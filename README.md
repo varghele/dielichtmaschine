@@ -2,7 +2,7 @@
 
 A visual show authoring tool for [QLC+](https://www.qlcplus.org/) - timeline-based effect editing, audio synchronization, real-time ArtNet preview, a 3D Visualizer, and an experimental live audio-reactive engine. Exports to `.qxw` workspace files that run on the night in QLC+ itself.
 
-> **Status:** preparing the first community release (`v1.0`). Active development on `v1.0.5-fixture-rewrite`. Latest tagged build is `v0.9.5-beta`. See [CHANGELOG](CHANGELOG.md).
+> **Status:** `v1.0.0` — the first community release. See the [CHANGELOG](CHANGELOG.md) and [ROADMAP](ROADMAP.md).
 
 ---
 
