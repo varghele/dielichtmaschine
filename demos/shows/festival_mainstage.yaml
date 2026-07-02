@@ -181,7 +181,7 @@ block_defs:
       strobe_speed: 0.0
   movement:
     m0:
-      effect_speed: 1/2
+      effect_speed: 1/4
       effect_type: linear_sweep
       interpolate_from_previous: true
       lissajous_ratio: '1:2'
@@ -201,8 +201,8 @@ block_defs:
       tilt_max: 255.0
       tilt_min: 0.0
     m1:
-      effect_speed: 1/2
-      effect_type: figure_8
+      effect_speed: 1/4
+      effect_type: circle
       interpolate_from_previous: true
       lissajous_ratio: '1:2'
       pan: 127.5
@@ -221,7 +221,7 @@ block_defs:
       tilt_max: 255.0
       tilt_min: 0.0
     m2:
-      effect_speed: '2'
+      effect_speed: '1'
       effect_type: linear_sweep
       interpolate_from_previous: true
       lissajous_ratio: '1:2'
@@ -241,8 +241,8 @@ block_defs:
       tilt_max: 255.0
       tilt_min: 0.0
     m3:
-      effect_speed: '2'
-      effect_type: figure_8
+      effect_speed: '1'
+      effect_type: circle
       interpolate_from_previous: true
       lissajous_ratio: '1:2'
       pan: 127.5
@@ -261,7 +261,7 @@ block_defs:
       tilt_max: 255.0
       tilt_min: 0.0
     m4:
-      effect_speed: '1'
+      effect_speed: 1/2
       effect_type: linear_sweep
       interpolate_from_previous: true
       lissajous_ratio: '1:2'
@@ -281,8 +281,8 @@ block_defs:
       tilt_max: 255.0
       tilt_min: 0.0
     m5:
-      effect_speed: '1'
-      effect_type: figure_8
+      effect_speed: 1/2
+      effect_type: circle
       interpolate_from_previous: true
       lissajous_ratio: '1:2'
       pan: 127.5
@@ -301,7 +301,7 @@ block_defs:
       tilt_max: 255.0
       tilt_min: 0.0
     m6:
-      effect_speed: 1/2
+      effect_speed: 1/4
       effect_type: linear_sweep
       interpolate_from_previous: true
       lissajous_ratio: '1:2'
@@ -321,7 +321,7 @@ block_defs:
       tilt_max: 255.0
       tilt_min: 0.0
     m7:
-      effect_speed: '1'
+      effect_speed: 1/2
       effect_type: linear_sweep
       interpolate_from_previous: true
       lissajous_ratio: '1:2'
@@ -341,7 +341,7 @@ block_defs:
       tilt_max: 255.0
       tilt_min: 0.0
     m8:
-      effect_speed: '2'
+      effect_speed: '1'
       effect_type: linear_sweep
       interpolate_from_previous: true
       lissajous_ratio: '1:2'

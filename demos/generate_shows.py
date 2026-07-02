@@ -31,6 +31,7 @@ import os
 import random
 import shutil
 import sys
+from fractions import Fraction
 
 import numpy as np
 
@@ -151,7 +152,34 @@ def load_structure_parts(config_path: str, show_name: str = None, slice_spec: st
     return parts, label
 
 
-def generate_for_rig(rig_name: str, audio_path: str, parts, audio_basename: str) -> Configuration:
+# Busy movement shapes -> a smooth stand-in when --calm-movement is on.
+_CALM_SHAPE = {"figure_8": "circle", "lissajous": "circle"}
+
+
+def _speed_to_str(mult: float) -> str:
+    """Render a speed multiplier back to a "n" / "n/d" effect_speed string."""
+    f = Fraction(mult).limit_denominator(16)
+    return str(f.numerator) if f.denominator == 1 else f"{f.numerator}/{f.denominator}"
+
+
+def calm_movement(lanes, speed_factor: float = 0.5):
+    """Tone down autogen movement: slow effect_speed and smooth busy shapes.
+
+    Halving the speed on top of the global 4x movement slowdown, plus swapping
+    figure-8 / lissajous for a plain circle, keeps dense rigs (e.g. the festival
+    front truss of 8 washes) from reading as frantic.
+    """
+    from effects.timing import parse_speed
+    for lane in lanes:
+        for lb in lane.light_blocks:
+            for mb in lb.movement_blocks:
+                mb.effect_speed = _speed_to_str(parse_speed(str(mb.effect_speed)) * speed_factor)
+                mb.effect_type = _CALM_SHAPE.get(mb.effect_type, mb.effect_type)
+    return lanes
+
+
+def generate_for_rig(rig_name: str, audio_path: str, parts, audio_basename: str,
+                     calm: bool = False) -> Configuration:
     """Load a rig, autogenerate a show against the clip using ``parts``, return the config."""
     cfg = Configuration.load(os.path.join(RIGS_DIR, f"{rig_name}.yaml"))
 
@@ -165,6 +193,8 @@ def generate_for_rig(rig_name: str, audio_path: str, parts, audio_basename: str)
     np.random.seed(SEED)
 
     lanes, _report = generate_show(audio_path, structure, cfg)
+    if calm:
+        calm_movement(lanes)
 
     show = Show(
         name="Demo",
@@ -186,6 +216,8 @@ def main(argv=None):
                         help="Show name within --structure-from (default: first show).")
     parser.add_argument("--structure-slice", default=None,
                         help="START:END part-index range of --structure-show to keep (e.g. 4:6 for a short excerpt).")
+    parser.add_argument("--calm-movement", action="store_true",
+                        help="Slow movement effect_speed 2x and smooth figure-8/lissajous to circle (dense rigs).")
     parser.add_argument("--out", default=OUT_DIR, help="Output directory (default: demos/shows).")
     args = parser.parse_args(argv)
 
@@ -215,7 +247,7 @@ def main(argv=None):
 
     print(f"Clip: {os.path.basename(audio_path)}  ({duration:.1f}s, {bpm:g} BPM)")
     for rig_name in rigs:
-        cfg = generate_for_rig(rig_name, audio_path, parts, os.path.basename(audio_path))
+        cfg = generate_for_rig(rig_name, audio_path, parts, os.path.basename(audio_path), calm=args.calm_movement)
         out = os.path.join(args.out, f"{rig_name}.yaml")
         cfg.save(out)
         show = cfg.shows["Demo"]
