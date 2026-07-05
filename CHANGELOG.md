@@ -13,6 +13,13 @@ verbatim as the GitHub Release notes (see [docs/releasing.md](docs/releasing.md)
 
 ### Added
 
+- **Stage plane visualization.** The Stage tab gets a plane picker for the 6
+  faces of the stage bounding cuboid (Floor / Ceiling / Front / Back / Left /
+  Right). Hovering an entry previews the face as a translucent highlight in
+  the embedded 3D view; clicking keeps it highlighted, clicking again clears.
+  The cuboid's ceiling follows the tallest fixture (min 3 m), matching the
+  planes Auto Mode targets. Display-only for now: plane *targeting* from
+  movement blocks lands with the v1.4a focus-geometry work.
 - **Stage layers (vertical stacking).** The Stage tab gets named Z-planes
   (ground stack, mid-truss, top-truss, ...) with a per-layer visibility
   toggle. Assign fixtures via right-click on the stage; assignment snaps the

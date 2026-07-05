@@ -5,7 +5,7 @@ import sys
 import os
 
 from PyQt6 import QtWidgets
-from PyQt6.QtCore import Qt, QTimer, QSettings
+from PyQt6.QtCore import Qt, QTimer, QSettings, QEvent
 from config.models import Configuration
 from .base_tab import BaseTab
 from gui.StageView import StageView
@@ -147,6 +147,30 @@ class StageTab(BaseTab):
         layer_btn_row.addStretch()
         layer_layout.addLayout(layer_btn_row)
 
+        # Stage planes group — picker for the 6 faces of the stage
+        # bounding cuboid. Hovering an entry highlights that face in the
+        # embedded 3D preview; clicking selects it persistently; clicking
+        # the selected entry again clears. Display-only for now — plane
+        # *targeting* from movement blocks is v1.4a.
+        from visualizer.renderer.stage_planes import PLANE_NAMES
+        plane_group = QtWidgets.QGroupBox("Stage Planes")
+        plane_layout = QtWidgets.QVBoxLayout(plane_group)
+
+        self.plane_list = QtWidgets.QListWidget()
+        self.plane_list.setMaximumHeight(120)
+        self.plane_list.setMouseTracking(True)
+        self.plane_list.setToolTip(
+            "The 6 faces of the stage bounding box.\n"
+            "Hover to preview, click to keep highlighted in the 3D view,\n"
+            "click again to clear."
+        )
+        for plane_name in PLANE_NAMES:
+            item = QtWidgets.QListWidgetItem(plane_name)
+            item.setData(Qt.ItemDataRole.UserRole, plane_name)
+            self.plane_list.addItem(item)
+        self._selected_plane = None
+        plane_layout.addWidget(self.plane_list)
+
         # Fixture Orientation group
         orientation_group = QtWidgets.QGroupBox("Fixture Orientation")
         orientation_layout = QtWidgets.QVBoxLayout(orientation_group)
@@ -203,6 +227,7 @@ class StageTab(BaseTab):
         control_layout.addWidget(view_group)
         control_layout.addWidget(spot_group)
         control_layout.addWidget(layer_group)
+        control_layout.addWidget(plane_group)
         control_layout.addWidget(orientation_group)
         control_layout.addWidget(plot_group)
         control_layout.addWidget(visualizer_group)
@@ -287,6 +312,13 @@ class StageTab(BaseTab):
         self.remove_layer_btn.clicked.connect(self._remove_layer)
         self.edit_layer_btn.clicked.connect(self._edit_layer)
         self.layer_list.itemChanged.connect(self._on_layer_item_changed)
+
+        # Stage plane picker: hover previews, click toggles persistence.
+        # The event filter catches the mouse leaving the list so a pure
+        # hover (no click) reverts to the persistent selection.
+        self.plane_list.itemEntered.connect(self._on_plane_hovered)
+        self.plane_list.itemClicked.connect(self._on_plane_clicked)
+        self.plane_list.viewport().installEventFilter(self)
 
         # Visualizer controls
         self.launch_visualizer_btn.clicked.connect(self._launch_visualizer)
@@ -611,6 +643,45 @@ class StageTab(BaseTab):
                     tcp_server.update_config(self.config)
         except Exception as e:
             print(f"Error notifying TCP server: {e}")
+
+    # ── Stage planes ──────────────────────────────────────────────────
+
+    def eventFilter(self, obj, event):
+        """Revert the plane highlight to the persistent selection when
+        the mouse leaves the plane list (ends a hover preview)."""
+        if (hasattr(self, "plane_list") and obj is self.plane_list.viewport()
+                and event.type() == QEvent.Type.Leave):
+            self._apply_plane_highlight(self._selected_plane)
+        return super().eventFilter(obj, event)
+
+    def _rig_height(self) -> float:
+        """Ceiling height of the stage cuboid: the tallest fixture's
+        effective Z, floored at 3 m — the same rule autogen's
+        compute_stage_planes uses, so the highlighted ceiling matches
+        where Auto Mode aims."""
+        max_z = 3.0
+        for fixture in self.config.fixtures:
+            group = self.config.groups.get(fixture.group) if fixture.group else None
+            z = fixture.get_effective_z(group)
+            if z > max_z:
+                max_z = z
+        return max_z
+
+    def _apply_plane_highlight(self, name):
+        if hasattr(self, "embedded_visualizer") and self.embedded_visualizer is not None:
+            self.embedded_visualizer.set_highlighted_plane(name, self._rig_height())
+
+    def _on_plane_hovered(self, item):
+        self._apply_plane_highlight(item.data(Qt.ItemDataRole.UserRole))
+
+    def _on_plane_clicked(self, item):
+        name = item.data(Qt.ItemDataRole.UserRole)
+        if self._selected_plane == name:
+            self._selected_plane = None
+            self.plane_list.clearSelection()
+        else:
+            self._selected_plane = name
+        self._apply_plane_highlight(self._selected_plane)
 
     # ── Stage layers ──────────────────────────────────────────────────
 

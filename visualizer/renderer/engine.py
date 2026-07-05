@@ -12,6 +12,7 @@ from PyQt6.QtGui import QSurfaceFormat
 
 from .camera import OrbitCamera
 from .stage import StageRenderer
+from .stage_planes import StagePlaneHighlight
 from .gizmo import CoordinateGizmo
 from .fixtures import FixtureManager
 from .hdr import HDRPipeline
@@ -49,6 +50,7 @@ class RenderEngine(QOpenGLWidget):
 
         # Renderers (created in initializeGL)
         self.stage_renderer: Optional[StageRenderer] = None
+        self.stage_planes: Optional[StagePlaneHighlight] = None
         self.gizmo_renderer: Optional[CoordinateGizmo] = None
         self.fixture_manager: Optional[FixtureManager] = None
         self.hdr: Optional[HDRPipeline] = None
@@ -66,6 +68,7 @@ class RenderEngine(QOpenGLWidget):
         self._pending_grid_size: Optional[float] = None
         self._pending_fixtures: Optional[list] = None
         self._pending_dmx: dict[int, bytes] = {}
+        self._pending_plane_highlight: Optional[tuple] = None  # (name, rig_height)
 
         # Mouse tracking
         self.setMouseTracking(True)
@@ -108,6 +111,14 @@ class RenderEngine(QOpenGLWidget):
 
             # Create stage renderer
             self.stage_renderer = StageRenderer(
+                self.ctx,
+                self.stage_width,
+                self.stage_height
+            )
+
+            # Highlighted stage-plane overlay (driven by the Stage tab's
+            # plane picker).
+            self.stage_planes = StagePlaneHighlight(
                 self.ctx,
                 self.stage_width,
                 self.stage_height
@@ -194,6 +205,10 @@ class RenderEngine(QOpenGLWidget):
                 self.stage_renderer.render(mvp)
             if self.fixture_manager:
                 self.fixture_manager.render(mvp)
+            # Plane highlight after fixtures: alpha-blends over the scene
+            # while the depth test still lets chassis in front occlude it.
+            if self.stage_planes:
+                self.stage_planes.render(mvp)
 
             # --- Tonemap pass: HDR → Qt LDR FBO ---
             self.hdr.tonemap_to(qt_fbo)
@@ -206,6 +221,8 @@ class RenderEngine(QOpenGLWidget):
                 self.stage_renderer.render(mvp)
             if self.fixture_manager:
                 self.fixture_manager.render(mvp)
+            if self.stage_planes:
+                self.stage_planes.render(mvp)
 
         # Render coordinate gizmo last to the LDR FBO so the UI overlay
         # isn't affected by the tonemap curve.
@@ -249,8 +266,29 @@ class RenderEngine(QOpenGLWidget):
             self.stage_renderer.set_size(width, height)
             self.doneCurrent()
 
+        if self.stage_planes:
+            # GL-free: only marks geometry dirty for the next render.
+            self.stage_planes.set_stage_size(width, height)
+
         self.camera.set_stage_size(width, height)
         print(f"RenderEngine: Stage size update complete")
+
+    def set_highlighted_plane(self, name: Optional[str], rig_height: float = 3.0):
+        """Highlight one face of the stage bounding cuboid (None clears).
+
+        Args:
+            name: One of Floor / Ceiling / Front / Back / Left / Right, or None
+            rig_height: Cuboid ceiling height in meters (typically the
+                tallest fixture's Z, min 3.0 — same rule as autogen's
+                compute_stage_planes)
+        """
+        if self.stage_planes:
+            # Setters are GL-free; the VBO rebuild happens inside render.
+            self.stage_planes.set_rig_height(rig_height)
+            self.stage_planes.set_highlight(name)
+            self.update()
+        else:
+            self._pending_plane_highlight = (name, rig_height)
 
     def set_grid_size(self, grid_size: float):
         """
@@ -311,6 +349,11 @@ class RenderEngine(QOpenGLWidget):
             for uni, dmx in self._pending_dmx.items():
                 self.fixture_manager.update_dmx(uni, dmx)
             self._pending_dmx.clear()
+        if self._pending_plane_highlight is not None and self.stage_planes:
+            name, rig_height = self._pending_plane_highlight
+            self.stage_planes.set_rig_height(rig_height)
+            self.stage_planes.set_highlight(name)
+            self._pending_plane_highlight = None
 
     def reset_camera(self):
         """Reset camera to default position."""
@@ -377,6 +420,10 @@ class RenderEngine(QOpenGLWidget):
         if self.stage_renderer:
             self.stage_renderer.release()
             self.stage_renderer = None
+
+        if self.stage_planes:
+            self.stage_planes.release()
+            self.stage_planes = None
 
         if self.gizmo_renderer:
             self.gizmo_renderer.release()

@@ -139,6 +139,12 @@ class EmbeddedVisualizer(QWidget):
         if self._preview_mode == "build":
             self._push_build_mode_dmx()
 
+    def set_highlighted_plane(self, name, rig_height: float = 3.0) -> None:
+        """Highlight one stage bounding-cuboid face in the 3D preview
+        (None clears). Forwarded to the engine, which buffers it if GL
+        hasn't initialized yet (inactive tab)."""
+        self._engine.set_highlighted_plane(name, rig_height)
+
     def feed_dmx(self, universe: int, dmx_bytes: bytes) -> None:
         """Forward a DMX frame to the engine.
 
