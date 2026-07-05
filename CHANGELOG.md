@@ -13,6 +13,14 @@ verbatim as the GitHub Release notes (see [docs/releasing.md](docs/releasing.md)
 
 ### Added
 
+- **Cross-config show import.** `File -> Import Shows from Config` pulls
+  selected shows from another config.yaml into the current one without
+  swapping the project ("get last year's set into this venue's config").
+  The picker shows part counts, name conflicts (resolve by rename /
+  overwrite / skip), and any fixture groups the current config lacks —
+  those are reported, not silently fixed; lanes targeting them stay dormant
+  until re-pointed. Audio files are copied into this config's
+  `audiofiles/` bundle.
 - **Stage plot export.** The Stage tab's "Plot Stage" button (non-functional
   since v0.9.5) now exports the rig as a printable stage plot: vector PDF or
   PNG, A4/A3/A2 landscape. Includes a title block (config name, stage
@@ -49,6 +57,14 @@ verbatim as the GitHub Release notes (see [docs/releasing.md](docs/releasing.md)
   the clashing fixture and the overlapping channel range, and an issue count
   appears next to the table header. Re-lints live as addresses, universes, or
   modes change.
+
+### Removed
+
+- The root-level `merge_configs.py` script. It merged raw YAML and predated
+  the v1.0 compact serializer: shows copied between files kept references
+  into the wrong file's `block_defs` template table, silently corrupting
+  the merged config. `File -> Import Shows from Config` replaces it and
+  goes through the object model instead.
 
 ## [1.0.0] - 2026-07-02
 

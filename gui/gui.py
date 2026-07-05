@@ -386,6 +386,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.actionExportShowStructure.triggered.connect(self.export_show_structure_file)
         self.actionImportFixtureList.triggered.connect(self.import_fixture_list_file)
         self.actionExportFixtureList.triggered.connect(self.export_fixture_list_file)
+        self.actionImportShowsFromConfig.triggered.connect(self.import_shows_from_config_file)
         self.actionImportWorkspace.triggered.connect(self.import_workspace)
         self.actionCreateWorkspace.triggered.connect(self.create_workspace)
         self.actionExit.triggered.connect(self.close)
@@ -1026,6 +1027,139 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             self, "Exported",
             f"Exported '{show.name}' to {fmt.upper()}:\n{file_path}"
         )
+
+    def import_shows_from_config_file(self):
+        """File -> Import Shows from Config: pull selected shows from another
+        config.yaml into the current one without swapping the project.
+
+        The picker lists every show in the source config with its part
+        count, name conflicts, and any fixture groups this config doesn't
+        have. Missing groups are reported, not fixed — those lanes stay
+        dormant until re-pointed (retargeting is the v1.4 morphing work).
+        Audio files are copied into this config's audiofiles/ bundle.
+        """
+        from utils.config_merge import list_import_candidates, merge_shows
+
+        default_dir = os.path.dirname(self.config_path) if self.config_path else ""
+        file_path, _ = QFileDialog.getOpenFileName(
+            self,
+            "Import Shows from Config",
+            default_dir,
+            "Config files (*.yaml *.yml)"
+        )
+        if not file_path:
+            return
+        if self.config_path and os.path.abspath(file_path) == os.path.abspath(self.config_path):
+            QMessageBox.warning(
+                self, "Same Config",
+                "That is the currently open config — nothing to import."
+            )
+            return
+
+        try:
+            source = Configuration.load(file_path)
+        except Exception as e:
+            QMessageBox.critical(
+                self, "Import Failed",
+                f"Could not load {os.path.basename(file_path)}:\n{e}"
+            )
+            return
+        if not source.shows:
+            QMessageBox.warning(
+                self, "No Shows",
+                f"{os.path.basename(file_path)} contains no shows."
+            )
+            return
+
+        candidates = list_import_candidates(source, self.config)
+
+        # ── Picker dialog ────────────────────────────────────────────
+        dialog = QtWidgets.QDialog(self)
+        dialog.setWindowTitle(f"Import Shows from {os.path.basename(file_path)}")
+        dialog.resize(520, 420)
+        layout = QtWidgets.QVBoxLayout(dialog)
+
+        layout.addWidget(QtWidgets.QLabel("Select the shows to import:"))
+        show_list = QtWidgets.QListWidget()
+        for candidate in candidates:
+            text = f"{candidate.name}  —  {candidate.num_parts} part(s)"
+            if candidate.audio_file:
+                text += f", audio: {candidate.audio_file}"
+            if candidate.name_conflict:
+                text += "   [name exists]"
+            if candidate.missing_groups:
+                text += f"   [missing groups: {', '.join(candidate.missing_groups)}]"
+            item = QtWidgets.QListWidgetItem(text)
+            item.setFlags(item.flags() | Qt.ItemFlag.ItemIsUserCheckable)
+            item.setCheckState(Qt.CheckState.Checked)
+            item.setData(Qt.ItemDataRole.UserRole, candidate.name)
+            show_list.addItem(item)
+        layout.addWidget(show_list)
+
+        form = QtWidgets.QFormLayout()
+        conflict_combo = QtWidgets.QComboBox()
+        conflict_combo.addItem("Rename the imported show", "rename")
+        conflict_combo.addItem("Overwrite the existing show", "overwrite")
+        conflict_combo.addItem("Skip the imported show", "skip")
+        form.addRow("If a show name exists:", conflict_combo)
+        copy_audio_check = QtWidgets.QCheckBox("Copy audio files into this config's bundle")
+        copy_audio_check.setChecked(True)
+        form.addRow(copy_audio_check)
+        layout.addLayout(form)
+
+        buttons = QtWidgets.QDialogButtonBox(
+            QtWidgets.QDialogButtonBox.StandardButton.Ok |
+            QtWidgets.QDialogButtonBox.StandardButton.Cancel
+        )
+        buttons.accepted.connect(dialog.accept)
+        buttons.rejected.connect(dialog.reject)
+        layout.addWidget(buttons)
+
+        if dialog.exec() != QtWidgets.QDialog.DialogCode.Accepted:
+            return
+
+        selected = [
+            show_list.item(i).data(Qt.ItemDataRole.UserRole)
+            for i in range(show_list.count())
+            if show_list.item(i).checkState() == Qt.CheckState.Checked
+        ]
+        if not selected:
+            return
+
+        results = merge_shows(
+            self.config, source, selected,
+            on_conflict=conflict_combo.currentData(),
+            copy_audio=copy_audio_check.isChecked(),
+        )
+
+        # Refresh the Structure tab so the imported shows appear.
+        self.structure_tab.update_from_config()
+
+        lines = []
+        for r in results:
+            if r.action == 'skipped':
+                lines.append(f"- {r.source_name}: skipped (name exists)")
+                continue
+            line = f"- {r.source_name}: {r.action}"
+            if r.action == 'renamed':
+                line += f" as '{r.final_name}'"
+            if r.audio_action == 'copied':
+                line += ", audio copied"
+            elif r.audio_action == 'not-found':
+                line += ", AUDIO FILE NOT FOUND"
+            if r.missing_groups:
+                line += f", missing groups: {', '.join(r.missing_groups)}"
+            lines.append(line)
+        imported = sum(1 for r in results if r.action != 'skipped')
+        msg = f"Imported {imported} show(s) from {os.path.basename(file_path)}:\n\n"
+        msg += "\n".join(lines)
+        if any(r.missing_groups for r in results):
+            msg += (
+                "\n\nLanes targeting missing groups stay dormant until you "
+                "re-point them at this config's groups."
+            )
+        msg += "\n\nSave the config to persist the imported shows."
+        QMessageBox.information(self, "Imported", msg)
 
     def import_fixture_list_file(self):
         """File -> Import Fixture List: read a rig .csv or .json into the config.
