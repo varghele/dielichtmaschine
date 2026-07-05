@@ -384,6 +384,8 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.actionLoadConfig.triggered.connect(self.load_configuration)
         self.actionImportShowStructure.triggered.connect(self.import_show_structure_file)
         self.actionExportShowStructure.triggered.connect(self.export_show_structure_file)
+        self.actionImportFixtureList.triggered.connect(self.import_fixture_list_file)
+        self.actionExportFixtureList.triggered.connect(self.export_fixture_list_file)
         self.actionImportWorkspace.triggered.connect(self.import_workspace)
         self.actionCreateWorkspace.triggered.connect(self.create_workspace)
         self.actionExit.triggered.connect(self.close)
@@ -1023,6 +1025,117 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         QMessageBox.information(
             self, "Exported",
             f"Exported '{show.name}' to {fmt.upper()}:\n{file_path}"
+        )
+
+    def import_fixture_list_file(self):
+        """File -> Import Fixture List: read a rig .csv or .json into the config.
+
+        CSV input: flat spec-sheet rows; each fixture arrives with a single
+        synthesized mode that library resolution upgrades to the real .qxf
+        mode list where possible. JSON input: full-fidelity rig including
+        group metadata and mode lists.
+
+        If the config already has fixtures, the user picks Replace (swap the
+        whole rig) or Add (append; name collisions get a numbered suffix).
+        """
+        from utils.fixture_io import (
+            apply_fixture_list, read_fixture_list, resolve_modes_from_library,
+        )
+        default_dir = os.path.dirname(self.config_path) if self.config_path else ""
+        file_path, _ = QFileDialog.getOpenFileName(
+            self,
+            "Import Fixture List",
+            default_dir,
+            "Fixture lists (*.csv *.json);;CSV (*.csv);;JSON (*.json)"
+        )
+        if not file_path:
+            return
+        try:
+            fixtures, group_props, fmt = read_fixture_list(file_path)
+        except Exception as e:
+            QMessageBox.critical(
+                self, "Import Failed",
+                f"Could not import {os.path.basename(file_path)}:\n{e}"
+            )
+            return
+        if not fixtures:
+            QMessageBox.warning(
+                self, "Nothing to Import",
+                f"{os.path.basename(file_path)} contains no fixtures."
+            )
+            return
+
+        replace = False
+        if self.config.fixtures:
+            box = QMessageBox(self)
+            box.setWindowTitle("Import Fixture List")
+            box.setText(
+                f"The config already has {len(self.config.fixtures)} fixture(s).\n\n"
+                f"Replace the current rig with the {len(fixtures)} imported "
+                f"fixture(s), or add them to it?"
+            )
+            replace_btn = box.addButton(
+                "Replace", QMessageBox.ButtonRole.DestructiveRole)
+            add_btn = box.addButton("Add", QMessageBox.ButtonRole.AcceptRole)
+            box.addButton(QMessageBox.StandardButton.Cancel)
+            box.exec()
+            clicked = box.clickedButton()
+            if clicked is replace_btn:
+                replace = True
+            elif clicked is not add_btn:
+                return
+
+        # Resolution also warms the shared definitions cache, so the
+        # visualizer and capability detection see the imported models.
+        warnings = resolve_modes_from_library(fixtures)
+        apply_fixture_list(self.config, fixtures, group_props, replace=replace)
+
+        self.fixtures_tab.update_from_config(force=True)
+        self.on_groups_changed()
+
+        msg = f"Imported {len(fixtures)} fixture(s) from {fmt.upper()}."
+        if warnings:
+            msg += "\n\nWarnings:\n- " + "\n- ".join(warnings)
+        msg += "\n\nSave the config to persist the imported rig."
+        QMessageBox.information(self, "Imported", msg)
+
+    def export_fixture_list_file(self):
+        """File -> Export Fixture List: write the rig to .csv or .json.
+
+        CSV writes the flat spec sheet (effective z/orientation). JSON
+        writes the full-fidelity rig. Format is picked by the extension of
+        the chosen path.
+        """
+        from utils.fixture_io import write_fixture_list
+        if not self.config.fixtures:
+            QMessageBox.warning(
+                self, "No Fixtures",
+                "Add fixtures in the Fixtures tab before exporting a fixture list."
+            )
+            return
+        default_dir = os.path.dirname(self.config_path) if self.config_path else ""
+        default_path = os.path.join(default_dir, "fixtures.csv") if default_dir else "fixtures.csv"
+        file_path, _ = QFileDialog.getSaveFileName(
+            self,
+            "Export Fixture List",
+            default_path,
+            "CSV (*.csv);;JSON (*.json)"
+        )
+        if not file_path:
+            return
+        if not os.path.splitext(file_path)[1]:
+            file_path += ".csv"
+        try:
+            fmt = write_fixture_list(file_path, self.config)
+        except Exception as e:
+            QMessageBox.critical(
+                self, "Export Failed",
+                f"Could not export to {os.path.basename(file_path)}:\n{e}"
+            )
+            return
+        QMessageBox.information(
+            self, "Exported",
+            f"Exported {len(self.config.fixtures)} fixture(s) to {fmt.upper()}:\n{file_path}"
         )
 
     def create_workspace(self):

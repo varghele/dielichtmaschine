@@ -13,6 +13,14 @@ verbatim as the GitHub Release notes (see [docs/releasing.md](docs/releasing.md)
 
 ### Added
 
+- **Fixture list import/export.** `File -> Import / Export Fixture List`
+  round-trips the rig (patch, grouping, position, orientation) without the
+  rest of the project, as `.csv` (flat spec sheet, effective values; a
+  hand-written sheet with just manufacturer/model/universe/address imports
+  fine) or `.json` (full fidelity: deduplicated fixture definitions, group
+  metadata, mode lists). Imports resolve modes against the QLC+ fixture
+  library where a `.qxf` is found, and offer Replace / Add when the config
+  already has fixtures.
 - **DMX address conflict checker.** The Fixtures tab now flags fixtures whose
   channel footprints overlap on the same universe, and fixtures that run past
   DMX address 512: the Universe/Address cells turn red with a tooltip naming
