@@ -11,6 +11,45 @@ from gui.widgets.fixture_icons import (
 )
 
 
+def projected_bar_angle_2d(yaw: float, pitch: float, roll: float) -> float:
+    """2D top-down rotation (degrees) of a bar fixture's length axis.
+
+    Projects the fixture's local X-axis through the full yaw/pitch/roll
+    orientation onto the floor plane. Shared by the Stage tab's
+    FixtureItem and the stage-plot exporter so both draw bars at the
+    same apparent angle. Returns ``yaw + 90`` when the length axis is
+    near-vertical (no meaningful floor projection).
+
+    Coordinate systems:
+    - 3D World: X = stage right, Y = up (height), Z = toward audience (depth)
+    - 2D Stage view (top-down): X = stage right, Y = toward audience (maps to 3D Z)
+    """
+    yaw_rad = radians(yaw)
+    pitch_rad = radians(pitch)
+    roll_rad = radians(roll)
+
+    # Where does the local X unit vector (the bar's length) end up in
+    # world space after Yaw (Y) -> Pitch (X) -> Roll (Z)?
+    x1, y1, z1 = cos(yaw_rad), 0.0, -sin(yaw_rad)
+
+    x2 = x1
+    y2 = y1 * cos(pitch_rad) - z1 * sin(pitch_rad)
+    z2 = y1 * sin(pitch_rad) + z1 * cos(pitch_rad)
+
+    x3 = x2 * cos(roll_rad) - y2 * sin(roll_rad)
+    z3 = z2  # Z unchanged by roll around Z
+
+    # Project onto the floor plane. Near-vertical bars have no useful
+    # projection; show them rotated 90° from yaw like FixtureItem did.
+    proj_length = sqrt(x3 * x3 + z3 * z3)
+    if proj_length < 0.01:
+        return yaw + 90
+
+    # atan2(z, x) measures from +X toward +Z; positive Z (toward the
+    # audience) is negative screen-Y, hence the negation.
+    return atan2(-z3, x3) * 180.0 / 3.14159265359
+
+
 class FixtureItem(QGraphicsItem):
     # Class-level toggle for orientation-axis overlay (controlled by
     # stage_tab.py's "Show orientation axes" checkbox). When True every
@@ -290,72 +329,8 @@ class FixtureItem(QGraphicsItem):
         return abs(self.pitch) > 0.1 or abs(self.roll) > 0.1
 
     def _get_2d_rotation_angle(self) -> float:
-        """Calculate the 2D rotation angle for top-down view based on full 3D orientation.
-
-        For bar-type fixtures (BAR, SUNSTRIP), this computes where the fixture's
-        local X-axis (its length) projects onto the floor plane (XZ in 3D world).
-
-        Coordinate systems:
-        - 3D World: X = stage right, Y = up (height), Z = toward audience (depth)
-        - 2D Stage view (top-down): X = stage right, Y = toward audience (maps to 3D Z)
-
-        Returns:
-            Rotation angle in degrees for the 2D painter rotation.
-        """
-        # Get orientation angles in radians
-        yaw_rad = radians(self.rotation_angle)  # rotation_angle stores yaw
-        pitch_rad = radians(self.pitch)
-        roll_rad = radians(self.roll)
-
-        # Start with local X-axis unit vector (1, 0, 0)
-        # This represents the "length" direction of the fixture
-
-        # Apply rotations in order: Yaw (Y) -> Pitch (X) -> Roll (Z)
-        # We compute where local X ends up in world space
-
-        # After Yaw rotation around Y-axis:
-        # x' = x*cos(yaw) + z*sin(yaw)
-        # y' = y
-        # z' = -x*sin(yaw) + z*cos(yaw)
-        # For (1, 0, 0): (cos(yaw), 0, -sin(yaw))
-        x1 = cos(yaw_rad)
-        y1 = 0.0
-        z1 = -sin(yaw_rad)
-
-        # After Pitch rotation around X-axis:
-        # x'' = x'
-        # y'' = y'*cos(pitch) - z'*sin(pitch)
-        # z'' = y'*sin(pitch) + z'*cos(pitch)
-        x2 = x1
-        y2 = y1 * cos(pitch_rad) - z1 * sin(pitch_rad)
-        z2 = y1 * sin(pitch_rad) + z1 * cos(pitch_rad)
-
-        # After Roll rotation around Z-axis:
-        # x''' = x''*cos(roll) - y''*sin(roll)
-        # y''' = x''*sin(roll) + y''*cos(roll)
-        # z''' = z''
-        x3 = x2 * cos(roll_rad) - y2 * sin(roll_rad)
-        y3 = x2 * sin(roll_rad) + y2 * cos(roll_rad)
-        z3 = z2  # Z is unchanged by roll around Z
-
-        # Project onto floor plane (XZ in 3D world = XY in 2D stage view)
-        # x3 = world X (stage left/right)
-        # z3 = world Z (stage depth, becomes Y in 2D view)
-
-        # Handle near-zero projection (fixture's length pointing straight up/down)
-        proj_length = sqrt(x3 * x3 + z3 * z3)
-        if proj_length < 0.01:
-            # Fixture's length is nearly vertical (pointing up or down)
-            # Show as vertical in 2D (rotated 90° from yaw)
-            return self.rotation_angle + 90
-
-        # Calculate angle in degrees
-        # atan2(z, x) gives angle from positive X-axis toward positive Z
-        # In 2D stage view: positive Z (toward audience) is negative Y on screen
-        # So we negate z3 to match screen coordinates
-        angle = atan2(-z3, x3) * 180.0 / 3.14159265359
-
-        return angle
+        """2D rotation for the top-down view — see projected_bar_angle_2d."""
+        return projected_bar_angle_2d(self.rotation_angle, self.pitch, self.roll)
 
     def _theme_text_color(self):
         """Return the theme-driven label colour from the parent

@@ -320,6 +320,9 @@ class StageTab(BaseTab):
         self.plane_list.itemClicked.connect(self._on_plane_clicked)
         self.plane_list.viewport().installEventFilter(self)
 
+        # Stage plot export
+        self.plot_stage_btn.clicked.connect(self._export_stage_plot)
+
         # Visualizer controls
         self.launch_visualizer_btn.clicked.connect(self._launch_visualizer)
 
@@ -643,6 +646,81 @@ class StageTab(BaseTab):
                     tcp_server.update_config(self.config)
         except Exception as e:
             print(f"Error notifying TCP server: {e}")
+
+    # ── Stage plot export ─────────────────────────────────────────────
+
+    def _export_stage_plot(self):
+        """Plot Stage button: export the rig as a PDF or PNG stage plot.
+
+        Small options dialog (paper size + PNG resolution), then a save
+        dialog whose extension picks the format.
+        """
+        from gui.stage_plot import PAPER_PRESETS, StagePlotRenderer
+
+        if not self.config.fixtures:
+            QtWidgets.QMessageBox.warning(
+                self, "No Fixtures",
+                "Add fixtures before exporting a stage plot."
+            )
+            return
+
+        dialog = QtWidgets.QDialog(self)
+        dialog.setWindowTitle("Export Stage Plot")
+        layout = QtWidgets.QFormLayout(dialog)
+
+        paper_combo = QtWidgets.QComboBox()
+        paper_combo.addItems(list(PAPER_PRESETS.keys()))
+        layout.addRow("Paper size (landscape):", paper_combo)
+
+        dpi_combo = QtWidgets.QComboBox()
+        dpi_combo.addItems(["150", "300"])
+        dpi_combo.setCurrentText("300")
+        dpi_combo.setToolTip("Only used for PNG output; PDF is vector.")
+        layout.addRow("PNG resolution (dpi):", dpi_combo)
+
+        buttons = QtWidgets.QDialogButtonBox(
+            QtWidgets.QDialogButtonBox.StandardButton.Ok |
+            QtWidgets.QDialogButtonBox.StandardButton.Cancel
+        )
+        buttons.accepted.connect(dialog.accept)
+        buttons.rejected.connect(dialog.reject)
+        layout.addRow(buttons)
+
+        if dialog.exec() != QtWidgets.QDialog.DialogCode.Accepted:
+            return
+
+        renderer = StagePlotRenderer(self.config)
+        loaded_from = getattr(self.config, '_loaded_from', None)
+        default_dir = os.path.dirname(loaded_from) if loaded_from else ""
+        default_name = f"{renderer.title}_stage_plot.pdf"
+        default_path = os.path.join(default_dir, default_name) if default_dir else default_name
+
+        file_path, _ = QtWidgets.QFileDialog.getSaveFileName(
+            self, "Export Stage Plot", default_path,
+            "PDF (*.pdf);;PNG (*.png)"
+        )
+        if not file_path:
+            return
+        if not os.path.splitext(file_path)[1]:
+            file_path += ".pdf"
+
+        try:
+            fmt = renderer.render(
+                file_path,
+                paper=paper_combo.currentText(),
+                dpi=int(dpi_combo.currentText()),
+            )
+        except Exception as e:
+            QtWidgets.QMessageBox.critical(
+                self, "Export Failed",
+                f"Could not export the stage plot:\n{e}"
+            )
+            return
+
+        QtWidgets.QMessageBox.information(
+            self, "Exported",
+            f"Stage plot exported as {fmt.upper()}:\n{file_path}"
+        )
 
     # ── Stage planes ──────────────────────────────────────────────────
 

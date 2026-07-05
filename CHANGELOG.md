@@ -13,6 +13,14 @@ verbatim as the GitHub Release notes (see [docs/releasing.md](docs/releasing.md)
 
 ### Added
 
+- **Stage plot export.** The Stage tab's "Plot Stage" button (non-functional
+  since v0.9.5) now exports the rig as a printable stage plot: vector PDF or
+  PNG, A4/A3/A2 landscape. Includes a title block (config name, stage
+  dimensions, scale, fixture count, date), the stage with grid and meter
+  labels, an AUDIENCE edge marker, every fixture as its chassis symbol in
+  group color with an orientation tick and a name + universe.address label
+  (greedy collision avoidance keeps labels readable on dense rigs), stage
+  marks, and a legend listing groups, stage layers, and a scale bar.
 - **Stage plane visualization.** The Stage tab gets a plane picker for the 6
   faces of the stage bounding cuboid (Floor / Ceiling / Front / Back / Left /
   Right). Hovering an entry previews the face as a translucent highlight in
