@@ -71,6 +71,23 @@ verbatim as the GitHub Release notes (see [docs/releasing.md](docs/releasing.md)
   appears next to the table header. Re-lints live as addresses, universes, or
   modes change.
 
+### Fixed
+
+- Stage tab: the layer panel's +/- buttons rendered their glyph as a
+  cut-off sliver (32px fixed width vs the theme's 14px button padding);
+  they now use the shared 40px toolbar-button width.
+
+### Testing
+
+- **Visual regression harness.** A glyph-clipping sweep grabs every
+  fixed-width icon button (both themes) and fails when the rendered ink is
+  clipped by the widget bounds or the QSS-padding content rect — the exact
+  class of the layer-button bug. Golden-screenshot tests compare
+  deterministic renders (stage plot, Fixtures table with conflict cells,
+  Stage Layers panel) against per-platform reference images with pixel
+  tolerance; regenerate intended changes with `QLC_REGEN_GOLDENS=1`.
+  `tests/README.md` rewritten to match reality.
+
 ### Removed
 
 - The root-level `merge_configs.py` script. It merged raw YAML and predated

@@ -142,12 +142,17 @@ class StageTab(BaseTab):
         )
         layer_layout.addWidget(self.active_layer_label)
 
+        # TOOLBAR_BTN_WIDTH (40), not less: the theme's 14px horizontal
+        # button padding clips the glyph's content rect on anything
+        # narrower — a 32px "+" renders as a cut-off sliver. Same
+        # convention as FixturesTab's toolbar (see test_fixtures_tab.py).
+        from gui.tabs.configuration_tab import TOOLBAR_BTN_WIDTH
         layer_btn_row = QtWidgets.QHBoxLayout()
         self.add_layer_btn = QtWidgets.QPushButton("+")
-        self.add_layer_btn.setFixedWidth(32)
+        self.add_layer_btn.setFixedWidth(TOOLBAR_BTN_WIDTH)
         self.add_layer_btn.setToolTip("Add Layer")
         self.remove_layer_btn = QtWidgets.QPushButton("-")
-        self.remove_layer_btn.setFixedWidth(32)
+        self.remove_layer_btn.setFixedWidth(TOOLBAR_BTN_WIDTH)
         self.remove_layer_btn.setToolTip("Remove Layer (fixtures keep their height)")
         self.edit_layer_btn = QtWidgets.QPushButton("Edit")
         self.edit_layer_btn.setToolTip("Rename the layer or move it to another height")
