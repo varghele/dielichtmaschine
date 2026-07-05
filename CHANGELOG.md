@@ -50,6 +50,12 @@ verbatim as the GitHub Release notes (see [docs/releasing.md](docs/releasing.md)
   everything on it. Hidden layers disappear from the 2D plot and every 3D
   preview (embedded and standalone) but still patch, output DMX, and export.
   Layers round-trip through the config YAML and the fixture-list CSV/JSON.
+- **Active-layer editing.** Double-click a stage layer (or press L to cycle)
+  to edit only that layer: its fixtures stay fully interactive while every
+  other fixture ghosts to a faint, locked reference — visible enough to
+  place against, impossible to select or drag by accident. Activating a
+  hidden layer shows it; hiding or removing the active layer ends the
+  editing session.
 - **Fixture list import/export.** `File -> Import / Export Fixture List`
   round-trips the rig (patch, grouping, position, orientation) without the
   rest of the project, as `.csv` (flat spec sheet, effective values; a

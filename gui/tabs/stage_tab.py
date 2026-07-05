@@ -128,9 +128,19 @@ class StageTab(BaseTab):
         self.layer_list.setToolTip(
             "Named Z-planes of the rig. Uncheck a layer to hide its\n"
             "fixtures on the stage plot and in the 3D previews.\n"
-            "Assign fixtures via right-click on the stage."
+            "Assign fixtures via right-click on the stage.\n\n"
+            "Double-click a layer (or press L to cycle) to edit only\n"
+            "that layer: its fixtures stay live, everything else ghosts\n"
+            "to a faint locked reference."
         )
         layer_layout.addWidget(self.layer_list)
+
+        self.active_layer_label = QtWidgets.QLabel("Editing: all layers")
+        self.active_layer_label.setToolTip(
+            "Active-layer editing. Double-click a layer or press L to cycle;\n"
+            "double-click the active layer again to return to all layers."
+        )
+        layer_layout.addWidget(self.active_layer_label)
 
         layer_btn_row = QtWidgets.QHBoxLayout()
         self.add_layer_btn = QtWidgets.QPushButton("+")
@@ -312,6 +322,15 @@ class StageTab(BaseTab):
         self.remove_layer_btn.clicked.connect(self._remove_layer)
         self.edit_layer_btn.clicked.connect(self._edit_layer)
         self.layer_list.itemChanged.connect(self._on_layer_item_changed)
+        self.layer_list.itemDoubleClicked.connect(self._on_layer_double_clicked)
+
+        # L cycles the active layer (all -> layer 1 -> ... -> all), scoped
+        # to the Stage tab like the F fit-view shortcut.
+        from PyQt6.QtGui import QShortcut, QKeySequence
+        self._layer_cycle_shortcut = QShortcut(QKeySequence("L"), self)
+        self._layer_cycle_shortcut.setContext(
+            Qt.ShortcutContext.WidgetWithChildrenShortcut)
+        self._layer_cycle_shortcut.activated.connect(self._cycle_active_layer)
 
         # Stage plane picker: hover previews, click toggles persistence.
         # The event filter catches the mouse leaving the list so a pure
@@ -776,6 +795,58 @@ class StageTab(BaseTab):
             item.setData(Qt.ItemDataRole.UserRole, layer.name)
             self.layer_list.addItem(item)
         self.layer_list.blockSignals(False)
+        self._update_active_layer_ui()
+
+    # ── Active-layer editing ──────────────────────────────────────────
+
+    def _set_active_layer(self, name):
+        """Enter/leave active-layer editing (None = edit all layers).
+
+        Activating a hidden layer force-shows it — editing an invisible
+        layer would mean dragging fixtures you can't see.
+        """
+        if name:
+            layer = self.config.get_stage_layer(name)
+            if layer is None:
+                name = None
+            elif not layer.visible:
+                layer.visible = True
+                self._refresh_layer_list()
+                self._notify_tcp_update()
+                self._broadcast_visualizer_refresh()
+        self.stage_view.set_active_layer(name)
+        self._update_active_layer_ui()
+
+    def _on_layer_double_clicked(self, item):
+        name = item.data(Qt.ItemDataRole.UserRole)
+        if self.stage_view.active_layer == name:
+            self._set_active_layer(None)
+        else:
+            self._set_active_layer(name)
+
+    def _cycle_active_layer(self):
+        """L shortcut: all layers -> first layer -> ... -> all layers."""
+        order = [None] + [layer.name for layer in self.config.stage_layers]
+        if len(order) == 1:
+            return
+        current = self.stage_view.active_layer
+        idx = order.index(current) if current in order else 0
+        self._set_active_layer(order[(idx + 1) % len(order)])
+
+    def _update_active_layer_ui(self):
+        """Bold the active layer's row + update the status label."""
+        active = self.stage_view.active_layer if hasattr(self, "stage_view") else None
+        self.active_layer_label.setText(
+            f"Editing: {active} only" if active else "Editing: all layers"
+        )
+        # setFont emits itemChanged; these are not check-state edits.
+        self.layer_list.blockSignals(True)
+        for i in range(self.layer_list.count()):
+            item = self.layer_list.item(i)
+            font = item.font()
+            font.setBold(item.data(Qt.ItemDataRole.UserRole) == active)
+            item.setFont(font)
+        self.layer_list.blockSignals(False)
 
     def _on_layer_item_changed(self, item):
         """Checkbox toggle — flip the layer's visible flag everywhere."""
@@ -783,6 +854,11 @@ class StageTab(BaseTab):
         if layer is None:
             return
         layer.visible = item.checkState() == Qt.CheckState.Checked
+        if not layer.visible and self.stage_view.active_layer == layer.name:
+            # Hiding the layer being edited ends the editing session —
+            # you can't place fixtures you can't see.
+            self.stage_view.set_active_layer(None)
+            self._update_active_layer_ui()
         self.stage_view.apply_layer_visibility()
         self._notify_tcp_update()
         self._broadcast_visualizer_refresh()
@@ -867,6 +943,8 @@ class StageTab(BaseTab):
                 if z_changed:
                     fixture.z = new_z
                     fixture.z_uses_group_default = False
+        if self.stage_view.active_layer == old_name:
+            self.stage_view.active_layer = new_name
 
         self._refresh_layer_list()
         self.stage_view.update_from_config()
@@ -895,6 +973,8 @@ class StageTab(BaseTab):
             if fixture.layer == layer.name:
                 fixture.layer = ""
         self.config.stage_layers.remove(layer)
+        if self.stage_view.active_layer == layer.name:
+            self.stage_view.set_active_layer(None)
         self._refresh_layer_list()
         self.stage_view.update_from_config()
         self._notify_tcp_update()

@@ -95,6 +95,12 @@ class StageView(QtWidgets.QGraphicsView):
         # only works after the user has tabbed to the view.
         self.setFocusPolicy(QtCore.Qt.FocusPolicy.StrongFocus)
 
+        # Active-layer editing mode: when set to a layer name, only that
+        # layer's fixtures are interactive; everything else ghosts to a
+        # faint, locked reference. None = normal editing. UI state, not
+        # persisted to the config.
+        self.active_layer = None
+
         # List to store fixture items
         self.fixtures = {}
         self.spots = {}  # name: SpotItem
@@ -163,6 +169,10 @@ class StageView(QtWidgets.QGraphicsView):
 
     def set_config(self, config):
         """Update the configuration and refresh the view"""
+        if config is not self.config:
+            # A different project: the active-layer editing mode belongs
+            # to the previous config's layer set.
+            self.active_layer = None
         self.config = config
         self.update_from_config()
 
@@ -328,13 +338,31 @@ class StageView(QtWidgets.QGraphicsView):
         # Emit signal to notify listeners (e.g., for TCP visualizer updates)
         self.fixtures_changed.emit()
 
+    def set_active_layer(self, name):
+        """Enter/leave active-layer editing mode (None leaves).
+
+        While a layer is active, its fixtures stay fully interactive and
+        every other fixture (other layers AND unassigned) ghosts: faint,
+        unselectable, undraggable — visible enough to place the active
+        layer's fixtures relative to them, locked so they can't be moved
+        by accident.
+        """
+        if name and (not self.config or self.config.get_stage_layer(name) is None):
+            name = None
+        self.active_layer = name
+        self.apply_layer_visibility()
+
     def apply_layer_visibility(self):
         """Show/hide fixture items according to their stage layer's
-        visible flag. Invisible QGraphicsItems are excluded from
-        itemAt / rubber-band hits, so hidden layers can't be selected
-        or dragged by accident."""
+        visible flag, and apply active-layer ghosting. Invisible
+        QGraphicsItems are excluded from itemAt / rubber-band hits, so
+        hidden layers can't be selected or dragged by accident."""
         if not self.config:
             return
+        active = self.active_layer
+        if active and self.config.get_stage_layer(active) is None:
+            # Layer was deleted underneath us.
+            active = self.active_layer = None
         for fixture_item in self.fixtures.values():
             config_fixture = next(
                 (f for f in self.config.fixtures if f.name == fixture_item.fixture_name),
@@ -342,6 +370,9 @@ class StageView(QtWidgets.QGraphicsView):
             )
             if config_fixture is not None:
                 fixture_item.setVisible(self.config.is_fixture_visible(config_fixture))
+                fixture_item.set_ghosted(
+                    active is not None and config_fixture.layer != active
+                )
 
     def assign_selected_to_layer(self, layer_name):
         """Assign the selected fixtures to a stage layer ('' clears).
@@ -869,7 +900,9 @@ class StageView(QtWidgets.QGraphicsView):
         # stage case (most common) and the multi-select-without-Shift
         # case (no item-level handler).
         item_at_pos = self.itemAt(event.position().toPoint())
-        if isinstance(item_at_pos, FixtureItem) and len(selected_fixtures) <= 1:
+        if (isinstance(item_at_pos, FixtureItem)
+                and not item_at_pos.ghosted
+                and len(selected_fixtures) <= 1):
             super().wheelEvent(event)
             return
 

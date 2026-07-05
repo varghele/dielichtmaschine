@@ -71,6 +71,9 @@ class FixtureItem(QGraphicsItem):
         self.orientation_uses_group_default = True
         self.z_uses_group_default = True  # Whether to use group's default_z_height
         self.layer = ""  # Stage layer assignment ("" = none)
+        # Active-layer editing: fixtures NOT on the active layer ghost to
+        # a faint, locked reference (see StageView.set_active_layer).
+        self.ghosted = False
 
         # Enable dragging and mouse interaction
         self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsMovable)
@@ -104,8 +107,27 @@ class FixtureItem(QGraphicsItem):
 
         return QRectF(-text_width / 2, -self.size / 2, text_width, self.size + self.text_height)
 
+    def set_ghosted(self, ghosted: bool):
+        """Ghost = barely visible + locked. Applied while another stage
+        layer is active for editing: the fixture stays on the plot as a
+        spatial reference but can't be selected, dragged, or wheel-edited."""
+        if ghosted == self.ghosted:
+            return
+        self.ghosted = ghosted
+        self.setOpacity(0.18 if ghosted else 1.0)
+        self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsMovable, not ghosted)
+        self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsSelectable, not ghosted)
+        if ghosted:
+            self.setSelected(False)
+        self.update()
+
     def mouseMoveEvent(self, event):
         """Handle mouse movement for dragging fixtures"""
+        if self.ghosted:
+            # Belt and braces on top of the cleared ItemIsMovable flag —
+            # this override moves the item itself, so it must not run.
+            event.ignore()
+            return
         if Qt.MouseButton.LeftButton & event.buttons():
             # Get the view
             view = self.scene().views()[0]
@@ -232,6 +254,9 @@ class FixtureItem(QGraphicsItem):
 
     def wheelEvent(self, event):
         """Handle mouse wheel events for changing z-height (Shift+scroll)."""
+        if self.ghosted:
+            event.ignore()
+            return
         modifiers = event.modifiers()
 
         # Only handle Z-height adjustment with Shift modifier

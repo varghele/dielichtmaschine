@@ -206,3 +206,122 @@ class TestStageTab:
         assert layer is not None
         assert layer.z_height == 1.5
         assert tab.layer_list.count() == 3
+
+
+class TestActiveLayerView:
+    """StageView active-layer editing: only the active layer's fixtures
+    stay interactive; everything else (other layers AND unassigned)
+    ghosts — faint, unselectable, undraggable."""
+
+    @pytest.fixture
+    def view(self, qapp, layered_config):
+        from gui.StageView import StageView
+        layered_config.get_stage_layer("Top truss").visible = True
+        view = StageView(None)
+        view.set_config(layered_config)
+        yield view
+        view.deleteLater()
+
+    def test_activating_ghosts_everything_off_layer(self, view):
+        from PyQt6.QtWidgets import QGraphicsItem
+
+        view.set_active_layer("Ground")
+
+        member = view.fixtures["Ground Par"]
+        assert member.ghosted is False
+        assert member.opacity() == 1.0
+
+        for name in ("Top Wash", "Floater"):  # other layer + unassigned
+            ghost = view.fixtures[name]
+            assert ghost.ghosted is True
+            assert ghost.opacity() < 0.3
+            assert not (ghost.flags() & QGraphicsItem.GraphicsItemFlag.ItemIsMovable)
+            assert not (ghost.flags() & QGraphicsItem.GraphicsItemFlag.ItemIsSelectable)
+
+    def test_ghosting_clears_selection(self, view):
+        floater = view.fixtures["Floater"]
+        floater.setSelected(True)
+        view.set_active_layer("Ground")
+        assert not floater.isSelected()
+
+    def test_deactivating_restores_everything(self, view):
+        from PyQt6.QtWidgets import QGraphicsItem
+        view.set_active_layer("Ground")
+        view.set_active_layer(None)
+        for item in view.fixtures.values():
+            assert item.ghosted is False
+            assert item.opacity() == 1.0
+            assert item.flags() & QGraphicsItem.GraphicsItemFlag.ItemIsMovable
+
+    def test_unknown_layer_treated_as_none(self, view):
+        view.set_active_layer("NoSuchLayer")
+        assert view.active_layer is None
+        assert all(not i.ghosted for i in view.fixtures.values())
+
+    def test_new_config_resets_active_layer(self, view):
+        view.set_active_layer("Ground")
+        view.set_config(Configuration())
+        assert view.active_layer is None
+
+
+class TestActiveLayerTab:
+
+    @pytest.fixture
+    def tab(self, qapp, layered_config):
+        from gui.tabs.stage_tab import StageTab
+        tab = StageTab(layered_config, parent=None)
+        tab.update_from_config()
+        yield tab
+        tab.deleteLater()
+
+    def test_cycle_goes_all_then_each_layer_then_all(self, tab):
+        assert tab.stage_view.active_layer is None
+        tab._cycle_active_layer()
+        assert tab.stage_view.active_layer == "Ground"
+        tab._cycle_active_layer()
+        assert tab.stage_view.active_layer == "Top truss"
+        tab._cycle_active_layer()
+        assert tab.stage_view.active_layer is None
+
+    def test_double_click_toggles(self, tab):
+        item = tab.layer_list.item(0)  # Ground
+        tab._on_layer_double_clicked(item)
+        assert tab.stage_view.active_layer == "Ground"
+        assert "Ground only" in tab.active_layer_label.text()
+        tab._on_layer_double_clicked(item)
+        assert tab.stage_view.active_layer is None
+        assert "all layers" in tab.active_layer_label.text()
+
+    def test_activating_hidden_layer_forces_it_visible(self, tab, layered_config):
+        # Top truss starts hidden in layered_config.
+        assert layered_config.get_stage_layer("Top truss").visible is False
+        tab._set_active_layer("Top truss")
+        assert layered_config.get_stage_layer("Top truss").visible is True
+        assert tab.stage_view.fixtures["Top Wash"].isVisible()
+
+    def test_hiding_active_layer_ends_editing(self, tab, layered_config):
+        from PyQt6.QtCore import Qt
+        tab._set_active_layer("Ground")
+        tab.layer_list.item(0).setCheckState(Qt.CheckState.Unchecked)
+        assert tab.stage_view.active_layer is None
+
+    def test_removing_active_layer_ends_editing(self, tab, layered_config, monkeypatch):
+        from PyQt6 import QtWidgets
+        monkeypatch.setattr(
+            QtWidgets.QMessageBox, "question",
+            lambda *a, **k: QtWidgets.QMessageBox.StandardButton.Yes,
+        )
+        tab._set_active_layer("Ground")
+        tab.layer_list.setCurrentRow(0)
+        tab._remove_layer()
+        assert tab.stage_view.active_layer is None
+        assert all(not i.ghosted for i in tab.stage_view.fixtures.values())
+
+    def test_renaming_active_layer_follows(self, tab, layered_config, monkeypatch):
+        tab._set_active_layer("Ground")
+        monkeypatch.setattr(tab, "_layer_dialog", lambda *a, **k: ("Deck", 0.0))
+        tab.layer_list.setCurrentRow(0)
+        tab._edit_layer()
+        assert tab.stage_view.active_layer == "Deck"
+        # Still ghosting the non-members after the rebuild.
+        assert tab.stage_view.fixtures["Top Wash"].ghosted is True
