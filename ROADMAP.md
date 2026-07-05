@@ -134,10 +134,11 @@ A show that runs from a button press is fine until the band restarts the song, t
   - Queue list of cue points the operator can jump to mid-song.
   - "Hold" button that pauses the timeline at a bar boundary until released (for unscripted pauses).
   - Manual nudge (+/- one bar, +/- one beat) to recover from drift without rebuilding the show.
-  - Visible link status: ArtNet output, MIDI clock, audio device.
+  - Visible link status: ArtNet output, MIDI clock, incoming timecode (MTC / LTC, with the last-received timecode value), audio device.
 - [ ] **MIDI clock input (slave mode).** Backing track or DAW sends 24 PPQ MIDI clock; the playback engine follows. Handles tempo changes, start / stop / continue messages, and song-position pointer. This is the answer to "what happens when we restart the song" and "what if the band lags": the playhead stays locked to whatever's driving the audio.
 - [ ] **MIDI clock output (master mode).** Show Creator emits clock so a connected DAW or backing-track rig can chase the show. Useful when lighting is the master tempo source.
-- [ ] **MTC (MIDI Time Code) support** as a fallback for environments without MIDI clock.
+- [ ] **MTC (MIDI Time Code) support** as a fallback for environments without MIDI clock. Unlike MIDI clock (beats), MTC delivers absolute SMPTE timecode — the chase logic (timecode-offset mapping to show position, freewheel on dropout, 24/25/29.97/30 fps) is shared with LTC below; only the transport differs.
+- [ ] **LTC (SMPTE linear timecode) input.** Decode SMPTE timecode from an audio input — the FOH / playback rig's LTC line, the lingua franca of festival and touring sync (backing rigs, video servers, pyro all chase it) — and drive the playhead from it. Shares the absolute-timecode chase abstraction with MTC; the new parts are the biphase-mark decoder for the 80-bit SMPTE frame and a per-show timecode-offset field. The Auto Mode audio-capture stack already provides host-API / device selection, so the input plumbing exists. LTC *output* (generating timecode) only if demand shows up.
 - [ ] **Tempo-map handling.** Real songs aren't a single BPM. The Live tab and the clock-sync code need to honour the per-part BPM already in the structure data, including transitions.
 - [ ] **Persistence of operator state.** If the app crashes mid-set, the next launch resumes at the last known cue position, not from bar 0.
 - [ ] **Per-show notes / metadata.** Free-text notes per show (set-list cues, sound-check reminders, gear notes, key changes). Surfaced in the Live tab as a sidebar so the operator can read them at runtime. Stored alongside the show in the config.
