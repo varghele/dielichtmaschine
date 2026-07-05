@@ -768,107 +768,58 @@ class FixturesTab(BaseTab):
         else:
             self.conflict_label.hide()
 
+    def _scan_fixture_files(self) -> list:
+        """Every .qxf reachable in the bundled + platform QLC+ fixture
+        directories, as dicts the browser dialog consumes. The bundled
+        custom_fixtures/ come first and are tagged 'bundled'."""
+        qlc_fixture_dirs = []
+
+        # Always include project's custom_fixtures folder first
+        project_custom_fixtures = os.path.join(
+            os.path.dirname(os.path.dirname(os.path.dirname(__file__))),
+            'custom_fixtures')
+        if os.path.exists(project_custom_fixtures):
+            qlc_fixture_dirs.append((project_custom_fixtures, 'bundled'))
+
+        if sys.platform.startswith('linux'):
+            qlc_fixture_dirs.append((os.path.expanduser('~/.qlcplus/Fixtures'), 'library'))
+            qlc_fixture_dirs.append(('/usr/share/qlcplus/Fixtures', 'library'))
+        elif sys.platform == 'win32':
+            qlc_fixture_dirs.append((os.path.join(os.path.expanduser('~'), 'QLC+', 'Fixtures'), 'library'))
+            qlc_fixture_dirs.append(('C:\\QLC+\\Fixtures', 'library'))
+            qlc_fixture_dirs.append(('C:\\QLC+5\\Fixtures', 'library'))
+        elif sys.platform == 'darwin':
+            qlc_fixture_dirs.append((os.path.expanduser('~/Library/Application Support/QLC+/Fixtures'), 'library'))
+            qlc_fixture_dirs.append(('/Applications/QLC+.app/Contents/Resources/Fixtures', 'library'))
+
+        fixture_files = []
+        for qlc_fixtures_dir, source in qlc_fixture_dirs:
+            if os.path.exists(qlc_fixtures_dir):
+                for root, dirs, files in os.walk(qlc_fixtures_dir):
+                    for file in files:
+                        if file.endswith('.qxf'):
+                            fixture_files.append({
+                                'manufacturer': os.path.basename(root),
+                                'model': os.path.splitext(file)[0],
+                                'path': os.path.join(root, file),
+                                'source': source,
+                            })
+        return fixture_files
+
     def _add_fixture(self):
-        """Show dialog to add fixture from QLC+ definitions"""
+        """Open the fixture browser and add the picked fixture(s)."""
+        from gui.dialogs.fixture_browser_dialog import FixtureBrowserDialog
         try:
-            # Scan QLC+ fixture directories
-            qlc_fixture_dirs = []
-
-            # Always include project's custom_fixtures folder first
-            project_custom_fixtures = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), 'custom_fixtures')
-            if os.path.exists(project_custom_fixtures):
-                qlc_fixture_dirs.append(project_custom_fixtures)
-
-            if sys.platform.startswith('linux'):
-                # Linux paths
-                qlc_fixture_dirs.append(os.path.expanduser('~/.qlcplus/Fixtures'))
-                qlc_fixture_dirs.append('/usr/share/qlcplus/Fixtures')
-
-            elif sys.platform == 'win32':
-                # Windows paths
-                qlc_fixture_dirs.append(os.path.join(os.path.expanduser('~'), 'QLC+', 'Fixtures'))
-                qlc_fixture_dirs.append('C:\\QLC+\\Fixtures')
-                qlc_fixture_dirs.append('C:\\QLC+5\\Fixtures')
-
-            elif sys.platform == 'darwin':
-                # macOS paths
-                qlc_fixture_dirs.append(os.path.expanduser('~/Library/Application Support/QLC+/Fixtures'))
-                qlc_fixture_dirs.append('/Applications/QLC+.app/Contents/Resources/Fixtures')
-
-            # Build fixture list
-            fixture_files = []
-            for qlc_fixtures_dir in qlc_fixture_dirs:
-                if os.path.exists(qlc_fixtures_dir):
-                    for root, dirs, files in os.walk(qlc_fixtures_dir):
-                        for file in files:
-                            if file.endswith('.qxf'):
-                                manufacturer = os.path.basename(root)
-                                fixture_files.append({
-                                    'manufacturer': manufacturer,
-                                    'model': os.path.splitext(file)[0],
-                                    'path': os.path.join(root, file)
-                                })
-
+            fixture_files = self._scan_fixture_files()
             if not fixture_files:
                 raise Exception("No fixture files found in QLC+ directories")
 
-            # Create selection dialog
-            dialog = QDialog(self)
-            dialog.setWindowTitle("Select Fixture")
-            dialog.setModal(True)
-            dialog.resize(600, 800)
-            layout = QtWidgets.QVBoxLayout()
-            layout.setSpacing(10)
-
-            # Search box
-            search_box = QLineEdit()
-            search_box.setPlaceholderText("Search fixtures...")
-            font = QtGui.QFont()
-            font.setPointSize(12)
-            search_box.setFont(font)
-            search_box.setMinimumHeight(40)
-            layout.addWidget(search_box)
-
-            # List widget
-            list_widget = QtWidgets.QListWidget()
-            list_widget.setFont(font)
-            list_widget.setSpacing(4)
-
-            # Add sorted fixtures
-            fixture_files.sort(key=lambda x: (x['manufacturer'].lower(), x['model'].lower()))
-            for fixture in fixture_files:
-                item = QtWidgets.QListWidgetItem(
-                    f"{fixture['manufacturer']} - {fixture['model']}"
-                )
-                item.setData(QtCore.Qt.ItemDataRole.UserRole, fixture['path'])
-                list_widget.addItem(item)
-
-            layout.addWidget(list_widget)
-
-            # Search filter
-            def filter_fixtures():
-                search_text = search_box.text().lower()
-                for i in range(list_widget.count()):
-                    item = list_widget.item(i)
-                    item.setHidden(search_text not in item.text().lower())
-
-            search_box.textChanged.connect(filter_fixtures)
-
-            # Dialog buttons
-            button_box = QDialogButtonBox(
-                QDialogButtonBox.StandardButton.Ok |
-                QDialogButtonBox.StandardButton.Cancel
-            )
-            button_box.accepted.connect(dialog.accept)
-            button_box.rejected.connect(dialog.reject)
-            layout.addWidget(button_box)
-
-            dialog.setLayout(layout)
-
+            dialog = FixtureBrowserDialog(fixture_files, parent=self)
             if dialog.exec() == QDialog.DialogCode.Accepted:
-                selected_items = list_widget.selectedItems()
-                if selected_items:
-                    self._process_fixture_selection(selected_items[0])
+                selected = dialog.selection()
+                if selected:
+                    path, quantity = selected
+                    self._add_fixtures_from_qxf(path, quantity)
 
         except Exception as e:
             print(f"Error adding fixture: {e}")
@@ -921,11 +872,23 @@ class FixturesTab(BaseTab):
         # Fallback to universe 1, address 1 if all universes are somehow full
         return (1, 1)
 
-    def _process_fixture_selection(self, selected_item):
-        """Process selected fixture and add to configuration"""
-        fixture_path = selected_item.data(QtCore.Qt.ItemDataRole.UserRole)
+    def _unique_fixture_name(self, base_name: str) -> str:
+        """base_name, or 'base_name (2)', 'base_name (3)', ... if taken."""
+        existing = {f.name for f in self.config.fixtures}
+        if base_name not in existing:
+            return base_name
+        n = 2
+        while f"{base_name} ({n})" in existing:
+            n += 1
+        return f"{base_name} ({n})"
 
-        # Parse fixture file
+    def _add_fixtures_from_qxf(self, fixture_path: str, quantity: int = 1):
+        """Parse a .qxf and add ``quantity`` fixtures to the config.
+
+        Each copy is patched at the next free (universe, address) slot —
+        the free-slot search re-runs after every append, so multi-adds
+        come out at consecutive non-overlapping addresses.
+        """
         tree = ET.parse(fixture_path)
         root = tree.getroot()
         ns = {'': 'http://www.qlcplus.org/FixtureDefinition'}
@@ -940,32 +903,28 @@ class FixturesTab(BaseTab):
             {'name': mode.get('Name'), 'channels': len(mode.findall('Channel', ns))}
             for mode in modes
         ]
-
-        # Find next available DMX address
         first_mode_channels = mode_data[0]['channels'] if mode_data else 1
-        universe, address = self._find_next_available_address(first_mode_channels)
 
-        # Create fixture object
-        new_fixture = Fixture(
-            universe=universe,
-            address=address,
-            manufacturer=manufacturer,
-            model=model,
-            name=model,
-            group="",
-            current_mode=mode_data[0]['name'],
-            available_modes=[
-                FixtureMode(name=mode['name'], channels=mode['channels'])
-                for mode in mode_data
-            ],
-            type=fixture_type,
-            x=0.0,
-            y=0.0,
-            z=0.0
-        )
-
-        # Add to configuration
-        self.config.fixtures.append(new_fixture)
+        for _ in range(quantity):
+            universe, address = self._find_next_available_address(first_mode_channels)
+            new_fixture = Fixture(
+                universe=universe,
+                address=address,
+                manufacturer=manufacturer,
+                model=model,
+                name=self._unique_fixture_name(model),
+                group="",
+                current_mode=mode_data[0]['name'],
+                available_modes=[
+                    FixtureMode(name=mode['name'], channels=mode['channels'])
+                    for mode in mode_data
+                ],
+                type=fixture_type,
+                x=0.0,
+                y=0.0,
+                z=0.0
+            )
+            self.config.fixtures.append(new_fixture)
 
         # Check if this fixture model is already cached
         from utils.fixture_utils import _fixture_definitions_cache
@@ -1035,7 +994,7 @@ class FixturesTab(BaseTab):
         if main_window and hasattr(main_window, 'on_groups_changed'):
             main_window.on_groups_changed()
 
-        print(f"Added fixture: {manufacturer} {model}")
+        print(f"Added {quantity}x fixture: {manufacturer} {model}")
 
     def _remove_fixture(self):
         """Remove selected fixture from configuration"""

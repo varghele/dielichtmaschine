@@ -13,6 +13,11 @@ verbatim as the GitHub Release notes (see [docs/releasing.md](docs/releasing.md)
 
 ### Added
 
+- **Fixture browser upgrade.** The Add Fixture dialog grew a details pane
+  (fixture type + every mode with its channel count, parsed lazily from the
+  selected `.qxf`), a `[bundled]` tag on the definitions that ship with the
+  app, double-click-to-add, and a quantity field — add 8 PARs in one go,
+  auto-patched at consecutive free addresses with unique names.
 - **New from Template.** `File -> New from Template` (Ctrl+N) starts a
   project from one of the five bundled starter rigs (club band 9 fixtures up
   to festival mainstage 60), optionally with the ready-to-play demo show and
