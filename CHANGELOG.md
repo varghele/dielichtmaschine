@@ -13,6 +13,13 @@ verbatim as the GitHub Release notes (see [docs/releasing.md](docs/releasing.md)
 
 ### Added
 
+- **Stage layers (vertical stacking).** The Stage tab gets named Z-planes
+  (ground stack, mid-truss, top-truss, ...) with a per-layer visibility
+  toggle. Assign fixtures via right-click on the stage; assignment snaps the
+  fixture to the layer's height, and editing a layer's height moves
+  everything on it. Hidden layers disappear from the 2D plot and every 3D
+  preview (embedded and standalone) but still patch, output DMX, and export.
+  Layers round-trip through the config YAML and the fixture-list CSV/JSON.
 - **Fixture list import/export.** `File -> Import / Export Fixture List`
   round-trips the rig (patch, grouping, position, orientation) without the
   rest of the project, as `.csv` (flat spec sheet, effective values; a

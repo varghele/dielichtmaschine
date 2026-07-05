@@ -651,6 +651,12 @@ class VisualizerProtocol:
         fixtures_data = []
 
         for fixture in config.fixtures:
+            # Fixtures on hidden stage layers are omitted from every 3D
+            # preview (embedded + standalone via TCP). They still patch,
+            # output DMX, and export — this is display-only.
+            if hasattr(config, 'is_fixture_visible') and not config.is_fixture_visible(fixture):
+                continue
+
             # Get QXF metadata for this fixture
             qxf_data = _parse_qxf_for_visualizer(
                 fixture.manufacturer,

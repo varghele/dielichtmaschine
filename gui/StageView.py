@@ -265,9 +265,12 @@ class StageView(QtWidgets.QGraphicsView):
                 fixture_item.group = fixture.group
                 fixture_item.current_mode = fixture.current_mode
                 fixture_item.available_modes = fixture.available_modes
+                fixture_item.layer = fixture.layer
 
                 self.scene.addItem(fixture_item)
                 self.fixtures[fixture.name] = fixture_item
+
+        self.apply_layer_visibility()
 
         # Update spots
         if hasattr(self.config, 'spots'):
@@ -311,6 +314,7 @@ class StageView(QtWidgets.QGraphicsView):
                 config_fixture.roll = fixture_item.roll
                 config_fixture.orientation_uses_group_default = fixture_item.orientation_uses_group_default
                 config_fixture.z_uses_group_default = fixture_item.z_uses_group_default
+                config_fixture.layer = fixture_item.layer
 
         # Save spot positions
         for spot_name, spot_item in self.spots.items():
@@ -323,6 +327,38 @@ class StageView(QtWidgets.QGraphicsView):
 
         # Emit signal to notify listeners (e.g., for TCP visualizer updates)
         self.fixtures_changed.emit()
+
+    def apply_layer_visibility(self):
+        """Show/hide fixture items according to their stage layer's
+        visible flag. Invisible QGraphicsItems are excluded from
+        itemAt / rubber-band hits, so hidden layers can't be selected
+        or dragged by accident."""
+        if not self.config:
+            return
+        for fixture_item in self.fixtures.values():
+            config_fixture = next(
+                (f for f in self.config.fixtures if f.name == fixture_item.fixture_name),
+                None
+            )
+            if config_fixture is not None:
+                fixture_item.setVisible(self.config.is_fixture_visible(config_fixture))
+
+    def assign_selected_to_layer(self, layer_name):
+        """Assign the selected fixtures to a stage layer ('' clears).
+
+        A layer is a Z-plane: assignment snaps the fixture's Z to the
+        layer's height (as an explicit per-fixture value). Clearing the
+        assignment leaves Z untouched.
+        """
+        layer = self.config.get_stage_layer(layer_name) if (self.config and layer_name) else None
+        for fixture_item in self.get_selected_fixtures():
+            fixture_item.layer = layer_name if layer is not None else ""
+            if layer is not None:
+                fixture_item.z_height = layer.z_height
+                fixture_item.z_uses_group_default = False
+            fixture_item.update()
+        self.save_positions_to_config()
+        self.apply_layer_visibility()
 
     def set_snap_to_grid(self, enabled):
         """Enable or disable snap to grid"""
@@ -758,6 +794,17 @@ class StageView(QtWidgets.QGraphicsView):
         orientation_action = menu.addAction("Set Orientation...")
         orientation_action.setEnabled(len(selected_fixtures) > 0)
 
+        # Assign to Layer submenu — only offered once layers exist.
+        layer_actions = {}
+        clear_layer_action = None
+        if self.config and self.config.stage_layers:
+            layer_menu = menu.addMenu("Assign to Layer")
+            for layer in self.config.stage_layers:
+                action = layer_menu.addAction(f"{layer.name} ({layer.z_height:g} m)")
+                layer_actions[action] = layer.name
+            layer_menu.addSeparator()
+            clear_layer_action = layer_menu.addAction("None")
+
         menu.addSeparator()
 
         # Select All action
@@ -772,6 +819,10 @@ class StageView(QtWidgets.QGraphicsView):
         if action == orientation_action:
             # Emit signal to open orientation dialog
             self.set_orientation_requested.emit(selected_fixtures)
+        elif action in layer_actions:
+            self.assign_selected_to_layer(layer_actions[action])
+        elif clear_layer_action is not None and action == clear_layer_action:
+            self.assign_selected_to_layer("")
         elif action == select_all_action:
             for fixture_item in self.fixtures.values():
                 fixture_item.setSelected(True)

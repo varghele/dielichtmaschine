@@ -31,6 +31,7 @@ class FixtureItem(QGraphicsItem):
         self.roll = 0.0
         self.orientation_uses_group_default = True
         self.z_uses_group_default = True  # Whether to use group's default_z_height
+        self.layer = ""  # Stage layer assignment ("" = none)
 
         # Enable dragging and mouse interaction
         self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsMovable)
@@ -185,7 +186,10 @@ class FixtureItem(QGraphicsItem):
         painter.setFont(font)
 
         z_rect = QRectF(-text_width / 2, text_y_offset + 11, text_width, 12)
-        painter.drawText(z_rect, Qt.AlignmentFlag.AlignCenter, f"Z: {self.z_height:.1f}m")
+        z_label = f"Z: {self.z_height:.1f}m"
+        if self.layer:
+            z_label += f"  [{self.layer}]"
+        painter.drawText(z_rect, Qt.AlignmentFlag.AlignCenter, z_label)
 
     def wheelEvent(self, event):
         """Handle mouse wheel events for changing z-height (Shift+scroll)."""

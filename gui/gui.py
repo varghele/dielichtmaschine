@@ -1051,7 +1051,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         if not file_path:
             return
         try:
-            fixtures, group_props, fmt = read_fixture_list(file_path)
+            fixtures, group_props, layers, fmt = read_fixture_list(file_path)
         except Exception as e:
             QMessageBox.critical(
                 self, "Import Failed",
@@ -1088,7 +1088,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         # Resolution also warms the shared definitions cache, so the
         # visualizer and capability detection see the imported models.
         warnings = resolve_modes_from_library(fixtures)
-        apply_fixture_list(self.config, fixtures, group_props, replace=replace)
+        apply_fixture_list(self.config, fixtures, group_props, layers, replace=replace)
 
         self.fixtures_tab.update_from_config(force=True)
         self.on_groups_changed()

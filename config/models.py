@@ -41,6 +41,10 @@ class Fixture:
     orientation_uses_group_default: bool = True
     z_uses_group_default: bool = True
 
+    # Stage layer assignment ("" = no layer). Layers are named Z-planes
+    # (ground stack / mid-truss / top-truss); see StageLayer.
+    layer: str = ""
+
     def get_effective_orientation(self, group: Optional['FixtureGroup'] = None) -> tuple:
         """
         Get effective orientation values, considering group defaults if applicable.
@@ -70,6 +74,20 @@ class Spot:
     x: float = 0.0     # X position in meters
     y: float = 0.0     # Y position in meters
     z: float = 0.0     # Z height in meters (for 3D targeting)
+
+
+@dataclass
+class StageLayer:
+    """A named horizontal Z-plane of the rig (ground stack, mid-truss, ...).
+
+    Fixtures opt in via Fixture.layer. Assigning a fixture to a layer snaps
+    its Z to z_height; a layer with visible=False is omitted from the 2D
+    stage plot and every 3D preview (fixtures on it still exist, patch, and
+    export normally).
+    """
+    name: str
+    z_height: float = 3.0   # nominal plane height in meters
+    visible: bool = True
 
 
 @dataclass
@@ -1213,6 +1231,21 @@ class Configuration:
     stage_width: float = 10.0  # Stage width in meters
     stage_height: float = 6.0  # Stage depth in meters (called height for compatibility)
     grid_size: float = 0.5  # Grid spacing in meters
+    stage_layers: List[StageLayer] = field(default_factory=list)
+
+    def get_stage_layer(self, name: str) -> Optional[StageLayer]:
+        return next((l for l in self.stage_layers if l.name == name), None)
+
+    def is_fixture_visible(self, fixture: Fixture) -> bool:
+        """False only when the fixture sits on a hidden stage layer.
+
+        Fixtures without a layer, or referencing a layer that no longer
+        exists, are always visible.
+        """
+        if not fixture.layer:
+            return True
+        layer = self.get_stage_layer(fixture.layer)
+        return layer.visible if layer is not None else True
 
     @classmethod
     def from_workspace(cls, workspace_path: str) -> 'Configuration':
@@ -1346,6 +1379,7 @@ class Configuration:
             'stage_width': self.stage_width,
             'stage_height': self.stage_height,
             'grid_size': self.grid_size,
+            'stage_layers': [asdict(layer) for layer in self.stage_layers],
         }
 
         from config.compact_serializer import compact_serialize
@@ -1464,6 +1498,10 @@ class Configuration:
             stage_width=data.get('stage_width', 10.0),
             stage_height=data.get('stage_height', 6.0),
             grid_size=data.get('grid_size', 0.5),
+            stage_layers=[
+                StageLayer(**layer_data)
+                for layer_data in data.get('stage_layers', [])
+            ],
         )
 
         # Transient attribute (not persisted): the path the config was loaded

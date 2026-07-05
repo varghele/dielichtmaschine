@@ -29,12 +29,12 @@ import json
 import os
 from typing import Dict, List, Optional, Tuple
 
-from config.models import Fixture, FixtureGroup, FixtureMode
+from config.models import Fixture, FixtureGroup, FixtureMode, StageLayer
 from utils.dmx_conflicts import fixture_channel_count
 
 CSV_FIELDNAMES = [
     'name', 'manufacturer', 'model', 'type', 'mode', 'channels',
-    'universe', 'address', 'group', 'x', 'y', 'z',
+    'universe', 'address', 'group', 'layer', 'x', 'y', 'z',
     'mounting', 'yaw', 'pitch', 'roll',
 ]
 
@@ -85,6 +85,7 @@ def write_fixture_list_csv(path: str, config) -> None:
                 'universe': fixture.universe,
                 'address': fixture.address,
                 'group': fixture.group,
+                'layer': fixture.layer,
                 'x': fixture.x,
                 'y': fixture.y,
                 'z': fixture.get_effective_z(group),
@@ -123,6 +124,7 @@ def read_fixture_list_csv(path: str) -> List[Fixture]:
                     model=model,
                     name=(row.get('name') or '').strip() or model,
                     group=(row.get('group') or '').strip(),
+                    layer=(row.get('layer') or '').strip(),
                     current_mode=mode,
                     available_modes=[FixtureMode(name=mode, channels=channels)],
                     type=(row.get('type') or '').strip() or 'PAR',
@@ -173,6 +175,7 @@ def write_fixture_list_json(path: str, config) -> None:
             'universe': fixture.universe,
             'address': fixture.address,
             'group': fixture.group,
+            'layer': fixture.layer,
             'x': fixture.x,
             'y': fixture.y,
             'z': fixture.z,
@@ -194,18 +197,22 @@ def write_fixture_list_json(path: str, config) -> None:
         'version': JSON_FORMAT_VERSION,
         'definitions': definitions,
         'groups': groups,
+        'layers': [
+            {'name': l.name, 'z_height': l.z_height, 'visible': l.visible}
+            for l in getattr(config, 'stage_layers', [])
+        ],
         'fixtures': fixture_dicts,
     }
     with open(path, 'w') as f:
         json.dump(data, f, indent=2)
 
 
-def read_fixture_list_json(path: str) -> Tuple[List[Fixture], Dict[str, dict]]:
-    """Read a JSON rig back into (fixtures, group_props).
+def read_fixture_list_json(path: str) -> Tuple[List[Fixture], Dict[str, dict], List[StageLayer]]:
+    """Read a JSON rig back into (fixtures, group_props, layers).
 
     group_props maps group name -> the GROUP_PROP_KEYS subset that was
     exported; apply_fixture_list uses it to seed groups that don't exist
-    in the target config yet.
+    in the target config yet. layers are the exported StageLayer planes.
     """
     with open(path, 'r') as f:
         data = json.load(f)
@@ -226,6 +233,7 @@ def read_fixture_list_json(path: str) -> Tuple[List[Fixture], Dict[str, dict]]:
                 model=definition['model'],
                 name=fd['name'],
                 group=fd.get('group', ''),
+                layer=fd.get('layer', ''),
                 current_mode=fd['mode'],
                 available_modes=[
                     FixtureMode(name=m['name'], channels=int(m['channels']))
@@ -252,21 +260,30 @@ def read_fixture_list_json(path: str) -> Tuple[List[Fixture], Dict[str, dict]]:
         name: {key: props[key] for key in GROUP_PROP_KEYS if key in props}
         for name, props in (data.get('groups') or {}).items()
     }
-    return fixtures, group_props
+    layers = [
+        StageLayer(
+            name=ld['name'],
+            z_height=float(ld.get('z_height', 3.0)),
+            visible=bool(ld.get('visible', True)),
+        )
+        for ld in (data.get('layers') or [])
+    ]
+    return fixtures, group_props, layers
 
 
 # ---------------------------------------------------------------------------
 # Format-agnostic entry points
 # ---------------------------------------------------------------------------
 
-def read_fixture_list(path: str) -> Tuple[List[Fixture], Dict[str, dict], str]:
-    """Returns (fixtures, group_props, format). CSV has no group metadata,
-    so group_props is empty for it."""
+def read_fixture_list(path: str) -> Tuple[List[Fixture], Dict[str, dict], List[StageLayer], str]:
+    """Returns (fixtures, group_props, layers, format). CSV has no group or
+    layer metadata sections, so those are empty for it (fixtures still carry
+    layer names; apply_fixture_list synthesizes missing layers)."""
     fmt = detect_format(path)
     if fmt == 'csv':
-        return read_fixture_list_csv(path), {}, 'csv'
-    fixtures, group_props = read_fixture_list_json(path)
-    return fixtures, group_props, 'json'
+        return read_fixture_list_csv(path), {}, [], 'csv'
+    fixtures, group_props, layers = read_fixture_list_json(path)
+    return fixtures, group_props, layers, 'json'
 
 
 def write_fixture_list(path: str, config) -> str:
@@ -337,6 +354,7 @@ def _unique_name(name: str, existing: set) -> str:
 
 def apply_fixture_list(config, fixtures: List[Fixture],
                        group_props: Optional[Dict[str, dict]] = None,
+                       layers: Optional[List[StageLayer]] = None,
                        replace: bool = False) -> None:
     """Apply an imported fixture list to a Configuration.
 
@@ -344,16 +362,31 @@ def apply_fixture_list(config, fixtures: List[Fixture],
     imported fixtures whose names collide ("Name (2)"). Groups are rebuilt
     from fixture membership; existing groups keep their properties, groups
     new to the config are seeded from group_props (JSON) or defaults (CSV).
+    Stage layers merge by name (existing layers win); a fixture referencing
+    a layer nobody defines gets one synthesized at its own height.
     """
     if replace:
         config.fixtures = []
         config.groups = {}
+        config.stage_layers = []
 
     existing_names = {f.name for f in config.fixtures}
     for fixture in fixtures:
         fixture.name = _unique_name(fixture.name, existing_names)
         existing_names.add(fixture.name)
         config.fixtures.append(fixture)
+
+    existing_layers = {l.name for l in config.stage_layers}
+    for layer in (layers or []):
+        if layer.name not in existing_layers:
+            config.stage_layers.append(layer)
+            existing_layers.add(layer.name)
+    for fixture in fixtures:
+        if fixture.layer and fixture.layer not in existing_layers:
+            config.stage_layers.append(
+                StageLayer(name=fixture.layer, z_height=fixture.z)
+            )
+            existing_layers.add(fixture.layer)
 
     # Rebuild group membership, preserving props of groups already present.
     old_groups = config.groups

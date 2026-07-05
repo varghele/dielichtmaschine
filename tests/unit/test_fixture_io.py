@@ -135,7 +135,7 @@ class TestJsonRoundTrip:
     def test_full_fidelity(self, rig_config, tmp_path):
         path = str(tmp_path / "rig.json")
         write_fixture_list_json(path, rig_config)
-        fixtures, group_props = read_fixture_list_json(path)
+        fixtures, group_props, layers = read_fixture_list_json(path)
 
         for original, restored in zip(rig_config.fixtures, fixtures):
             assert restored == original
@@ -178,7 +178,7 @@ class TestFormatDispatch:
         for ext in ("csv", "json"):
             path = str(tmp_path / f"rig.{ext}")
             assert write_fixture_list(path, rig_config) == ext
-            fixtures, group_props, fmt = read_fixture_list(path)
+            fixtures, group_props, layers, fmt = read_fixture_list(path)
             assert fmt == ext
             assert len(fixtures) == 3
             assert bool(group_props) == (ext == "json")
@@ -271,3 +271,58 @@ class TestApplyFixtureList:
         apply_fixture_list(config, [make_fixture("A", group="G")], replace=False)
         assert len(config.fixtures) == 1
         assert set(config.groups) == {"G"}
+
+
+class TestStageLayers:
+
+    def test_json_round_trips_layers(self, rig_config, tmp_path):
+        from config.models import StageLayer
+        rig_config.stage_layers = [
+            StageLayer(name="Top truss", z_height=5.0, visible=False),
+        ]
+        rig_config.fixtures[0].layer = "Top truss"
+
+        path = str(tmp_path / "rig.json")
+        write_fixture_list_json(path, rig_config)
+        fixtures, _, layers = read_fixture_list_json(path)
+
+        assert layers == [StageLayer(name="Top truss", z_height=5.0, visible=False)]
+        assert fixtures[0].layer == "Top truss"
+
+    def test_csv_carries_layer_column(self, rig_config, tmp_path):
+        rig_config.fixtures[0].layer = "Top truss"
+        path = str(tmp_path / "rig.csv")
+        write_fixture_list_csv(path, rig_config)
+        fixtures = read_fixture_list_csv(path)
+        assert fixtures[0].layer == "Top truss"
+        assert fixtures[1].layer == ""
+
+    def test_apply_merges_layers_and_synthesizes_missing(self):
+        from config.models import StageLayer
+        config = Configuration(
+            stage_layers=[StageLayer(name="Ground", z_height=0.0)],
+        )
+        imported = [
+            make_fixture("A", group="", layer="Ground", z=0.3),
+            make_fixture("B", group="", layer="Booms", z=1.5),  # nobody defines it
+        ]
+        apply_fixture_list(
+            config, imported,
+            layers=[StageLayer(name="Ground", z_height=9.9)],  # existing wins
+        )
+        assert config.get_stage_layer("Ground").z_height == 0.0
+        booms = config.get_stage_layer("Booms")
+        assert booms is not None
+        assert booms.z_height == 1.5  # synthesized at the fixture's height
+
+    def test_replace_swaps_layers(self):
+        from config.models import StageLayer
+        config = Configuration(
+            stage_layers=[StageLayer(name="Old", z_height=2.0)],
+        )
+        apply_fixture_list(
+            config, [make_fixture("A", group="")],
+            layers=[StageLayer(name="New", z_height=4.0)],
+            replace=True,
+        )
+        assert [l.name for l in config.stage_layers] == ["New"]

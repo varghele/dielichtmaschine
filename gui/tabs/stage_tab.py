@@ -116,6 +116,37 @@ class StageTab(BaseTab):
         spot_layout.addWidget(self.add_spot_btn)
         spot_layout.addWidget(self.remove_item_btn)
 
+        # Stage layers group — named Z-planes (ground stack / mid-truss /
+        # top-truss). Checkbox = visibility; hidden layers disappear from
+        # the 2D plot and every 3D preview. Fixtures are assigned via the
+        # stage right-click menu ("Assign to Layer").
+        layer_group = QtWidgets.QGroupBox("Stage Layers")
+        layer_layout = QtWidgets.QVBoxLayout(layer_group)
+
+        self.layer_list = QtWidgets.QListWidget()
+        self.layer_list.setMaximumHeight(110)
+        self.layer_list.setToolTip(
+            "Named Z-planes of the rig. Uncheck a layer to hide its\n"
+            "fixtures on the stage plot and in the 3D previews.\n"
+            "Assign fixtures via right-click on the stage."
+        )
+        layer_layout.addWidget(self.layer_list)
+
+        layer_btn_row = QtWidgets.QHBoxLayout()
+        self.add_layer_btn = QtWidgets.QPushButton("+")
+        self.add_layer_btn.setFixedWidth(32)
+        self.add_layer_btn.setToolTip("Add Layer")
+        self.remove_layer_btn = QtWidgets.QPushButton("-")
+        self.remove_layer_btn.setFixedWidth(32)
+        self.remove_layer_btn.setToolTip("Remove Layer (fixtures keep their height)")
+        self.edit_layer_btn = QtWidgets.QPushButton("Edit")
+        self.edit_layer_btn.setToolTip("Rename the layer or move it to another height")
+        layer_btn_row.addWidget(self.add_layer_btn)
+        layer_btn_row.addWidget(self.remove_layer_btn)
+        layer_btn_row.addWidget(self.edit_layer_btn)
+        layer_btn_row.addStretch()
+        layer_layout.addLayout(layer_btn_row)
+
         # Fixture Orientation group
         orientation_group = QtWidgets.QGroupBox("Fixture Orientation")
         orientation_layout = QtWidgets.QVBoxLayout(orientation_group)
@@ -171,6 +202,7 @@ class StageTab(BaseTab):
         control_layout.addWidget(grid_group)
         control_layout.addWidget(view_group)
         control_layout.addWidget(spot_group)
+        control_layout.addWidget(layer_group)
         control_layout.addWidget(orientation_group)
         control_layout.addWidget(plot_group)
         control_layout.addWidget(visualizer_group)
@@ -250,6 +282,12 @@ class StageTab(BaseTab):
         self.add_spot_btn.clicked.connect(lambda: self.stage_view.add_spot())
         self.remove_item_btn.clicked.connect(self.stage_view.remove_selected_items)
 
+        # Stage layer controls
+        self.add_layer_btn.clicked.connect(self._add_layer)
+        self.remove_layer_btn.clicked.connect(self._remove_layer)
+        self.edit_layer_btn.clicked.connect(self._edit_layer)
+        self.layer_list.itemChanged.connect(self._on_layer_item_changed)
+
         # Visualizer controls
         self.launch_visualizer_btn.clicked.connect(self._launch_visualizer)
 
@@ -308,6 +346,8 @@ class StageTab(BaseTab):
                 )
                 if hasattr(self.config, 'grid_size'):
                     self.stage_view.updateGrid(size_m=float(self.config.grid_size))
+
+            self._refresh_layer_list()
 
         self._refresh_embedded_visualizer()
 
@@ -571,6 +611,145 @@ class StageTab(BaseTab):
                     tcp_server.update_config(self.config)
         except Exception as e:
             print(f"Error notifying TCP server: {e}")
+
+    # ── Stage layers ──────────────────────────────────────────────────
+
+    def _refresh_layer_list(self):
+        """Rebuild the layer list widget from config.stage_layers."""
+        self.layer_list.blockSignals(True)
+        self.layer_list.clear()
+        for layer in self.config.stage_layers:
+            item = QtWidgets.QListWidgetItem(f"{layer.name} ({layer.z_height:g} m)")
+            item.setFlags(item.flags() | Qt.ItemFlag.ItemIsUserCheckable)
+            item.setCheckState(
+                Qt.CheckState.Checked if layer.visible else Qt.CheckState.Unchecked
+            )
+            item.setData(Qt.ItemDataRole.UserRole, layer.name)
+            self.layer_list.addItem(item)
+        self.layer_list.blockSignals(False)
+
+    def _on_layer_item_changed(self, item):
+        """Checkbox toggle — flip the layer's visible flag everywhere."""
+        layer = self.config.get_stage_layer(item.data(Qt.ItemDataRole.UserRole))
+        if layer is None:
+            return
+        layer.visible = item.checkState() == Qt.CheckState.Checked
+        self.stage_view.apply_layer_visibility()
+        self._notify_tcp_update()
+        self._broadcast_visualizer_refresh()
+
+    def _layer_dialog(self, title, name="", z_height=3.0):
+        """Small name + height dialog. Returns (name, z_height) or None."""
+        dialog = QtWidgets.QDialog(self)
+        dialog.setWindowTitle(title)
+        layout = QtWidgets.QFormLayout(dialog)
+
+        name_edit = QtWidgets.QLineEdit(name)
+        name_edit.setPlaceholderText("e.g. Top truss")
+        layout.addRow("Name:", name_edit)
+
+        z_spin = QtWidgets.QDoubleSpinBox()
+        z_spin.setRange(0.0, 100.0)
+        z_spin.setSingleStep(0.5)
+        z_spin.setValue(z_height)
+        layout.addRow("Height (m):", z_spin)
+
+        buttons = QtWidgets.QDialogButtonBox(
+            QtWidgets.QDialogButtonBox.StandardButton.Ok |
+            QtWidgets.QDialogButtonBox.StandardButton.Cancel
+        )
+        buttons.accepted.connect(dialog.accept)
+        buttons.rejected.connect(dialog.reject)
+        layout.addRow(buttons)
+
+        if dialog.exec() != QtWidgets.QDialog.DialogCode.Accepted:
+            return None
+        new_name = name_edit.text().strip()
+        if not new_name:
+            return None
+        return new_name, z_spin.value()
+
+    def _add_layer(self):
+        from config.models import StageLayer
+        result = self._layer_dialog("Add Stage Layer")
+        if result is None:
+            return
+        name, z_height = result
+        if self.config.get_stage_layer(name) is not None:
+            QtWidgets.QMessageBox.warning(
+                self, "Layer Exists", f"A layer named '{name}' already exists."
+            )
+            return
+        self.config.stage_layers.append(StageLayer(name=name, z_height=z_height))
+        self._refresh_layer_list()
+
+    def _selected_layer(self):
+        item = self.layer_list.currentItem()
+        if item is None:
+            return None
+        return self.config.get_stage_layer(item.data(Qt.ItemDataRole.UserRole))
+
+    def _edit_layer(self):
+        """Rename a layer and/or move it to another height.
+
+        Moving the layer moves everything on it: all assigned fixtures
+        get the new height (the truss goes up, the lamps go with it).
+        """
+        layer = self._selected_layer()
+        if layer is None:
+            return
+        result = self._layer_dialog("Edit Stage Layer", layer.name, layer.z_height)
+        if result is None:
+            return
+        new_name, new_z = result
+        if new_name != layer.name and self.config.get_stage_layer(new_name) is not None:
+            QtWidgets.QMessageBox.warning(
+                self, "Layer Exists", f"A layer named '{new_name}' already exists."
+            )
+            return
+
+        old_name = layer.name
+        z_changed = new_z != layer.z_height
+        layer.name = new_name
+        layer.z_height = new_z
+        for fixture in self.config.fixtures:
+            if fixture.layer == old_name:
+                fixture.layer = new_name
+                if z_changed:
+                    fixture.z = new_z
+                    fixture.z_uses_group_default = False
+
+        self._refresh_layer_list()
+        self.stage_view.update_from_config()
+        self._notify_tcp_update()
+        self._broadcast_visualizer_refresh()
+
+    def _remove_layer(self):
+        """Delete a layer. Fixtures on it lose the assignment but keep
+        their current height."""
+        layer = self._selected_layer()
+        if layer is None:
+            return
+        assigned = sum(1 for f in self.config.fixtures if f.layer == layer.name)
+        if assigned:
+            reply = QtWidgets.QMessageBox.question(
+                self, "Remove Layer?",
+                f"'{layer.name}' has {assigned} fixture(s) assigned.\n\n"
+                "Remove the layer? The fixtures keep their height but lose "
+                "the layer assignment.",
+                QtWidgets.QMessageBox.StandardButton.Yes |
+                QtWidgets.QMessageBox.StandardButton.No
+            )
+            if reply != QtWidgets.QMessageBox.StandardButton.Yes:
+                return
+        for fixture in self.config.fixtures:
+            if fixture.layer == layer.name:
+                fixture.layer = ""
+        self.config.stage_layers.remove(layer)
+        self._refresh_layer_list()
+        self.stage_view.update_from_config()
+        self._notify_tcp_update()
+        self._broadcast_visualizer_refresh()
 
     def _on_show_axes_changed(self, state):
         """Handle show orientation axes checkbox change.
