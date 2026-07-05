@@ -14,6 +14,11 @@ a = Analysis(
         ('resources', 'resources'),
         ('riffs', 'riffs'),
         ('visualizer', 'visualizer'),
+        # Starter rigs + demo shows for File -> New from Template. Only
+        # rigs/ and shows/ — demos/media, demos/reference and the
+        # generator scripts stay out of the bundle.
+        ('demos/rigs', 'demos/rigs'),
+        ('demos/shows', 'demos/shows'),
     ],
     hiddenimports=[
         'visualizer',

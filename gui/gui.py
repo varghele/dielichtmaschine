@@ -387,6 +387,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.actionImportFixtureList.triggered.connect(self.import_fixture_list_file)
         self.actionExportFixtureList.triggered.connect(self.export_fixture_list_file)
         self.actionImportShowsFromConfig.triggered.connect(self.import_shows_from_config_file)
+        self.actionNewFromTemplate.triggered.connect(self.new_from_template)
         self.actionImportWorkspace.triggered.connect(self.import_workspace)
         self.actionCreateWorkspace.triggered.connect(self.create_workspace)
         self.actionExit.triggered.connect(self.close)
@@ -654,6 +655,101 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             print(f"Error saving configuration: {e}")
             import traceback
             traceback.print_exc()
+
+    def new_from_template(self):
+        """File -> New from Template: start a project from a starter rig.
+
+        Copy-then-open, never open-in-place: the chosen template (rig
+        only, or rig + demo show + audio) is copied to a user-picked
+        location and THAT file becomes the project, so Ctrl+S can never
+        overwrite a bundled template or write into the install dir.
+        """
+        from utils.templates import list_templates, instantiate_template
+
+        templates = list_templates()
+        if not templates:
+            QMessageBox.warning(
+                self, "No Templates",
+                "No starter rigs found (demos/rigs/ is missing)."
+            )
+            return
+
+        dialog = QtWidgets.QDialog(self)
+        dialog.setWindowTitle("New Project from Template")
+        dialog.resize(560, 380)
+        layout = QtWidgets.QVBoxLayout(dialog)
+
+        layout.addWidget(QtWidgets.QLabel("Choose a starter rig:"))
+        template_list = QtWidgets.QListWidget()
+        for template in templates:
+            item = QtWidgets.QListWidgetItem(
+                f"{template.name}  ({template.fixture_count} fixtures)\n"
+                f"    {template.description}"
+            )
+            item.setData(Qt.ItemDataRole.UserRole, template)
+            template_list.addItem(item)
+        template_list.setCurrentRow(0)
+        layout.addWidget(template_list)
+
+        include_show_check = QtWidgets.QCheckBox(
+            "Include the ready-to-play demo show + audio clip"
+        )
+        include_show_check.setChecked(True)
+        layout.addWidget(include_show_check)
+
+        buttons = QtWidgets.QDialogButtonBox(
+            QtWidgets.QDialogButtonBox.StandardButton.Ok |
+            QtWidgets.QDialogButtonBox.StandardButton.Cancel
+        )
+        buttons.accepted.connect(dialog.accept)
+        buttons.rejected.connect(dialog.reject)
+        layout.addWidget(buttons)
+
+        if dialog.exec() != QtWidgets.QDialog.DialogCode.Accepted:
+            return
+        current = template_list.currentItem()
+        if current is None:
+            return
+        template = current.data(Qt.ItemDataRole.UserRole)
+
+        dest_path, _ = QFileDialog.getSaveFileName(
+            self,
+            "Create Project From Template",
+            os.path.join(os.path.expanduser("~"), f"{template.key}.yaml"),
+            "YAML Files (*.yaml)"
+        )
+        if not dest_path:
+            return
+        if not os.path.splitext(dest_path)[1]:
+            dest_path += ".yaml"
+
+        try:
+            new_path = instantiate_template(
+                template, dest_path,
+                include_show=include_show_check.isChecked(),
+            )
+        except Exception as e:
+            QMessageBox.critical(
+                self, "Template Failed",
+                f"Could not create the project:\n{e}"
+            )
+            return
+
+        # Open the copy through the normal deferred load flow (progress
+        # modal + all-tab refresh), same as File -> Load Configuration.
+        self._pending_config_path = new_path
+        from PyQt6.QtWidgets import QApplication
+        dialog = self.progress_manager.start_modal(
+            "Loading Configuration",
+            "Opening file...",
+            maximum=8
+        )
+        for _ in range(5):
+            QApplication.processEvents()
+        if dialog:
+            dialog.repaint()
+            QApplication.processEvents()
+        QTimer.singleShot(100, self._do_load_configuration)
 
     def load_configuration(self):
         """Load configuration from YAML file"""

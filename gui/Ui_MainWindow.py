@@ -153,6 +153,8 @@ class Ui_MainWindow(object):
 
         # File menu
         self.menuFile = QtWidgets.QMenu("File", parent=self.menubar)
+        self.actionNewFromTemplate = QAction("New from Template...", MainWindow)
+        self.actionNewFromTemplate.setShortcut("Ctrl+N")
         self.actionSaveConfig = QAction("Save Configuration", MainWindow)
         self.actionSaveConfig.setShortcut("Ctrl+S")
         self.actionSaveConfigAs = QAction("Save Configuration As...", MainWindow)
@@ -169,6 +171,8 @@ class Ui_MainWindow(object):
         self.actionExit = QAction("Exit", MainWindow)
         self.actionExit.setShortcut("Ctrl+Q")
 
+        self.menuFile.addAction(self.actionNewFromTemplate)
+        self.menuFile.addSeparator()
         self.menuFile.addAction(self.actionSaveConfig)
         self.menuFile.addAction(self.actionSaveConfigAs)
         self.menuFile.addAction(self.actionLoadConfig)

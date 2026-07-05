@@ -13,6 +13,13 @@ verbatim as the GitHub Release notes (see [docs/releasing.md](docs/releasing.md)
 
 ### Added
 
+- **New from Template.** `File -> New from Template` (Ctrl+N) starts a
+  project from one of the five bundled starter rigs (club band 9 fixtures up
+  to festival mainstage 60), optionally with the ready-to-play demo show and
+  audio clip. The template is copied to a location you choose and the copy
+  opens — saving can never overwrite a bundled template. The starter rigs
+  and demo shows now ship inside the packaged builds (they were previously
+  repo-only, so release users had no templates at all).
 - **Cross-config show import.** `File -> Import Shows from Config` pulls
   selected shows from another config.yaml into the current one without
   swapping the project ("get last year's set into this venue's config").
