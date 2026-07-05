@@ -11,7 +11,14 @@ verbatim as the GitHub Release notes (see [docs/releasing.md](docs/releasing.md)
 
 ## [Unreleased]
 
-_Nothing yet._
+### Added
+
+- **DMX address conflict checker.** The Fixtures tab now flags fixtures whose
+  channel footprints overlap on the same universe, and fixtures that run past
+  DMX address 512: the Universe/Address cells turn red with a tooltip naming
+  the clashing fixture and the overlapping channel range, and an issue count
+  appears next to the table header. Re-lints live as addresses, universes, or
+  modes change.
 
 ## [1.0.0] - 2026-07-02
 

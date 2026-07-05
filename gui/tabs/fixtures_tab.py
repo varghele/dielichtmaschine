@@ -8,7 +8,18 @@ from PyQt6.QtWidgets import QDialog, QDialogButtonBox, QFormLayout, QLineEdit, Q
 from PyQt6.QtGui import QFont
 from config.models import Configuration, Fixture, FixtureMode, FixtureGroup
 from utils.fixture_utils import determine_fixture_type, get_cached_fixture_definitions
+from utils.dmx_conflicts import (
+    AddressConflict,
+    DMX_MAX_ADDRESS,
+    fixture_channel_count,
+    lint_dmx_addresses,
+)
 from .base_tab import BaseTab
+
+# Warning tint for Universe / Address cells of conflicting fixtures.
+# A fixed red (not theme-derived) so it reads as "error" on both themes
+# and can't collide with the pastel group tints.
+CONFLICT_CELL_QSS = "background-color: #d9534f; color: #ffffff;"
 
 
 class FixturesTab(BaseTab):
@@ -127,10 +138,21 @@ class FixturesTab(BaseTab):
         toolbar.addStretch()
         main_layout.addLayout(toolbar)
 
-        # Fixtures label
+        # Fixtures label + DMX conflict summary on the same line
+        label_row = QtWidgets.QHBoxLayout()
+        label_row.setSpacing(12)
+
         self.label = QtWidgets.QLabel("Fixtures")
         self.label.setFont(QFont("", 14, QFont.Weight.Bold))
-        main_layout.addWidget(self.label)
+        label_row.addWidget(self.label)
+
+        self.conflict_label = QtWidgets.QLabel("")
+        self.conflict_label.setStyleSheet("color: #d9534f; font-weight: bold;")
+        self.conflict_label.hide()
+        label_row.addWidget(self.conflict_label)
+
+        label_row.addStretch()
+        main_layout.addLayout(label_row)
 
         # Fixtures table — RowOutlineTableWidget paints a continuous
         # selection outline around the entire row, including across cells
@@ -449,6 +471,10 @@ class FixturesTab(BaseTab):
         # Update fingerprint to reflect saved changes
         self._last_fixture_fingerprint = self._get_fixture_fingerprint()
 
+        # Universe / address spins route here without a row-color pass,
+        # so re-lint now to flag or clear conflicts as the user types.
+        self._update_conflict_indicators()
+
         # Notify main window of group changes if needed
         main_window = self.window()
         if main_window and hasattr(main_window, 'on_groups_changed'):
@@ -658,6 +684,9 @@ class FixturesTab(BaseTab):
                             cell_widget = self.table.cellWidget(row, col)
                             if cell_widget is not None:
                                 cell_widget.setStyleSheet("")
+            # Conflict warnings paint over the fresh group tint on the
+            # Universe/Address cells, so they must re-apply last.
+            self._update_conflict_indicators()
         finally:
             # Force a viewport repaint. Cell widgets repaint themselves
             # synchronously when their stylesheet changes, but
@@ -667,6 +696,77 @@ class FixturesTab(BaseTab):
             # Without this, text cells would only catch up once another
             # event triggered the next paint cycle.
             self.table.viewport().update()
+
+    def _group_widget_qss(self, row) -> str:
+        """The group-tint stylesheet a row's cell widgets carry ('' if ungrouped).
+
+        Mirrors what _update_row_colors applies, so clearing a conflict
+        restores the exact tint instead of a blank cell.
+        """
+        group_combo = self.table.cellWidget(row, 7)
+        if not group_combo:
+            return ""
+        group_name = group_combo.currentText()
+        if not group_name or group_name == "Add New..." or group_name not in self.group_colors:
+            return ""
+        color = self.group_colors[group_name]
+        luminance = (
+            0.299 * color.red()
+            + 0.587 * color.green()
+            + 0.114 * color.blue()
+        ) / 255.0
+        fg_hex = "#000000" if luminance > 0.5 else "#ffffff"
+        return f"background-color: {color.name()}; color: {fg_hex};"
+
+    def _describe_dmx_finding(self, row, finding, fixtures) -> str:
+        if isinstance(finding, AddressConflict):
+            other_idx = finding.index_b if finding.index_a == row else finding.index_a
+            other = fixtures[other_idx]
+            return (
+                f"Overlaps '{other.name}' on universe {finding.universe}, "
+                f"channels {finding.overlap_start}-{finding.overlap_end}"
+            )
+        return (
+            f"Runs past the end of universe {finding.universe} "
+            f"(ends at channel {finding.end_address}, max {DMX_MAX_ADDRESS})"
+        )
+
+    def _update_conflict_indicators(self):
+        """Flag DMX address overlaps / overflow on the Universe + Address cells.
+
+        Only touches cell *widgets* (the spinboxes) and the summary label —
+        never table items — so it can run from save_to_config without
+        re-triggering itemChanged.
+        """
+        fixtures = self.config.fixtures
+        lint = lint_dmx_addresses(fixtures)
+        findings_by_fixture = lint.by_fixture()
+
+        for row in range(self.table.rowCount()):
+            if row >= len(fixtures):
+                continue
+            findings = findings_by_fixture.get(row)
+            if findings:
+                qss = CONFLICT_CELL_QSS
+                tooltip = "\n".join(
+                    self._describe_dmx_finding(row, f, fixtures) for f in findings
+                )
+            else:
+                qss = self._group_widget_qss(row)
+                tooltip = ""
+            for col in (0, 1):  # Universe, Address
+                widget = self.table.cellWidget(row, col)
+                if widget is not None:
+                    widget.setStyleSheet(qss)
+                    widget.setToolTip(tooltip)
+
+        issue_count = len(lint.conflicts) + len(lint.overflows)
+        if issue_count:
+            noun = "issue" if issue_count == 1 else "issues"
+            self.conflict_label.setText(f"⚠ {issue_count} DMX addressing {noun}")
+            self.conflict_label.show()
+        else:
+            self.conflict_label.hide()
 
     def _add_fixture(self):
         """Show dialog to add fixture from QLC+ definitions"""
@@ -789,15 +889,8 @@ class FixturesTab(BaseTab):
             if universe not in used_addresses:
                 used_addresses[universe] = []
 
-            # Get channel count for this fixture's current mode
-            fixture_channels = 1
-            for mode in fixture.available_modes:
-                if mode.name == fixture.current_mode:
-                    fixture_channels = mode.channels
-                    break
-
             start = fixture.address
-            end = fixture.address + fixture_channels - 1
+            end = fixture.address + fixture_channel_count(fixture) - 1
             used_addresses[universe].append((start, end))
 
         # Try to find space in existing universes first
@@ -999,12 +1092,7 @@ class FixturesTab(BaseTab):
             if fixture is exclude_fixture:
                 continue
             if fixture.universe == universe:
-                # Get channel count for this fixture
-                fixture_channels = 1
-                for mode in fixture.available_modes:
-                    if mode.name == fixture.current_mode:
-                        fixture_channels = mode.channels
-                        break
+                fixture_channels = fixture_channel_count(fixture)
                 used_ranges.append((fixture.address, fixture.address + fixture_channels - 1))
 
         # Sort by start address
@@ -1071,11 +1159,7 @@ class FixturesTab(BaseTab):
         original_fixture = self.config.fixtures[row]
 
         # Get channel count
-        channel_count = 1
-        for mode in original_fixture.available_modes:
-            if mode.name == original_fixture.current_mode:
-                channel_count = mode.channels
-                break
+        channel_count = fixture_channel_count(original_fixture)
 
         # Find next free address (starting from same universe)
         new_universe, new_address = self._find_next_free_address(
