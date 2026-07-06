@@ -90,3 +90,14 @@ anticipates, not format problems.
 3. Treat wild-file physical data as untrusted input: plausibility
    checks (lumens, dimensions) before it feeds brightness scaling or
    plot scale, warnings surfaced per the v1.4 audit item.
+4. **Mode-name mismatch on identity clash (open follow-up).** When a
+   GDTF shadows a same-identity `.qxf`, mode names differ ("14 Channel"
+   vs "14-channel DMX mode"), so a config authored against the `.qxf`
+   no longer matches its mode and the fixture resolves to fallback
+   capabilities / empty channel maps. Fixture-list import already
+   handles it (`resolve_modes_from_library` re-resolves and falls back
+   with a warning); plain config load does not. Needed before GDTF
+   shadowing can be considered safe on real projects: a mode
+   re-resolution prompt on config load (offer the closest-footprint
+   mode), or mode-aware definition resolution that prefers the source
+   whose mode names the config uses.

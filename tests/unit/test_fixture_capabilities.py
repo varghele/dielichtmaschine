@@ -383,10 +383,20 @@ class _StubFixture:
         self.current_mode = mode
 
 
-def test_get_capabilities_for_fixture_finds_custom_qxf():
+def test_get_capabilities_for_fixture_finds_custom_qxf(monkeypatch):
+    # Hermetic: restrict the library to custom_fixtures/. On machines
+    # with a populated gdtf_fixtures/, a Share-downloaded GDTF of the
+    # same identity wins resolution and carries different mode names
+    # (see docs/gdtf-coverage-note.md, mode-name mismatch follow-up).
+    from utils import fixture_library as fl
+    fl.clear_library_cache()
+    monkeypatch.setattr(
+        fl, "fixture_search_dirs",
+        lambda: [(fl.project_custom_fixtures_dir(), "bundled")])
     clear_capabilities_cache()
     f = _StubFixture("Varytec", "Hero Spot 60", "14 Channel")
     caps = get_capabilities_for_fixture(f)
+    fl.clear_library_cache()
     assert caps.chassis is Chassis.MOVING_YOKE
     assert caps.movement is not None
     assert caps.gobo_wheel is not None
