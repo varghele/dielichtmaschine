@@ -34,6 +34,12 @@ verbatim as the GitHub Release notes (see [docs/releasing.md](docs/releasing.md)
   3D model rendering itself (planned, `docs/gdtf-integration-plan.md`
   Phase 3), GDTF Share integration, and the demo-rig coverage comparison
   (needs Share downloads, which require a user account).
+- **Mode reconciliation on config load.** When the fixture library
+  resolves a different definition than the config was authored against
+  (typically a GDTF now shadowing a same-identity `.qxf`, whose mode
+  names differ), fixtures no longer fall back to empty channel maps:
+  the closest-footprint mode is adopted with a printed warning and the
+  definition provenance is restamped.
 - **GDTF persistence and QLC+ interop.** Fixtures remember where their
   definition came from (`definition_source` + the GDTF GUID in config
   YAML and the JSON rig format; old configs load unchanged). On `.qxw`

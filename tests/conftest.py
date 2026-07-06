@@ -14,6 +14,26 @@ if PROJECT_ROOT not in sys.path:
 
 
 # ---------------------------------------------------------------------------
+# Hermetic fixture library: exclude the machine-local gdtf_fixtures/ folder
+# (GDTF Share downloads, gitignored, contents vary per machine). GDTF wins
+# identity clashes by design, so a downloaded file would otherwise shadow
+# the bundled .qxf definitions that tests are written against. GDTF tests
+# opt back in by monkeypatching fixture_search_dirs themselves.
+# ---------------------------------------------------------------------------
+@pytest.fixture(scope="session", autouse=True)
+def _exclude_local_gdtf_library():
+    from utils import fixture_library as fl
+    real = fl.fixture_search_dirs
+    fl.fixture_search_dirs = lambda: [
+        (path, source) for path, source in real() if source != "gdtf"
+    ]
+    fl.clear_library_cache()
+    yield
+    fl.fixture_search_dirs = real
+    fl.clear_library_cache()
+
+
+# ---------------------------------------------------------------------------
 # QApplication singleton (session-scoped)
 # ---------------------------------------------------------------------------
 @pytest.fixture(scope="session")

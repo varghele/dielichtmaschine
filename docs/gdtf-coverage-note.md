@@ -96,8 +96,11 @@ anticipates, not format problems.
    no longer matches its mode and the fixture resolves to fallback
    capabilities / empty channel maps. Fixture-list import already
    handles it (`resolve_modes_from_library` re-resolves and falls back
-   with a warning); plain config load does not. Needed before GDTF
-   shadowing can be considered safe on real projects: a mode
-   re-resolution prompt on config load (offer the closest-footprint
-   mode), or mode-aware definition resolution that prefers the source
-   whose mode names the config uses.
+   with a warning); plain config load does not. **Resolved 2026-07-06:**
+   `Configuration.load` now runs
+   `utils/fixture_io.py::reconcile_fixture_modes` - fixtures whose
+   stored mode is absent from the resolved definition adopt the
+   closest-footprint mode, provenance is restamped, and a warning is
+   printed per change. The test suite excludes the machine-local
+   `gdtf_fixtures/` globally (tests/conftest.py) so Share downloads
+   can never shadow the bundled definitions tests are written against.

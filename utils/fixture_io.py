@@ -354,6 +354,47 @@ def resolve_modes_from_library(fixtures: List[Fixture]) -> List[str]:
     return warnings
 
 
+def reconcile_fixture_modes(fixtures: List[Fixture]) -> List[str]:
+    """Re-point fixtures whose stored mode name is absent from the
+    definition the library resolves today.
+
+    Happens when a GDTF definition shadows a same-identity .qxf (mode
+    names differ between the formats). Conservative: fixtures whose
+    mode still exists are untouched. The replacement is the mode with
+    the closest channel footprint to the stored one. Returns warnings.
+    """
+    from utils.fixture_library import get_definition
+
+    warnings = []
+    for fixture in fixtures:
+        defn = get_definition(fixture.manufacturer, fixture.model)
+        if defn is None or not defn.modes:
+            continue
+        mode_names = [m.name for m in defn.modes]
+        if fixture.current_mode in mode_names:
+            continue
+        stored = next(
+            (m.channels for m in fixture.available_modes
+             if m.name == fixture.current_mode), None)
+        if stored is None and fixture.available_modes:
+            stored = fixture.available_modes[0].channels
+        best = min(
+            defn.modes,
+            key=lambda m: (abs(len(m.channels) - (stored or 0)), mode_names.index(m.name)))
+        warnings.append(
+            f"{fixture.name}: mode {fixture.current_mode!r} not in the "
+            f"resolved {defn.source} definition; using {best.name!r} "
+            f"({len(best.channels)} ch, stored footprint {stored})")
+        fixture.current_mode = best.name
+        fixture.available_modes = [
+            FixtureMode(name=m.name, channels=len(m.channels))
+            for m in defn.modes
+        ]
+        fixture.definition_source = defn.source
+        fixture.gdtf_fixture_type_id = defn.gdtf_fixture_type_id
+    return warnings
+
+
 def _unique_name(name: str, existing: set) -> str:
     if name not in existing:
         return name

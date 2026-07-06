@@ -1425,6 +1425,14 @@ class Configuration:
 
             fixtures.append(Fixture(**f_data))
 
+        # Reconcile stored mode names against the resolved definitions.
+        # A GDTF definition can shadow a same-identity .qxf and carry
+        # differently-named modes; without this, such fixtures fall back
+        # to empty channel maps (docs/gdtf-coverage-note.md item 4).
+        from utils.fixture_io import reconcile_fixture_modes
+        for warning in reconcile_fixture_modes(fixtures):
+            print(f"Config load: {warning}")
+
         # Handle groups with colors and orientation defaults
         # Groups reference the same fixture objects as the top-level fixtures list
         groups = {}

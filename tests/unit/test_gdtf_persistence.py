@@ -185,6 +185,32 @@ def test_no_companion_when_qxf_twin_exists(tmp_path, monkeypatch, capsys):
 # Fixture-list import resolution stamps provenance
 # ---------------------------------------------------------------------------
 
+def test_config_load_reconciles_shadowed_mode_names(gdtf_dir, tmp_path, capsys):
+    """A config authored against .qxf mode names keeps working when a
+    GDTF shadows the identity: the closest-footprint mode is adopted."""
+    fixture = _spot_fixture()
+    fixture.current_mode = "14 Channel"  # qxf-style name, 13ch footprint
+    fixture.available_modes = [FixtureMode(name="14 Channel", channels=13)]
+    config = _config_with(fixture)
+    path = tmp_path / "config.yaml"
+    config.save(str(path))
+
+    loaded = Configuration.load(str(path))
+    f = loaded.fixtures[0]
+    assert f.current_mode == "Standard"          # the GDTF mode, 13 ch
+    assert f.available_modes[0].channels == 13
+    assert f.definition_source == "gdtf"
+    assert "not in the resolved gdtf definition" in capsys.readouterr().out
+
+
+def test_config_load_leaves_matching_modes_alone(gdtf_dir, tmp_path):
+    config = _config_with(_spot_fixture())  # current_mode already "Standard"
+    path = tmp_path / "config.yaml"
+    config.save(str(path))
+    loaded = Configuration.load(str(path))
+    assert loaded.fixtures[0].current_mode == "Standard"
+
+
 def test_json_rig_round_trips_provenance(tmp_path):
     from utils.fixture_io import read_fixture_list_json, write_fixture_list_json
 
