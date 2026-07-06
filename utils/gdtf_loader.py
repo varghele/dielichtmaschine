@@ -547,11 +547,162 @@ def synthesize_qlc_root(fixture_type) -> ET.Element:
 
 
 # ---------------------------------------------------------------------------
+# GDTF-native data extraction (the richer lane, utils/gdtf_data.py)
+# ---------------------------------------------------------------------------
+
+def _node_type_name(node) -> str:
+    """'GeometryAxis' -> 'Axis', 'GeometryReference' -> 'Reference',
+    plain 'Geometry' stays 'Geometry'."""
+    cls = type(node).__name__
+    if cls == 'GeometryReference':
+        return 'Reference'
+    if cls.startswith('Geometry') and len(cls) > len('Geometry'):
+        return cls[len('Geometry'):]
+    return 'Geometry'
+
+
+def _matrix_rows(node) -> list:
+    position = getattr(node, 'position', None)
+    matrix = getattr(position, 'matrix', None)
+    if not matrix:
+        from utils.gdtf_data import IDENTITY_MATRIX
+        return [row[:] for row in IDENTITY_MATRIX]
+    return [[float(v) for v in row] for row in matrix]
+
+
+def _convert_geometry_node(node, driven_axes: Dict[str, str]):
+    from utils.gdtf_data import GdtfBeam, GdtfGeometryNode
+    import pygdtf
+
+    name = str(getattr(node, 'name', '') or '')
+    converted = GdtfGeometryNode(
+        name=name,
+        node_type=_node_type_name(node),
+        model=str(node.model) if getattr(node, 'model', None) else None,
+        position=_matrix_rows(node),
+        axis_attribute=driven_axes.get(name),
+    )
+    if isinstance(node, pygdtf.GeometryBeam):
+        converted.beam = GdtfBeam(
+            name=name,
+            beam_angle=float(getattr(node, 'beam_angle', 0) or 0),
+            field_angle=float(getattr(node, 'field_angle', 0) or 0),
+            luminous_flux=float(getattr(node, 'luminous_flux', 0) or 0),
+            color_temperature=float(getattr(node, 'color_temperature', 0) or 0),
+            beam_type=str(getattr(node, 'beam_type', '') or ''),
+            power_consumption=float(getattr(node, 'power_consumption', 0) or 0),
+        )
+    if _node_type_name(node) == 'Reference':
+        converted.reference_to = str(node.geometry) if getattr(node, 'geometry', None) else None
+        converted.break_offsets = [
+            int(getattr(getattr(brk, 'dmx_offset', None), 'address', 1) or 1)
+            for brk in getattr(node, 'breaks', []) or []
+        ]
+    converted.children = [
+        _convert_geometry_node(child, driven_axes)
+        for child in getattr(node, 'geometries', []) or []
+    ]
+    return converted
+
+
+def _model_archive_paths(fixture_type, file_base: str) -> List[str]:
+    """Paths inside the .gdtf zip whose basename stem matches the model file."""
+    if not file_base:
+        return []
+    package = getattr(fixture_type, '_package', None)
+    if package is None:
+        return []
+    paths = []
+    for entry in package.namelist():
+        normalized = entry.replace('\\', '/')
+        if not normalized.lower().startswith('models/'):
+            continue
+        stem = normalized.rsplit('/', 1)[-1]
+        stem = stem.rsplit('.', 1)[0]
+        if stem == file_base:
+            paths.append(normalized)
+    return sorted(paths)
+
+
+def build_gdtf_data(fixture_type) -> 'GdtfData':
+    """Extract the GDTF-native lane from a pygdtf FixtureType."""
+    from utils.gdtf_data import GdtfChannelPhysical, GdtfData, GdtfModel
+
+    # Which geometry nodes are driven by Pan/Tilt: resolved from the DMX
+    # channels' Geometry links across all modes (marks the Axis joints).
+    driven_axes: Dict[str, str] = {}
+    physical: List[GdtfChannelPhysical] = []
+    mode_root: Dict[str, str] = {}
+
+    for mode in getattr(fixture_type, 'dmx_modes', []) or []:
+        mode_name = getattr(mode, 'name', None) or 'Default'
+        mode_root[mode_name] = str(getattr(mode, 'geometry', '') or '')
+        bases = _break_bases(mode)
+        for ch in getattr(mode, 'dmx_channels', []) or []:
+            offsets = getattr(ch, 'offset', None)
+            if not offsets:
+                continue
+            attr = str(getattr(ch, 'attribute', '') or '')
+            geometry = str(getattr(ch, 'geometry', '') or '')
+            if attr in ('Pan', 'Tilt') and geometry:
+                driven_axes.setdefault(geometry, attr)
+            low, high = _physical_range(ch)
+            if (low, high) != (0.0, 0.0):
+                base = bases.get(getattr(ch, 'dmx_break', 1), 0)
+                physical.append(GdtfChannelPhysical(
+                    mode=mode_name,
+                    attribute=attr,
+                    geometry=geometry,
+                    channel_index=base + (offsets[0] - 1),
+                    physical_from=low,
+                    physical_to=high,
+                ))
+
+    models: Dict[str, GdtfModel] = {}
+    for model in getattr(fixture_type, 'models', []) or []:
+        name = str(getattr(model, 'name', '') or '')
+        if not name:
+            continue
+        # pygdtf resolves Model.file to the archive filename (with
+        # extension) when the file exists; normalize to the bare stem.
+        file_base = str(getattr(model, 'file', '') or '')
+        if '.' in file_base:
+            file_base = file_base.rsplit('.', 1)[0]
+        models[name] = GdtfModel(
+            name=name,
+            length_m=float(getattr(model, 'length', 0) or 0),
+            width_m=float(getattr(model, 'width', 0) or 0),
+            height_m=float(getattr(model, 'height', 0) or 0),
+            primitive_type=str(getattr(model, 'primitive_type', '') or ''),
+            file=file_base,
+            archive_paths=_model_archive_paths(fixture_type, file_base),
+        )
+
+    trees = [
+        _convert_geometry_node(node, driven_axes)
+        for node in getattr(fixture_type, 'geometries', []) or []
+    ]
+
+    return GdtfData(
+        fixture_type_id=getattr(fixture_type, 'fixture_type_id', None),
+        data_version=str(getattr(fixture_type, 'data_version', '') or ''),
+        mode_root_geometry=mode_root,
+        models=models,
+        geometry_trees=trees,
+        channel_physical=physical,
+    )
+
+
+# ---------------------------------------------------------------------------
 # Entry point
 # ---------------------------------------------------------------------------
 
 def parse_gdtf_file(path: str) -> FixtureDefinition:
     """Parse a .gdtf into the canonical FixtureDefinition.
+
+    The DMX channel semantics travel through the QLC-format transpile
+    (synthesize_qlc_root); the GDTF-native lane (geometry tree, models,
+    photometrics, physical values) is attached as ``defn.gdtf``.
 
     Raises on unreadable archives; callers (the fixture library) handle
     and report, same as for invalid .qxf files.
@@ -563,4 +714,5 @@ def parse_gdtf_file(path: str) -> FixtureDefinition:
         defn = definition_from_qxf_root(root, path)
         defn.source = 'gdtf'
         defn.gdtf_fixture_type_id = getattr(fixture_type, 'fixture_type_id', None)
+        defn.gdtf = build_gdtf_data(fixture_type)
         return defn

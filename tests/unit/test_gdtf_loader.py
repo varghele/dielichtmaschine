@@ -41,7 +41,7 @@ SPOT_DESCRIPTION = """<?xml version="1.0" encoding="UTF-8"?>
    </Wheel>
   </Wheels>
   <Models>
-   <Model Name="BaseModel" Length="0.30" Width="0.25" Height="0.40" PrimitiveType="Base"/>
+   <Model Name="BaseModel" Length="0.30" Width="0.25" Height="0.40" PrimitiveType="Base" File="base"/>
   </Models>
   <Geometries>
    <Geometry Name="Base" Model="BaseModel">
@@ -201,10 +201,12 @@ MATCHING_QXF = """<?xml version="1.0" encoding="UTF-8"?>
 """
 
 
-def _write_gdtf(dir_path, filename, description_xml):
+def _write_gdtf(dir_path, filename, description_xml, extra_files=None):
     path = os.path.join(str(dir_path), filename)
     with zipfile.ZipFile(path, 'w') as z:
         z.writestr('description.xml', description_xml)
+        for name, payload in (extra_files or {}).items():
+            z.writestr(name, payload)
     return path
 
 
@@ -219,7 +221,12 @@ def _fresh_caches():
 def gdtf_dir(tmp_path, monkeypatch):
     d = tmp_path / "gdtf"
     d.mkdir()
-    _write_gdtf(d, "Testlight@Test_Spot_60.gdtf", SPOT_DESCRIPTION)
+    _write_gdtf(d, "Testlight@Test_Spot_60.gdtf", SPOT_DESCRIPTION,
+                extra_files={
+                    # Stub model files: path resolution only, never parsed here.
+                    'models/gltf/base.glb': b'stub-glb',
+                    'models/3ds/base.3ds': b'stub-3ds',
+                })
     _write_gdtf(d, "Testlight@Test_Pixel_Bar_5.gdtf", BAR_DESCRIPTION)
     monkeypatch.setattr(fl, "fixture_search_dirs", lambda: [(str(d), "gdtf")])
     return d
@@ -398,6 +405,89 @@ def test_broken_gdtf_is_reported_not_fatal(tmp_path, monkeypatch, capsys):
     monkeypatch.setattr(fl, "fixture_search_dirs", lambda: [(str(d), "gdtf")])
     assert fl.find_fixture_file("Testlight", "Test Spot 60") is None
     assert list(fl.iter_definitions()) == []
+
+
+# ---------------------------------------------------------------------------
+# GDTF-native lane (FixtureDefinition.gdtf, utils/gdtf_data.py)
+# ---------------------------------------------------------------------------
+
+def test_gdtf_native_geometry_tree(gdtf_dir):
+    data = get_definition("Testlight", "Test Spot 60").gdtf
+    assert data is not None
+    assert data.fixture_type_id == "11111111-2222-3333-4444-555555555555"
+    assert data.data_version == "1.2"
+    assert data.mode_root_geometry == {"Standard": "Base"}
+
+    base = data.find_node("Base")
+    assert base is not None and base.node_type == "Geometry"
+    assert base.model == "BaseModel"
+
+    yoke = data.find_node("Yoke")
+    head = data.find_node("Head")
+    assert yoke.node_type == "Axis" and yoke.axis_attribute == "Pan"
+    assert head.node_type == "Axis" and head.axis_attribute == "Tilt"
+    assert head in yoke.children
+
+    assert {n.name for n in data.axes()} == {"Yoke", "Head"}
+    beams = data.beams()
+    assert len(beams) == 1
+    assert beams[0].beam.beam_angle == 12.0
+    assert beams[0].beam.luminous_flux == 8000.0
+    assert beams[0].beam.color_temperature == 6500.0
+    # kinematic chain: the beam hangs off the tilt axis
+    assert beams[0] in head.children
+
+
+def test_gdtf_native_models_and_archive_paths(gdtf_dir):
+    data = get_definition("Testlight", "Test Spot 60").gdtf
+    model = data.models["BaseModel"]
+    assert (model.length_m, model.width_m, model.height_m) == (0.30, 0.25, 0.40)
+    assert model.primitive_type == "Base"
+    assert model.file == "base"
+    assert model.archive_paths == ["models/3ds/base.3ds", "models/gltf/base.glb"]
+    assert model.glb_path() == "models/gltf/base.glb"
+
+
+def test_gdtf_native_channel_physical_full_resolution(gdtf_dir):
+    """Physical values survive at full resolution (the transpiled
+    capability ranges are scaled to the coarse byte and lose them)."""
+    data = get_definition("Testlight", "Test Spot 60").gdtf
+    by_attr = {p.attribute: p for p in data.channel_physical}
+
+    pan = by_attr["Pan"]
+    assert (pan.mode, pan.geometry, pan.channel_index) == ("Standard", "Yoke", 0)
+    assert (pan.physical_from, pan.physical_to) == (-270.0, 270.0)
+
+    tilt = by_attr["Tilt"]
+    assert (tilt.geometry, tilt.channel_index) == ("Head", 2)
+    assert (tilt.physical_from, tilt.physical_to) == (-135.0, 135.0)
+
+    zoom = by_attr["Zoom"]
+    assert zoom.channel_index == 12
+    assert (zoom.physical_from, zoom.physical_to) == (10.0, 40.0)
+
+
+def test_gdtf_native_reference_nodes(gdtf_dir):
+    data = get_definition("Testlight", "Test Pixel Bar 5").gdtf
+    refs = [n for n in data.iter_nodes() if n.node_type == "Reference"]
+    assert len(refs) == 5
+    assert all(r.reference_to == "PixelCell" for r in refs)
+    assert [r.break_offsets for r in refs] == [[1], [4], [7], [10], [13]]
+    # primitive-only models carry no archive files
+    assert data.models["PixelModel"].archive_paths == []
+    assert data.models["PixelModel"].glb_path() is None
+    assert data.models["PixelModel"].primitive_type == "Cube"
+
+
+def test_qxf_definitions_have_no_gdtf_lane(tmp_path, monkeypatch):
+    qxf_d = tmp_path / "qxf"
+    qxf_d.mkdir()
+    (qxf_d / "Testlight-Test-Spot-60.qxf").write_text(MATCHING_QXF, encoding="utf-8")
+    monkeypatch.setattr(fl, "fixture_search_dirs", lambda: [(str(qxf_d), "bundled")])
+    defn = get_definition("Testlight", "Test Spot 60")
+    assert defn.source == "qxf"
+    assert defn.gdtf is None
+    assert defn.gdtf_fixture_type_id is None
 
 
 # ---------------------------------------------------------------------------

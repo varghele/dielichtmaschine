@@ -24,10 +24,16 @@ verbatim as the GitHub Release notes (see [docs/releasing.md](docs/releasing.md)
   transpiles the GDTF attribute system, channel functions, wheel slots
   (CIE xyY slot colors to sRGB), multi-byte channels, and geometry-
   reference cells onto the QLC channel-preset model via `pygdtf`, so every
-  downstream consumer is format-agnostic. Not yet in: 3D model rendering
-  (planned, `docs/gdtf-integration-plan.md` Phase 3), GDTF Share
-  integration, and the demo-rig coverage comparison (needs Share
-  downloads, which require a user account).
+  downstream consumer is format-agnostic. The GDTF-native data that
+  exceeds what the channel model can express is extracted structurally
+  onto the definition (`utils/gdtf_data.py`): the geometry tree with
+  parent-relative transforms and pan/tilt axis joints, 3D model
+  references with dimensions and in-archive file paths, beam
+  photometrics, and full-resolution physical values - ready for mesh
+  rendering (Phase 3) and stage-relative movement (v1.5a). Not yet in:
+  3D model rendering itself (planned, `docs/gdtf-integration-plan.md`
+  Phase 3), GDTF Share integration, and the demo-rig coverage comparison
+  (needs Share downloads, which require a user account).
 - **GDTF persistence and QLC+ interop.** Fixtures remember where their
   definition came from (`definition_source` + the GDTF GUID in config
   YAML and the JSON rig format; old configs load unchanged). On `.qxw`

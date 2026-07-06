@@ -307,6 +307,17 @@ synthesized root doubles as the Phase 2 companion-`.qxf` generator.
 
 ### Phase 3: render GDTF models in the visualizer
 
+Groundwork already in place (shipped alongside Phases 1-2): the
+GDTF-native lane exists structurally. `FixtureDefinition.gdtf`
+(`utils/gdtf_data.py`) carries the geometry tree with per-node parent-
+relative transforms and Pan/Tilt axis attribution, model references with
+dimensions + primitive fallbacks + in-archive file paths
+(`GdtfModel.glb_path()`), beam photometrics, and full-resolution
+per-channel physical values (`GdtfChannelPhysical`; also what v1.5a's
+inverse kinematics wants). `.qxf` definitions carry `gdtf = None` and
+keep the procedural path. Phase 3 consumes this lane directly; nothing
+below goes through the transpiled channel model.
+
 - [ ] Mesh pipeline: extract GLB from the archive (pygdtf `_package`), parse
       with trimesh, bake to interleaved indexed position+normal+uv buffers,
       scale to the Model node's Length/Width/Height, cache baked meshes in

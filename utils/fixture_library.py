@@ -45,6 +45,8 @@ import xml.etree.ElementTree as ET
 from dataclasses import dataclass, field
 from typing import Dict, Iterator, List, Optional, Set, Tuple
 
+from utils.gdtf_data import GdtfData  # noqa: F401  (typing for FixtureDefinition.gdtf)
+
 QLC_FIXTURE_NS = 'http://www.qlcplus.org/FixtureDefinition'
 _NS = {'': QLC_FIXTURE_NS}
 
@@ -126,6 +128,11 @@ class FixtureDefinition:
     root: Optional[ET.Element] = None
     source: str = 'qxf'           # 'qxf' | 'gdtf'
     gdtf_fixture_type_id: Optional[str] = None  # GDTF FixtureTypeID GUID
+    gdtf: Optional['GdtfData'] = None
+    """GDTF-native data (geometry tree, 3D model refs, photometrics,
+    full-resolution physical values) - the richer lane that bypasses the
+    transpiled channel model. None for .qxf-sourced definitions; see
+    utils/gdtf_data.py."""
 
     @property
     def key(self) -> Tuple[str, str]:
