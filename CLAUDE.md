@@ -104,6 +104,15 @@ into the same canonical model; `gdtf_fixtures/` scanned first so GDTF
 wins identity clashes. Phase 2 - `Fixture.definition_source` +
 `gdtf_fixture_type_id` (YAML schema bump, defaults keep old configs
 loading), companion .qxf generation on export for fixtures QLC+ lacks.
-Open: Phase 1 spike gate (rebuild demo rigs from GDTF Share files -
-needs the user's Share account), manual QLC+ runtime check of a
-companion .qxf, Phase 3 (mesh rendering) not started.
+Phases 1-3 are fully shipped as of 2026-07-06 evening: the spike gate
+passed against real Share downloads (decision note
+docs/gdtf-coverage-note.md; fetch via scripts/gdtf_share_fetch.py,
+files in gitignored gdtf_fixtures/), mode-name reconciliation runs on
+config load, and GDTF GLB models render in the visualizer
+(utils/gdtf_mesh.py + visualizer/renderer/gdtf_draw_plan.py +
+gdtf_mesh_chassis.py, shared GL resources, per-platform golden,
+QLC_GDTF_MESHES=0 kill switch; verified end to end on the MagicBlade
+R). Open: manual QLC+ runtime check of a companion .qxf, Phase 4
+(Share browser UI) unstarted, and the test suite globally excludes
+gdtf_fixtures/ (tests/conftest.py) so local Share files never shadow
+bundled test definitions.
