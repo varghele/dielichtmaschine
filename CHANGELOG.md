@@ -47,7 +47,7 @@ verbatim as the GitHub Release notes (see [docs/releasing.md](docs/releasing.md)
   the embedded 3D view; clicking keeps it highlighted, clicking again clears.
   The cuboid's ceiling follows the tallest fixture (min 3 m), matching the
   planes Auto Mode targets. Display-only for now: plane *targeting* from
-  movement blocks lands with the v1.4a focus-geometry work.
+  movement blocks lands with the v1.5a focus-geometry work.
 - **Stage layers (vertical stacking).** The Stage tab gets named Z-planes
   (ground stack, mid-truss, top-truss, ...) with a per-layer visibility
   toggle. Assign fixtures via right-click on the stage; assignment snaps the

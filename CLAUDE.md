@@ -70,10 +70,17 @@ authoring for QLC+, PyQt6 + ModernGL, developed primarily on Windows).
 
 ## Current state (update when it changes)
 
-As of 2026-07-06: **v1.1 "Stage tab and rig data" is complete** (all 8
-roadmap items) on branch `v1.1-stage-rig-data`, 894 tests green,
-nothing pushed. Waiting on the user to merge to `main` and decide on
-tagging `v1.1.0` (flow: `docs/releasing.md` - retitle `[Unreleased]`,
-bump `_version.py`; CI has a dispatch trigger to test builds before
-tagging). Next milestone: v1.2 "Authoring polish". LTC/SMPTE timecode
-input was added to the v1.6 milestone.
+As of 2026-07-06: **v1.1 "Stage tab and rig data" is reopened.** All 8
+items shipped a first pass on branch `v1.1-stage-rig-data` (894 tests
+green, nothing pushed), but stage plot export and stage layers have
+gaps in real-world use and are un-ticked in ROADMAP.md until a
+follow-up lands. No v1.1.0 tag yet.
+
+**Direction change (July 2026):** the QLC+ extension route was
+rejected upstream; the app continues as a standalone tool. Native
+ArtNet playback is the primary path, `.qxw` export stays as interop.
+ROADMAP.md was restructured accordingly: new v1.2 (GDTF import spike
++ GDTF Share/MVR assessment + OSC support) and new v1.8 (live mode
+control panel); former v1.2-v1.9 renumbered to v1.3-v1.11 (movement /
+morphing are now v1.5a / v1.5b, live ops + clock sync is v1.7 - the
+LTC/SMPTE timecode item lives there).
