@@ -169,12 +169,20 @@ def test_summary_shape():
 # Discovery, index, caching
 # ---------------------------------------------------------------------------
 
-def test_search_dirs_bundled_first_and_tagged():
+def test_search_dirs_priority_order_and_tags():
+    """gdtf_fixtures/ (if present) first, then bundled custom_fixtures/,
+    then the QLC+ library dirs. The gdtf dir only appears when it exists
+    on the machine, so assert order, not absolute positions."""
     dirs = fixture_search_dirs()
     assert dirs, "search dirs must not be empty"
-    assert dirs[0][0].endswith("custom_fixtures")
-    assert dirs[0][1] == "bundled"
-    assert all(source == "library" for _path, source in dirs[1:])
+    sources = [source for _path, source in dirs]
+    assert "bundled" in sources
+    if "gdtf" in sources:
+        assert sources.index("gdtf") < sources.index("bundled")
+        assert dirs[sources.index("gdtf")][0].endswith("gdtf_fixtures")
+    bundled_idx = sources.index("bundled")
+    assert dirs[bundled_idx][0].endswith("custom_fixtures")
+    assert all(s == "library" for s in sources[bundled_idx + 1:])
 
 
 def test_find_fixture_file_verbatim_identity(bundled_only):
