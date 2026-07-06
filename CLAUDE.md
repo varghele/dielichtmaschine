@@ -84,3 +84,12 @@ ROADMAP.md was restructured accordingly: new v1.2 (GDTF import spike
 control panel); former v1.2-v1.9 renumbered to v1.3-v1.11 (movement /
 morphing are now v1.5a / v1.5b, live ops + clock sync is v1.7 - the
 LTC/SMPTE timecode item lives there).
+
+**GDTF decision (2026-07-06):** GDTF becomes the primary fixture
+format with `.qxf` kept in parallel as fallback and QLC+ interop;
+GDTF's embedded 3D models will render in the visualizer. Full
+implementation plan (phases 0-4, architecture findings, GDTF Share
+licensing constraints) in `docs/gdtf-integration-plan.md`; the v1.2
+section of ROADMAP.md was rewritten to match. Key constraint: GDTF
+Share files must never be bundled or committed (terms of use); test
+and demo `.gdtf` files are authored in-repo.
