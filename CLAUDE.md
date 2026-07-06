@@ -93,3 +93,17 @@ licensing constraints) in `docs/gdtf-integration-plan.md`; the v1.2
 section of ROADMAP.md was rewritten to match. Key constraint: GDTF
 Share files must never be bundled or committed (terms of use); test
 and demo `.gdtf` files are authored in-repo.
+
+**GDTF phases 0-2 shipped (2026-07-06, same branch):** Phase 0 -
+all fixture-definition discovery/parsing/caching unified in
+`utils/fixture_library.py` (canonical `FixtureDefinition`, byte-identical
+export proven via `scripts/export_hash_check.py`; needs PYTHONHASHSEED=0
++ seeded RNG because `preset_scenes_to_xml` samples the global RNG
+unseeded). Phase 1 - `utils/gdtf_loader.py` transpiles .gdtf (pygdtf)
+into the same canonical model; `gdtf_fixtures/` scanned first so GDTF
+wins identity clashes. Phase 2 - `Fixture.definition_source` +
+`gdtf_fixture_type_id` (YAML schema bump, defaults keep old configs
+loading), companion .qxf generation on export for fixtures QLC+ lacks.
+Open: Phase 1 spike gate (rebuild demo rigs from GDTF Share files -
+needs the user's Share account), manual QLC+ runtime check of a
+companion .qxf, Phase 3 (mesh rendering) not started.
