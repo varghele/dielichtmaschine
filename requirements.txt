@@ -21,6 +21,8 @@ pyserial>=3.5
 
 # GDTF fixture definitions (DIN SPEC 15800), see docs/gdtf-integration-plan.md
 pygdtf>=1.4.5
+# GLB mesh loading for GDTF 3D models (visualizer)
+trimesh>=4.0.0
 
 # 3D Graphics (if needed)
 moderngl>=5.8.0
