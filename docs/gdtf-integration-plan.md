@@ -211,20 +211,34 @@ The largest single cost, and the one not to compromise on. Behavior
 preserving; pinned by the existing suite (894 tests) plus demo-rig
 round-trips.
 
-- [ ] One directory scanner + cache replacing the five duplicated search
+- [x] One directory scanner + cache replacing the five duplicated search
       implementations. Bundled `custom_fixtures/` first, then platform QLC+
-      dirs, then (Phase 1) the GDTF folder.
-- [ ] Canonical `FixtureDefinition` model; the QXF parse produces it once.
-      The five parsers' consumers migrate onto it:
-      `get_channels_by_property` / `dmx_manager.FixtureChannelMap`,
-      `create_qlc_workspace` + all `to_xml` paths, `_scan_fixture_definitions`
-      (workspace import), `_parse_qxf_for_visualizer` (payload),
-      `parse_qxf_summary` (browser), `resolve_modes_from_library`
-      (fixture_io).
-- [ ] `detect_capabilities` becomes a view over `FixtureDefinition` rather
-      than its own XML walk.
-- [ ] Acceptance: byte-identical `.qxw` export for the five demo rigs before
-      vs after; identical visualizer payloads; no test regressions.
+      dirs, then (Phase 1) the GDTF folder. Done:
+      `utils/fixture_library.py::fixture_search_dirs` / `iter_fixture_files`
+      / `find_fixture_file` (first-match-wins index with negative caching).
+- [x] Canonical `FixtureDefinition` model; the QXF parse produces it once.
+      Done: `parse_fixture_file` -> `FixtureDefinition` with
+      `to_legacy_dict()` for the export/DMX dict consumers and `summary()`
+      for the browser. Migrated: `load_fixture_definitions_from_qlc`,
+      `_scan_fixture_definitions` (workspace import), `parse_qxf_summary`,
+      `_scan_fixture_files` + `_add_fixtures_from_qxf` (Fixtures tab),
+      `get_fixture_layout`. One deliberate cleanup: the old loader's
+      `.//Channel` XPath swept per-mode channel references into the channel
+      list as junk `{'name': None}` entries; the canonical model drops them
+      (no consumer could match them).
+- [x] `detect_capabilities` consumes the library's parse. Done with a
+      scope adjustment: it keeps its internal XML walk (exactly tuned and
+      golden-tested) but `_find_and_parse_qxf` now returns
+      `FixtureDefinition.root` from the library, so discovery, duplicate
+      resolution, parsing, and caching are shared. Same for the visualizer
+      payload parse (`_parse_qxf_for_visualizer`). Rewriting their
+      extraction onto structured fields adds risk for no behaviour gain;
+      revisit only if Phase 1 needs it.
+- [x] Acceptance: byte-identical `.qxw` export for the five demo rigs before
+      vs after (`scripts/export_hash_check.py`; needs `PYTHONHASHSEED=0`
+      plus a pinned RNG seed, because set order affects definition load
+      order and `preset_scenes_to_xml` samples the global RNG unseeded);
+      no test regressions (948 unit/integration + 33 visual green).
 
 ### Phase 1: GDTF definition import (includes the spike deliverable)
 

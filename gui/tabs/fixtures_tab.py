@@ -1,13 +1,10 @@
 # gui/tabs/fixtures_tab.py
 
-import os
-import sys
-import xml.etree.ElementTree as ET
 from PyQt6 import QtWidgets, QtCore, QtGui
 from PyQt6.QtWidgets import QDialog, QDialogButtonBox, QFormLayout, QLineEdit, QComboBox
 from PyQt6.QtGui import QFont
 from config.models import Configuration, Fixture, FixtureMode, FixtureGroup
-from utils.fixture_utils import determine_fixture_type, get_cached_fixture_definitions
+from utils.fixture_utils import get_cached_fixture_definitions
 from utils.dmx_conflicts import (
     AddressConflict,
     DMX_MAX_ADDRESS,
@@ -772,39 +769,8 @@ class FixturesTab(BaseTab):
         """Every .qxf reachable in the bundled + platform QLC+ fixture
         directories, as dicts the browser dialog consumes. The bundled
         custom_fixtures/ come first and are tagged 'bundled'."""
-        qlc_fixture_dirs = []
-
-        # Always include project's custom_fixtures folder first
-        project_custom_fixtures = os.path.join(
-            os.path.dirname(os.path.dirname(os.path.dirname(__file__))),
-            'custom_fixtures')
-        if os.path.exists(project_custom_fixtures):
-            qlc_fixture_dirs.append((project_custom_fixtures, 'bundled'))
-
-        if sys.platform.startswith('linux'):
-            qlc_fixture_dirs.append((os.path.expanduser('~/.qlcplus/Fixtures'), 'library'))
-            qlc_fixture_dirs.append(('/usr/share/qlcplus/Fixtures', 'library'))
-        elif sys.platform == 'win32':
-            qlc_fixture_dirs.append((os.path.join(os.path.expanduser('~'), 'QLC+', 'Fixtures'), 'library'))
-            qlc_fixture_dirs.append(('C:\\QLC+\\Fixtures', 'library'))
-            qlc_fixture_dirs.append(('C:\\QLC+5\\Fixtures', 'library'))
-        elif sys.platform == 'darwin':
-            qlc_fixture_dirs.append((os.path.expanduser('~/Library/Application Support/QLC+/Fixtures'), 'library'))
-            qlc_fixture_dirs.append(('/Applications/QLC+.app/Contents/Resources/Fixtures', 'library'))
-
-        fixture_files = []
-        for qlc_fixtures_dir, source in qlc_fixture_dirs:
-            if os.path.exists(qlc_fixtures_dir):
-                for root, dirs, files in os.walk(qlc_fixtures_dir):
-                    for file in files:
-                        if file.endswith('.qxf'):
-                            fixture_files.append({
-                                'manufacturer': os.path.basename(root),
-                                'model': os.path.splitext(file)[0],
-                                'path': os.path.join(root, file),
-                                'source': source,
-                            })
-        return fixture_files
+        from utils.fixture_library import all_fixture_files
+        return all_fixture_files()
 
     def _add_fixture(self):
         """Open the fixture browser and add the picked fixture(s)."""
@@ -889,19 +855,16 @@ class FixturesTab(BaseTab):
         the free-slot search re-runs after every append, so multi-adds
         come out at consecutive non-overlapping addresses.
         """
-        tree = ET.parse(fixture_path)
-        root = tree.getroot()
-        ns = {'': 'http://www.qlcplus.org/FixtureDefinition'}
+        from utils.fixture_library import parse_fixture_file
+        defn = parse_fixture_file(fixture_path)
 
-        manufacturer = root.find('.//Manufacturer', ns).text
-        model = root.find('.//Model', ns).text
-        fixture_type = determine_fixture_type(root)
+        manufacturer = defn.manufacturer
+        model = defn.model
+        fixture_type = defn.legacy_type
 
-        # Get modes
-        modes = root.findall('.//Mode', ns)
         mode_data = [
-            {'name': mode.get('Name'), 'channels': len(mode.findall('Channel', ns))}
-            for mode in modes
+            {'name': mode.name, 'channels': len(mode.channels)}
+            for mode in defn.modes
         ]
         first_mode_channels = mode_data[0]['channels'] if mode_data else 1
 

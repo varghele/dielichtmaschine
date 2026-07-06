@@ -17,9 +17,7 @@ ground truth, channel-name string matching is a last-resort fallback.
 
 from __future__ import annotations
 
-import os
 import re
-import sys
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass, field
 from enum import Enum
@@ -1206,65 +1204,15 @@ def _safe_default_capabilities(mode_name: str) -> 'FixtureCapabilities':
 
 
 def _find_and_parse_qxf(manufacturer: str, model: str) -> Optional[ET.Element]:
-    """Search QLC+ fixture directories for a manufacturer/model match and parse.
+    """Locate and parse the fixture's .qxf via the unified fixture library.
 
-    Mirrors the directory-search logic in :func:`utils.fixture_utils.load_fixture_definitions_from_qlc`
-    so the two paths agree on which file wins. Returns the parsed root or
-    ``None`` if no file matches.
+    Discovery, duplicate resolution (bundled custom_fixtures/ wins), and
+    parse caching all live in :mod:`utils.fixture_library`; this returns
+    the parsed root for :func:`detect_capabilities` or ``None``.
     """
-    search_dirs = []
-    project_custom = os.path.join(
-        os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-        'custom_fixtures',
-    )
-    if os.path.exists(project_custom):
-        search_dirs.append(project_custom)
-
-    if sys.platform.startswith('linux'):
-        search_dirs.append(os.path.expanduser('~/.qlcplus/Fixtures'))
-        search_dirs.append('/usr/share/qlcplus/Fixtures')
-    elif sys.platform == 'win32':
-        search_dirs.append(os.path.join(os.path.expanduser('~'), 'QLC+', 'Fixtures'))
-        search_dirs.append('C:\\QLC+\\Fixtures')
-        search_dirs.append('C:\\QLC+5\\Fixtures')
-    elif sys.platform == 'darwin':
-        search_dirs.append(os.path.expanduser('~/Library/Application Support/QLC+/Fixtures'))
-        search_dirs.append('/Applications/QLC+.app/Contents/Resources/Fixtures')
-
-    for dir_path in search_dirs:
-        if not os.path.exists(dir_path):
-            continue
-        for entry in os.listdir(dir_path):
-            entry_path = os.path.join(dir_path, entry)
-            if entry.endswith('.qxf') and os.path.isfile(entry_path):
-                root = _try_parse_qxf_match(entry_path, manufacturer, model)
-                if root is not None:
-                    return root
-            elif os.path.isdir(entry_path):
-                for fname in os.listdir(entry_path):
-                    if fname.endswith('.qxf'):
-                        root = _try_parse_qxf_match(os.path.join(entry_path, fname), manufacturer, model)
-                        if root is not None:
-                            return root
-    return None
-
-
-def _try_parse_qxf_match(
-    path: str,
-    manufacturer: str,
-    model: str,
-) -> Optional[ET.Element]:
-    """Return the parsed root if this file's manufacturer/model match, else None."""
-    try:
-        tree = ET.parse(path)
-    except (ET.ParseError, OSError):
-        return None
-    root = tree.getroot()
-    file_mfr = _find_text(root, './/Manufacturer')
-    file_model = _find_text(root, './/Model')
-    if file_mfr == manufacturer and file_model == model:
-        return root
-    return None
+    from utils.fixture_library import get_definition
+    defn = get_definition(manufacturer, model)
+    return defn.root if defn is not None else None
 
 
 def _estimate_lumens(qxf_lumens: float, power_w: float, channel_defs: Dict[str, _ChannelDef]) -> float:

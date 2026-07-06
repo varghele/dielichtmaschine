@@ -5,8 +5,6 @@ from typing import Dict, List, Optional, Tuple
 import yaml
 import xml.etree.ElementTree as ET
 import os
-import sys
-from utils.fixture_utils import determine_fixture_type
 
 
 @dataclass
@@ -1514,97 +1512,23 @@ class Configuration:
 
     @staticmethod
     def _scan_fixture_definitions():
-        """Scan QLC+ fixture definitions"""
-        # Get QLC+ fixture directories
-        qlc_fixture_dirs = []
+        """Scan QLC+ fixture definitions (full-library sweep for .qxw import)."""
+        from utils.fixture_library import iter_definitions
 
-        # Add project custom_fixtures directory first (highest priority)
-        project_custom_fixtures = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'custom_fixtures')
-        if os.path.exists(project_custom_fixtures):
-            qlc_fixture_dirs.append(project_custom_fixtures)
-
-        if sys.platform.startswith('linux'):
-            qlc_fixture_dirs.extend([
-                '/usr/share/qlcplus/fixtures',
-                os.path.expanduser('~/.qlcplus/fixtures')
-            ])
-        elif sys.platform == 'win32':
-            qlc_fixture_dirs.extend([
-                os.path.join(os.path.expanduser('~'), 'QLC+', 'fixtures'),  # User fixtures
-                'C:\\QLC+\\Fixtures'  # System-wide fixtures
-            ])
-        elif sys.platform == 'darwin':
-            qlc_fixture_dirs.append(os.path.expanduser('~/Library/Application Support/QLC+/fixtures'))
-
-        # Scan all fixture definitions first
         fixture_definitions = {}
-        for dir_path in qlc_fixture_dirs:
-            if os.path.exists(dir_path):
-                for manufacturer_dir in os.listdir(dir_path):
-                    manufacturer_path = os.path.join(dir_path, manufacturer_dir)
-                    if os.path.isdir(manufacturer_path):
-                        for fixture_file in os.listdir(manufacturer_path):
-                            if fixture_file.endswith('.qxf'):
-                                fixture_path = os.path.join(manufacturer_path, fixture_file)
-                                try:
-                                    tree = ET.parse(fixture_path)
-                                    root = tree.getroot()
-                                    ns = {'': 'http://www.qlcplus.org/FixtureDefinition'}
-
-                                    manufacturer = root.find('.//Manufacturer', ns).text
-                                    model = root.find('.//Model', ns).text
-
-                                    # Determine fixture type once for all modes
-                                    fixture_type = determine_fixture_type(root)
-
-                                    # Get all available modes
-                                    modes = []
-                                    for mode in root.findall('.//Mode', ns):
-                                        mode_name = mode.get('Name')
-                                        channels = mode.findall('Channel', ns)
-                                        modes.append({
-                                            'name': mode_name,
-                                            'channels': len(channels),
-                                            'type': fixture_type  # Same type for all modes
-                                        })
-
-                                    fixture_definitions[(manufacturer, model)] = {
-                                        'path': fixture_path,
-                                        'modes': modes,
-                                        'type': fixture_type  # Store type at fixture level
-                                    }
-                                except Exception as e:
-                                    print(f"Error parsing fixture file {fixture_path}: {e}")
-                    elif manufacturer_path.endswith('.qxf'):
-                        try:
-                            tree = ET.parse(manufacturer_path)
-                            root = tree.getroot()
-                            ns = {'': 'http://www.qlcplus.org/FixtureDefinition'}
-
-                            manufacturer = root.find('.//Manufacturer', ns).text
-                            model = root.find('.//Model', ns).text
-
-                            # Determine fixture type once for all modes
-                            fixture_type = determine_fixture_type(root)
-
-                            # Get all available modes
-                            modes = []
-                            for mode in root.findall('.//Mode', ns):
-                                mode_name = mode.get('Name')
-                                channels = mode.findall('Channel', ns)
-                                modes.append({
-                                    'name': mode_name,
-                                    'channels': len(channels),
-                                    'type': fixture_type  # Same type for all modes
-                                })
-
-                            fixture_definitions[(manufacturer, model)] = {
-                                'path': manufacturer_path,
-                                'modes': modes,
-                                'type': fixture_type  # Store type at fixture level
-                            }
-                        except Exception as e:
-                            print(f"Error parsing fixture file {manufacturer_path}: {e}")
+        for defn in iter_definitions():
+            fixture_definitions[(defn.manufacturer, defn.model)] = {
+                'path': defn.path,
+                'modes': [
+                    {
+                        'name': mode.name,
+                        'channels': len(mode.channels),
+                        'type': defn.legacy_type,  # Same type for all modes
+                    }
+                    for mode in defn.modes
+                ],
+                'type': defn.legacy_type,
+            }
         return fixture_definitions
 
     @staticmethod

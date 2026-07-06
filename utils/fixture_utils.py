@@ -1,8 +1,20 @@
-import os
-import sys
-import xml.etree.ElementTree as ET
+"""Fixture-definition access for export, playback, and group analysis.
 
-# Module-level cache for fixture definitions to avoid repeated file system scans
+Discovery, parsing, and caching live in utils/fixture_library.py (the
+Phase 0 unification, see docs/gdtf-integration-plan.md); this module keeps
+the historical entry points and the legacy dict shape their consumers
+expect, plus the group-level analysis helpers that operate on those dicts.
+"""
+
+from utils.fixture_library import (  # noqa: F401  (re-exported: existing import sites)
+    determine_fixture_type,
+    get_definition,
+    clear_library_cache,
+)
+
+# Module-level cache for fixture definitions to avoid repeated file system scans.
+# Keyed "manufacturer_model" with the legacy dict shape. fixtures_tab checks
+# membership on this dict directly; keep the name stable.
 _fixture_definitions_cache = {}
 _cache_initialized = False
 
@@ -44,6 +56,7 @@ def clear_fixture_definitions_cache():
     global _fixture_definitions_cache, _cache_initialized
     _fixture_definitions_cache = {}
     _cache_initialized = False
+    clear_library_cache()
 
 
 def load_fixture_definitions_from_qlc(models_in_config, use_cache=True):
@@ -53,270 +66,14 @@ def load_fixture_definitions_from_qlc(models_in_config, use_cache=True):
     Parameters:
         models_in_config: Set of (manufacturer, model) tuples to load
     Returns:
-        dict: Dictionary of fixture definitions
+        dict: Dictionary of fixture definitions (legacy dict shape)
     """
     fixture_definitions = {}
-    ns = {'': 'http://www.qlcplus.org/FixtureDefinition'}
-
-    # Get QLC+ fixture directories based on OS
-    qlc_fixture_dirs = []
-
-    # Always include the project's custom_fixtures folder first (for development/testing)
-    project_custom_fixtures = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'custom_fixtures')
-    if os.path.exists(project_custom_fixtures):
-        qlc_fixture_dirs.append(project_custom_fixtures)
-
-    if sys.platform.startswith('linux'):
-        # Linux paths
-        # User fixtures: ~/.qlcplus/Fixtures
-        qlc_fixture_dirs.append(os.path.expanduser('~/.qlcplus/Fixtures'))
-        # System fixtures: /usr/share/qlcplus/Fixtures
-        qlc_fixture_dirs.append('/usr/share/qlcplus/Fixtures')
-
-    elif sys.platform == 'win32':
-        # Windows paths
-        # User fixtures: C:\Users\{Username}\QLC+\Fixtures
-        qlc_fixture_dirs.append(os.path.join(os.path.expanduser('~'), 'QLC+', 'Fixtures'))
-        # System fixtures: C:\QLC+\Fixtures (QLC+ 4 default install location)
-        qlc_fixture_dirs.append('C:\\QLC+\\Fixtures')
-        # System fixtures: C:\QLC+5\Fixtures (QLC+ 5 install location)
-        qlc_fixture_dirs.append('C:\\QLC+5\\Fixtures')
-
-    elif sys.platform == 'darwin':
-        # macOS paths
-        # User fixtures: ~/Library/Application Support/QLC+/Fixtures
-        qlc_fixture_dirs.append(os.path.expanduser('~/Library/Application Support/QLC+/Fixtures'))
-        # System fixtures: /Applications/QLC+.app/Contents/Resources/Fixtures
-        qlc_fixture_dirs.append('/Applications/QLC+.app/Contents/Resources/Fixtures')
-
-    # Color name to RGB mapping for standard colors
-    color_name_to_rgb = {
-        "White": "#FFFFFF",
-        "Red": "#FF0000",
-        "Green": "#00FF00",
-        "Blue": "#0000FF",
-        "Cyan": "#00FFFF",
-        "Magenta": "#FF00FF",
-        "Yellow": "#FFFF00",
-        "Amber": "#FFBF00",
-        "Orange": "#FF7F00",
-        "Purple": "#7F00FF",
-        "Pink": "#FF007F",
-        "UV": "#8000FF",
-        "Lime": "#BFFF00"
-    }
-
-    def _parse_fixture_file(fixture_path, ns, models_in_config, color_name_to_rgb, fixture_definitions):
-        """Parse a single fixture file and add to definitions if in config."""
-        try:
-            tree = ET.parse(fixture_path)
-            root = tree.getroot()
-
-            manufacturer = root.find('.//Manufacturer', ns).text
-            model = root.find('.//Model', ns).text
-
-            # Only process if this fixture is in our configuration
-            if (manufacturer, model) not in models_in_config:
-                return
-
-            # Get channels information
-            channels_info = []
-            for channel in root.findall('.//Channel', ns):
-                channel_data = {
-                    'name': channel.get('Name'),
-                    'preset': channel.get('Preset'),
-                    'group': channel.find('Group', ns).text if channel.find('Group', ns) is not None else None,
-                    'capabilities': []
-                }
-
-                # Get capabilities
-                for capability in channel.findall('Capability', ns):
-                    cap_data = {
-                        'min': int(capability.get('Min')),
-                        'max': int(capability.get('Max')),
-                        'preset': capability.get('Preset'),
-                        'name': capability.text
-                    }
-
-                    # Extract color information if present
-                    if capability.get('Color1') or capability.get('Color2'):
-                        cap_data['color'] = capability.get('Color1')
-                    elif capability.get('Res1'):
-                        cap_data['color'] = capability.get('Res1')
-                    elif capability.text and any(color in capability.text for color in color_name_to_rgb):
-                        for color_name, hex_value in color_name_to_rgb.items():
-                            if color_name.lower() in capability.text.lower():
-                                cap_data['color'] = hex_value
-                                break
-
-                    channel_data['capabilities'].append(cap_data)
-
-                channels_info.append(channel_data)
-
-            # Get modes information
-            modes_info = []
-            for mode in root.findall('.//Mode', ns):
-                mode_data = {
-                    'name': mode.get('Name'),
-                    'channels': []
-                }
-                for channel in mode.findall('Channel', ns):
-                    mode_data['channels'].append({
-                        'number': int(channel.get('Number')),
-                        'name': channel.text
-                    })
-                modes_info.append(mode_data)
-
-            # Store the fixture definition
-            key = f"{manufacturer}_{model}"
-            fixture_definitions[key] = {
-                'manufacturer': manufacturer,
-                'model': model,
-                'channels': channels_info,
-                'modes': modes_info
-            }
-
-        except ET.ParseError as e:
-            print(f"Error parsing fixture file {fixture_path}: {e}")
-        except Exception as e:
-            print(f"Error processing fixture file {fixture_path}: {e}")
-
-    for dir_path in qlc_fixture_dirs:
-        if not os.path.exists(dir_path):
-            continue
-
-        for item in os.listdir(dir_path):
-            item_path = os.path.join(dir_path, item)
-
-            # Check if it's a .qxf file directly in the directory
-            if item.endswith('.qxf') and os.path.isfile(item_path):
-                _parse_fixture_file(item_path, ns, models_in_config, color_name_to_rgb, fixture_definitions)
-
-            # Check if it's a manufacturer subdirectory
-            elif os.path.isdir(item_path):
-                for fixture_file in os.listdir(item_path):
-                    if fixture_file.endswith('.qxf'):
-                        fixture_path = os.path.join(item_path, fixture_file)
-                        _parse_fixture_file(fixture_path, ns, models_in_config, color_name_to_rgb, fixture_definitions)
-
+    for manufacturer, model in models_in_config:
+        defn = get_definition(manufacturer, model)
+        if defn is not None:
+            fixture_definitions[f"{manufacturer}_{model}"] = defn.to_legacy_dict()
     return fixture_definitions
-
-
-def determine_fixture_type(fixture_def):
-    """
-    Determine fixture type based on its channels across all modes
-    Parameters:
-        fixture_def: The fixture definition root element
-    """
-    ns = {'': 'http://www.qlcplus.org/FixtureDefinition'}
-
-    def _find_element(parent, tag):
-        """Find element with or without namespace."""
-        elem = parent.find(tag, ns)
-        if elem is None:
-            elem = parent.find(tag)
-        return elem
-
-    # First check the XML Type tag for explicit type hints
-    type_elem = _find_element(fixture_def, './/Type')
-    xml_type = type_elem.text.lower() if type_elem is not None and type_elem.text else ""
-
-    # Check for layout (indicates multi-segment fixture)
-    physical = _find_element(fixture_def, './/Physical')
-    layout_width = 1
-    if physical is not None:
-        layout = _find_element(physical, 'Layout')
-        if layout is not None:
-            layout_width = int(layout.get('Width', 1))
-
-    # Detect if this is an LED bar type from XML (may be overridden by channel analysis)
-    is_led_bar_type = 'led bar' in xml_type or 'sunstrip' in xml_type
-
-    # Initialize sets for channel types
-    movement_channels = set()
-    color_channels = set()
-    dimmer_channels = set()
-
-    # Get all channels and their properties
-    for channel in fixture_def.findall('.//Channel', ns):
-        channel_name = channel.get('Name', '')
-
-        # Check for movement channels
-        if 'Pan' in channel_name or 'Tilt' in channel_name:
-            movement_channels.add(channel_name)
-
-        # Check for color channels
-        if any(color in channel_name for color in ['Red', 'Green', 'Blue', 'White']):
-            color_channels.add(channel_name)
-
-        # Check for dimmer
-        if 'Dimmer' in channel_name:
-            dimmer_channels.add(channel_name)
-
-    # Determine fixture type based on capabilities
-    has_movement = len(movement_channels) > 0
-    has_rgbw = all(any(color in ch for ch in color_channels)
-                   for color in ['Red', 'Green', 'Blue', 'White'])
-    has_rgb = all(any(color in ch for ch in color_channels)
-                  for color in ['Red', 'Green', 'Blue'])
-    has_dimmer = len(dimmer_channels) > 0
-
-    # Check for individual pixel control (e.g., "Red LED 1", "Red LED 2", etc.)
-    # This indicates a PIXELBAR with per-segment RGBW control
-    import re
-    pixel_channels = [ch for ch in color_channels
-                     if re.search(r'(Red|Green|Blue|White)\s+(LED\s+)?\d+', ch)]
-    has_individual_pixels = len(pixel_channels) >= 4  # At least one RGBW segment
-
-    # Count how many unique segment numbers we have
-    segment_numbers = set()
-    for ch in pixel_channels:
-        match = re.search(r'\d+', ch)
-        if match:
-            segment_numbers.add(match.group())
-    num_pixel_segments = len(segment_numbers)
-
-    # Count total RGB/RGBW channel sets to distinguish WASH from PIXELBAR
-    # A WASH has ONE set (Red, Green, Blue), a PIXELBAR has MULTIPLE sets
-    # Count by looking for base color channels without numbers
-    base_red_channels = [ch for ch in color_channels if 'Red' in ch and not re.search(r'\d+', ch)]
-    base_green_channels = [ch for ch in color_channels if 'Green' in ch and not re.search(r'\d+', ch)]
-    base_blue_channels = [ch for ch in color_channels if 'Blue' in ch and not re.search(r'\d+', ch)]
-    has_single_rgb_set = (len(base_red_channels) == 1 and
-                          len(base_green_channels) == 1 and
-                          len(base_blue_channels) == 1)
-
-    # Priority-based fixture type detection:
-    if has_movement:
-        return "MH"  # Moving Head
-    elif has_individual_pixels and num_pixel_segments > 1:
-        # Has individual pixel channels for multiple segments (e.g., "Red LED 1-12")
-        # This is a PIXELBAR - multi-segment bar with per-segment RGBW control
-        return "PIXELBAR"
-    elif is_led_bar_type and has_single_rgb_set and (has_rgb or has_rgbw):
-        # XML Type says "LED Bar" but only has ONE set of RGB channels
-        # This is a WASH, not a PIXELBAR (Layout describes physical LEDs, not DMX segments)
-        return "WASH"
-    elif is_led_bar_type and num_pixel_segments > 1:
-        # XML Type says "LED Bar" with multiple numbered pixel channels
-        return "PIXELBAR"
-    elif is_led_bar_type and (has_rgb or has_rgbw):
-        # XML Type says "LED Bar" with RGB/RGBW - default to BAR
-        return "BAR"
-    elif layout_width > 1 and num_pixel_segments > 1:
-        # Multi-segment fixture with actual per-pixel DMX control
-        return "PIXELBAR"
-    elif is_led_bar_type or (layout_width > 1 and not (has_rgb or has_rgbw)):
-        # LED bar type or multi-segment WITHOUT RGB - likely a sunstrip (dimmer-only)
-        return "SUNSTRIP"
-    elif (has_rgbw or has_rgb) and has_dimmer:
-        # RGB/RGBW fixture with dimmer - WASH fixture
-        return "WASH"
-    elif has_rgb or has_rgbw:
-        # RGB/RGBW without clear classification - default to BAR
-        return "BAR"
-    else:
-        return "PAR"  # Default type
 
 
 def detect_fixture_group_capabilities(fixtures, fixture_definitions=None):
@@ -521,83 +278,7 @@ def get_fixture_layout(manufacturer: str, model: str) -> dict:
     Returns:
         dict with 'width' and 'height' keys (defaults to 1, 1 if not found)
     """
-    ns = {'': 'http://www.qlcplus.org/FixtureDefinition'}
-    default_layout = {'width': 1, 'height': 1}
-
-    # Get QLC+ fixture directories based on OS
-    qlc_fixture_dirs = []
-
-    # Project's custom_fixtures folder first
-    project_custom_fixtures = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'custom_fixtures')
-    if os.path.exists(project_custom_fixtures):
-        qlc_fixture_dirs.append(project_custom_fixtures)
-
-    if sys.platform.startswith('linux'):
-        qlc_fixture_dirs.append(os.path.expanduser('~/.qlcplus/Fixtures'))
-        qlc_fixture_dirs.append('/usr/share/qlcplus/Fixtures')
-    elif sys.platform == 'win32':
-        qlc_fixture_dirs.append(os.path.join(os.path.expanduser('~'), 'QLC+', 'Fixtures'))
-        qlc_fixture_dirs.append('C:\\QLC+\\Fixtures')
-        qlc_fixture_dirs.append('C:\\QLC+5\\Fixtures')
-    elif sys.platform == 'darwin':
-        qlc_fixture_dirs.append(os.path.expanduser('~/Library/Application Support/QLC+/Fixtures'))
-        qlc_fixture_dirs.append('/Applications/QLC+.app/Contents/Resources/Fixtures')
-
-    def _find_element(parent, tag, ns):
-        """Find element with or without namespace."""
-        elem = parent.find(tag, ns)
-        if elem is None:
-            elem = parent.find(tag)
-        return elem
-
-    def _check_fixture_file(fixture_path):
-        """Check if this is the right fixture and return layout if found."""
-        try:
-            tree = ET.parse(fixture_path)
-            root = tree.getroot()
-
-            file_manufacturer = _find_element(root, './/Manufacturer', ns)
-            file_model = _find_element(root, './/Model', ns)
-
-            if file_manufacturer is None or file_model is None:
-                return None
-
-            if file_manufacturer.text == manufacturer and file_model.text == model:
-                # Found the fixture, get layout
-                physical = _find_element(root, './/Physical', ns)
-                if physical is not None:
-                    layout = _find_element(physical, 'Layout', ns)
-                    if layout is not None:
-                        return {
-                            'width': int(layout.get('Width', 1)),
-                            'height': int(layout.get('Height', 1))
-                        }
-                return default_layout
-
-        except Exception:
-            pass
-
-        return None
-
-    # Search through fixture directories
-    for dir_path in qlc_fixture_dirs:
-        if not os.path.exists(dir_path):
-            continue
-
-        for item in os.listdir(dir_path):
-            item_path = os.path.join(dir_path, item)
-
-            if item.endswith('.qxf') and os.path.isfile(item_path):
-                result = _check_fixture_file(item_path)
-                if result is not None:
-                    return result
-
-            elif os.path.isdir(item_path):
-                for fixture_file in os.listdir(item_path):
-                    if fixture_file.endswith('.qxf'):
-                        fixture_path = os.path.join(item_path, fixture_file)
-                        result = _check_fixture_file(fixture_path)
-                        if result is not None:
-                            return result
-
-    return default_layout
+    defn = get_definition(manufacturer, model)
+    if defn is None:
+        return {'width': 1, 'height': 1}
+    return {'width': defn.layout[0], 'height': defn.layout[1]}

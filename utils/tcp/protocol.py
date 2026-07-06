@@ -2,9 +2,6 @@
 # Protocol definition for Show Creator <-> Visualizer communication
 
 import json
-import os
-import sys
-import xml.etree.ElementTree as ET
 from enum import Enum
 from typing import Dict, List, Any, Optional, Tuple
 from config.models import Configuration, Fixture, FixtureGroup
@@ -154,69 +151,14 @@ def _findall_elements(parent, tag: str, ns: Dict[str, str] = None):
 
 def _get_qxf_fixture_dirs() -> List[str]:
     """Get list of directories containing QXF fixture files."""
-    dirs = []
-
-    # Project custom fixtures
-    project_custom = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), 'custom_fixtures')
-    if os.path.exists(project_custom):
-        dirs.append(project_custom)
-
-    if sys.platform.startswith('linux'):
-        dirs.append(os.path.expanduser('~/.qlcplus/Fixtures'))
-        dirs.append('/usr/share/qlcplus/Fixtures')
-    elif sys.platform == 'win32':
-        dirs.append(os.path.join(os.path.expanduser('~'), 'QLC+', 'Fixtures'))
-        dirs.append('C:\\QLC+\\Fixtures')
-        dirs.append('C:\\QLC+5\\Fixtures')
-    elif sys.platform == 'darwin':
-        dirs.append(os.path.expanduser('~/Library/Application Support/QLC+/Fixtures'))
-        dirs.append('/Applications/QLC+.app/Contents/Resources/Fixtures')
-
-    return dirs
+    from utils.fixture_library import fixture_search_dirs
+    return [path for path, _source in fixture_search_dirs()]
 
 
 def _find_qxf_file(manufacturer: str, model: str) -> Optional[str]:
     """Find QXF file for a given manufacturer and model."""
-    for dir_path in _get_qxf_fixture_dirs():
-        if not os.path.exists(dir_path):
-            continue
-
-        # Check direct files in directory
-        for item in os.listdir(dir_path):
-            item_path = os.path.join(dir_path, item)
-
-            if item.endswith('.qxf') and os.path.isfile(item_path):
-                # Check if this file matches
-                try:
-                    tree = ET.parse(item_path)
-                    root = tree.getroot()
-                    ns = {'': 'http://www.qlcplus.org/FixtureDefinition'}
-                    file_mfr = root.find('.//Manufacturer', ns)
-                    file_model = root.find('.//Model', ns)
-                    if file_mfr is not None and file_model is not None:
-                        if file_mfr.text == manufacturer and file_model.text == model:
-                            return item_path
-                except:
-                    pass
-
-            elif os.path.isdir(item_path):
-                # Check subdirectory
-                for fixture_file in os.listdir(item_path):
-                    if fixture_file.endswith('.qxf'):
-                        fixture_path = os.path.join(item_path, fixture_file)
-                        try:
-                            tree = ET.parse(fixture_path)
-                            root = tree.getroot()
-                            ns = {'': 'http://www.qlcplus.org/FixtureDefinition'}
-                            file_mfr = root.find('.//Manufacturer', ns)
-                            file_model = root.find('.//Model', ns)
-                            if file_mfr is not None and file_model is not None:
-                                if file_mfr.text == manufacturer and file_model.text == model:
-                                    return fixture_path
-                        except:
-                            pass
-
-    return None
+    from utils.fixture_library import find_fixture_file
+    return find_fixture_file(manufacturer, model)
 
 
 def _parse_qxf_for_visualizer(manufacturer: str, model: str, mode_name: str) -> Dict[str, Any]:
@@ -254,14 +196,15 @@ def _parse_qxf_for_visualizer(manufacturer: str, model: str, mode_name: str) -> 
         'lumens': 0.0,  # Computed after LED classification
     }
 
-    qxf_path = _find_qxf_file(manufacturer, model)
-    if not qxf_path:
+    from utils.fixture_library import get_definition
+    defn = get_definition(manufacturer, model)
+    if defn is None or defn.root is None:
         _fixture_definition_cache[cache_key] = result
         return result
+    qxf_path = defn.path
 
     try:
-        tree = ET.parse(qxf_path)
-        root = tree.getroot()
+        root = defn.root
         # Use explicit namespace prefix for reliable matching
         ns = {'qlc': 'http://www.qlcplus.org/FixtureDefinition'}
         # Also support default namespace for some ElementTree versions

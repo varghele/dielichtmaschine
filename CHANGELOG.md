@@ -78,7 +78,19 @@ verbatim as the GitHub Release notes (see [docs/releasing.md](docs/releasing.md)
 
 ### Changed
 
-- **Auto BPM detection rebuilt end to end.** New onset front end: a
+- **Fixture-definition layer unified** (Phase 0 of the GDTF integration
+  plan, `docs/gdtf-integration-plan.md`). QXF discovery, parsing, and
+  caching now live in one place, `utils/fixture_library.py`, producing a
+  canonical `FixtureDefinition`; the five previously independent parsers
+  (export/DMX loader, workspace-import scanner, renderer capability
+  detection, visualizer payload parse, fixture-browser summary) and the
+  five duplicated QLC+ directory-search implementations all delegate to
+  it. Search paths are the union of the old variants (some scanners
+  missed the `C:\QLC+5` directory or used different casing on Linux) and
+  duplicate fixture identities now resolve consistently: first match in
+  priority order, bundled `custom_fixtures/` first. Byte-identical `.qxw`
+  export for all five demo rigs verified before vs after
+  (`scripts/export_hash_check.py`); no behaviour change intended. New onset front end: a
   dedicated undecimated 86 Hz beat-flux path (multi-band log flux, per
   band saturated against its recent peak and reduced to its rising edge,
   hats down-weighted) so a kick/snare backbeat reads at the beat rate

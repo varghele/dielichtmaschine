@@ -19,14 +19,11 @@ the platform-specific search paths.
 
 from __future__ import annotations
 
-import xml.etree.ElementTree as ET
 from typing import Dict, List, Optional, Tuple
 
 from PyQt6 import QtCore, QtGui, QtWidgets
 
-from utils.fixture_utils import determine_fixture_type
-
-_NS = {'': 'http://www.qlcplus.org/FixtureDefinition'}
+from utils.fixture_library import parse_fixture_file
 
 
 def parse_qxf_summary(path: str) -> Dict:
@@ -36,19 +33,7 @@ def parse_qxf_summary(path: str) -> Dict:
     Raises on unreadable/invalid files; the dialog turns that into an
     inline error message instead of a crash.
     """
-    root = ET.parse(path).getroot()
-    manufacturer = root.find('.//Manufacturer', _NS)
-    model = root.find('.//Model', _NS)
-    modes = [
-        (mode.get('Name'), len(mode.findall('Channel', _NS)))
-        for mode in root.findall('.//Mode', _NS)
-    ]
-    return {
-        'manufacturer': manufacturer.text if manufacturer is not None else '?',
-        'model': model.text if model is not None else '?',
-        'type': determine_fixture_type(root),
-        'modes': modes,
-    }
+    return parse_fixture_file(path).summary()
 
 
 class FixtureBrowserDialog(QtWidgets.QDialog):
