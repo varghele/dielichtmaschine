@@ -268,11 +268,15 @@ synthesized root doubles as the Phase 2 companion-`.qxf` generator.
       header reads via description.xml without a full pygdtf parse, the
       browser tags `[GDTF]` entries. The per-user folder location
       revisits with the v1.4 data-dir work.
-- [ ] **Spike gate (kept from the original roadmap):** rebuild the five demo
-      rigs from GDTF definitions, compare capability coverage against the
-      `.qxf` parse, write the decision note in `docs/`. Blocked on GDTF
-      Share downloads (user account required; files cannot be committed).
-      The mapping itself is proven by the synthetic end-to-end tests.
+- [x] **Spike gate (kept from the original roadmap).** Done 2026-07-06:
+      Share definitions fetched with the user's account
+      (`scripts/gdtf_share_fetch.py`), capability coverage compared
+      against the bundled `.qxf` parses
+      (`scripts/gdtf_coverage_diff.py`), decision note written:
+      `docs/gdtf-coverage-note.md`. Verdict: GDTF-primary confirmed -
+      DMX-semantic parity on matched modes, GDTF adds photometrics /
+      beam angles / meshes; wild-file physical data needs plausibility
+      checks and Phase 3 needs tree-bounds dimensions + axis fallbacks.
 - [x] Tests: `tests/unit/test_gdtf_loader.py` (11) against self-authored
       in-test `.gdtf` archives - canonical parse, preset resolution for
       export/DMX, capability detection, cells/heads, GDTF-over-QXF
