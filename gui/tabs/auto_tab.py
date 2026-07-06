@@ -1004,6 +1004,14 @@ class AutoTab(BaseTab):
             self._bridge = LiveFeatureBridge(self._analyzer)
             self._bridge.feature_updated.connect(self._on_feature_frame)
 
+            # The detector converts flux-lag counts to BPM, so its rate
+            # must match the arrival rate of the values it buffers: the
+            # analyzer's undecimated beat-flux hops (~86 Hz), delivered
+            # via LiveFeatureFrame.flux_raw_hops.
+            self._auto_bpm = AutoBPMDetector(
+                analysis_rate_hz=self._analyzer.beat_frame_rate_hz
+            )
+
             self._engine = AutoShowEngine(self.config, self.fixture_definitions)
             self._engine.set_bpm(self._bpm_spinbox.value())
             self._engine.set_energy_sensitivity(self._energy_fader.value())

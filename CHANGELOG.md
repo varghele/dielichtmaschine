@@ -76,8 +76,31 @@ verbatim as the GitHub Release notes (see [docs/releasing.md](docs/releasing.md)
   appears next to the table header. Re-lints live as addresses, universes, or
   modes change.
 
+### Changed
+
+- **Auto BPM detection rebuilt end to end.** New onset front end: a
+  dedicated undecimated 86 Hz beat-flux path (multi-band log flux, per
+  band saturated against its recent peak and reduced to its rising edge,
+  hats down-weighted) so a kick/snare backbeat reads at the beat rate
+  and subdivision doesn't read as double time. New estimator: harmonic
+  comb scoring on a fractional 0.25 BPM grid, a temporal belief filter,
+  an octave-raise walk with hysteresis, and a 3-analysis median. Also
+  new: beat *phase* - `AutoBPMDetector.get_next_beat()` predicts the
+  next beat to 0-12 ms mean error on click benchmarks (not yet consumed
+  by the UI). Measured ladder in `docs/beat-tracking.md`: the real-album
+  benchmark went from 5% of time correct (pre-fix wiring) to **65%,
+  ahead of both QLC+ beat trackers** (63% / 4%), with a perfect 64/64 on
+  the synthetic audio suite and 139/140 on the flux-level sweep.
+
 ### Fixed
 
+- Auto tab: the "Auto" BPM detection was wrong twice over - the detector
+  assumed feature frames arrive at 86 Hz while the analyzer delivers
+  ~43 Hz (every estimate came out doubled), and it read the smoothed
+  display flux, which degenerates to a bogus 240 BPM on real music. The
+  analyzer now exposes the raw onset flux (`LiveFeatureFrame.flux_raw`)
+  and its true `frame_rate_hz`, and the detector consumes both. On a real
+  track the estimate now matches librosa's reference exactly.
 - Stage tab: the layer panel's +/- buttons rendered their glyph as a
   cut-off sliver (32px fixed width vs the theme's 14px button padding);
   they now use the shared 40px toolbar-button width.
@@ -92,6 +115,24 @@ verbatim as the GitHub Release notes (see [docs/releasing.md](docs/releasing.md)
   Stage Layers panel) against per-platform reference images with pixel
   tolerance; regenerate intended changes with `QLC_REGEN_GOLDENS=1`.
   `tests/README.md` rewritten to match reality.
+- **Beat tracker test suite + evaluator.** The Auto Mode BPM detectors (tap
+  tempo and the autocorrelation auto-detector) got 22 deterministic unit
+  tests (fake clock, synthetic click trains) and a benchmark script
+  (`scripts/evaluate_bpm_detector.py`) that sweeps 7 scenario types
+  (noise, subdivision, swing, drift, dropout, tempo step) across 50-240
+  BPM with ground truth, classifies octave errors, and measures estimate
+  error, time-to-lock, confidence, and throughput. It can also run any
+  audio file through the live onset-flux path against a librosa
+  reference (`--audio song.ogg --bpm 128`).
+- **BPM comparison vs QLC+ upstream.** `scripts/compare_bpm_qlcplus.py`
+  benchmarks our detector head-to-head against faithful Python ports of
+  both QLC+ beat trackers (the ACF tempo-induction `BeatTracking` and the
+  onset-reactive `BeatTracker`) on synthesized percussion audio and real
+  tracks; results and analysis in `docs/bpm-comparison-qlcplus.md`. Our
+  core wins (92% vs 75%/84%), and the run exposed two Auto tab wiring
+  defects (frame-rate assumption 2x off; detector fed the smoothed
+  display flux instead of raw flux) that make in-app estimates unreliable
+  on real music - fix planned, tracked in the v1.1 roadmap item.
 
 ### Removed
 
