@@ -96,6 +96,7 @@ _ATTR_MAP: Dict[str, Tuple[Optional[str], str, str]] = {
     'Iris':          ('BeamIris', 'Beam', 'Iris'),
     'Frost(n)':      ('BeamFrost', 'Beam', 'Frost'),
     'Prism(n)':      (None, 'Prism', 'Prism'),
+    'Prism':         (None, 'Prism', 'Prism'),   # seen in the wild without index
     'Prism(n)PosRotate': ('PrismRotationSlowFast', 'Prism', 'Prism Rotation'),
     'Prism(n)Pos':   ('PrismRotationSlowFast', 'Prism', 'Prism Rotation'),
     # shutter / strobe
@@ -106,6 +107,7 @@ _ATTR_MAP: Dict[str, Tuple[Optional[str], str, str]] = {
     # speed
     'PanTiltSpeed':  ('SpeedPanTiltSlowFast', 'Speed', 'Pan/Tilt Speed'),
     'PanTiltTime':   ('SpeedPanTiltSlowFast', 'Speed', 'Pan/Tilt Time'),
+    'PositionMSpeed': ('SpeedPanTiltSlowFast', 'Speed', 'Movement Speed'),
     # control
     'NoFeature':     ('NoFunction', 'Nothing', 'No Function'),
 }
