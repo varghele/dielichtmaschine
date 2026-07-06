@@ -266,6 +266,15 @@ def _parse_qxf_for_visualizer(manufacturer: str, model: str, mode_name: str) -> 
                 except (ValueError, TypeError):
                     result['power_consumption'] = 100.0
 
+            # Declared photometric output (real data on GDTF imports and
+            # some QXFs). Used as fallback when the power estimate is 0.
+            bulb = _find_element(physical, 'Bulb', ns)
+            if bulb is not None:
+                try:
+                    result['declared_lumens'] = float(bulb.get('Lumens', 0))
+                except (ValueError, TypeError):
+                    pass
+
         # Build channel name to preset mapping and extract color wheel capabilities
         channel_presets = {}
         color_wheel_colors = []  # List of {min, max, color} for color wheel
@@ -487,6 +496,12 @@ def _parse_qxf_for_visualizer(manufacturer: str, model: str, mode_name: str) -> 
         # LED: ~100 lumens/watt, Conventional (halogen): ~17.5 lumens/watt
         efficiency = 100.0 if is_led else 17.5
         result['lumens'] = result['power_consumption'] * efficiency
+        # No usable power figure (GDTF imports carry photometric flux
+        # instead): fall back to the declared bulb lumens. Note for the
+        # v1.5b physical-metadata pass: prefer declared lumens outright;
+        # kept as fallback-only here so existing rigs render unchanged.
+        if result['lumens'] <= 0 and result.get('declared_lumens', 0) > 0:
+            result['lumens'] = result['declared_lumens']
 
         _fixture_definition_cache[cache_key] = result
 

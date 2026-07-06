@@ -13,7 +13,21 @@ verbatim as the GitHub Release notes (see [docs/releasing.md](docs/releasing.md)
 
 ### Added
 
-- **Fixture browser upgrade.** The Add Fixture dialog grew a details pane
+- **GDTF fixture import (first pass).** `.gdtf` files (General Device Type
+  Format, DIN SPEC 15800) are now a first-class fixture-definition source:
+  drop them into `gdtf_fixtures/` and they appear in the Add Fixture
+  browser (tagged `[GDTF]`), patch, export to `.qxw`, drive live ArtNet
+  output, and render in the visualizer with their real photometric data
+  (beam angle, pan/tilt ranges, luminous flux from the GDTF geometry tree
+  instead of a wattage guess). When a fixture exists as both GDTF and
+  `.qxf`, the GDTF definition wins. Implementation: `utils/gdtf_loader.py`
+  transpiles the GDTF attribute system, channel functions, wheel slots
+  (CIE xyY slot colors to sRGB), multi-byte channels, and geometry-
+  reference cells onto the QLC channel-preset model via `pygdtf`, so every
+  downstream consumer is format-agnostic. Not yet in: 3D model rendering
+  (planned, `docs/gdtf-integration-plan.md` Phase 3), GDTF Share
+  integration, and the demo-rig coverage comparison (needs Share
+  downloads, which require a user account). The Add Fixture dialog grew a details pane
   (fixture type + every mode with its channel count, parsed lazily from the
   selected `.qxf`), a `[bundled]` tag on the definitions that ship with the
   app, double-click-to-add, and a quantity field — add 8 PARs in one go,

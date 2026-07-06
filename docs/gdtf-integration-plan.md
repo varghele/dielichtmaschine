@@ -242,25 +242,43 @@ round-trips.
 
 ### Phase 1: GDTF definition import (includes the spike deliverable)
 
-- [ ] Add `pygdtf`. GDTF loader producing `FixtureDefinition`: attribute
-      system (Pan, Tilt, Dimmer, ColorAdd_*, Shutter/Strobe, Gobo(n), Prism,
-      Zoom, Focus, Iris, Frost, color wheels) maps into the same semantic
-      vocabulary the QXF presets map into; channel functions become
-      capability ranges; wheels become `ColorWheel`/`GoboWheel` entries;
-      `GeometryReference` + breaks become `MultiHead`/`CellArray` emitters.
-- [ ] Physical data from the geometry tree: dimensions from Model nodes,
-      beam angle/type and **LuminousFlux** from the Beam node (replaces the
-      power-based lumens estimate in the brightness scaling), pan/tilt
-      ranges from Axis channel functions.
-- [ ] Library discovery: a `gdtf_fixtures/` per-user folder scanned
-      alongside the QLC+ dirs; fixture browser lists both formats, tags the
-      source, prefers GDTF when both exist.
+Design note (implemented): the loader **transpiles instead of forking**.
+`utils/gdtf_loader.py` maps the GDTF model onto a synthesized QLC-format
+XML root and runs it through the same `definition_from_qxf_root` extraction
+as a real `.qxf`, so `detect_capabilities`, the visualizer payload parse,
+`get_channels_by_property`, and the exporters stay format-agnostic. The
+synthesized root doubles as the Phase 2 companion-`.qxf` generator.
+
+- [x] Add `pygdtf`. GDTF loader producing `FixtureDefinition`. Done:
+      attribute-to-preset table (`_ATTR_MAP`), channel functions/sets to
+      `<Capability>` ranges scaled to the coarse byte, wheel slots resolved
+      to names + sRGB hex (CIE xyY conversion, `cie_xyy_to_hex`), 16-bit
+      offsets to coarse + `...Fine` channel pairs, `GeometryReference`
+      instances to numbered per-cell channels + `<Head>` blocks (detected
+      as `CellArray` downstream).
+- [x] Physical data from the geometry tree. Done: dimensions from the root
+      geometry's Model, beam angle + LuminousFlux + color temperature from
+      Beam nodes, pan/tilt ranges from the Pan/Tilt channel functions'
+      physical values. The visualizer payload falls back to declared bulb
+      lumens when there is no power figure (the GDTF case); preferring
+      declared lumens outright is deferred to the v1.5b physical-metadata
+      pass so existing rigs render unchanged.
+- [x] Library discovery. Done: `gdtf_fixtures/` scanned first (GDTF wins
+      identity clashes per the primary-format decision), cheap `.gdtf`
+      header reads via description.xml without a full pygdtf parse, the
+      browser tags `[GDTF]` entries. The per-user folder location
+      revisits with the v1.4 data-dir work.
 - [ ] **Spike gate (kept from the original roadmap):** rebuild the five demo
       rigs from GDTF definitions, compare capability coverage against the
-      `.qxf` parse, write the decision note in `docs/`. The switch is not
-      declared done until that note exists and reads well.
-- [ ] Tests: per-mapping unit tests against self-authored `.gdtf` files, the
-      demo-rig rebuild, coverage-diff script.
+      `.qxf` parse, write the decision note in `docs/`. Blocked on GDTF
+      Share downloads (user account required; files cannot be committed).
+      The mapping itself is proven by the synthetic end-to-end tests.
+- [x] Tests: `tests/unit/test_gdtf_loader.py` (11) against self-authored
+      in-test `.gdtf` archives - canonical parse, preset resolution for
+      export/DMX, capability detection, cells/heads, GDTF-over-QXF
+      precedence, broken-archive tolerance, plus `.qxw` export and
+      visualizer payload end to end. The coverage-diff script arrives with
+      the spike gate.
 
 ### Phase 2: persistence and interop
 

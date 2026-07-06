@@ -73,6 +73,8 @@ class FixtureBrowserDialog(QtWidgets.QDialog):
             label = f"{entry['manufacturer']} — {entry['model']}"
             if entry.get('source') == 'bundled':
                 label += "   [bundled]"
+            elif entry.get('source') == 'gdtf':
+                label += "   [GDTF]"
             item = QtWidgets.QListWidgetItem(label)
             item.setData(QtCore.Qt.ItemDataRole.UserRole, entry['path'])
             self.list_widget.addItem(item)

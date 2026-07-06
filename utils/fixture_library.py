@@ -110,9 +110,10 @@ class ModeDef:
 class FixtureDefinition:
     """Canonical fixture definition, format-agnostic.
 
-    Produced today by the QXF parse; Phase 1 adds a GDTF producer.
-    ``root`` carries the parsed QXF XML for analysis passes that need
-    details beyond the structured fields; it is None for non-XML sources.
+    Produced by the QXF parse and by the GDTF loader (which transpiles
+    into the same QLC-format XML, see utils/gdtf_loader.py). ``root``
+    carries the (real or synthesized) QLC-format XML for analysis passes
+    that need details beyond the structured fields.
     """
     path: str
     manufacturer: str
@@ -123,6 +124,8 @@ class FixtureDefinition:
     channels: List[ChannelDef] = field(default_factory=list)
     modes: List[ModeDef] = field(default_factory=list)
     root: Optional[ET.Element] = None
+    source: str = 'qxf'           # 'qxf' | 'gdtf'
+    gdtf_fixture_type_id: Optional[str] = None  # GDTF FixtureTypeID GUID
 
     @property
     def key(self) -> Tuple[str, str]:
@@ -208,8 +211,23 @@ def _find_text(parent, path: str) -> Optional[str]:
 # ---------------------------------------------------------------------------
 
 def parse_fixture_file(path: str) -> FixtureDefinition:
-    """Parse one .qxf into the canonical model. Raises on invalid files."""
-    root = ET.parse(path).getroot()
+    """Parse one fixture file (.qxf or .gdtf) into the canonical model.
+
+    Raises on invalid files. GDTF archives are transpiled into the same
+    QLC-format model by utils/gdtf_loader.py.
+    """
+    if path.lower().endswith('.gdtf'):
+        from utils.gdtf_loader import parse_gdtf_file
+        return parse_gdtf_file(path)
+    return definition_from_qxf_root(ET.parse(path).getroot(), path)
+
+
+def definition_from_qxf_root(root: ET.Element, path: str) -> FixtureDefinition:
+    """Build the canonical model from a QLC-format XML root.
+
+    Shared by the .qxf parse and the GDTF transpiler (which synthesizes
+    an equivalent root), so both formats go through identical extraction.
+    """
     manufacturer = _find_text(root, './/Manufacturer')
     model = _find_text(root, './/Model')
     if manufacturer is None or model is None:
@@ -290,15 +308,31 @@ def project_custom_fixtures_dir() -> str:
                         'custom_fixtures')
 
 
+def project_gdtf_fixtures_dir() -> str:
+    """The gdtf_fixtures/ directory next to custom_fixtures/.
+
+    Drop .gdtf files here to use them. (A per-user data-dir location is
+    planned with the v1.4 %APPDATA% work; until then this is the one
+    GDTF folder.)
+    """
+    return os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                        'gdtf_fixtures')
+
+
 def fixture_search_dirs() -> List[Tuple[str, str]]:
     """All fixture directories as (path, source) in priority order.
 
-    source is 'bundled' for custom_fixtures/, 'library' for QLC+ dirs.
-    The list is the union of every variant the five pre-unification
-    implementations used (they disagreed on case and on the QLC+5 dir);
-    non-existent directories are simply skipped by the scanners.
+    source is 'gdtf' for gdtf_fixtures/, 'bundled' for custom_fixtures/,
+    'library' for QLC+ dirs. GDTF comes first: when both formats define
+    the same (manufacturer, model), the GDTF definition wins (it carries
+    strictly more information). The QLC+ list is the union of every
+    variant the five pre-unification implementations used; non-existent
+    directories are simply skipped by the scanners.
     """
     dirs: List[Tuple[str, str]] = []
+    gdtf = project_gdtf_fixtures_dir()
+    if os.path.exists(gdtf):
+        dirs.append((gdtf, 'gdtf'))
     custom = project_custom_fixtures_dir()
     if os.path.exists(custom):
         dirs.append((custom, 'bundled'))
@@ -320,8 +354,12 @@ def fixture_search_dirs() -> List[Tuple[str, str]]:
     return dirs
 
 
+FIXTURE_FILE_EXTENSIONS = ('.qxf', '.gdtf')
+
+
 def iter_fixture_files(dirs: Optional[List[Tuple[str, str]]] = None) -> Iterator[Tuple[str, str]]:
-    """Yield (path, source) for every .qxf reachable from the search dirs."""
+    """Yield (path, source) for every fixture file reachable from the
+    search dirs (.qxf and .gdtf)."""
     if dirs is None:
         dirs = fixture_search_dirs()
     for dir_path, source in dirs:
@@ -329,7 +367,7 @@ def iter_fixture_files(dirs: Optional[List[Tuple[str, str]]] = None) -> Iterator
             continue
         for walk_root, _subdirs, files in os.walk(dir_path):
             for fname in files:
-                if fname.endswith('.qxf'):
+                if fname.lower().endswith(FIXTURE_FILE_EXTENSIONS):
                     yield os.path.join(walk_root, fname), source
 
 
@@ -375,7 +413,9 @@ def clear_library_cache() -> None:
 
 
 def _read_header(path: str) -> Tuple[Optional[str], Optional[str]]:
-    """Cheap (manufacturer, model) read via iterparse, early exit."""
+    """Cheap (manufacturer, model) read, early exit; format-dispatched."""
+    if path.lower().endswith('.gdtf'):
+        return _read_gdtf_header(path)
     mfr = model = None
     try:
         for _event, elem in ET.iterparse(path, events=('end',)):
@@ -389,6 +429,24 @@ def _read_header(path: str) -> Tuple[Optional[str], Optional[str]]:
     except (ET.ParseError, OSError):
         return None, None
     return mfr, model
+
+
+def _read_gdtf_header(path: str) -> Tuple[Optional[str], Optional[str]]:
+    """(Manufacturer, Name) from a .gdtf's description.xml, without pygdtf.
+
+    GDTF identity for library purposes is (Manufacturer, Name); Name is
+    the model string.
+    """
+    import zipfile
+    try:
+        with zipfile.ZipFile(path) as archive:
+            with archive.open('description.xml') as fh:
+                for _event, elem in ET.iterparse(fh, events=('start',)):
+                    if elem.tag.rsplit('}', 1)[-1] == 'FixtureType':
+                        return elem.get('Manufacturer'), elem.get('Name')
+    except (zipfile.BadZipFile, KeyError, ET.ParseError, OSError):
+        return None, None
+    return None, None
 
 
 def find_fixture_file(manufacturer: str, model: str) -> Optional[str]:
@@ -447,7 +505,7 @@ def iter_definitions() -> Iterator[FixtureDefinition]:
     for path, _source in iter_fixture_files():
         try:
             defn = parse_fixture_file(path)
-        except (ET.ParseError, ValueError, OSError, TypeError) as e:
+        except Exception as e:
             print(f"Error parsing fixture file {path}: {e}")
             continue
         if defn.key in seen:
