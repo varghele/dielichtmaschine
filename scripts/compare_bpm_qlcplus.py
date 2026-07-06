@@ -8,10 +8,10 @@ Compares four trackers on identical synthesized 44.1 kHz PCM audio:
      hops, unbiased autocorrelation + comb filter, Rayleigh prior at
      110 BPM, tps2/tps3 octave disambiguation, two-state continuity model.
      Only the tempo path is ported (phase / beat emission is not needed for
-     a BPM comparison). The integration defects listed in
-     QLCPLUS_BEATTRACKING_REFERENCE.md section 5 (channel-count bug, dead
-     build flag) are deliberately NOT reproduced: the port gets clean mono
-     float audio, i.e. the algorithm's best case.
+     a BPM comparison). Upstream's integration defects (channel-count bug
+     in audiocapture.cpp's construction, emission dead behind the undefined
+     FULL_BEATTRACKING flag) are deliberately NOT reproduced: the port gets
+     clean mono float audio, i.e. the algorithm's best case.
   2. "QLC+ B (BeatTracker)"     - faithful port of Massimo Callegari's
      reactive onset detector (beattracker.cpp) with the integration
      parameters from audiocapture.cpp: band 40-400 Hz, flux smoothing 0.6,

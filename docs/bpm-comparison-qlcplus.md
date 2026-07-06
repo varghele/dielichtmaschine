@@ -3,10 +3,13 @@
 Comparison of our Auto Mode BPM detection against both QLC+ beat tracking
 implementations, run 2026-07-06. Reproduce with
 `python scripts/compare_bpm_qlcplus.py` (synthetic suite) and
-`--audio <file>` (real audio). The QLC+ side is described point by point in
-[QLCPLUS_BEATTRACKING_REFERENCE.md](../QLCPLUS_BEATTRACKING_REFERENCE.md)
-(source: local checkout of upstream branch `beattracker`, commit 41778df01);
-the comparison script contains faithful Python ports of both.
+`--audio <file>` (real audio). The QLC+ side (both implementations, their
+integration contract in `audiocapture.cpp` / `inputoutputmap.cpp`, and
+their defect list) was analyzed from a local checkout of upstream branch
+`beattracker`, commit 41778df01; that point-by-point reference now lives
+with the C++ port in the qlcplus working copy. The comparison script
+contains faithful Python ports of both implementations, which double as
+executable documentation of their behavior.
 
 ## Contenders
 
@@ -71,7 +74,9 @@ Per-scenario correct counts (out of 8):
    re-estimation only every ~6 s by design; 25% octave errors concentrated
    where its 110 BPM Rayleigh prior pulls estimates down (140+ BPM read at
    half). And this is its ported best case: the shipping integration has a
-   channel-count bug that corrupts its input (reference doc section 5.1).
+   channel-count bug that corrupts its input (`audiocapture.cpp` constructs
+   it with 2 channels against a 1-channel capture default, and its mixdown
+   loop treats total samples as a frame count - out-of-bounds reads).
 4. **Our app wiring is broken, in two compounding ways.** This is the
    actionable outcome:
    - **Rate mismatch (2x)**: `AutoBPMDetector()` defaults to
@@ -213,6 +218,6 @@ a Psycho) being songs both QLC+ trackers also misread.
   30x+ realtime here; both QLC+ trackers are cheap in C++).
 - QLC+ B is scored on its internal BPM. What QLC+ *displays* is derived
   from wall-clock spacing of emitted beat signals with 1-beat memory
-  (reference doc section 2), which is strictly noisier.
+  (`inputoutputmap.cpp`, `slotProcessBeat`), which is strictly noisier.
 - Tolerance is 4%; "octave" = 2x, 0.5x, 3x or 1/3x; "related" = 1.5x, 2/3x,
   0.75x or 4/3x; "wrong" = none of those.
