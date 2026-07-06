@@ -63,6 +63,62 @@ void main() {
 """
 
 
+GDTF_MESH_VERTEX_SHADER = """
+#version 330
+
+in vec3 in_position;
+in vec3 in_normal;
+in vec2 in_uv;
+
+out vec3 v_normal;
+out vec3 v_position;
+out vec2 v_uv;
+
+uniform mat4 mvp;
+uniform mat4 model;
+
+void main() {
+    gl_Position = mvp * vec4(in_position, 1.0);
+    v_normal = mat3(model) * in_normal;
+    v_position = (model * vec4(in_position, 1.0)).xyz;
+    v_uv = in_uv;
+}
+"""
+
+GDTF_MESH_FRAGMENT_SHADER = """
+#version 330
+
+in vec3 v_normal;
+in vec3 v_position;
+in vec2 v_uv;
+
+out vec4 fragColor;
+
+uniform vec3 base_color;
+uniform vec3 emissive_color;
+uniform float emissive_strength;
+uniform bool use_texture;
+uniform sampler2D tex;
+
+void main() {
+    // Same two-light model as the procedural fixture shader so mesh and
+    // procedural chassis read identically in a mixed rig.
+    vec3 light_dir = normalize(vec3(0.5, 1.0, 0.3));
+    float diff = max(dot(normalize(v_normal), light_dir), 0.0);
+
+    vec3 albedo = base_color;
+    if (use_texture) {
+        albedo *= texture(tex, v_uv).rgb;
+    }
+    vec3 ambient = albedo * 0.3;
+    vec3 diffuse = albedo * diff * 0.7;
+    vec3 emissive = emissive_color * emissive_strength;
+
+    fragColor = vec4(ambient + diffuse + emissive, 1.0);
+}
+"""
+
+
 # ---------------------------------------------------------------------------
 # Beam shaders — volumetric light cone / cylinder / box
 # ---------------------------------------------------------------------------

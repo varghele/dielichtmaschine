@@ -1064,6 +1064,7 @@ def make_chassis_geometry(
     chassis: Chassis,
     body_dims_m: Tuple[float, float, float],
     emitter: Optional[object] = None,
+    gdtf_source: Optional[Tuple[str, object, str]] = None,
 ) -> ChassisGeometry:
     """Construct the right :class:`ChassisGeometry` for a fixture.
 
@@ -1071,7 +1072,20 @@ def make_chassis_geometry(
     pick a cell-aware chassis (visible per-cell slabs / lamps) when the
     fixture has a :class:`CellArray`. ``None`` falls back to the legacy
     static / moving-yoke choice.
+
+    ``gdtf_source`` is ``(gdtf_path, GdtfData, mode_name)`` for
+    GDTF-sourced fixtures: try the mesh-backed chassis first and fall
+    back to the procedural ladder below on any failure (missing models,
+    bake rejects, degenerate trees — wild files, see
+    docs/gdtf-coverage-note.md).
     """
+    if gdtf_source is not None:
+        try:
+            from visualizer.renderer.gdtf_mesh_chassis import GdtfMeshChassisGeometry
+            gdtf_path, gdtf_data, mode_name = gdtf_source
+            return GdtfMeshChassisGeometry(ctx, gdtf_path, gdtf_data, mode_name)
+        except Exception as e:
+            print(f"GDTF mesh chassis unavailable, procedural fallback: {e}")
     if chassis is Chassis.MOVING_YOKE:
         return MovingYokeChassisGeometry(ctx, body_dims_m)
     if isinstance(emitter, CellArray) and chassis in (Chassis.BAR, Chassis.PANEL):
