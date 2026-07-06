@@ -282,19 +282,28 @@ synthesized root doubles as the Phase 2 companion-`.qxf` generator.
 
 ### Phase 2: persistence and interop
 
-- [ ] `Fixture` gains a definition-source field (YAML schema bump; absent
-      field defaults to `qxf` so existing configs load unchanged) plus GDTF
-      FixtureTypeID + revision when applicable.
-- [ ] `utils/fixture_io.py::resolve_modes_from_library` resolves GDTF too;
-      JSON rig export records the source.
-- [ ] `.qxw` export of GDTF-patched fixtures (the one real interop wart;
-      QLC+ has no GDTF import). Two mechanisms, in order: exact-match to an
-      existing QLC+ library `.qxf` (manufacturer/model, verbatim strings);
-      else generate a companion `.qxf` from the GDTF definition next to the
-      workspace, for the user to drop into QLC+'s fixture folder. Export
-      report lists which mechanism each fixture used.
-- [ ] Native ArtNet playback needs nothing special (it consumes the semantic
-      channel map).
+- [x] `Fixture` gains provenance fields. Done: `definition_source`
+      (default `qxf`; pre-GDTF configs load unchanged) and
+      `gdtf_fixture_type_id` (the GDTF GUID, for exact re-resolution and
+      future Share update checks). Stamped when patching from the browser
+      and when fixture-list import resolves against the library.
+- [x] `utils/fixture_io.py`. Done: `resolve_modes_from_library` resolves
+      GDTF via the unified cache and stamps provenance; the JSON rig
+      format records source + GUID on the deduplicated definitions.
+- [x] `.qxw` export of GDTF-patched fixtures. Done in
+      `create_workspace._write_gdtf_companion_qxfs`: fixtures whose
+      identity also exists as a real `.qxf` anywhere in the library
+      (`find_qxf_twin`) need nothing; the rest get a companion `.qxf`
+      serialized from the transpiled definition
+      (`serialize_definition_to_qxf`) into `gdtf_companion_fixtures/`
+      next to the workspace, with a printed report naming the mechanism
+      per fixture. The companion round-trips: re-parsing it yields a
+      legacy dict identical to the GDTF definition's
+      (`tests/unit/test_gdtf_persistence.py`, 6 tests). Residual: load a
+      companion + workspace in real QLC+ binaries, like the v1.0 runtime
+      check (manual, pending).
+- [x] Native ArtNet playback needs nothing special (it consumes the semantic
+      channel map; proven by the preset-resolution tests).
 
 ### Phase 3: render GDTF models in the visualizer
 

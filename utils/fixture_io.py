@@ -163,6 +163,8 @@ def write_fixture_list_json(path: str, config) -> None:
                 'manufacturer': fixture.manufacturer,
                 'model': fixture.model,
                 'type': fixture.type,
+                'source': fixture.definition_source,
+                'gdtf_fixture_type_id': fixture.gdtf_fixture_type_id,
                 'modes': [
                     {'name': m.name, 'channels': m.channels}
                     for m in fixture.available_modes
@@ -250,6 +252,8 @@ def read_fixture_list_json(path: str) -> Tuple[List[Fixture], Dict[str, dict], L
                 orientation_uses_group_default=bool(
                     fd.get('orientation_uses_group_default', True)),
                 z_uses_group_default=bool(fd.get('z_uses_group_default', True)),
+                definition_source=definition.get('source', 'qxf'),
+                gdtf_fixture_type_id=definition.get('gdtf_fixture_type_id'),
             ))
         except (KeyError, IndexError, TypeError, ValueError) as e:
             raise ValueError(
@@ -328,12 +332,19 @@ def resolve_modes_from_library(fixtures: List[Fixture]) -> List[str]:
             FixtureMode(name=m['name'], channels=len(m['channels']))
             for m in definition['modes']
         ]
+        # Provenance: record which format the definition resolved from
+        # (GDTF wins identity clashes in the library, see fixture_library).
+        from utils.fixture_library import get_definition
+        resolved = get_definition(manufacturer, model)
         for fixture in fixtures:
             if (fixture.manufacturer, fixture.model) != (manufacturer, model):
                 continue
             fixture.available_modes = [
                 FixtureMode(name=m.name, channels=m.channels) for m in modes
             ]
+            if resolved is not None:
+                fixture.definition_source = resolved.source
+                fixture.gdtf_fixture_type_id = resolved.gdtf_fixture_type_id
             if not any(m.name == fixture.current_mode for m in modes):
                 warnings.append(
                     f"{fixture.name}: mode {fixture.current_mode!r} not in "

@@ -43,6 +43,13 @@ class Fixture:
     # (ground stack / mid-truss / top-truss); see StageLayer.
     layer: str = ""
 
+    # Definition provenance (GDTF plan Phase 2). "qxf" or "gdtf"; absent
+    # in pre-GDTF configs, so the default keeps them loading unchanged.
+    # The GDTF FixtureTypeID GUID enables exact re-resolution and GDTF
+    # Share update checks; None for .qxf-sourced fixtures.
+    definition_source: str = "qxf"
+    gdtf_fixture_type_id: Optional[str] = None
+
     def get_effective_orientation(self, group: Optional['FixtureGroup'] = None) -> tuple:
         """
         Get effective orientation values, considering group defaults if applicable.

@@ -174,3 +174,47 @@ def create_qlc_workspace(config: Configuration, vc_options: Optional[Dict[str, b
         f.write('<?xml version="1.0" encoding="UTF-8"?>\n')
         f.write('<!DOCTYPE Workspace>\n')
         f.write('\n'.join(pretty_xml.split('\n')[1:]))
+
+    _write_gdtf_companion_qxfs(models_in_config, os.path.dirname(workspace_path))
+
+
+def _write_gdtf_companion_qxfs(models_in_config, out_dir: str):
+    """QLC+ interop for GDTF-sourced fixtures (GDTF plan Phase 2).
+
+    QLC+ cannot read .gdtf. For every patched fixture whose definition
+    came from a GDTF file and has no same-identity .qxf anywhere in the
+    library, serialize the transpiled definition into
+    ``<out_dir>/gdtf_companion_fixtures/`` and tell the user to drop the
+    files into QLC+'s fixture folder; with them installed the exported
+    workspace patches identically in QLC+.
+    """
+    from utils.fixture_library import (
+        companion_qxf_filename, find_qxf_twin, get_definition,
+        serialize_definition_to_qxf,
+    )
+
+    matched, generated = [], []
+    for manufacturer, model in sorted(models_in_config):
+        defn = get_definition(manufacturer, model)
+        if defn is None or defn.source != 'gdtf':
+            continue
+        if find_qxf_twin(manufacturer, model) is not None:
+            matched.append(f"{manufacturer} {model}")
+            continue
+        companion_dir = os.path.join(out_dir, 'gdtf_companion_fixtures')
+        os.makedirs(companion_dir, exist_ok=True)
+        out_path = os.path.join(companion_dir,
+                                companion_qxf_filename(manufacturer, model))
+        with open(out_path, 'w', encoding='UTF-8') as f:
+            f.write(serialize_definition_to_qxf(defn))
+        generated.append(out_path)
+
+    if matched:
+        print("GDTF fixtures with a same-identity .qxf in the QLC+ library "
+              "(no companion needed): " + ", ".join(matched))
+    if generated:
+        print("GDTF fixtures unknown to QLC+; companion .qxf files written. "
+              "Copy them into QLC+'s user fixture folder so the workspace "
+              "patches correctly:")
+        for path in generated:
+            print(f"  {path}")

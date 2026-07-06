@@ -99,3 +99,6 @@ archive/shows/audiofiles/backingtrack_*
 /tester.yaml
 /workspace_generated.qxw
 /workspace_saved.qxw
+
+# GDTF companion .qxf output from the .qxw exporter (generated per export).
+/gdtf_companion_fixtures/

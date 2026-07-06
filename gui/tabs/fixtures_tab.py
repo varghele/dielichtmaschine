@@ -885,7 +885,9 @@ class FixturesTab(BaseTab):
                 type=fixture_type,
                 x=0.0,
                 y=0.0,
-                z=0.0
+                z=0.0,
+                definition_source=defn.source,
+                gdtf_fixture_type_id=defn.gdtf_fixture_type_id,
             )
             self.config.fixtures.append(new_fixture)
 

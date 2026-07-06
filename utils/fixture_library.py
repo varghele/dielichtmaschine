@@ -409,6 +409,7 @@ def clear_library_cache() -> None:
     _path_index.clear()
     _scanned_paths.clear()
     _definition_cache.clear()
+    _qxf_twin_cache.clear()
     _full_scan_done = False
 
 
@@ -512,6 +513,64 @@ def iter_definitions() -> Iterator[FixtureDefinition]:
             continue
         seen.add(defn.key)
         yield defn
+
+
+# ---------------------------------------------------------------------------
+# QLC+ interop: companion .qxf for GDTF-sourced definitions
+# ---------------------------------------------------------------------------
+#
+# QLC+ has no GDTF import. A GDTF-sourced FixtureDefinition carries a
+# synthesized QLC-format root, so serializing it yields a .qxf that QLC+
+# can load; the .qxw exporter writes one next to the workspace for every
+# GDTF fixture that has no same-identity .qxf in the library.
+
+_qxf_twin_cache: Dict[Tuple[str, str], Optional[str]] = {}
+
+
+def find_qxf_twin(manufacturer: str, model: str) -> Optional[str]:
+    """Path of a real .qxf for this identity, ignoring .gdtf files.
+
+    Unlike :func:`find_fixture_file` (format-agnostic, GDTF first), this
+    answers the interop question "does QLC+'s own library already know
+    this fixture". Memoized; cleared with :func:`clear_library_cache`.
+    """
+    key = (manufacturer, model)
+    if key in _qxf_twin_cache:
+        return _qxf_twin_cache[key]
+    result = None
+    for path, _source in iter_fixture_files():
+        if not path.lower().endswith('.qxf'):
+            continue
+        header = _read_header(path)
+        if header == key:
+            result = path
+            break
+    _qxf_twin_cache[key] = result
+    return result
+
+
+def serialize_definition_to_qxf(defn: FixtureDefinition) -> str:
+    """QLC+ .qxf file text for a definition's (real or synthesized) root."""
+    if defn.root is None:
+        raise ValueError(f"definition for {defn.key} carries no XML root")
+    import xml.dom.minidom as minidom
+    ET.register_namespace('', QLC_FIXTURE_NS)
+    rough = ET.tostring(defn.root, encoding='unicode')
+    pretty = minidom.parseString(rough).toprettyxml(indent=' ')
+    # Drop minidom's XML declaration line; emit QLC+'s header instead.
+    body = '\n'.join(
+        line for line in pretty.split('\n')[1:] if line.strip()
+    )
+    return ('<?xml version="1.0" encoding="UTF-8"?>\n'
+            '<!DOCTYPE FixtureDefinition>\n'
+            f'{body}\n')
+
+
+def companion_qxf_filename(manufacturer: str, model: str) -> str:
+    """QLC+-convention filename (Manufacturer-Model.qxf, sanitized)."""
+    raw = f"{manufacturer}-{model}"
+    safe = re.sub(r'[^A-Za-z0-9._-]+', '-', raw).strip('-')
+    return f"{safe}.qxf"
 
 
 # ---------------------------------------------------------------------------

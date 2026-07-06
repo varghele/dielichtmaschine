@@ -27,7 +27,15 @@ verbatim as the GitHub Release notes (see [docs/releasing.md](docs/releasing.md)
   downstream consumer is format-agnostic. Not yet in: 3D model rendering
   (planned, `docs/gdtf-integration-plan.md` Phase 3), GDTF Share
   integration, and the demo-rig coverage comparison (needs Share
-  downloads, which require a user account). The Add Fixture dialog grew a details pane
+  downloads, which require a user account).
+- **GDTF persistence and QLC+ interop.** Fixtures remember where their
+  definition came from (`definition_source` + the GDTF GUID in config
+  YAML and the JSON rig format; old configs load unchanged). On `.qxw`
+  export, GDTF fixtures QLC+ already knows pass through untouched, and
+  unknown ones get a companion `.qxf` generated next to the workspace
+  (`gdtf_companion_fixtures/`) to drop into QLC+'s fixture folder, so a
+  GDTF-built rig still opens correctly in QLC+.
+- **Fixture browser upgrade.** The Add Fixture dialog grew a details pane
   (fixture type + every mode with its channel count, parsed lazily from the
   selected `.qxf`), a `[bundled]` tag on the definitions that ship with the
   app, double-click-to-add, and a quantity field — add 8 PARs in one go,
