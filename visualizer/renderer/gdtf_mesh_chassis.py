@@ -55,18 +55,24 @@ def _box_as_baked(dims: Tuple[float, float, float]) -> BakedMesh:
     )
 
 
-class _DrawEntry:
-    def __init__(self, item: DrawItem, baked: BakedMesh, ctx: moderngl.Context,
-                 program: moderngl.Program):
-        self.item = item
+# ---------------------------------------------------------------------------
+# Shared GL resources: one program per context, one buffer/texture set per
+# (context, archive, model). N instances of the same fixture type share
+# everything except their (cheap) VAOs - per-fixture private buffers would
+# not scale to the 60-fixture festival rig with real meshes. Shared
+# resources live for the context's lifetime (bounded by distinct fixture
+# types); clear_gl_mesh_cache() exists for explicit teardown.
+# ---------------------------------------------------------------------------
+
+_shared_programs: dict = {}     # id(ctx) -> Program
+_shared_meshes: dict = {}       # (id(ctx), gdtf_path, mesh_key) -> _SharedMesh
+
+
+class _SharedMesh:
+    def __init__(self, ctx: moderngl.Context, baked: BakedMesh):
         self.base_color = baked.base_color[:3]
         self.vbo = ctx.buffer(baked.vertex_data.tobytes())
         self.ibo = ctx.buffer(baked.indices.tobytes())
-        self.vao = ctx.vertex_array(
-            program,
-            [(self.vbo, '3f 3f 2f', 'in_position', 'in_normal', 'in_uv')],
-            index_buffer=self.ibo,
-        )
         self.texture: Optional[moderngl.Texture] = None
         if baked.texture_png:
             from PIL import Image
@@ -75,9 +81,63 @@ class _DrawEntry:
             self.texture.build_mipmaps()
 
     def release(self):
-        for res in (self.vao, self.vbo, self.ibo, self.texture):
+        for res in (self.vbo, self.ibo, self.texture):
             if res is not None:
                 res.release()
+
+
+def _shared_program(ctx: moderngl.Context) -> moderngl.Program:
+    program = _shared_programs.get(id(ctx))
+    if program is None:
+        program = ctx.program(vertex_shader=GDTF_MESH_VERTEX_SHADER,
+                              fragment_shader=GDTF_MESH_FRAGMENT_SHADER)
+        _shared_programs[id(ctx)] = program
+    return program
+
+
+def _shared_mesh(ctx: moderngl.Context, gdtf_path: str, mesh_key: str,
+                 baked: BakedMesh) -> _SharedMesh:
+    key = (id(ctx), gdtf_path, mesh_key)
+    shared = _shared_meshes.get(key)
+    if shared is None:
+        shared = _SharedMesh(ctx, baked)
+        _shared_meshes[key] = shared
+    return shared
+
+
+def clear_gl_mesh_cache() -> None:
+    """Release all shared GL mesh resources (explicit teardown only)."""
+    for shared in _shared_meshes.values():
+        shared.release()
+    _shared_meshes.clear()
+    for program in _shared_programs.values():
+        program.release()
+    _shared_programs.clear()
+
+
+class _DrawEntry:
+    def __init__(self, item: DrawItem, shared: _SharedMesh,
+                 ctx: moderngl.Context, program: moderngl.Program):
+        self.item = item
+        self.shared = shared
+        self.vao = ctx.vertex_array(
+            program,
+            [(shared.vbo, '3f 3f 2f', 'in_position', 'in_normal', 'in_uv')],
+            index_buffer=shared.ibo,
+        )
+
+    @property
+    def base_color(self):
+        return self.shared.base_color
+
+    @property
+    def texture(self):
+        return self.shared.texture
+
+    def release(self):
+        # Only the per-instance VAO; buffers/textures are shared.
+        if self.vao is not None:
+            self.vao.release()
 
 
 class GdtfMeshChassisGeometry(ChassisGeometry):
@@ -86,10 +146,7 @@ class GdtfMeshChassisGeometry(ChassisGeometry):
     def __init__(self, ctx: moderngl.Context, gdtf_path: str, gdtf: GdtfData,
                  mode_name: str):
         self.ctx = ctx
-        self.program = ctx.program(
-            vertex_shader=GDTF_MESH_VERTEX_SHADER,
-            fragment_shader=GDTF_MESH_FRAGMENT_SHADER,
-        )
+        self.program = _shared_program(ctx)
         self.entries: List[_DrawEntry] = []
         self._beam_item: Optional[DrawItem] = None
 
@@ -105,16 +162,18 @@ class GdtfMeshChassisGeometry(ChassisGeometry):
             dims = (model.length_m, model.width_m, model.height_m)
             baked = None
             glb = model.glb_path()
+            mesh_key = f'glb:{glb}'
             if glb is not None:
                 baked = load_glb_mesh(gdtf_path, glb, target_dims_m=dims)
             if baked is None:
                 if max(dims) <= 0:
                     continue
                 baked = _box_as_baked(dims)
-            self.entries.append(_DrawEntry(item, baked, ctx, self.program))
+                mesh_key = f'box:{item.model_name}'
+            shared = _shared_mesh(ctx, gdtf_path, mesh_key, baked)
+            self.entries.append(_DrawEntry(item, shared, ctx, self.program))
 
         if not self.entries:
-            self.program.release()
             raise ValueError(
                 f"GDTF geometry tree of {gdtf_path} yields nothing drawable")
 
@@ -155,7 +214,7 @@ class GdtfMeshChassisGeometry(ChassisGeometry):
         return node * flip
 
     def release(self) -> None:
+        # VAOs only; program and mesh buffers are shared per context
+        # (see clear_gl_mesh_cache for explicit teardown).
         for entry in self.entries:
             entry.release()
-        if self.program:
-            self.program.release()

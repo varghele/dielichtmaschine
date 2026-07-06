@@ -136,3 +136,55 @@ class GdtfData:
 
     def axes(self) -> List[GdtfGeometryNode]:
         return [n for n in self.iter_nodes() if n.node_type == 'Axis']
+
+
+def tree_bounds_dims_m(gdtf: 'GdtfData',
+                       mode_name: Optional[str] = None) -> Optional[tuple]:
+    """Overall (X, Y, Z) extents in meters of the whole geometry tree.
+
+    Walks the mode's subtree at rest (pan/tilt zero), accumulating
+    parent-relative transforms, and unions the axis-aligned boxes of
+    every modeled node (each approximated as the Model dims centered on
+    the node origin - mesh pivots vary in the wild, so this is a bound
+    estimate, not an exact hull). Much closer to reality than the root
+    model alone: a moving head's root is just its base plate
+    (docs/gdtf-coverage-note.md). None when nothing is modeled.
+    """
+    import numpy as np
+
+    roots = {t.name: t for t in gdtf.geometry_trees}
+    root = roots.get(gdtf.mode_root_geometry.get(mode_name or '', ''))
+    if root is None and gdtf.geometry_trees:
+        root = gdtf.geometry_trees[0]
+    if root is None:
+        return None
+
+    lo = np.full(3, np.inf)
+    hi = np.full(3, -np.inf)
+
+    def visit(node: GdtfGeometryNode, parent: 'np.ndarray', depth: int) -> None:
+        nonlocal lo, hi
+        if depth > 16:
+            return
+        m = parent @ np.asarray(node.position, dtype=np.float64)
+        model = gdtf.models.get(node.model) if node.model else None
+        if model is not None:
+            half = np.array([model.length_m, model.width_m, model.height_m]) / 2.0
+            if half.max() > 0:
+                center = m[:3, 3]
+                # Rotated half-extents bound: |R| @ half
+                extent = np.abs(m[:3, :3]) @ half
+                lo = np.minimum(lo, center - extent)
+                hi = np.maximum(hi, center + extent)
+        if node.node_type == 'Reference' and node.reference_to:
+            target = roots.get(node.reference_to)
+            if target is not None:
+                visit(target, m, depth + 1)
+        for child in node.children:
+            visit(child, m, depth + 1)
+
+    visit(root, np.eye(4), 0)
+    if not np.isfinite(lo).all():
+        return None
+    extents = hi - lo
+    return (float(extents[0]), float(extents[1]), float(extents[2]))

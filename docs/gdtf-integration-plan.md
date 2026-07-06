@@ -322,53 +322,60 @@ inverse kinematics wants). `.qxf` definitions carry `gdtf = None` and
 keep the procedural path. Phase 3 consumes this lane directly; nothing
 below goes through the transpiled channel model.
 
-**Progress 2026-07-06 (first working pass, all tested):**
-`utils/gdtf_mesh.py` (GLB extract + bake: interleaved indexed arrays,
-dims-fitted with pivot preserved, vertex cap, cache);
-`visualizer/renderer/gdtf_draw_plan.py` (GL-free kinematic plan:
-reference expansion, axis attribution incl wild-file name fallbacks,
-live pan/tilt composition); `visualizer/renderer/gdtf_mesh_chassis.py`
-(textured indexed draws, per-NODE primitive fallback for 3DS-only /
-modelless nodes, beam origin from the Beam node, opaque-pass depth
-rules); wired via `make_chassis_geometry(gdtf_source=...)` with
-procedural fallback on any failure and a `QLC_GDTF_MESHES=0` kill
-switch. Real-GL smoke: the MagicBlade R Share file renders its GLB
-head + primitive yoke/base and articulates. Still open below: mesh
-sharing across instances, tree-bounds dimensions, golden screenshots,
-in-app verification.
+**Shipped 2026-07-06.** All items below done; deviations noted inline.
 
-- [ ] Mesh pipeline: extract GLB from the archive (pygdtf `_package`), parse
-      with trimesh, bake to interleaved indexed position+normal+uv buffers,
-      scale to the Model node's Length/Width/Height, cache baked meshes in
-      the per-OS data dir keyed by FixtureTypeID + model name + revision.
-      Default LOD; hard vertex cap with a validation warning for oversized
-      wild files.
-- [ ] `MeshChassisGeometry(ChassisGeometry)` selected in
-      `make_chassis_geometry()` when the definition carries a geometry tree
-      with usable model files. Builds the kinematic chain the way
-      `MovingYokeChassisGeometry` does procedurally: accumulate node
-      transforms, pan rotation at the Yoke Axis node, tilt at the Head Axis
-      node. BlenderDMX's tree walk is the reference implementation.
-- [ ] Coordinate adapter, one function, unit-pinned: GDTF right-handed Z-up
-      / origin at base plate / beam along -Z of the Beam node, into the
-      chassis-local convention of `visualizer/renderer/reference.md` (Z-up,
-      beam +X for yokes, +Z static). This is exactly the frame-mixup trap
-      CLAUDE.md warns about; tests before wiring.
-- [ ] Shader work: textured variant of the fixture shader (UV attribute +
-      sampler; Pillow decodes GLB-embedded PNG/JPEG; untextured materials
-      use the baseColor factor). Mesh chassis renders in the opaque
-      `render_chassis` pass; depth writes via `gl_state.set_depth_mask` only.
-- [ ] Beam emission origin/direction from the Beam geometry node instead of
-      the procedural lens offset; GeometryReference instances yield one
-      emission each (pixel bars, MH bars get correct per-cell beam origins).
-- [ ] Mesh sharing: one baked mesh + VAO set shared across all instances of
-      a fixture type (today each fixture owns private VBOs; that does not
-      scale to the 60-fixture festival rig with real meshes).
-- [ ] Fallback ladder (§6) wired and tested.
-- [ ] Tests: unit tests for tree walk + frame conversion + LOD/cap logic
-      against self-authored `.gdtf` files (tiny GLBs), golden screenshots
-      per the visual-regression workflow, a real-GL smoke, and the clipping
-      sweep untouched.
+- [x] Mesh pipeline. Done: `utils/gdtf_mesh.py` extracts GLBs via
+      zipfile + trimesh, bakes interleaved indexed position+normal+uv
+      float32 arrays fitted per axis to the Model dims with the pivot
+      preserved (wild meshes are mm-scale), 60k vertex cap with a
+      printed warning, per-(archive, model) bake cache. Deviation: the
+      cache is in-memory per process, not a per-OS disk cache - bakes
+      are milliseconds, disk caching wasn't worth the invalidation
+      complexity.
+- [x] Mesh chassis. Done: `GdtfMeshChassisGeometry` (ChassisGeometry
+      subclass) driven by the GL-free kinematic plan in
+      `visualizer/renderer/gdtf_draw_plan.py` - reference expansion,
+      pan at Z-aligned Axis nodes, tilt at X-aligned ones, per-NODE
+      primitive-box fallback for 3DS-only / modelless nodes (MagicBlade
+      R: GLB head + primitive yoke/base). Selected in
+      `make_chassis_geometry(gdtf_source=...)`; any failure falls back
+      to the procedural ladder; `QLC_GDTF_MESHES=0` kill switch.
+- [x] Coordinate adapter. Done inside the draw plan: both frames are
+      Z-up so no basis change; the beam cone (+Z) flips 180 degrees
+      onto the Beam node's -Z. Axis attribution carries the wild-file
+      name fallbacks ('yoke'/'pan', 'head'/'tilt') for files without
+      DMX-linked Axis nodes (MAC Aura). Unit-pinned in
+      `tests/unit/test_gdtf_draw_plan.py`.
+- [x] Shader work. Done: `GDTF_MESH_VERTEX/FRAGMENT_SHADER` (UV
+      attribute + sampler, baseColor factor for untextured materials,
+      same two-light model as the procedural shader so mixed rigs read
+      uniformly); opaque pass, `gl_state.set_depth_mask` only.
+- [x] Beam emission origin from the Beam node. Done for the chassis
+      beam via `beam_origin_transform`. Per-cell emissions continue to
+      come from the emitter runners (CellArray / MultiHead), which is
+      correct: verified end to end - the MagicBlade renders its seven
+      per-cell beams from the head bar.
+- [x] Mesh sharing. Done: one shared GL program per context and one
+      buffer/texture set per (context, archive, model); instances own
+      only their VAOs and never release shared resources
+      (`clear_gl_mesh_cache` for explicit teardown). Pinned by
+      `test_instances_share_gl_buffers`.
+- [x] Tree-bounds dimensions (coverage-note follow-up). Done:
+      `utils/gdtf_data.py::tree_bounds_dims_m` unions rotated model
+      AABBs over the whole tree; the loader feeds it into the
+      synthesized `<Dimensions>`. MagicBlade R now 0.571 x 0.349 x
+      0.186 m (qxf: 0.57 x 0.27 x 0.18), MAC Aura 0.30 x 0.36 x 0.22 m
+      (was 0.22 x 0.07 x 0.13 base-plate-only).
+- [x] Fallback ladder (§6) wired and tested (modelless tree raises ->
+      procedural; broken GLB -> primitive box; `.qxf` untouched).
+- [x] Tests: bake unit tests incl. the real MagicBlade GLB
+      (`test_gdtf_mesh.py`), draw-plan unit tests
+      (`test_gdtf_draw_plan.py`), real-GL smokes + sharing + fallback +
+      a per-platform golden (`tests/visual/test_gdtf_mesh_chassis.py`,
+      `goldens/win32/gdtf_mesh_spot.png`), clipping sweep untouched.
+      End-to-end verified headlessly: the full payload -> capabilities
+      -> mesh chassis -> emitter pipeline renders the real MagicBlade R
+      articulated with its seven colored beams.
 
 ### Phase 4: GDTF Share browser (optional, last)
 

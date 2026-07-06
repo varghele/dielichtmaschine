@@ -47,9 +47,33 @@ def fbo(gl_context):
 
 @pytest.fixture(autouse=True)
 def _fresh_mesh_cache():
+    from visualizer.renderer.gdtf_mesh_chassis import clear_gl_mesh_cache
     clear_mesh_cache()
     yield
+    clear_gl_mesh_cache()
     clear_mesh_cache()
+
+
+def test_instances_share_gl_buffers(gl_context, fbo, tmp_path):
+    """N fixtures of one type share program + buffers; only VAOs are
+    per instance, and releasing one instance leaves the other usable."""
+    from visualizer.renderer.gdtf_mesh_chassis import GdtfMeshChassisGeometry
+
+    defn = parse_gdtf_file(_spot_with_glb(tmp_path))
+    a = GdtfMeshChassisGeometry(gl_context, defn.path, defn.gdtf, "Standard")
+    b = GdtfMeshChassisGeometry(gl_context, defn.path, defn.gdtf, "Standard")
+    try:
+        assert a.program is b.program
+        assert a.entries[0].shared is b.entries[0].shared
+        assert a.entries[0].vao is not b.entries[0].vao
+        a.release()
+        fbo.use()
+        gl_context.clear(0.0, 0.0, 0.0, 0.0)
+        gl_context.enable(moderngl.DEPTH_TEST)
+        b.render(_mvp(), glm.mat4(1.0))
+        assert _rendered_pixels(fbo) > 50, "survivor renders after peer release"
+    finally:
+        b.release()
 
 
 def _spot_with_glb(tmp_path):
@@ -92,6 +116,29 @@ def test_mesh_chassis_renders_synthetic_spot(gl_context, fbo, tmp_path):
         assert rest.z == pytest.approx(-1.0, abs=1e-5)  # cone +Z flipped onto -Z
         tilted = chassis.beam_origin_transform(0.0, 90.0) * glm.vec4(0, 0, 1, 0)
         assert abs(tilted.z) < 1e-5 and abs(tilted.y) == pytest.approx(1.0, abs=1e-5)
+    finally:
+        chassis.release()
+
+
+def test_mesh_chassis_matches_golden(gl_context, fbo, tmp_path):
+    """Pixel-level pin of the mesh render path (per-platform golden,
+    QLC_REGEN_GOLDENS=1 to regenerate after intended changes)."""
+    from PyQt6.QtGui import QImage
+    from tests.visual.harness import compare_to_golden
+    from visualizer.renderer.gdtf_mesh_chassis import GdtfMeshChassisGeometry
+
+    defn = parse_gdtf_file(_spot_with_glb(tmp_path))
+    chassis = GdtfMeshChassisGeometry(gl_context, defn.path, defn.gdtf, "Standard")
+    try:
+        fbo.use()
+        gl_context.clear(0.05, 0.05, 0.07, 1.0)
+        gl_context.enable(moderngl.DEPTH_TEST)
+        chassis.render(_mvp(), glm.mat4(1.0))
+        data = np.frombuffer(fbo.read(components=4), dtype=np.uint8)
+        data = data.reshape(SIZE, SIZE, 4)[::-1].copy()  # bottom-up FBO
+        image = QImage(data.tobytes(), SIZE, SIZE, SIZE * 4,
+                       QImage.Format.Format_RGBA8888)
+        compare_to_golden(image, "gdtf_mesh_spot")
     finally:
         chassis.release()
 

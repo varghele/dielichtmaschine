@@ -364,9 +364,14 @@ def _physical_range(gdtf_channel) -> Tuple[float, float]:
     return (min(lows), max(highs))
 
 
-def synthesize_qlc_root(fixture_type) -> ET.Element:
+def synthesize_qlc_root(fixture_type, dims_mm=None) -> ET.Element:
     """Build a QLC-format <FixtureDefinition> element tree from a pygdtf
-    FixtureType. Namespaced exactly like a real .qxf parse."""
+    FixtureType. Namespaced exactly like a real .qxf parse.
+
+    dims_mm: optional (Width, Height, Depth) override in millimeters -
+    the caller computes whole-tree bounds from the native lane, which
+    beat the root-model-only estimate (a mover's root is its base plate).
+    """
     root = ET.Element(_q('FixtureDefinition'))
 
     creator = ET.SubElement(root, _q('Creator'))
@@ -514,7 +519,7 @@ def synthesize_qlc_root(fixture_type) -> ET.Element:
     bulb.set('ColourTemperature', str(int(
         float(getattr(beams[0], 'color_temperature', 0) or 0)) if beams else 0))
 
-    dims = _root_dimensions_mm(fixture_type)
+    dims = dims_mm if dims_mm is not None else _root_dimensions_mm(fixture_type)
     dims_el = ET.SubElement(physical, _q('Dimensions'))
     dims_el.set('Weight', '0')
     dims_el.set('Width', str(int(dims[0])) if dims else '0')
@@ -712,9 +717,19 @@ def parse_gdtf_file(path: str) -> FixtureDefinition:
     import pygdtf
 
     with pygdtf.FixtureType(path) as fixture_type:
-        root = synthesize_qlc_root(fixture_type)
+        gdtf_data = build_gdtf_data(fixture_type)
+
+        # Chassis dimensions from whole-tree bounds (GDTF X/Y/Z ->
+        # QLC Width/Height(Z)/Depth(Y), meters -> millimeters).
+        from utils.gdtf_data import tree_bounds_dims_m
+        dims_mm = None
+        bounds = tree_bounds_dims_m(gdtf_data)
+        if bounds is not None and max(bounds) > 0:
+            dims_mm = (bounds[0] * 1000.0, bounds[2] * 1000.0, bounds[1] * 1000.0)
+
+        root = synthesize_qlc_root(fixture_type, dims_mm=dims_mm)
         defn = definition_from_qxf_root(root, path)
         defn.source = 'gdtf'
         defn.gdtf_fixture_type_id = getattr(fixture_type, 'fixture_type_id', None)
-        defn.gdtf = build_gdtf_data(fixture_type)
+        defn.gdtf = gdtf_data
         return defn
