@@ -34,6 +34,14 @@ verbatim as the GitHub Release notes (see [docs/releasing.md](docs/releasing.md)
   3D model rendering itself (planned, `docs/gdtf-integration-plan.md`
   Phase 3), GDTF Share integration, and the demo-rig coverage comparison
   (needs Share downloads, which require a user account).
+- **GDTF 3D models render in the visualizer (first pass).** Fixtures
+  whose definition comes from a `.gdtf` now draw their embedded GLB
+  meshes instead of the procedural chassis: the GDTF geometry tree
+  becomes a kinematic chain (pan/tilt rotate whole subtrees at the Axis
+  nodes), the beam cone emits from the Beam node, and nodes without a
+  usable GLB (3DS-only or placeholder files are common in the wild)
+  fall back to primitive boxes per node. Any failure falls back to the
+  procedural chassis; `QLC_GDTF_MESHES=0` disables the mesh path.
 - **Mode reconciliation on config load.** When the fixture library
   resolves a different definition than the config was authored against
   (typically a GDTF now shadowing a same-identity `.qxf`, whose mode

@@ -322,6 +322,21 @@ inverse kinematics wants). `.qxf` definitions carry `gdtf = None` and
 keep the procedural path. Phase 3 consumes this lane directly; nothing
 below goes through the transpiled channel model.
 
+**Progress 2026-07-06 (first working pass, all tested):**
+`utils/gdtf_mesh.py` (GLB extract + bake: interleaved indexed arrays,
+dims-fitted with pivot preserved, vertex cap, cache);
+`visualizer/renderer/gdtf_draw_plan.py` (GL-free kinematic plan:
+reference expansion, axis attribution incl wild-file name fallbacks,
+live pan/tilt composition); `visualizer/renderer/gdtf_mesh_chassis.py`
+(textured indexed draws, per-NODE primitive fallback for 3DS-only /
+modelless nodes, beam origin from the Beam node, opaque-pass depth
+rules); wired via `make_chassis_geometry(gdtf_source=...)` with
+procedural fallback on any failure and a `QLC_GDTF_MESHES=0` kill
+switch. Real-GL smoke: the MagicBlade R Share file renders its GLB
+head + primitive yoke/base and articulates. Still open below: mesh
+sharing across instances, tree-bounds dimensions, golden screenshots,
+in-app verification.
+
 - [ ] Mesh pipeline: extract GLB from the archive (pygdtf `_package`), parse
       with trimesh, bake to interleaved indexed position+normal+uv buffers,
       scale to the Model node's Length/Width/Height, cache baked meshes in
