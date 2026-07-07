@@ -186,9 +186,52 @@ class StagePlotRenderer:
         origin_y = plot_rect.center().y()
         self._draw_stage(painter, origin_x, origin_y, stage_w, stage_d,
                          ppm, mm, black, gray)
+        self._draw_stage_elements(painter, origin_x, origin_y, ppm, mm, gray)
         occupied = self._draw_fixtures(painter, origin_x, origin_y, ppm, mm, black)
         self._draw_spots(painter, origin_x, origin_y, ppm, mm, black, occupied)
         self._draw_legend(painter, legend_rect, mm, ppm, black, gray)
+
+    def _draw_stage_elements(self, painter, ox, oy, ppm, mm, gray) -> None:
+        """Static stage elements (risers, wedges, truss shapes, ...)
+        under the fixtures: SVG symbol at its real footprint, plus the
+        user label if set. Hidden-layer elements are skipped like
+        hidden-layer fixtures."""
+        elements = getattr(self.config, "stage_elements", None) or []
+        if not elements:
+            return
+        from PyQt6.QtSvg import QSvgRenderer
+        from utils.stage_element_catalog import symbol_path
+
+        for element in elements:
+            if element.layer:
+                layer = self.config.get_stage_layer(element.layer)
+                if layer is not None and not layer.visible:
+                    continue
+            x = ox + element.x * ppm
+            y = oy + element.y * ppm
+            w = element.width * ppm
+            d = element.depth * ppm
+
+            painter.save()
+            painter.translate(x, y)
+            painter.rotate(element.rotation)
+            renderer = QSvgRenderer(symbol_path(element.kind))
+            body = QRectF(-w / 2, -d / 2, w, d)
+            if renderer.isValid():
+                renderer.render(painter, body)
+            else:
+                painter.setPen(QPen(gray, 0.25 * mm, Qt.PenStyle.DashLine))
+                painter.setBrush(Qt.BrushStyle.NoBrush)
+                painter.drawRect(body)
+            painter.restore()
+
+            if element.label:
+                painter.setPen(QPen(gray, 0.2 * mm))
+                painter.setFont(self._font(2.2, mm))
+                painter.drawText(
+                    QRectF(x - 20 * mm, y + d / 2 + 0.5 * mm, 40 * mm, 4 * mm),
+                    Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignTop,
+                    element.label)
 
     def _draw_title_block(self, painter, page_w, margin, title_h, mm,
                           stage_w, stage_d, scale_den, black, gray) -> None:

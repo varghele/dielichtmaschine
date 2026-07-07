@@ -556,3 +556,165 @@ class SpotItem(QGraphicsItem):
         painter.setFont(font)
         painter.drawText(QPointF(-self.size/2, self.size + 18), f"Z: {self.z_height:.1f}m")
 
+
+
+class StageElementItem(QGraphicsItem):
+    """A static stage element (riser, wedge, amp, truss shape, ...) on
+    the plan (StageElement model, utils/stage_element_catalog.py).
+
+    Renders the stageplot SVG symbol stretched to the element's real
+    footprint, draggable with grid snap, rotatable via context menu,
+    ghosted by the active-layer mode exactly like fixtures. Draws under
+    fixtures (zValue -1). Holds a direct reference to its StageElement
+    model; the view writes positions back on drag.
+    """
+
+    _renderers = {}  # kind -> QSvgRenderer (shared per session)
+
+    def __init__(self, element, pixels_per_meter, parent=None):
+        super().__init__(parent)
+        self.element = element
+        self.ppm = pixels_per_meter
+        self.ghosted = False
+        self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsMovable)
+        self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsSelectable)
+        self.setZValue(-1)  # under fixtures
+
+    @classmethod
+    def _renderer(cls, kind):
+        if kind not in cls._renderers:
+            from PyQt6.QtSvg import QSvgRenderer
+            from utils.stage_element_catalog import symbol_path
+            cls._renderers[kind] = QSvgRenderer(symbol_path(kind))
+        return cls._renderers[kind]
+
+    def _body_rect(self):
+        w = self.element.width * self.ppm
+        d = self.element.depth * self.ppm
+        return QRectF(-w / 2, -d / 2, w, d)
+
+    def boundingRect(self):
+        rect = self._body_rect()
+        # Rotation happens inside paint(); bound by the rotated extent
+        # plus the label strip and selection ring.
+        angle = radians(self.element.rotation)
+        half_w = abs(rect.width() / 2 * cos(angle)) + abs(rect.height() / 2 * sin(angle))
+        half_h = abs(rect.width() / 2 * sin(angle)) + abs(rect.height() / 2 * cos(angle))
+        label_h = 14 if self.element.label else 0
+        return QRectF(-half_w - 4, -half_h - 4,
+                      2 * half_w + 8, 2 * half_h + 8 + label_h)
+
+    def set_ghosted(self, ghosted: bool):
+        if ghosted == self.ghosted:
+            return
+        self.ghosted = ghosted
+        self.setOpacity(0.18 if ghosted else 1.0)
+        self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsMovable, not ghosted)
+        self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsSelectable, not ghosted)
+        if ghosted:
+            self.setSelected(False)
+        self.update()
+
+    def paint(self, painter, option, widget):
+        painter.save()
+        painter.rotate(self.element.rotation)
+        renderer = self._renderer(self.element.kind)
+        if renderer.isValid():
+            renderer.render(painter, self._body_rect())
+        else:
+            painter.setPen(QPen(QColor("#8D9299"), 1, Qt.PenStyle.DashLine))
+            painter.setBrush(Qt.BrushStyle.NoBrush)
+            painter.drawRect(self._body_rect())
+        painter.restore()
+
+        if self.isSelected():
+            painter.setPen(QPen(Qt.GlobalColor.blue, 2))
+            painter.setBrush(Qt.BrushStyle.NoBrush)
+            body = self.boundingRect()
+            painter.drawRect(body.adjusted(2, 2, -2,
+                                           -(14 if self.element.label else 0) - 2))
+
+        if self.element.label:
+            from gui.typography import mono_font
+            painter.setFont(mono_font(6))
+            view_color = self._label_color()
+            painter.setPen(QPen(view_color))
+            body = self.boundingRect()
+            painter.drawText(
+                QRectF(body.left(), body.bottom() - 13, body.width(), 12),
+                Qt.AlignmentFlag.AlignCenter, self.element.label)
+
+    def _label_color(self):
+        scene = self.scene()
+        if scene is not None:
+            views = scene.views()
+            if views:
+                color = getattr(views[0], "stageLabelColor", None)
+                if color is not None and color.isValid():
+                    return color
+        return QColor(120, 120, 120)
+
+    def mouseMoveEvent(self, event):
+        if self.ghosted:
+            event.ignore()
+            return
+        if Qt.MouseButton.LeftButton & event.buttons():
+            view = self.scene().views()[0]
+            new_pos = event.scenePos()
+            if getattr(view, "snap_enabled", False):
+                new_pos = view.snap_to_grid_position(new_pos)
+            self.setPos(new_pos)
+            if hasattr(view, "save_positions_to_config"):
+                view.save_positions_to_config()
+            event.accept()
+            return
+        super().mouseMoveEvent(event)
+
+    def contextMenuEvent(self, event):
+        if self.ghosted:
+            event.ignore()
+            return
+        from PyQt6.QtWidgets import QMenu, QInputDialog
+        view = self.scene().views()[0]
+        menu = QMenu()
+        rotate_left = menu.addAction("Rotate -45°")
+        rotate_right = menu.addAction("Rotate +45°")
+        rename = menu.addAction("Set Label...")
+        layer_menu = menu.addMenu("Assign to Layer")
+        layer_actions = {}
+        clear_action = layer_menu.addAction("(none)")
+        config = getattr(view, "config", None)
+        for layer in getattr(config, "stage_layers", []) or []:
+            layer_actions[layer_menu.addAction(layer.name)] = layer.name
+        menu.addSeparator()
+        remove = menu.addAction("Remove Element")
+
+        chosen = menu.exec(event.screenPos())
+        if chosen is rotate_left:
+            self.element.rotation = (self.element.rotation - 45) % 360
+        elif chosen is rotate_right:
+            self.element.rotation = (self.element.rotation + 45) % 360
+        elif chosen is rename:
+            text, ok = QInputDialog.getText(None, "Element Label",
+                                            "Label:", text=self.element.label)
+            if ok:
+                self.element.label = text
+        elif chosen is clear_action:
+            self.element.layer = ""
+        elif chosen in layer_actions:
+            self.element.layer = layer_actions[chosen]
+        elif chosen is remove:
+            if hasattr(view, "remove_stage_element"):
+                view.remove_stage_element(self)
+            event.accept()
+            return
+        else:
+            event.accept()
+            return
+        self.prepareGeometryChange()
+        self.update()
+        if hasattr(view, "save_positions_to_config"):
+            view.save_positions_to_config()
+        if hasattr(view, "apply_layer_visibility"):
+            view.apply_layer_visibility()
+        event.accept()

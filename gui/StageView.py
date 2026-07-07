@@ -105,6 +105,7 @@ class StageView(QtWidgets.QGraphicsView):
         self.fixtures = {}
         self.spots = {}  # name: SpotItem
         self.spot_counter = 1  # Counter for generating unique spot names
+        self.stage_element_items = []  # StageElementItem per config.stage_elements entry
 
         # Initial update
         self.updateStage()
@@ -229,8 +230,22 @@ class StageView(QtWidgets.QGraphicsView):
             self.scene.removeItem(spot)
         self.spots.clear()
 
+        # Clear and update static stage elements
+        for item in self.stage_element_items:
+            self.scene.removeItem(item)
+        self.stage_element_items = []
+
         # Reset spot counter
         self.spot_counter = 1
+
+        # Stage elements draw under fixtures (zValue -1 in the item)
+        from gui.stage_items import StageElementItem
+        for element in getattr(self.config, 'stage_elements', []) or []:
+            item = StageElementItem(element, self.pixels_per_meter)
+            x_px, y_px = self.meters_to_pixels(element.x, element.y)
+            item.setPos(x_px, y_px)
+            self.scene.addItem(item)
+            self.stage_element_items.append(item)
 
         # Update fixtures
         if hasattr(self.config, 'fixtures'):
@@ -335,6 +350,14 @@ class StageView(QtWidgets.QGraphicsView):
                 self.config.spots[spot_name].y = y_m
                 self.config.spots[spot_name].z = spot_item.z_height
 
+        # Save stage element positions (items hold their model directly;
+        # rotation/label/layer are written by the item's own actions)
+        for item in self.stage_element_items:
+            pos = item.pos()
+            x_m, y_m = self.pixels_to_meters(pos.x(), pos.y())
+            item.element.x = x_m
+            item.element.y = y_m
+
         # Emit signal to notify listeners (e.g., for TCP visualizer updates)
         self.fixtures_changed.emit()
 
@@ -373,6 +396,45 @@ class StageView(QtWidgets.QGraphicsView):
                 fixture_item.set_ghosted(
                     active is not None and config_fixture.layer != active
                 )
+
+        # Stage elements follow the same layer rules as fixtures:
+        # hidden layer -> hidden, active-layer mode -> non-members ghost.
+        for item in self.stage_element_items:
+            layer = (self.config.get_stage_layer(item.element.layer)
+                     if item.element.layer else None)
+            visible = layer.visible if layer is not None else True
+            item.setVisible(visible)
+            item.set_ghosted(
+                active is not None and item.element.layer != active
+            )
+
+    def add_stage_element(self, kind):
+        """Place a catalog element at stage center; returns the model."""
+        from gui.stage_items import StageElementItem
+        from utils.stage_element_catalog import make_element
+        element = make_element(kind, x=0.0, y=0.0)
+        if not hasattr(self.config, 'stage_elements') or self.config.stage_elements is None:
+            self.config.stage_elements = []
+        self.config.stage_elements.append(element)
+        item = StageElementItem(element, self.pixels_per_meter)
+        x_px, y_px = self.meters_to_pixels(element.x, element.y)
+        item.setPos(x_px, y_px)
+        self.scene.addItem(item)
+        self.stage_element_items.append(item)
+        self.apply_layer_visibility()
+        self.fixtures_changed.emit()
+        return element
+
+    def remove_stage_element(self, item):
+        """Remove an element item and its model from the config."""
+        if item in self.stage_element_items:
+            self.stage_element_items.remove(item)
+        try:
+            self.config.stage_elements.remove(item.element)
+        except (AttributeError, ValueError):
+            pass
+        self.scene.removeItem(item)
+        self.fixtures_changed.emit()
 
     def assign_selected_to_layer(self, layer_name):
         """Assign the selected fixtures to a stage layer ('' clears).

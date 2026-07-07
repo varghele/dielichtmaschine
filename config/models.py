@@ -96,6 +96,29 @@ class StageLayer:
 
 
 @dataclass
+class StageElement:
+    """A static, non-DMX object on the stage plan (riser, wedge, amp,
+    FOH desk, truss shape, ...).
+
+    ``kind`` keys into the stageplot symbol set (resources/stageplot/
+    <kind>.svg, catalog in utils/stage_element_catalog.py). Purely
+    visual/planning data: elements render on the 2D stage plan and the
+    printable stage plot, participate in the layer system like
+    fixtures, and carry no DMX meaning. Truss docking (fixtures
+    attached to trusses) is future work; a truss placed today is just
+    a static shape.
+    """
+    kind: str
+    x: float = 0.0          # stage coords, meters, element center
+    y: float = 0.0
+    rotation: float = 0.0   # degrees, clockwise in the top view
+    width: float = 1.0      # footprint in meters
+    depth: float = 1.0
+    label: str = ""         # optional user caption on the plan
+    layer: str = ""         # StageLayer name; "" = unassigned
+
+
+@dataclass
 class StagePlane:
     """A face of the stage bounding cuboid for movement targeting."""
     name: str                                    # "Floor", "Ceiling", "Front", "Back", "Left", "Right"
@@ -1237,6 +1260,7 @@ class Configuration:
     stage_height: float = 6.0  # Stage depth in meters (called height for compatibility)
     grid_size: float = 0.5  # Grid spacing in meters
     stage_layers: List[StageLayer] = field(default_factory=list)
+    stage_elements: List[StageElement] = field(default_factory=list)
 
     def get_stage_layer(self, name: str) -> Optional[StageLayer]:
         return next((l for l in self.stage_layers if l.name == name), None)
@@ -1385,6 +1409,7 @@ class Configuration:
             'stage_height': self.stage_height,
             'grid_size': self.grid_size,
             'stage_layers': [asdict(layer) for layer in self.stage_layers],
+            'stage_elements': [asdict(e) for e in self.stage_elements],
         }
 
         from config.compact_serializer import compact_serialize
@@ -1514,6 +1539,10 @@ class Configuration:
             stage_layers=[
                 StageLayer(**layer_data)
                 for layer_data in data.get('stage_layers', [])
+            ],
+            stage_elements=[
+                StageElement(**element_data)
+                for element_data in data.get('stage_elements', [])
             ],
         )
 

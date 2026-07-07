@@ -219,6 +219,35 @@ class StageTab(BaseTab):
         control_layout.addWidget(self.add_spot_btn)
         control_layout.addWidget(self.remove_item_btn)
 
+        # Element palette: click a symbol to place a static stage
+        # element (riser/wedge/amp/... + static truss shapes) at stage
+        # center; drag it into place on the plan. Symbols and default
+        # footprints come from utils/stage_element_catalog.py.
+        from PyQt6.QtCore import QSize
+        from PyQt6.QtGui import QIcon
+        from utils.stage_element_catalog import (
+            CATEGORIES, specs_for_category, symbol_path,
+        )
+        self.element_buttons = {}
+        for category in CATEGORIES:
+            control_layout.addSpacing(4)
+            control_layout.addWidget(caption(category))
+            grid = QtWidgets.QGridLayout()
+            grid.setSpacing(2)
+            for i, spec in enumerate(specs_for_category(category)):
+                button = QtWidgets.QToolButton()
+                button.setIcon(QIcon(symbol_path(spec.kind)))
+                button.setIconSize(QSize(22, 22))
+                button.setFixedSize(34, 34)
+                button.setToolTip(f"{spec.label} "
+                                  f"({spec.width:g} x {spec.depth:g} m)")
+                button.setProperty("role", "topbar-icon")
+                button.clicked.connect(
+                    lambda _=False, k=spec.kind: self._add_stage_element(k))
+                grid.addWidget(button, i // 6, i % 6)
+                self.element_buttons[spec.kind] = button
+            control_layout.addLayout(grid)
+
         # Stage layers card - named Z-planes (ground stack / mid-truss /
         # top-truss). Checkbox = visibility; hidden layers disappear from
         # the 2D plot and every 3D preview. Fixtures are assigned via the
@@ -517,6 +546,10 @@ class StageTab(BaseTab):
         self._fit_shortcut = QShortcut(QKeySequence("F"), self)
         self._fit_shortcut.setContext(Qt.ShortcutContext.WidgetWithChildrenShortcut)
         self._fit_shortcut.activated.connect(self.stage_view.fit_to_stage)
+
+    def _add_stage_element(self, kind: str):
+        """Palette click: place a static element at stage center."""
+        self.stage_view.add_stage_element(kind)
 
     def update_from_config(self):
         """Refresh stage view from configuration"""

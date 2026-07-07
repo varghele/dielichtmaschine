@@ -83,5 +83,7 @@ def test_stage_control_panel_golden(qapp, stage_tab):
     """Left rail: micro captions, mono dimension fields, layers card,
     planes list, PLOT STAGE / LAUNCH VISUALIZER at the bottom."""
     panel = stage_tab.control_panel
-    panel.setFixedSize(250, 720)
+    # Tall enough for the element-palette sections added by the static
+    # stage elements slice; a squeezed grab overlaps section text.
+    panel.setFixedSize(250, 900)
     compare_to_golden(panel.grab().toImage(), "stage_control_panel_dark")

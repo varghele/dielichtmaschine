@@ -23,6 +23,21 @@ verbatim as the GitHub Release notes (see [docs/releasing.md](docs/releasing.md)
   default light-gray background because the stylesheet never painted
   bare page widgets; every tab page now uses the theme's window color.
 
+### Added
+
+- **Static stage elements on the stage plan.** The Stage tab's left
+  rail grew an element palette (drum riser, risers, wedges, amps,
+  4x12, mic stands, keys, DI, distro, FOH, backdrop, stairs, hazer,
+  plus the four truss shapes as static outlines): click to place at
+  stage center, drag with grid snap, right-click to rotate in 45
+  degree steps, set a label, assign to a stage layer, or remove.
+  Elements follow the layer rules (hidden layers hide them, active-
+  layer editing ghosts non-members), draw under fixtures as steel
+  line symbols at their real footprint, persist in the config YAML
+  (old configs load unchanged), and appear on the printable stage
+  plot. Truss docking (fixtures attached to trusses) is a separate
+  future step and needs a design decision on trusses vs layers.
+
 ### Changed
 
 - **Fixtures, Structure, Timeline, and Stage screens rebuilt to the
