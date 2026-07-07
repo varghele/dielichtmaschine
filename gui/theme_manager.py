@@ -39,6 +39,11 @@ class ThemeManager:
     def apply(self, app: QApplication, name: str) -> bool:
         """Render the theme's tokens through the QSS template and apply it.
 
+        Deliberately does NOT persist the choice: apply() is called by
+        tests and by startup, and persisting here let a test run
+        overwrite the user's saved theme (the "app keeps opening light"
+        bug). Persist explicitly via set_current() on user action.
+
         After loading the stylesheet, all top-level widgets are unpolished
         and re-polished so dynamic-property selectors (e.g. status pills
         keyed off a ``status`` property) re-evaluate. Returns False if the
@@ -64,5 +69,4 @@ class ThemeManager:
                 style.polish(widget)
             widget.update()
 
-        self.set_current(name)
         return True

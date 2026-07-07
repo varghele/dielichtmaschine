@@ -164,9 +164,15 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             self.actionToggleFullscreen.setChecked(True)
 
     def _set_theme(self, name: str):
-        """Apply and persist the selected theme."""
+        """Apply and persist the selected theme (View > Theme).
+
+        This is the ONLY place a theme choice is persisted - apply()
+        itself deliberately doesn't save, so test runs and startup can
+        never overwrite the user's saved theme."""
         from gui.theme_manager import ThemeManager
-        ThemeManager().apply(QtWidgets.QApplication.instance(), name)
+        manager = ThemeManager()
+        manager.apply(QtWidgets.QApplication.instance(), name)
+        manager.set_current(name)
         # Force the toolbar-status pills to re-evaluate their dynamic props
         # against the new theme, and re-rasterize the topbar line icons
         # in the new theme's color.

@@ -87,6 +87,21 @@ def test_theme_manager_apply_sets_stylesheet(qapp, name):
     assert "#F0562E" in qapp.styleSheet()
 
 
+def test_apply_never_persists_the_choice(qapp):
+    """Regression: apply() persisting let TEST RUNS overwrite the
+    user's saved theme (golden tests apply light/dark against the real
+    store). Only the explicit View > Theme action may persist."""
+    from gui.theme_manager import ThemeManager
+
+    tm = ThemeManager()
+    tm.set_current("dark")
+    tm.apply(qapp, "light")
+    assert tm.current() == "dark", (
+        "apply() persisted the applied theme - it must not; persistence "
+        "belongs to set_current() on explicit user action")
+    tm.apply(qapp, "dark")
+
+
 def test_theme_manager_available_themes_match_token_dicts():
     from gui.theme_manager import ThemeManager
 

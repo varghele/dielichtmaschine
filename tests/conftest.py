@@ -34,6 +34,30 @@ def _exclude_local_gdtf_library():
 
 
 # ---------------------------------------------------------------------------
+# Hermetic QSettings: tests must NEVER touch the real registry / config
+# dir. Without this, any code path that persists a setting during a test
+# run (theme changes in golden tests, splitter states saved by tabs, ...)
+# silently overwrites the user's real preferences - this is how the
+# "app keeps opening in the light theme" bug happened.
+# ---------------------------------------------------------------------------
+@pytest.fixture(scope="session", autouse=True)
+def _hermetic_qsettings(tmp_path_factory):
+    from PyQt6.QtCore import QSettings
+    from utils import app_settings as mod
+
+    settings_dir = tmp_path_factory.mktemp("qsettings")
+    QSettings.setPath(QSettings.Format.IniFormat,
+                      QSettings.Scope.UserScope, str(settings_dir))
+    real_format = mod._settings_format
+    mod._settings_format = QSettings.Format.IniFormat
+    # Also route DIRECT QSettings(org, app) constructions (none should
+    # exist in app code, but keep the default format ini-bound too).
+    QSettings.setDefaultFormat(QSettings.Format.IniFormat)
+    yield
+    mod._settings_format = real_format
+
+
+# ---------------------------------------------------------------------------
 # QApplication singleton (session-scoped)
 # ---------------------------------------------------------------------------
 @pytest.fixture(scope="session")
