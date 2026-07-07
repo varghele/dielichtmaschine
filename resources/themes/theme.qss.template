@@ -472,11 +472,15 @@ QWidget[role="tab-page"] {
     background-color: $window$;
 }
 
-/* -- Universes tab: row cards + inspector (North Star 1d) ---------------- */
+/* -- North Star cards: shared row/tile card chrome ----------------------- */
+/* Generic card role for all 1x-card screens (universes, fixtures,
+   structure parts, ...). Selected = accent border. */
+QWidget[role="card"],
 QWidget[role="universe-card"] {
     background-color: $panel$;
     border: 1px solid $border$;
 }
+QWidget[role="card"][selected="true"],
 QWidget[role="universe-card"][selected="true"] {
     border: 1px solid $accent$;
 }
