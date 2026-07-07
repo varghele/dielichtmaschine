@@ -1,0 +1,502 @@
+/*
+ * Die Lichtmaschine - QSS theme template
+ *
+ * Single source for both themes: gui/theme_tokens.py substitutes every
+ * dollar-delimited placeholder from the per-theme dicts (DARK / LIGHT)
+ * and the result goes to app.setStyleSheet(). Never ship this file's
+ * raw text to Qt - unrendered placeholders are invalid QSS.
+ *
+ * Brand rules baked in here (see docs/rebranding-plan.md):
+ * - border-radius 0 everywhere (hard edges, datasheet aesthetic)
+ * - no shadows, no gradients
+ * - accent Glutorange for selection/highlight, function colors
+ *   (success/info/warning/destructive) keep their semantic roles
+ * - Barlow for UI text, IBM Plex Mono for numeric readouts
+ *
+ * Data colors (group tints, song-part colors, fixture colors) are
+ * applied per-item and intentionally bypass these rules.
+ */
+
+/* -- Window / chrome ------------------------------------------------- */
+QMainWindow,
+QDialog {
+    background-color: $window$;
+    color: $text$;
+}
+
+QWidget {
+    color: $text$;
+    font-family: $font_ui$;
+}
+
+QToolBar {
+    background-color: $panel$;
+    border-bottom: 1px solid $border$;
+    spacing: 4px;
+    padding: 4px;
+}
+
+QStatusBar {
+    background-color: $panel$;
+    color: $text_secondary$;
+    border-top: 1px solid $border$;
+}
+
+QMenuBar {
+    background-color: $panel$;
+    color: $text$;
+    border-bottom: 1px solid $border$;
+}
+QMenuBar::item {
+    padding: 4px 10px;
+    background-color: transparent;
+}
+QMenuBar::item:selected {
+    background-color: $accent_tint$;
+}
+
+QMenu {
+    background-color: $raised$;
+    color: $text$;
+    border: 1px solid $border$;
+    padding: 4px;
+}
+QMenu::item {
+    padding: 6px 24px 6px 16px;
+}
+QMenu::item:selected {
+    background-color: $accent_tint$;
+}
+QMenu::separator {
+    height: 1px;
+    background-color: $border$;
+    margin: 4px 8px;
+}
+
+/* -- Tabs ------------------------------------------------------------ */
+QTabWidget::pane {
+    background-color: $window$;
+    border: 1px solid $border$;
+}
+QTabBar::tab {
+    background-color: $panel$;
+    color: $text_secondary$;
+    padding: 8px 18px;
+    border: 1px solid $border$;
+    border-bottom: none;
+    margin-right: 2px;
+}
+QTabBar::tab:selected {
+    background-color: $window$;
+    color: $text$;
+    border-bottom: 2px solid $accent_line$;
+}
+QTabBar::tab:hover:!selected {
+    background-color: $accent_tint$;
+    color: $text$;
+}
+
+/* -- Buttons --------------------------------------------------------- */
+QPushButton {
+    background-color: $raised$;
+    color: $text$;
+    border: 1px solid $border$;
+    padding: 6px 14px;
+    min-height: 22px;
+}
+QPushButton:hover {
+    background-color: $accent_tint$;
+}
+QPushButton:pressed {
+    background-color: $window$;
+}
+QPushButton:disabled {
+    background-color: $panel$;
+    color: $text_disabled$;
+}
+QPushButton:checked {
+    background-color: $accent_tint$;
+    border-color: $accent_line$;
+}
+
+QPushButton[role="primary"] {
+    background-color: $accent$;
+    color: $on_accent$;
+    border-color: $accent_pressed$;
+    font-weight: bold;
+}
+QPushButton[role="primary"]:hover { background-color: $accent_hover$; }
+QPushButton[role="primary"]:pressed { background-color: $accent_pressed$; }
+
+QPushButton[role="success"] {
+    background-color: $success$;
+    color: $on_function$;
+    border-color: $success_border$;
+    font-weight: bold;
+}
+QPushButton[role="success"]:hover { background-color: $success_hover$; }
+
+QPushButton[role="destructive"] {
+    background-color: $destructive$;
+    color: $on_function$;
+    border-color: $destructive_border$;
+    font-weight: bold;
+}
+QPushButton[role="destructive"]:hover { background-color: $destructive_hover$; }
+
+/* -- Inputs ---------------------------------------------------------- */
+QLineEdit,
+QPlainTextEdit,
+QTextEdit,
+QComboBox,
+QSpinBox,
+QDoubleSpinBox {
+    background-color: $raised$;
+    color: $text$;
+    border: 1px solid $border$;
+    padding: 4px 8px;
+    selection-background-color: $accent$;
+    selection-color: $on_accent$;
+}
+QLineEdit:focus,
+QComboBox:focus,
+QSpinBox:focus,
+QDoubleSpinBox:focus,
+QPlainTextEdit:focus,
+QTextEdit:focus {
+    border-color: $accent_line$;
+}
+QLineEdit:disabled,
+QComboBox:disabled,
+QSpinBox:disabled {
+    background-color: $panel$;
+    color: $text_disabled$;
+}
+QComboBox::drop-down { border: none; width: 20px; }
+QComboBox QAbstractItemView {
+    background-color: $raised$;
+    color: $text$;
+    selection-background-color: $accent$;
+    selection-color: $on_accent$;
+    border: 1px solid $border$;
+}
+
+/* -- Tables ----------------------------------------------------------- */
+QTableView,
+QTreeView,
+QListView {
+    background-color: $panel$;
+    color: $text$;
+    alternate-background-color: $raised$;
+    gridline-color: transparent;
+    border: 1px solid $border$;
+    selection-background-color: $accent$;
+    selection-color: $on_accent$;
+}
+/* No QTableView::item rule. Adding one - even just padding - makes
+   Qt's stylesheet engine take over item rendering and silently ignore
+   QTableWidgetItem.setBackground(). Row height and item spacing are
+   controlled instead via apply_modern_table_style + setDefaultSectionSize.
+   See docs/qt-gotchas.md #1. */
+QHeaderView::section {
+    background-color: $raised$;
+    color: $text_secondary$;
+    padding: 8px 10px;
+    border: none;
+    border-right: 1px solid $border$;
+    border-bottom: 1px solid $border$;
+    font-weight: bold;
+}
+QHeaderView::section:hover {
+    background-color: $accent_tint$;
+}
+
+/* Cell-widget editors (QSpinBox / QDoubleSpinBox / QComboBox / QLineEdit
+   set via setCellWidget on a table). Tight padding (1px 4px) leaves
+   room for actual text - the table cell already adds its own breathing
+   room. Editors inherit table cell background by default. */
+QTableView QSpinBox,
+QTableView QDoubleSpinBox,
+QTableView QComboBox,
+QTableView QLineEdit {
+    background-color: $raised$;
+    color: $text$;
+    border: 1px solid $border$;
+    padding: 1px 4px;
+}
+QTableView QSpinBox:focus,
+QTableView QDoubleSpinBox:focus,
+QTableView QComboBox:focus,
+QTableView QLineEdit:focus {
+    border-color: $accent_line$;
+}
+
+/* -- Group box -------------------------------------------------------- */
+QGroupBox {
+    background-color: $panel$;
+    border: 1px solid $border$;
+    margin-top: 12px;
+    padding-top: 8px;
+    font-weight: bold;
+}
+QGroupBox::title {
+    subcontrol-origin: margin;
+    left: 12px;
+    padding: 0 6px;
+    color: $text_secondary$;
+}
+
+/* -- Sliders ---------------------------------------------------------- */
+QSlider::groove:horizontal {
+    background: $border$;
+    height: 4px;
+}
+QSlider::handle:horizontal {
+    background: $accent$;
+    width: 14px;
+    margin: -6px 0;
+}
+QSlider::handle:horizontal:hover { background: $accent_hover$; }
+QSlider::groove:vertical {
+    background: $border$;
+    width: 4px;
+}
+QSlider::handle:vertical {
+    background: $accent$;
+    height: 14px;
+    margin: 0 -6px;
+}
+
+/* -- Scrollbars -------------------------------------------------------- */
+QScrollBar:vertical {
+    background: $window$;
+    width: 12px;
+    margin: 0;
+}
+QScrollBar::handle:vertical {
+    background: $scroll_handle$;
+    min-height: 30px;
+    margin: 2px;
+}
+QScrollBar::handle:vertical:hover { background: $scroll_handle_hover$; }
+QScrollBar::add-line:vertical,
+QScrollBar::sub-line:vertical { height: 0; }
+QScrollBar:horizontal {
+    background: $window$;
+    height: 12px;
+    margin: 0;
+}
+QScrollBar::handle:horizontal {
+    background: $scroll_handle$;
+    min-width: 30px;
+    margin: 2px;
+}
+QScrollBar::handle:horizontal:hover { background: $scroll_handle_hover$; }
+QScrollBar::add-line:horizontal,
+QScrollBar::sub-line:horizontal { width: 0; }
+
+/* -- Checkbox / radio -------------------------------------------------- */
+QCheckBox, QRadioButton { spacing: 6px; }
+QCheckBox::indicator,
+QRadioButton::indicator {
+    width: 16px; height: 16px;
+    background-color: $raised$;
+    border: 1px solid $border$;
+}
+QCheckBox::indicator:checked,
+QRadioButton::indicator:checked {
+    background-color: $accent$;
+    border-color: $accent$;
+}
+
+/* -- Splitters --------------------------------------------------------- */
+QSplitter::handle {
+    background-color: $border$;
+}
+QSplitter::handle:horizontal { width: 3px; }
+QSplitter::handle:vertical { height: 3px; }
+
+/* -- Tooltips ---------------------------------------------------------- */
+QToolTip {
+    background-color: $raised$;
+    color: $text$;
+    border: 1px solid $border$;
+    padding: 4px 8px;
+}
+
+/* -- Status indicator labels (toolbar) --------------------------------- */
+QLabel[role="status-label"] {
+    font-weight: bold;
+    color: $text_secondary$;
+}
+QLabel[status="off"] { color: $text_disabled$; font-weight: bold; }
+QLabel[status="on"]  { color: $success$; font-weight: bold; }
+QLabel[status="active"] { color: $success$; font-weight: bold; }
+QLabel[status="ready"] { color: $info$; font-weight: bold; }
+
+/* Toolbar pill toggle buttons (the round-glyph buttons next to
+   ArtNet/Visualizer). Square chrome per the radius-0 rule; the glyph
+   itself stays a circle character. */
+QPushButton[role="status-pill"] {
+    font-size: 14px;
+    background-color: transparent;
+    border: 1px solid $border$;
+    padding: 0;
+    min-height: 0;
+    color: $text_disabled$;
+}
+QPushButton[role="status-pill"]:hover { background-color: $accent_tint$; }
+QPushButton[role="status-pill"][status="on"]     { color: $success$; border-color: $success$; }
+QPushButton[role="status-pill"][status="active"] { color: $success$; border-color: $success$; }
+QPushButton[role="status-pill"][status="ready"]  { color: $info$; border-color: $info$; }
+
+/* -- Playback time readout (Shows + Structure tabs) --------------------- */
+QLabel#TimeReadout {
+    font-family: $font_mono$;
+    font-size: 16px;
+    font-weight: bold;
+    padding: 4px 8px;
+    background-color: $readout_bg$;
+    color: $readout_fg$;
+    border: 1px solid $readout_border$;
+}
+QLabel#TimeReadoutSecondary {
+    font-family: $font_mono$;
+    color: $text_disabled$;
+}
+
+/* -- Timeline grid (TimelineGrid in shows + structure tabs) ------------- */
+/* The QScrollArea viewport defaults to a solid light-gray bg that fights
+   the theme. Make all generic QScrollAreas transparent so the theme bg
+   shows through; tables/text-edits extend QAbstractScrollArea (not
+   QScrollArea) and aren't affected. */
+QScrollArea {
+    background: transparent;
+    border: none;
+}
+QScrollArea > QWidget > QWidget {
+    background-color: transparent;
+}
+
+/* Inner widgets that hold the row headers and stripes. Override the
+   transparent default above so they paint the theme's window bg in any
+   gaps between rows. */
+QWidget#TimelineHeadersInner,
+QWidget#TimelineStripesInner {
+    background-color: $window$;
+}
+
+/* Per-row headers. WA_StyledBackground is set on each in code so these
+   rules actually paint. NB: the master/lane backgrounds are pinned by
+   pixel assertions in tests/visual/test_master_timeline_render.py -
+   change the tokens there and here together. */
+QWidget#MasterTimelineHeader {
+    background-color: $timeline_master_bg$;
+    border: 1px solid $border$;
+}
+QWidget#AudioLaneHeader {
+    background-color: $audio_lane_bg$;
+    border: 1px solid $audio_lane_border$;
+}
+QWidget#LightLaneHeader {
+    background-color: $timeline_lane_bg$;
+    border: 1px solid $border$;
+}
+
+/* -- Timeline ruler + lane stripes -------------------------------------- */
+/* Order matters: Qt QSS treats class selectors as equal specificity, so the
+   later rule wins for any widget that matches both. Put the BASE class
+   first and DERIVED classes after - otherwise MasterTimelineWidget
+   instances pick up the TimelineWidget rule and the more specific one is
+   silently dropped.
+   Background paints via PE_Widget in MasterTimelineWidget.paintEvent /
+   via WA_StyledBackground in TimelineWidget - without those, QSS bg
+   rules have no effect on these QWidget subclasses. */
+TimelineWidget {
+    background-color: $timeline_lane_bg$;
+    border: 1px solid $border$;
+}
+MasterTimelineWidget {
+    background-color: $timeline_master_bg$;
+    border: 1px solid $border$;
+}
+
+/* -- Audio + light lanes (subtle role-based tint) ------------------------ */
+AudioLaneWidget {
+    background-color: $audio_lane_bg$;
+    border: 1px solid $audio_lane_border$;
+}
+LightLaneWidget {
+    background-color: $timeline_lane_bg$;
+    border: 1px solid $border$;
+}
+
+/* Compact buttons - used for tight icon-style buttons (M / S / x / etc.)
+   in the timeline lane controls. The base QPushButton padding (6px 14px)
+   crushes text in the small fixed-size buttons; this rule gives them
+   appropriate padding for their size. `density` is a separate property
+   axis from `role` so a button can be both `role=destructive` and
+   `density=compact`. NB: do NOT name this property `size` - Qt has a
+   built-in Q_PROPERTY `size` of type QSize for the widget geometry,
+   so setProperty("size", "compact") silently does nothing. */
+QPushButton[density="compact"] {
+    padding: 2px 4px;
+    min-height: 0;
+}
+
+/* -- Stage view (Stage tab 2D plot) --------------------------------------
+   StageView uses custom drawBackground rather than a stylesheet-painted
+   widget background, so colours are pushed in via qproperty-* setters
+   that the StageView class declares as pyqtProperty(QColor). Adding a
+   new theme means filling these tokens in - no Python edit required.
+   Centre red/blue axes inside the plot are "data" colours and stay
+   hardcoded. */
+StageView {
+    background-color: $stage_bg$;
+    border: 1px solid $border$;
+    qproperty-stageOutlineColor: $stage_outline$;
+    qproperty-stageFillColor: $stage_fill$;
+    qproperty-stageGridColor: $border$;
+    qproperty-stageLabelColor: $text_secondary$;
+    qproperty-fixtureTextColor: $text$;
+}
+
+QLabel#LightLaneTargets {
+    background-color: $raised$;
+    color: $text_secondary$;
+    border: 1px solid $border$;
+    padding: 2px 6px;
+}
+
+/* -- Auto tab (real-time audio-reactive auto-generation) ----------------- */
+/* Status frame at the top of the centre panel - readable bold riff name
+   + secondary bar counter + state-coloured phase label. Phase color is
+   driven by a `phase` dynamic property the tab re-polishes on
+   transition. */
+QFrame#AutoStatusFrame {
+    background-color: $auto_status_bg$;
+    border: 1px solid $border$;
+    padding: 8px;
+}
+QLabel#AutoStatusRiff {
+    color: $text$;
+    font-size: 14px;
+    font-weight: bold;
+}
+QLabel#AutoStatusBarCounter {
+    color: $text_secondary$;
+    font-size: 12px;
+}
+QLabel#AutoStatusPhase {
+    font-size: 12px;
+    font-weight: bold;
+}
+QLabel#AutoStatusPhase[phase="stopped"] { color: $phase_stopped$; }
+QLabel#AutoStatusPhase[phase="running"] { color: $phase_running$; }
+QLabel#AutoStatusPhase[phase="groove"]  { color: $phase_running$; }
+QLabel#AutoStatusPhase[phase="fill"]    { color: $phase_fill$; }
+
+/* Big BPM display on the left panel - font set in code, colour here. */
+QLabel#AutoBpmDisplay {
+    color: $text$;
+}
