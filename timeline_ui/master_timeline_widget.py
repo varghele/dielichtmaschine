@@ -98,7 +98,15 @@ class MasterTimelineWidget(TimelineWidget):
         self.draw_playhead(painter, width, height)
 
     def draw_song_structure(self, painter, width, height):
-        """Draw song structure parts as colored segments with labels."""
+        """Draw song parts as North Star region bands (card 4a): each
+        band is a 3px part-color bar along the top edge over a
+        ~0.18-alpha tint of the same color, the part name in condensed
+        caps, hard corners, no border box. The tint keeps the theme
+        background readable, so labels render in the part color itself
+        (BPM readout in steel-gray tracked mono)."""
+        # Deferred import: the gui package imports timeline_ui at module
+        # load, so a top-level import here would be circular.
+        from gui.typography import display_font, mono_font
         try:
             for part in self.song_structure.parts:
                 start_x = self.time_to_pixel(part.start_time)
@@ -107,42 +115,37 @@ class MasterTimelineWidget(TimelineWidget):
                 if end_x < 0 or start_x > width:
                     continue
 
-                # Draw colored background
-                color = QColor(part.color)
-                color.setAlpha(100)
-                painter.fillRect(int(start_x), 0, int(end_x - start_x), height, color)
+                x = int(start_x)
+                band_width = int(end_x - start_x)
+                band_color = QColor(part.color)
 
-                # Draw part border
-                border_pen = QPen(QColor(part.color), 2)
-                painter.setPen(border_pen)
-                painter.drawRect(int(start_x), 0, int(end_x - start_x), height)
+                # ~0.18-alpha tint of the part color across the band.
+                tint = QColor(band_color)
+                tint.setAlpha(46)
+                painter.fillRect(x, 0, band_width, height, tint)
 
-                # Draw part name if there's enough space. Use the part's
-                # color luminance to pick a contrasting text color so labels
-                # stay readable regardless of the chosen part color or
-                # active theme.
+                # 3px part-color bar along the top edge.
+                painter.fillRect(x, 0, band_width, 3, band_color)
+
+                # Part name in tracked condensed caps if there's space.
                 if end_x - start_x > 50:
-                    label_color = QColor("#000000") if QColor(part.color).lightness() > 140 else QColor("#ffffff")
-                    painter.setPen(QPen(label_color, 1))
-                    font = painter.font()
-                    font.setPointSize(9)
-                    font.setBold(True)
-                    painter.setFont(font)
+                    painter.setPen(QPen(band_color, 1))
+                    painter.setFont(display_font(9))
+                    text_rect = QRectF(start_x + 6, 7, end_x - start_x - 12, 16)
+                    painter.drawText(text_rect, Qt.AlignmentFlag.AlignLeft,
+                                     (part.name or "").upper())
 
-                    text_rect = QRectF(start_x + 5, 5, end_x - start_x - 10, 20)
-                    painter.drawText(text_rect, Qt.AlignmentFlag.AlignLeft, part.name)
-
-                    # Draw BPM info
-                    font.setPointSize(8)
-                    font.setBold(False)
-                    painter.setFont(font)
+                    # BPM readout: mono, steel gray (#8D9299 reads on
+                    # the near-background tint in both themes).
+                    painter.setPen(QPen(QColor(141, 146, 153), 1))
+                    painter.setFont(mono_font(7))
                     bpm_text = f"{part.bpm} BPM"
                     if part.transition == "gradual":
                         prev_bpm = self.get_previous_part_bpm(part)
                         if prev_bpm != part.bpm:
                             bpm_text = f"{prev_bpm}->{part.bpm} BPM"
 
-                    bpm_rect = QRectF(start_x + 5, 25, end_x - start_x - 10, 15)
+                    bpm_rect = QRectF(start_x + 6, 25, end_x - start_x - 12, 14)
                     painter.drawText(bpm_rect, Qt.AlignmentFlag.AlignLeft, bpm_text)
         except Exception as e:
             print(f"Error in draw_song_structure: {e}")

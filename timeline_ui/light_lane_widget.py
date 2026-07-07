@@ -130,8 +130,29 @@ class LightLaneWidget(QFrame):
         widget.setObjectName("LightLaneHeader")
         widget.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
         widget.setFixedWidth(320)
-        layout = QVBoxLayout(widget)
+
+        # Outer layout: the control rows on the left, plus a slim
+        # right-aligned column of sublane micro-labels (DIM / COL /
+        # MOV / SPC) on the header's right edge (North Star lane
+        # anatomy, slice T1). The column lists the active sublanes in
+        # the same top-to-bottom order as the timeline stripe rows.
+        outer = QHBoxLayout(widget)
+        outer.setSpacing(6)
+
+        layout = QVBoxLayout()
+        layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(4)
+        outer.addLayout(layout, 1)
+
+        self.sublane_labels_widget = QWidget(widget)
+        self.sublane_labels_widget.setObjectName("LaneSublaneLabels")
+        self.sublane_labels_widget.setFixedWidth(34)
+        self._sublane_labels_layout = QVBoxLayout(self.sublane_labels_widget)
+        self._sublane_labels_layout.setContentsMargins(0, 0, 0, 0)
+        self._sublane_labels_layout.setSpacing(0)
+        outer.addWidget(self.sublane_labels_widget)
+        self.sublane_labels = []
+        self.refresh_sublane_labels()
 
         # Row 1: Name and remove button — visuals from active theme.
         name_layout = QHBoxLayout()
@@ -303,6 +324,53 @@ class LightLaneWidget(QFrame):
                 return 0
 
         return 0  # Fallback
+
+    def sublane_label_rows(self):
+        """Ordered (sublane_type, text) pairs for the active sublanes,
+        top to bottom - the same row order get_sublane_index assigns."""
+        rows = []
+        # Dimmer row shows when the group has dimmer OR colour (dimmer
+        # drives RGB intensity for no-dimmer fixtures) - mirrors
+        # _count_sublanes / get_sublane_index exactly.
+        if self.capabilities.has_dimmer or self.capabilities.has_colour:
+            rows.append(("dimmer", "DIM"))
+        if self.capabilities.has_colour:
+            rows.append(("colour", "COL"))
+        if self.capabilities.has_movement:
+            rows.append(("movement", "MOV"))
+        if self.capabilities.has_special:
+            rows.append(("special", "SPC"))
+        return rows
+
+    def refresh_sublane_labels(self):
+        """Rebuild the DIM / COL / MOV / SPC micro-label column from the
+        current capabilities (North Star lane anatomy, slice T1). Called
+        at construction and whenever capabilities are re-detected
+        (on_targets_changed / update_fixture_groups)."""
+        layout = getattr(self, "_sublane_labels_layout", None)
+        if layout is None:
+            return
+        # Deferred import: the gui package imports timeline_ui at module
+        # load, so a top-level import here would be circular.
+        from gui.typography import MicroLabel
+
+        while layout.count():
+            item = layout.takeAt(0)
+            child = item.widget()
+            if child is not None:
+                child.deleteLater()
+
+        self.sublane_labels = []
+        for sublane_type, text in self.sublane_label_rows():
+            label = MicroLabel(text)
+            label.setProperty("sublane_type", sublane_type)
+            label.setAlignment(Qt.AlignmentFlag.AlignRight
+                               | Qt.AlignmentFlag.AlignVCenter)
+            # Equal stretch per label: one slot per sublane row, so the
+            # column tracks the stripe's row order and spacing evenly
+            # within the header's fixed layout.
+            layout.addWidget(label, 1)
+            self.sublane_labels.append(label)
 
     def set_song_structure(self, song_structure):
         """Set song structure for this lane's timeline."""
@@ -520,6 +588,9 @@ class LightLaneWidget(QFrame):
         self.timeline_widget.num_sublanes = self.num_sublanes
         self.timeline_widget.capabilities = self.capabilities
 
+        # Header micro-labels track the active sublanes (slice T1)
+        self.refresh_sublane_labels()
+
         # Only rebuild layout if sublane count changed
         if self.num_sublanes != old_num_sublanes:
             # Update heights
@@ -622,6 +693,9 @@ class LightLaneWidget(QFrame):
         # Refresh local capabilities (fixtures may have been added/removed from groups)
         self.capabilities = self._detect_group_capabilities()
         self.timeline_widget.capabilities = self.capabilities
+
+        # Header micro-labels track the active sublanes (slice T1)
+        self.refresh_sublane_labels()
 
     def set_riff_library(self, riff_library):
         """Set the riff library for this lane.
