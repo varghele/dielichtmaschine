@@ -57,6 +57,7 @@ _FUNCTION = {
 # lands with the screen redesigns, not the retokenization.
 _FONTS = {
     "font_ui": '"Barlow"',
+    "font_display": '"Barlow Condensed"',
     "font_mono": '"IBM Plex Mono"',
 }
 

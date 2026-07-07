@@ -135,6 +135,10 @@ QPushButton[role="primary"] {
 }
 QPushButton[role="primary"]:hover { background-color: $accent_hover$; }
 QPushButton[role="primary"]:pressed { background-color: $accent_pressed$; }
+/* Primary CTAs use the display family. Pinned here because the
+   app-wide QWidget font-family rule otherwise races setFont() on
+   polish order (family painted vs reported could differ per session). */
+QPushButton[role="primary"] { font-family: $font_display$; }
 QPushButton[role="primary"]:disabled,
 QPushButton[role="destructive"]:disabled {
     background-color: transparent;
@@ -362,6 +366,11 @@ QPushButton[role="status-pill"][status="on"]     { background-color: $success$; 
 QPushButton[role="status-pill"][status="active"] { background-color: $success$; border-color: $success$; }
 QPushButton[role="status-pill"][status="ready"]  { background-color: $info$; border-color: $info$; }
 
+/* Micro-caps labels (gui/typography.py MicroLabel) read as secondary
+   captions by default; later rules (chips, objectName-specific labels)
+   override where needed. */
+QLabel[role="micro"] { color: $text_secondary$; }
+
 /* -- Shell chrome: topbar, subnav, chips (North Star anatomy) ----------- */
 #TopBar {
     background-color: $panel$;
@@ -473,6 +482,20 @@ QWidget[role="tab-page"] {
 }
 
 /* -- North Star cards: shared row/tile card chrome ----------------------- */
+/* Dashed add-tile (e.g. "+" part tile on the Structure strip). */
+QPushButton[role="add-tile"] {
+    background-color: transparent;
+    border: 1px dashed $text_disabled$;
+    color: $text_secondary$;
+    min-height: 0;
+}
+QPushButton[role="add-tile"]:hover {
+    border-color: $accent$;
+    color: $accent_line$;
+}
+/* Mono readout lines inside cards (bars/signature/BPM etc.). */
+QLabel[role="card-readout"] { color: $text_secondary$; }
+
 /* Generic card role for all 1x-card screens (universes, fixtures,
    structure parts, ...). Selected = accent border. */
 QWidget[role="card"],
