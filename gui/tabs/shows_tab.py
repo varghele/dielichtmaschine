@@ -6,8 +6,8 @@ import csv
 from PyQt6.QtWidgets import (QVBoxLayout, QHBoxLayout, QComboBox, QPushButton,
                              QLabel, QSlider, QScrollArea, QWidget, QFrame,
                              QSplitter, QSizePolicy, QInputDialog, QMessageBox, QCheckBox,
-                             QApplication, QDialog)
-from PyQt6.QtCore import Qt, QTimer, pyqtSignal, QPoint, QRect
+                             QApplication, QDialog, QButtonGroup)
+from PyQt6.QtCore import Qt, QTimer, QEvent, pyqtSignal, QPoint, QRect
 from PyQt6.QtGui import QShortcut, QKeySequence
 from config.models import Configuration, Show, ShowPart, TimelineData, LightBlock, ShowEffect
 from timeline.song_structure import SongStructure
@@ -15,6 +15,10 @@ from timeline.light_lane import LightLane
 from utils.fixture_utils import load_fixture_definitions_from_qlc, get_cached_fixture_definitions
 from timeline_ui import (MasterTimelineContainer, LightLaneWidget, AudioLaneWidget,
                          TimelineGrid)
+from timeline_ui.master_timeline_widget import SUBDIVISION_CHOICES
+from gui.icons import line_icon, shell_icon
+from gui.typography import MicroLabel, mono_font
+from gui.tabs.configuration_tab import TOOLBAR_BTN_WIDTH
 from timeline_ui.selection_manager import SelectionManager
 from timeline_ui.selection_overlay import SelectionOverlay
 from timeline_ui.effect_clipboard import (copy_multiple_effects, paste_multiple_effects,
@@ -141,9 +145,9 @@ class ShowsTab(BaseTab):
         main_layout.setContentsMargins(10, 10, 10, 10)
         main_layout.setSpacing(8)
 
-        # Top toolbar
-        toolbar = self._create_toolbar()
-        main_layout.addLayout(toolbar)
+        # Top toolbar (a real QWidget so visual tests can grab it)
+        self.toolbar_widget = self._create_toolbar()
+        main_layout.addWidget(self.toolbar_widget)
 
         # Master + audio + light lanes share a single horizontal scrollbar
         # and a single column boundary inside TimelineGrid. We still keep
@@ -174,9 +178,25 @@ class ShowsTab(BaseTab):
         riff_library = self._get_shared_riff_library()
         self.embedded_riff_panel = RiffBrowserPanel(riff_library, self)
 
+        # Pane caption in tracked micro caps (North Star 4a: the right
+        # pane header reads "3D PREVIEW"). The visualizer keeps its own
+        # Reset Camera / Pop Out row; this wrapper only adds the caption.
+        vis_pane = QWidget()
+        vis_pane.setObjectName("VisualizerPane")
+        vis_layout = QVBoxLayout(vis_pane)
+        vis_layout.setContentsMargins(0, 0, 0, 0)
+        vis_layout.setSpacing(2)
+        caption_row = QHBoxLayout()
+        caption_row.setContentsMargins(4, 2, 4, 0)
+        caption_row.addWidget(MicroLabel("3D Preview", point_size=8))
+        caption_row.addStretch()
+        vis_layout.addLayout(caption_row)
+        vis_layout.addWidget(self.embedded_visualizer, 1)
+        self._vis_pane = vis_pane
+
         # Right pane: visualizer (~16:9 top) + riff panel (fills below).
         right_splitter = QSplitter(Qt.Orientation.Vertical)
-        right_splitter.addWidget(self.embedded_visualizer)
+        right_splitter.addWidget(vis_pane)
         right_splitter.addWidget(self.embedded_riff_panel)
         right_splitter.setStretchFactor(0, 0)
         right_splitter.setStretchFactor(1, 1)
@@ -200,38 +220,62 @@ class ShowsTab(BaseTab):
         right_splitter.splitterMoved.connect(self._save_right_splitter_state)
         main_layout.addWidget(self._main_splitter, 1)
 
+        # Reflect the restored splitter state on the pane-toggle chevron
+        # (a previous session may have left the 3D pane collapsed).
+        sizes = self._main_splitter.sizes()
+        pane_visible = not (len(sizes) == 2 and sum(sizes) > 0 and sizes[1] == 0)
+        self.pane_toggle_btn.blockSignals(True)
+        self.pane_toggle_btn.setChecked(pane_visible)
+        self.pane_toggle_btn.blockSignals(False)
+
         # Create selection overlay for rubber-band selection (parented to self for proper stacking)
         self._selection_overlay = SelectionOverlay(self)
         self._selection_overlay.hide()
 
-        # Bottom playback controls
-        playback_bar = self._create_playback_controls()
-        main_layout.addLayout(playback_bar)
+        # Bottom transport bar (a real QWidget so visual tests can grab it)
+        self.transport_bar = self._create_playback_controls()
+        main_layout.addWidget(self.transport_bar)
+
+        # Rasterize the line icons for the active theme.
+        self._apply_chrome_icons()
 
     def _create_toolbar(self):
-        """Create the top toolbar with show selection and lane controls."""
-        toolbar = QHBoxLayout()
+        """Create the top toolbar (North Star card 4a chrome).
+
+        Anatomy: SHOW caption + combo, lane/generate actions, the GRID
+        subdivision chip row (mirrors the master-timeline combobox),
+        ZOOM, then Save and the 3D-pane chevron on the right. Captions
+        are tracked micro caps; the grid chips reuse the generic
+        output-select checkable-chip role from the Universes screen.
+        Returns a QWidget so visual tests can grab just the toolbar.
+        """
+        toolbar_widget = QWidget()
+        toolbar_widget.setObjectName("ShowsToolbar")
+        # Paint the themed window background ourselves: a bare QWidget
+        # falls back to the platform palette, which shows up as a light
+        # strip in golden grabs (and would flash on repaint glitches).
+        toolbar_widget.setProperty("role", "tab-page")
+        toolbar_widget.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
+        toolbar = QHBoxLayout(toolbar_widget)
+        toolbar.setContentsMargins(0, 0, 0, 0)
         toolbar.setSpacing(10)
 
         # Show selection
-        show_label = QLabel("Show:")
-        show_label.setStyleSheet("font-weight: bold;")
-        toolbar.addWidget(show_label)
+        toolbar.addWidget(MicroLabel("Show", point_size=8))
 
         self.show_combo = QComboBox()
         self.show_combo.setMinimumWidth(150)
         toolbar.addWidget(self.show_combo)
 
-        toolbar.addSpacing(20)
+        toolbar.addSpacing(10)
 
         # Add lane button
         self.add_lane_btn = QPushButton("+ Add Light Lane")
         self.add_lane_btn.setProperty("role", "success")
         toolbar.addWidget(self.add_lane_btn)
 
-        toolbar.addSpacing(10)
-
-        # Auto-generate button
+        # Auto-generate button - the accent CTA of the 4a toolbar
+        # ("SHOW AUS AUDIO GENERIEREN" in the mockup).
         self.autogen_btn = QPushButton("Auto-Generate")
         self.autogen_btn.setProperty("role", "primary")
         self.autogen_btn.setToolTip("Automatically generate light show from audio analysis")
@@ -244,11 +288,35 @@ class ShowsTab(BaseTab):
         self.inspector_btn.setToolTip("Show generation decision inspector (requires auto-generated show)")
         toolbar.addWidget(self.inspector_btn)
 
-        toolbar.addSpacing(20)
+        toolbar.addSpacing(10)
+
+        # Grid subdivision chips (4a GRID switcher). The master-timeline
+        # header keeps its combobox; both drive TimelineGrid, which fans
+        # the value out to every lane. Sync is bidirectional and loop-free
+        # (set_grid_subdivision updates the combo without re-emitting).
+        toolbar.addWidget(MicroLabel("Grid", point_size=8))
+        self.grid_chip_group = QButtonGroup(toolbar_widget)
+        self.grid_chip_group.setExclusive(True)
+        self.grid_chips = {}
+        chips = QHBoxLayout()
+        chips.setSpacing(2)
+        for label, value in SUBDIVISION_CHOICES:
+            chip = QPushButton("1" if value == 1 else f"1/{value}")
+            chip.setCheckable(True)
+            chip.setProperty("role", "output-select")
+            chip.setFont(mono_font(8, tracking_em=0.05))
+            chip.setCursor(Qt.CursorShape.PointingHandCursor)
+            chip.setToolTip(f"Snap grid: {label}")
+            self.grid_chip_group.addButton(chip)
+            self.grid_chips[value] = chip
+            chips.addWidget(chip)
+        self.grid_chips[SUBDIVISION_CHOICES[0][1]].setChecked(True)
+        toolbar.addLayout(chips)
+
+        toolbar.addSpacing(10)
 
         # Zoom control
-        zoom_label = QLabel("Zoom:")
-        toolbar.addWidget(zoom_label)
+        toolbar.addWidget(MicroLabel("Zoom", point_size=8))
 
         self.zoom_slider = QSlider(Qt.Orientation.Horizontal)
         self.zoom_slider.setRange(10, 500)  # 0.1x to 5.0x
@@ -257,6 +325,7 @@ class ShowsTab(BaseTab):
         toolbar.addWidget(self.zoom_slider)
 
         self.zoom_label = QLabel("1.0x")
+        self.zoom_label.setFont(mono_font(9))
         self.zoom_label.setFixedWidth(40)
         toolbar.addWidget(self.zoom_label)
 
@@ -267,30 +336,57 @@ class ShowsTab(BaseTab):
         self.save_btn.setProperty("role", "primary")
         toolbar.addWidget(self.save_btn)
 
-        return toolbar
+        # 3D-pane chevron (4a right-pane collapse affordance, kept in the
+        # always-visible toolbar so a collapsed pane can be re-opened).
+        # Icon set in _apply_chrome_icons. Pop-out already lives on the
+        # embedded visualizer's own row - not duplicated here.
+        self.pane_toggle_btn = QPushButton()
+        self.pane_toggle_btn.setCheckable(True)
+        self.pane_toggle_btn.setChecked(True)
+        self.pane_toggle_btn.setFixedWidth(TOOLBAR_BTN_WIDTH)
+        self.pane_toggle_btn.setToolTip("Show or hide the 3D preview pane")
+        toolbar.addWidget(self.pane_toggle_btn)
+
+        return toolbar_widget
 
     def _create_playback_controls(self):
-        """Create bottom playback control bar."""
-        controls = QHBoxLayout()
+        """Create the bottom transport bar (North Star card 4a).
+
+        Icon-only transport buttons (16px line icons on the function-color
+        fills) + the mono time readouts. Returns a QWidget so visual tests
+        can grab just the bar.
+        """
+        bar = QWidget()
+        bar.setObjectName("ShowsTransportBar")
+        # Same themed-background note as the toolbar widget.
+        bar.setProperty("role", "tab-page")
+        bar.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
+        controls = QHBoxLayout(bar)
+        controls.setContentsMargins(0, 0, 0, 0)
         controls.setSpacing(10)
 
-        # Playback buttons (transport — colors from active theme via role props).
-        self.play_btn = QPushButton("Play")
-        self.play_btn.setFixedWidth(70)
+        # Playback buttons (transport — colors from active theme via role
+        # props; glyphs are line icons, swapped play/pause by state in
+        # _apply_chrome_icons).
+        self.play_btn = QPushButton()
+        self.play_btn.setFixedWidth(TOOLBAR_BTN_WIDTH)
         self.play_btn.setProperty("role", "success")
+        self.play_btn.setToolTip("Play / Pause")
         controls.addWidget(self.play_btn)
 
-        self.stop_btn = QPushButton("Stop")
-        self.stop_btn.setFixedWidth(70)
+        self.stop_btn = QPushButton()
+        self.stop_btn.setFixedWidth(TOOLBAR_BTN_WIDTH)
         self.stop_btn.setProperty("role", "destructive")
+        self.stop_btn.setToolTip("Stop and return to start")
         controls.addWidget(self.stop_btn)
 
         controls.addSpacing(20)
 
         # Time display — styled by `#TimeReadout` rule in the active theme.
+        # 112px: 100 clipped the final digit under wide fallback fonts.
         self.time_label = QLabel("00:00.00")
         self.time_label.setObjectName("TimeReadout")
-        self.time_label.setFixedWidth(100)
+        self.time_label.setFixedWidth(112)
         controls.addWidget(self.time_label)
 
         controls.addSpacing(10)
@@ -306,7 +402,33 @@ class ShowsTab(BaseTab):
         self.total_time_label.setObjectName("TimeReadoutSecondary")
         controls.addWidget(self.total_time_label)
 
-        return controls
+        return bar
+
+    def _apply_chrome_icons(self):
+        """(Re)rasterize the toolbar/transport line icons.
+
+        The transport glyphs sit on the filled success/destructive
+        buttons and use the shared on-function white (same in both
+        themes); the pane chevron uses the active theme's secondary
+        text color via shell_icon, so this is re-run on StyleChange
+        (theme switch) via changeEvent.
+        """
+        if not hasattr(self, "play_btn") or not hasattr(self, "pane_toggle_btn"):
+            return
+        on_function = "#ffffff"
+        self.play_btn.setIcon(
+            line_icon("pause" if self.is_playing else "play", on_function))
+        self.stop_btn.setIcon(line_icon("stop", on_function))
+        expanded = self.pane_toggle_btn.isChecked()
+        self.pane_toggle_btn.setIcon(
+            shell_icon("chevron-right" if expanded else "chevron-left"))
+
+    def changeEvent(self, event):
+        # Theme switches restyle the whole app via app.setStyleSheet,
+        # which lands here as a StyleChange - re-ink the themed icons.
+        if event.type() == QEvent.Type.StyleChange:
+            self._apply_chrome_icons()
+        super().changeEvent(event)
 
     def connect_signals(self):
         """Connect widget signals to handlers."""
@@ -317,6 +439,14 @@ class ShowsTab(BaseTab):
         self.inspector_btn.toggled.connect(self._on_inspector_toggled)
         self.zoom_slider.valueChanged.connect(self._on_zoom_changed)
         self.save_btn.clicked.connect(self.save_to_config)
+        self.pane_toggle_btn.toggled.connect(self._on_pane_toggle)
+
+        # Grid chips: toolbar -> grid (master combo syncs silently);
+        # master combo -> grid.subdivision_changed -> chips.
+        for value, chip in self.grid_chips.items():
+            chip.clicked.connect(
+                lambda _=False, v=value: self._on_grid_chip_clicked(v))
+        self.timeline_grid.subdivision_changed.connect(self._sync_grid_chips)
 
         # Playback controls
         self.play_btn.clicked.connect(self._toggle_playback)
@@ -892,6 +1022,44 @@ class ShowsTab(BaseTab):
         for lane in self.lane_widgets:
             lane.set_zoom_factor(zoom_factor)
 
+    # === Grid Subdivision Chips ===
+
+    def _on_grid_chip_clicked(self, value: int):
+        """Toolbar chip -> TimelineGrid (fans out to master + audio +
+        every lane; the master combobox syncs without re-emitting)."""
+        self.timeline_grid.set_grid_subdivision(value)
+
+    def _sync_grid_chips(self, value: int):
+        """Master combobox change -> check the matching toolbar chip.
+
+        setChecked never emits clicked, so this can't loop back into
+        _on_grid_chip_clicked.
+        """
+        chip = self.grid_chips.get(value)
+        if chip is not None and not chip.isChecked():
+            chip.setChecked(True)
+
+    # === 3D Preview Pane Toggle ===
+
+    def _on_pane_toggle(self, visible: bool):
+        """Collapse or restore the right 3D+riff pane (4a pane chevron).
+
+        Collapsing remembers the current sizes; restoring uses them (or
+        the default split when there is nothing sensible to restore).
+        """
+        sizes = self._main_splitter.sizes()
+        if visible:
+            saved = getattr(self, "_saved_right_pane_sizes", None)
+            if not saved or len(saved) != 2 or saved[1] <= 0:
+                saved = [1000, 520]
+            self._main_splitter.setSizes(saved)
+        else:
+            if len(sizes) == 2 and sizes[1] > 0:
+                self._saved_right_pane_sizes = sizes
+            self._main_splitter.setSizes([max(1, sum(sizes)), 0])
+        self._save_main_splitter_state()
+        self._apply_chrome_icons()
+
     # === Playhead and Playback ===
 
     def _on_playhead_moved(self, position: float):
@@ -956,7 +1124,7 @@ class ShowsTab(BaseTab):
             return
 
         self.is_playing = True
-        self.play_btn.setText("Pause")
+        self._apply_chrome_icons()  # play glyph -> pause glyph
 
         # Reset visual update counter for consistent timing
         self._visual_update_counter = 0
@@ -1010,7 +1178,7 @@ class ShowsTab(BaseTab):
     def _pause_playback(self):
         """Pause playback."""
         self.is_playing = False
-        self.play_btn.setText("Play")
+        self._apply_chrome_icons()  # pause glyph -> play glyph
         self.playback_timer.stop()
 
         # Pause audio (simple player or sounddevice engine)
@@ -1026,7 +1194,7 @@ class ShowsTab(BaseTab):
     def _stop_playback(self):
         """Stop playback and reset position."""
         self.is_playing = False
-        self.play_btn.setText("Play")
+        self._apply_chrome_icons()  # pause glyph -> play glyph
         self.playback_timer.stop()
 
         # Stop audio (simple player or sounddevice engine)
@@ -1444,6 +1612,16 @@ class ShowsTab(BaseTab):
         from utils.app_settings import app_settings
         settings = app_settings()
         settings.setValue("shows/main_splitter", self._main_splitter.saveState())
+        # Keep the toolbar chevron honest when the user drags the pane
+        # shut (or open) by hand instead of using the toggle button.
+        if hasattr(self, "pane_toggle_btn"):
+            sizes = self._main_splitter.sizes()
+            visible = not (len(sizes) == 2 and sum(sizes) > 0 and sizes[1] == 0)
+            if self.pane_toggle_btn.isChecked() != visible:
+                self.pane_toggle_btn.blockSignals(True)
+                self.pane_toggle_btn.setChecked(visible)
+                self.pane_toggle_btn.blockSignals(False)
+                self._apply_chrome_icons()
 
     def _save_right_splitter_state(self, *_args) -> None:
         from utils.app_settings import app_settings

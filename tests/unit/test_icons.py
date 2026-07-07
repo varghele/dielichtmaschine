@@ -11,6 +11,13 @@ from gui.icons import icons_dir, line_icon, shell_icon
 SHELL_ICONS = ["save", "open", "import", "export", "morph", "audio",
                "settings", "menu"]
 
+# Timeline-chrome icons (Shows tab transport + 3D-pane chevron, North
+# Star card 4a). Authored in-repo in the same 16px/stroke-1.5 line
+# style; they get the same file/style/render checks as the shell set.
+TRANSPORT_ICONS = ["play", "pause", "stop", "chevron-left", "chevron-right"]
+
+ALL_ICONS = SHELL_ICONS + TRANSPORT_ICONS
+
 
 def _pixels(icon, size=16):
     from tests.visual.harness import qimage_to_array
@@ -19,12 +26,12 @@ def _pixels(icon, size=16):
 
 class TestIconFiles:
     def test_all_shell_icons_shipped(self):
-        for name in SHELL_ICONS:
+        for name in ALL_ICONS:
             assert os.path.isfile(
                 os.path.join(icons_dir(), f"{name}.svg")), name
 
     def test_svgs_use_current_color_line_style(self):
-        for name in SHELL_ICONS:
+        for name in ALL_ICONS:
             with open(os.path.join(icons_dir(), f"{name}.svg")) as f:
                 svg = f.read()
             assert 'stroke="currentColor"' in svg, name
@@ -34,7 +41,7 @@ class TestIconFiles:
 
 class TestLineIcon:
     def test_renders_nonempty(self, qapp):
-        for name in SHELL_ICONS:
+        for name in ALL_ICONS:
             icon = line_icon(name, "#8D9299")
             assert not icon.isNull(), name
             arr = _pixels(icon)
