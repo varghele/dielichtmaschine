@@ -568,23 +568,44 @@ class StageView(QtWidgets.QGraphicsView):
             for y in range(self.padding, depth_px + self.padding + 1, grid_size_px):
                 painter.drawLine(self.padding, y, width_px + self.padding, y)
 
-            # Draw center lines with colors matching the 3D visualizer
-            # X axis (horizontal center line) - RED
-            painter.setPen(QtGui.QPen(QtGui.QColor(255, 80, 80), 2))
+            # Centre axes. Hues still match the 3D visualizer's X=red /
+            # Y=blue so the two views stay cross-readable, but per the
+            # North Star stage plan (card 5a) they are quiet 1px dashed
+            # marks instead of the old loud 2px lines.
+            x_axis = QtGui.QColor(255, 80, 80)
+            x_axis.setAlpha(90)
+            pen = QtGui.QPen(x_axis, 1, QtCore.Qt.PenStyle.DashLine)
+            painter.setPen(pen)
             painter.drawLine(self.padding, int(center_y_px), width_px + self.padding, int(center_y_px))
 
-            # Y axis (vertical center line / depth) - BLUE
-            painter.setPen(QtGui.QPen(QtGui.QColor(80, 80, 255), 2))
+            y_axis = QtGui.QColor(80, 80, 255)
+            y_axis.setAlpha(90)
+            pen = QtGui.QPen(y_axis, 1, QtCore.Qt.PenStyle.DashLine)
+            painter.setPen(pen)
             painter.drawLine(int(center_x_px), self.padding, int(center_x_px), depth_px + self.padding)
+
+        # AUDIENCE marker at the front edge (negative Y = front), same
+        # convention as the printable stage plot.
+        try:
+            from gui.typography import mono_font as _mono_font
+            painter.setFont(_mono_font(8, tracking_em=0.2))
+        except Exception:
+            pass
+        painter.setPen(QtGui.QPen(self._stage_label_color, 1))
+        painter.drawText(
+            QtCore.QRect(self.padding, 0, width_px, self.padding - 4),
+            QtCore.Qt.AlignmentFlag.AlignHCenter |
+            QtCore.Qt.AlignmentFlag.AlignBottom,
+            "A U D I E N C E")
 
         # Draw dimension labels
         self._draw_dimension_labels(painter, width_px, depth_px, center_x_px, center_y_px)
 
     def _draw_dimension_labels(self, painter, width_px, depth_px, center_x_px, center_y_px):
         """Draw dimension labels at the edges of the stage"""
-        # Set up font for labels
-        font = QtGui.QFont("Arial", 8)
-        painter.setFont(font)
+        # Mono readout font per the design system (was hardcoded Arial).
+        from gui.typography import mono_font
+        painter.setFont(mono_font(7))
         painter.setPen(QtGui.QPen(self._stage_label_color, 1))
 
         # Calculate label interval (use 1m intervals, or 0.5m for small stages)

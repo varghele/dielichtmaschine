@@ -252,23 +252,23 @@ class FixtureItem(QGraphicsItem):
         # stage fill.
         text_color = self._theme_text_color()
 
-        font = painter.font()
-        font.setPointSize(8)
-        font.setBold(False)
-        painter.setFont(font)
+        # North Star stage plan labels: small mono name, and the Z/layer
+        # readout one step quieter (secondary label color, not bold - the
+        # old bold Z line dominated the whole plot).
+        from gui.typography import mono_font
+        painter.setFont(mono_font(7))
         painter.setPen(QPen(text_color))
 
         name_rect = QRectF(-text_width / 2, text_y_offset, text_width, 12)
         painter.drawText(name_rect, Qt.AlignmentFlag.AlignCenter, self.fixture_name)
 
-        # Draw Z-height (bold font)
-        font.setBold(True)
-        painter.setFont(font)
+        painter.setFont(mono_font(6))
+        painter.setPen(QPen(self._theme_label_color()))
 
         z_rect = QRectF(-text_width / 2, text_y_offset + 11, text_width, 12)
-        z_label = f"Z: {self.z_height:.1f}m"
+        z_label = f"Z {self.z_height:.1f}m"
         if self.layer:
-            z_label += f"  [{self.layer}]"
+            z_label += f" · {self.layer}"
         painter.drawText(z_rect, Qt.AlignmentFlag.AlignCenter, z_label)
 
     def wheelEvent(self, event):
@@ -395,6 +395,19 @@ class FixtureItem(QGraphicsItem):
                 if color is not None and color.isValid():
                     return color
         return QColor(0, 0, 0)
+
+    def _theme_label_color(self):
+        """The quieter secondary label colour (StageView's
+        ``stageLabelColor`` qproperty), for the Z/layer readout."""
+        scene = self.scene()
+        if scene is not None:
+            views = scene.views()
+            if views:
+                view = views[0]
+                color = getattr(view, "stageLabelColor", None)
+                if color is not None and color.isValid():
+                    return color
+        return QColor(120, 120, 120)
 
     def _draw_orientation_axes(self, painter):
         """Draw orientation coordinate axes for the fixture.
