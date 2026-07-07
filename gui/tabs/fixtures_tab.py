@@ -1,8 +1,22 @@
 # gui/tabs/fixtures_tab.py
+"""Setup > Fixtures: group-tinted patch table (North Star card 1c).
+
+Layout: brand title row (display-caps title, DMX-conflict chip, icon
+-/duplicate buttons, accent "+ ADD FIXTURE" CTA), the group-tinted
+fixtures table with tracked-mono column headers, a mono status footer
+(counts + auto-patch hint), and a right-hand inspector editing the
+selected fixture (name, provenance, patch, group, position readout).
+
+Data contract unchanged: config.fixtures / config.groups edited in
+place; the table cell widgets (Universe/Address spins, Mode/Group/Role
+combos) remain the single write path - inspector editors write through
+them so both stay in sync.
+"""
 
 from PyQt6 import QtWidgets, QtCore, QtGui
 from PyQt6.QtWidgets import QDialog, QDialogButtonBox, QFormLayout, QLineEdit, QComboBox
 from PyQt6.QtGui import QFont
+from PyQt6.QtCore import Qt
 from config.models import Configuration, Fixture, FixtureMode, FixtureGroup
 from utils.fixture_utils import get_cached_fixture_definitions
 from utils.dmx_conflicts import (
@@ -96,61 +110,83 @@ class FixturesTab(BaseTab):
             self._is_activating = False
 
     def setup_ui(self):
-        """Set up fixture management UI"""
-        # Main layout
+        """Set up fixture management UI (North Star card 1c)."""
+        from gui.typography import DisplayLabel, MicroLabel, display_font
+
         main_layout = QtWidgets.QVBoxLayout(self)
-        main_layout.setContentsMargins(10, 10, 10, 10)
+        main_layout.setContentsMargins(16, 12, 16, 12)
         main_layout.setSpacing(10)
 
-        # Button toolbar
-        toolbar = QtWidgets.QHBoxLayout()
-        toolbar.setSpacing(8)
+        # Title row: display title + conflict chip left, actions right.
+        title_row = QtWidgets.QHBoxLayout()
+        title_row.setSpacing(12)
 
-        # Toolbar +/-/duplicate buttons share styling with
-        # ConfigurationTab via TOOLBAR_BTN_WIDTH. Default theme
-        # padding (no compact-density) so the icon buttons render
-        # with the same proportions as default text buttons elsewhere
-        # — when the user compared this tab to ConfigurationTab the
-        # compact-density flavour was reading as a different class
-        # of widget than the Refresh / Update buttons that share
-        # ConfigurationTab's toolbar. Default styling everywhere is
-        # the simplest way to keep them visually consistent.
-        from gui.tabs.configuration_tab import TOOLBAR_BTN_WIDTH
-
-        self.add_btn = QtWidgets.QPushButton("+")
-        self.add_btn.setFixedWidth(TOOLBAR_BTN_WIDTH)
-        self.add_btn.setToolTip("Add Fixture")
-        toolbar.addWidget(self.add_btn)
-
-        self.remove_btn = QtWidgets.QPushButton("-")
-        self.remove_btn.setFixedWidth(TOOLBAR_BTN_WIDTH)
-        self.remove_btn.setToolTip("Remove Fixture")
-        toolbar.addWidget(self.remove_btn)
-
-        self.duplicate_btn = QtWidgets.QPushButton("⎘")
-        self.duplicate_btn.setFixedWidth(TOOLBAR_BTN_WIDTH)
-        self.duplicate_btn.setToolTip("Duplicate Fixture")
-        toolbar.addWidget(self.duplicate_btn)
-
-        toolbar.addStretch()
-        main_layout.addLayout(toolbar)
-
-        # Fixtures label + DMX conflict summary on the same line
-        label_row = QtWidgets.QHBoxLayout()
-        label_row.setSpacing(12)
-
-        from gui.typography import DisplayLabel
         self.label = DisplayLabel("Fixtures", point_size=14,
                                   weight=QFont.Weight.Bold)
-        label_row.addWidget(self.label)
+        title_row.addWidget(self.label)
 
         from gui.widgets.chip import Chip
         self.conflict_label = Chip("", variant="warning")
         self.conflict_label.hide()
-        label_row.addWidget(self.conflict_label)
+        title_row.addWidget(self.conflict_label)
 
-        label_row.addStretch()
-        main_layout.addLayout(label_row)
+        title_row.addStretch()
+
+        # The -/duplicate icon buttons share styling with
+        # ConfigurationTab via TOOLBAR_BTN_WIDTH. Default theme
+        # padding (no compact-density) so the icon buttons render
+        # with the same proportions as default text buttons elsewhere.
+        from gui.tabs.configuration_tab import TOOLBAR_BTN_WIDTH
+
+        self.remove_btn = QtWidgets.QPushButton("-")
+        self.remove_btn.setFixedWidth(TOOLBAR_BTN_WIDTH)
+        self.remove_btn.setToolTip("Remove Fixture")
+        title_row.addWidget(self.remove_btn)
+
+        self.duplicate_btn = QtWidgets.QPushButton("⎘")
+        self.duplicate_btn.setFixedWidth(TOOLBAR_BTN_WIDTH)
+        self.duplicate_btn.setToolTip("Duplicate Fixture")
+        title_row.addWidget(self.duplicate_btn)
+
+        # Add-fixture is the accent primary CTA (mockup: "+ IMPORT
+        # .QXF" top right); it opens the fixture browser dialog.
+        self.add_btn = QtWidgets.QPushButton("+ ADD FIXTURE")
+        self.add_btn.setProperty("role", "primary")
+        self.add_btn.setFont(display_font(11, QFont.Weight.Bold,
+                                          tracking_em=0.08))
+        # Widget-local family pin (see NEEDED-QSS in the rework notes):
+        # the app-wide ``QWidget { font-family }`` rule wins the family
+        # during polishing while painting keeps the assigned font, and
+        # which of the two actually paints depends on polish order. The
+        # local rule makes font() and the painted text agree in every
+        # session; size/weight/tracking still come from setFont. Interim
+        # until a template rule pins the display family for
+        # [role="primary"] CTAs.
+        from gui.fonts import FONT_DISPLAY
+        self.add_btn.setStyleSheet(f'font-family: "{FONT_DISPLAY}";')
+        self.add_btn.setToolTip("Add Fixture")
+        self.add_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        # Pin the width from the button's own font metrics (plus the
+        # theme's 28px padding + border and some slack) so the
+        # glyph-clipping sweep can diff renders at stable geometry:
+        # auto-width buttons re-layout when the harness blanks their
+        # text, which breaks the with/without-text diff. Metrics come
+        # from the same font engine that renders, so the width is
+        # always big enough on any platform (including the offscreen
+        # fallback-box font).
+        metrics = QtGui.QFontMetrics(self.add_btn.font())
+        self.add_btn.setFixedWidth(
+            metrics.horizontalAdvance(self.add_btn.text()) + 44)
+        title_row.addWidget(self.add_btn)
+
+        main_layout.addLayout(title_row)
+
+        body = QtWidgets.QHBoxLayout()
+        body.setSpacing(16)
+
+        # -- Left: table + mono status footer ---------------------------
+        table_column = QtWidgets.QVBoxLayout()
+        table_column.setSpacing(6)
 
         # Fixtures table — RowOutlineTableWidget paints a continuous
         # selection outline around the entire row, including across cells
@@ -163,17 +199,127 @@ class FixturesTab(BaseTab):
         # Setup table structure
         self._setup_table()
 
-        main_layout.addWidget(self.table)
+        table_column.addWidget(self.table, 1)
+
+        # Status footer (mockup bottom strip): counts left, the
+        # auto-patch behaviour hint right.
+        footer_row = QtWidgets.QHBoxLayout()
+        footer_row.setSpacing(12)
+        self.summary_label = MicroLabel("", point_size=8, tracking_em=0.1)
+        footer_row.addWidget(self.summary_label)
+        footer_row.addStretch()
+        self.autopatch_label = MicroLabel(
+            "Auto-patch: new fixtures take the next free address range",
+            point_size=8, tracking_em=0.1)
+        footer_row.addWidget(self.autopatch_label)
+        table_column.addLayout(footer_row)
+
+        body.addLayout(table_column, 1)
+
+        # -- Right: inspector for the selected fixture -------------------
+        body.addWidget(self._build_inspector())
+        main_layout.addLayout(body, 1)
 
         # Load initial data
         self.update_from_config()
 
+    def _build_inspector(self) -> QtWidgets.QWidget:
+        """The right-hand fixture inspector (mockup detail panel).
+
+        Editors write through the table's cell widgets so the existing
+        handlers stay the single path into the config (group rebuild,
+        tints, DMX lint all keep working); the table pushes changes
+        back via _refresh_inspector.
+        """
+        from gui.typography import DisplayLabel, MicroLabel, mono_font
+
+        panel = QtWidgets.QWidget()
+        panel.setObjectName("FixtureInspector")
+        panel.setProperty("role", "inspector")
+        panel.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
+        panel.setFixedWidth(300)
+        layout = QtWidgets.QVBoxLayout(panel)
+        layout.setContentsMargins(16, 14, 16, 14)
+        layout.setSpacing(8)
+
+        # Display-caps fixture name + mono provenance line underneath
+        # (mockup: "MHX-50 MOVING HEAD · L" / "mhx-50.qxf · QLC+ LIBRARY").
+        self.inspector_title = DisplayLabel("No fixture", point_size=13,
+                                            weight=QFont.Weight.Bold)
+        self.inspector_title.setWordWrap(True)
+        layout.addWidget(self.inspector_title)
+
+        self.inspector_source = MicroLabel("", point_size=8,
+                                           tracking_em=0.1)
+        self.inspector_source.setWordWrap(True)
+        layout.addWidget(self.inspector_source)
+
+        layout.addSpacing(4)
+
+        layout.addWidget(MicroLabel("Name", point_size=8, tracking_em=0.1))
+        self.insp_name = QtWidgets.QLineEdit()
+        self.insp_name.textEdited.connect(self._on_inspector_name)
+        layout.addWidget(self.insp_name)
+
+        # Universe + Address side by side (both mirror the table spins).
+        patch_row = QtWidgets.QHBoxLayout()
+        patch_row.setSpacing(8)
+        uni_col = QtWidgets.QVBoxLayout()
+        uni_col.setSpacing(4)
+        uni_col.addWidget(MicroLabel("Universe", point_size=8,
+                                     tracking_em=0.1))
+        self.insp_universe = QtWidgets.QSpinBox()
+        self.insp_universe.setRange(1, 16)
+        self.insp_universe.valueChanged.connect(self._on_inspector_universe)
+        uni_col.addWidget(self.insp_universe)
+        patch_row.addLayout(uni_col)
+        addr_col = QtWidgets.QVBoxLayout()
+        addr_col.setSpacing(4)
+        addr_col.addWidget(MicroLabel("Address", point_size=8,
+                                      tracking_em=0.1))
+        self.insp_address = QtWidgets.QSpinBox()
+        self.insp_address.setRange(1, 512)
+        self.insp_address.valueChanged.connect(self._on_inspector_address)
+        addr_col.addWidget(self.insp_address)
+        patch_row.addLayout(addr_col)
+        layout.addLayout(patch_row)
+
+        layout.addWidget(MicroLabel("Mode", point_size=8, tracking_em=0.1))
+        self.insp_mode = QtWidgets.QComboBox()
+        self.insp_mode.currentIndexChanged.connect(self._on_inspector_mode)
+        layout.addWidget(self.insp_mode)
+
+        layout.addWidget(MicroLabel("Group", point_size=8, tracking_em=0.1))
+        self.insp_group = QtWidgets.QComboBox()
+        self.insp_group.currentTextChanged.connect(self._on_inspector_group)
+        layout.addWidget(self.insp_group)
+
+        layout.addSpacing(4)
+        layout.addWidget(MicroLabel("Position", point_size=8,
+                                    tracking_em=0.1))
+        self.insp_position = QtWidgets.QLabel("")
+        self.insp_position.setFont(mono_font(9))
+        layout.addWidget(self.insp_position)
+
+        layout.addStretch(1)
+
+        self._inspector_editors = (self.insp_name, self.insp_universe,
+                                   self.insp_address, self.insp_mode,
+                                   self.insp_group)
+        return panel
+
     def _setup_table(self):
         """Initialize table structure and properties"""
-        headers = ['Universe', 'Address', 'Manufacturer', 'Model', 'Channels',
-                   'Mode', 'Name', 'Group', 'Role']
+        # Column headers are tracked mono caps (mockup: "# FIXTURE TYPE
+        # MODE UNI ADDRESS GROUP"). Uppercase text + a mono header font;
+        # colors/padding stay with the QHeaderView QSS rules (don't
+        # fight the header painter, see docs/qt-gotchas.md).
+        headers = ['UNIVERSE', 'ADDRESS', 'MANUFACTURER', 'MODEL',
+                   'CHANNELS', 'MODE', 'NAME', 'GROUP', 'ROLE']
         self.table.setColumnCount(len(headers))
         self.table.setHorizontalHeaderLabels(headers)
+        from gui.typography import mono_font
+        self.table.horizontalHeader().setFont(mono_font(8, tracking_em=0.1))
 
         # Make table stretch to fill available space
         self.table.setSizePolicy(
@@ -185,15 +331,17 @@ class FixturesTab(BaseTab):
             QtWidgets.QHeaderView.ResizeMode.Interactive
         )
 
-        # Set initial column widths (these are now resizable)
-        self.table.setColumnWidth(0, 80)   # Universe
-        self.table.setColumnWidth(1, 80)   # Address
-        self.table.setColumnWidth(2, 180)  # Manufacturer
-        self.table.setColumnWidth(3, 180)  # Model
-        self.table.setColumnWidth(4, 80)   # Channels
-        self.table.setColumnWidth(5, 170)  # Mode (wider — values like "14-Channel" + dropdown arrow)
-        self.table.setColumnWidth(6, 140)  # Name
-        self.table.setColumnWidth(7, 190)  # Group (wider — editable combo + dropdown arrow + group name)
+        # Set initial column widths (these are now resizable). Trimmed
+        # so Group/Role stay visible next to the 300px inspector on a
+        # 1280-1400px window.
+        self.table.setColumnWidth(0, 76)   # Universe
+        self.table.setColumnWidth(1, 76)   # Address
+        self.table.setColumnWidth(2, 130)  # Manufacturer
+        self.table.setColumnWidth(3, 130)  # Model
+        self.table.setColumnWidth(4, 78)   # Channels
+        self.table.setColumnWidth(5, 150)  # Mode (wider - values like "14-Channel" + dropdown arrow)
+        self.table.setColumnWidth(6, 110)  # Name
+        self.table.setColumnWidth(7, 150)  # Group (wider - editable combo + dropdown arrow + group name)
 
         # Modern table styling — alternating rows, no grid, padded headers.
         # Visuals come from the active theme stylesheet.
@@ -216,6 +364,7 @@ class FixturesTab(BaseTab):
         self.remove_btn.clicked.connect(self._remove_fixture)
         self.duplicate_btn.clicked.connect(self._duplicate_fixture)
         self.table.itemChanged.connect(self.save_to_config)
+        self.table.itemSelectionChanged.connect(self._refresh_inspector)
 
     def _get_fixture_fingerprint(self) -> str:
         """Generate fingerprint of fixtures and groups for change detection."""
@@ -409,6 +558,13 @@ class FixturesTab(BaseTab):
         self.table.blockSignals(False)
         self._update_row_colors()
 
+        # Keep a row selected so the inspector always shows something
+        # when fixtures exist (mockup: row 05 selected, detail right).
+        if self.table.rowCount() and not self.table.selectedItems():
+            self.table.selectRow(0)
+        self._refresh_inspector()
+        self._update_summary()
+
     def save_to_config(self, item=None):
         """Update configuration from table values"""
         if self._is_rebuilding:
@@ -473,10 +629,160 @@ class FixturesTab(BaseTab):
         # so re-lint now to flag or clear conflicts as the user types.
         self._update_conflict_indicators()
 
+        # Mirror table edits into the inspector and refresh the counts.
+        self._refresh_inspector()
+        self._update_summary()
+
         # Notify main window of group changes if needed
         main_window = self.window()
         if main_window and hasattr(main_window, 'on_groups_changed'):
             main_window.on_groups_changed()
+
+    # ------------------------------------------------------------------
+    # Inspector (North Star 1c detail panel)
+    # ------------------------------------------------------------------
+    def _selected_fixture_row(self) -> int:
+        """The config.fixtures index of the selected table row, or -1."""
+        model = self.table.selectionModel()
+        rows = model.selectedRows() if model else []
+        if not rows:
+            items = self.table.selectedItems()
+            if not items:
+                return -1
+            row = items[0].row()
+        else:
+            row = rows[0].row()
+        if 0 <= row < len(self.config.fixtures):
+            return row
+        return -1
+
+    def _refresh_inspector(self):
+        """Load the selected fixture into the inspector.
+
+        Signals stay blocked during population; widgets the user is
+        typing into (focus) are skipped so the write-back loop
+        (inspector -> table -> save_to_config -> here) never fights the
+        caret or a half-typed value.
+        """
+        row = self._selected_fixture_row()
+        fixture = self.config.fixtures[row] if row >= 0 else None
+
+        enabled = fixture is not None
+        for editor in self._inspector_editors:
+            editor.setEnabled(enabled)
+
+        if fixture is None:
+            self.inspector_title.setText("No fixture")
+            self.inspector_source.setText("")
+            self.insp_position.setText("")
+            for editor in self._inspector_editors:
+                editor.blockSignals(True)
+            self.insp_name.setText("")
+            self.insp_mode.clear()
+            self.insp_group.clear()
+            for editor in self._inspector_editors:
+                editor.blockSignals(False)
+            return
+
+        self.inspector_title.setText(fixture.name or fixture.model)
+        source = "GDTF" if fixture.definition_source == "gdtf" else "QXF"
+        self.inspector_source.setText(
+            f"{fixture.manufacturer} · {fixture.model} · {source}")
+
+        if not self.insp_name.hasFocus():
+            self.insp_name.blockSignals(True)
+            self.insp_name.setText(fixture.name)
+            self.insp_name.blockSignals(False)
+
+        for spin, value in ((self.insp_universe, fixture.universe),
+                            (self.insp_address, fixture.address)):
+            if not spin.hasFocus():
+                spin.blockSignals(True)
+                spin.setValue(value)
+                spin.blockSignals(False)
+
+        if not self.insp_mode.hasFocus():
+            self.insp_mode.blockSignals(True)
+            self.insp_mode.clear()
+            if fixture.available_modes:
+                for mode in fixture.available_modes:
+                    self.insp_mode.addItem(f"{mode.name} ({mode.channels}ch)")
+                index = next(
+                    (i for i, mode in enumerate(fixture.available_modes)
+                     if mode.name == fixture.current_mode), 0)
+                self.insp_mode.setCurrentIndex(index)
+            else:
+                self.insp_mode.addItem(fixture.current_mode)
+            self.insp_mode.blockSignals(False)
+
+        if not self.insp_group.hasFocus():
+            self.insp_group.blockSignals(True)
+            self.insp_group.clear()
+            self.insp_group.addItem("")
+            for group in sorted(self.config.groups.keys()):
+                self.insp_group.addItem(group)
+            self.insp_group.setCurrentText(fixture.group)
+            self.insp_group.blockSignals(False)
+
+        group = self.config.groups.get(fixture.group)
+        z = fixture.get_effective_z(group)
+        self.insp_position.setText(
+            f"X {fixture.x:.2f}   Y {fixture.y:.2f}   Z {z:.2f} m")
+
+    def _update_summary(self):
+        """The mono counts footer under the table (mockup status bar)."""
+        n_fixtures = len(self.config.fixtures)
+        n_groups = len(self.config.groups)
+        fixture_noun = "fixture" if n_fixtures == 1 else "fixtures"
+        group_noun = "group" if n_groups == 1 else "groups"
+        self.summary_label.setText(
+            f"{n_fixtures} {fixture_noun} · {n_groups} {group_noun}")
+
+    def _on_inspector_name(self, text: str):
+        row = self._selected_fixture_row()
+        if row < 0 or self._is_rebuilding:
+            return
+        item = self.table.item(row, 6)
+        if item is not None and item.text() != text:
+            # itemChanged routes through save_to_config, which writes
+            # the config and refreshes the fingerprint.
+            item.setText(text)
+        self.inspector_title.setText(text or self.config.fixtures[row].model)
+
+    def _on_inspector_universe(self, value: int):
+        row = self._selected_fixture_row()
+        if row < 0 or self._is_rebuilding:
+            return
+        spin = self.table.cellWidget(row, 0)
+        if isinstance(spin, QtWidgets.QSpinBox) and spin.value() != value:
+            spin.setValue(value)
+
+    def _on_inspector_address(self, value: int):
+        row = self._selected_fixture_row()
+        if row < 0 or self._is_rebuilding:
+            return
+        spin = self.table.cellWidget(row, 1)
+        if isinstance(spin, QtWidgets.QSpinBox) and spin.value() != value:
+            spin.setValue(value)
+
+    def _on_inspector_mode(self, index: int):
+        row = self._selected_fixture_row()
+        if row < 0 or self._is_rebuilding or index < 0:
+            return
+        combo = self.table.cellWidget(row, 5)
+        if (isinstance(combo, QtWidgets.QComboBox)
+                and 0 <= index < combo.count()
+                and combo.currentIndex() != index):
+            combo.setCurrentIndex(index)
+
+    def _on_inspector_group(self, text: str):
+        row = self._selected_fixture_row()
+        if row < 0 or self._is_rebuilding:
+            return
+        combo = self.table.cellWidget(row, 7)
+        if (isinstance(combo, QtWidgets.QComboBox)
+                and combo.currentText() != text):
+            combo.setCurrentText(text)
 
     def _update_groups(self):
         """Rebuild groups from fixtures, preserving colors, orientation defaults, and lighting roles"""
@@ -685,6 +991,9 @@ class FixturesTab(BaseTab):
             # Conflict warnings paint over the fresh group tint on the
             # Universe/Address cells, so they must re-apply last.
             self._update_conflict_indicators()
+            # Mode/Group/Role table edits route through here (not
+            # save_to_config), so mirror them into the inspector too.
+            self._refresh_inspector()
         finally:
             # Force a viewport repaint. Cell widgets repaint themselves
             # synchronously when their stylesheet changes, but
@@ -994,6 +1303,7 @@ class FixturesTab(BaseTab):
 
             self._update_groups()
             self._update_row_colors()
+            self._update_summary()
 
             # Notify main window
             main_window = self.window()

@@ -95,18 +95,8 @@ def test_universes_tab_golden(qapp, scene_config):
         tab.deleteLater()
 
 
-def test_fixtures_tab_golden(qapp, scene_config):
-    """Fixtures table: group tinting + DMX-conflict red cells + toolbar."""
-    from gui.theme_manager import ThemeManager
-    from gui.tabs.fixtures_tab import FixturesTab
-
-    ThemeManager().apply(qapp, "dark")
-    tab = FixturesTab(scene_config, parent=None)
-    try:
-        tab.setFixedSize(1100, 320)
-        compare_to_golden(tab.grab().toImage(), "fixtures_tab_dark")
-    finally:
-        tab.deleteLater()
+# The Fixtures tab golden moved to tests/visual/test_fixtures_golden.py
+# when the tab became the North Star 1c layout (table + inspector).
 
 
 def _build_shell(qapp, theme):
@@ -252,7 +242,8 @@ def test_master_timeline_golden(qapp, mock_song_structure):
 
 
 def test_stage_layer_panel_golden(qapp, scene_config):
-    """The Stage Layers group box: checkboxes, buttons, active-layer label."""
+    """The Stage Layers card: micro caption, checkboxes, buttons,
+    active-layer label."""
     from gui.theme_manager import ThemeManager
     from gui.tabs.stage_tab import StageTab
 
@@ -260,7 +251,7 @@ def test_stage_layer_panel_golden(qapp, scene_config):
     tab = StageTab(scene_config, parent=None)
     try:
         tab.update_from_config()
-        panel = tab.layer_list.parentWidget()  # the QGroupBox
+        panel = tab.layer_list.parentWidget()  # the role="card" layers panel
         panel.setFixedSize(240, 200)
         compare_to_golden(panel.grab().toImage(), "stage_layer_panel_dark")
     finally:
