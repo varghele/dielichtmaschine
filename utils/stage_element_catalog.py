@@ -66,9 +66,17 @@ def symbol_path(kind: str) -> str:
                         f"{kind}.svg")
 
 
+def is_truss(kind: str) -> bool:
+    spec = CATALOG.get(kind)
+    return spec is not None and spec.category == CATEGORY_TRUSS
+
+
 def make_element(kind: str, x: float = 0.0, y: float = 0.0):
-    """A StageElement with the catalog's default footprint."""
+    """A StageElement with the catalog's default footprint and a fresh
+    stable element_id (docking references point at it)."""
+    import uuid
     from config.models import StageElement
     spec = CATALOG[kind]
     return StageElement(kind=kind, x=x, y=y, width=spec.width,
-                        depth=spec.depth)
+                        depth=spec.depth,
+                        element_id=uuid.uuid4().hex[:12])

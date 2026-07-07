@@ -43,6 +43,11 @@ class Fixture:
     # (ground stack / mid-truss / top-truss); see StageLayer.
     layer: str = ""
 
+    # Truss docking: element_id of the truss StageElement this fixture
+    # hangs on ("" = not docked). A docked fixture lives on the truss's
+    # layer and follows the truss when it moves on the plan.
+    docked_to: str = ""
+
     # Definition provenance (GDTF plan Phase 2). "qxf" or "gdtf"; absent
     # in pre-GDTF configs, so the default keeps them loading unchanged.
     # The GDTF FixtureTypeID GUID enables exact re-resolution and GDTF
@@ -115,7 +120,12 @@ class StageElement:
     width: float = 1.0      # footprint in meters
     depth: float = 1.0
     label: str = ""         # optional user caption on the plan
-    layer: str = ""         # StageLayer name; "" = unassigned
+    layer: str = ""         # StageLayer name; "" = unassigned.
+    #   For TRUSS kinds this is the layer the truss DEFINES (created
+    #   when the truss is placed): docked fixtures join it and the
+    #   layer's z_height is the truss hang height.
+    # Stable identity for docking references (Fixture.docked_to).
+    element_id: str = ""
 
 
 @dataclass

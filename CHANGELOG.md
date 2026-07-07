@@ -25,6 +25,17 @@ verbatim as the GitHub Release notes (see [docs/releasing.md](docs/releasing.md)
 
 ### Added
 
+- **Truss docking: a truss is its own layer.** Placing a truss on the
+  stage plan now auto-creates a stage layer for it (Truss 1, Truss 2,
+  ... at a 4 m default hang height). Drop a fixture onto the truss to
+  dock it: it joins the truss's layer, its Z snaps to the hang height,
+  and on straight trusses it snaps onto the truss axis (clamped to the
+  span, rotation respected). Docked fixtures ride along when the truss
+  is dragged; dragging a fixture off the truss undocks it (position
+  and height stay). Right-click the truss for "Truss Height...", which
+  moves the layer and every fixture on it. Removing a truss undocks
+  its fixtures but keeps the layer. Docking round-trips through the
+  config YAML; older configs load unchanged.
 - **Static stage elements on the stage plan.** The Stage tab's left
   rail grew an element palette (drum riser, risers, wedges, amps,
   4x12, mic stands, keys, DI, distro, FOH, backdrop, stairs, hazer,

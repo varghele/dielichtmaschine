@@ -1,3 +1,5 @@
+from math import cos, radians, sin
+
 from PyQt6 import QtWidgets, QtGui, QtCore
 from PyQt6.QtCore import pyqtProperty
 from PyQt6.QtGui import QColor
@@ -291,6 +293,7 @@ class StageView(QtWidgets.QGraphicsView):
                 fixture_item.current_mode = fixture.current_mode
                 fixture_item.available_modes = fixture.available_modes
                 fixture_item.layer = fixture.layer
+                fixture_item.docked_to = getattr(fixture, 'docked_to', "")
 
                 self.scene.addItem(fixture_item)
                 self.fixtures[fixture.name] = fixture_item
@@ -340,6 +343,7 @@ class StageView(QtWidgets.QGraphicsView):
                 config_fixture.orientation_uses_group_default = fixture_item.orientation_uses_group_default
                 config_fixture.z_uses_group_default = fixture_item.z_uses_group_default
                 config_fixture.layer = fixture_item.layer
+                config_fixture.docked_to = getattr(fixture_item, 'docked_to', "")
 
         # Save spot positions
         for spot_name, spot_item in self.spots.items():
@@ -409,12 +413,29 @@ class StageView(QtWidgets.QGraphicsView):
             )
 
     def add_stage_element(self, kind):
-        """Place a catalog element at stage center; returns the model."""
+        """Place a catalog element at stage center; returns the model.
+
+        Trusses are their own layer: placing one auto-creates a
+        StageLayer (unique "Truss N" name, default hang height 4 m)
+        that the truss defines; docked fixtures join that layer and
+        its z_height is the hang height.
+        """
+        from config.models import StageLayer
         from gui.stage_items import StageElementItem
-        from utils.stage_element_catalog import make_element
+        from utils.stage_element_catalog import is_truss, make_element
         element = make_element(kind, x=0.0, y=0.0)
         if not hasattr(self.config, 'stage_elements') or self.config.stage_elements is None:
             self.config.stage_elements = []
+
+        if is_truss(kind):
+            n = 1
+            while self.config.get_stage_layer(f"Truss {n}") is not None:
+                n += 1
+            layer = StageLayer(name=f"Truss {n}", z_height=4.0)
+            self.config.stage_layers.append(layer)
+            element.layer = layer.name
+            element.label = layer.name
+
         self.config.stage_elements.append(element)
         item = StageElementItem(element, self.pixels_per_meter)
         x_px, y_px = self.meters_to_pixels(element.x, element.y)
@@ -426,14 +447,131 @@ class StageView(QtWidgets.QGraphicsView):
         return element
 
     def remove_stage_element(self, item):
-        """Remove an element item and its model from the config."""
+        """Remove an element item and its model from the config.
+
+        Removing a truss undocks its fixtures (they keep their layer,
+        position and Z); the truss's layer itself stays - remove it via
+        the layers panel if unwanted."""
+        element = item.element
+        if element.element_id:
+            for fixture in getattr(self.config, 'fixtures', []) or []:
+                if fixture.docked_to == element.element_id:
+                    fixture.docked_to = ""
+            for fixture_item in self.fixtures.values():
+                if getattr(fixture_item, 'docked_to', "") == element.element_id:
+                    fixture_item.docked_to = ""
         if item in self.stage_element_items:
             self.stage_element_items.remove(item)
         try:
-            self.config.stage_elements.remove(item.element)
+            self.config.stage_elements.remove(element)
         except (AttributeError, ValueError):
             pass
         self.scene.removeItem(item)
+        self.fixtures_changed.emit()
+
+    # ── Truss docking ─────────────────────────────────────────────────
+
+    def get_stage_element(self, element_id):
+        return next(
+            (e for e in (getattr(self.config, 'stage_elements', []) or [])
+             if e.element_id == element_id), None)
+
+    def _truss_item_at(self, scene_pos):
+        """The truss element item whose (rotated, padded) footprint
+        contains the scene position, or None."""
+        from utils.stage_element_catalog import is_truss
+        pad_px = 0.3 * self.pixels_per_meter
+        for item in self.stage_element_items:
+            element = item.element
+            if not is_truss(element.kind) or not element.element_id:
+                continue
+            local = item.mapFromScene(scene_pos)
+            # mapFromScene does NOT undo the paint-time rotation (the
+            # item rotates in paint(), not via setRotation) - rotate
+            # the local point into the truss frame ourselves.
+            angle = radians(-element.rotation)
+            lx = local.x() * cos(angle) - local.y() * sin(angle)
+            ly = local.x() * sin(angle) + local.y() * cos(angle)
+            half_w = element.width * self.pixels_per_meter / 2 + pad_px
+            half_d = element.depth * self.pixels_per_meter / 2 + pad_px
+            if abs(lx) <= half_w and abs(ly) <= half_d:
+                return item
+        return None
+
+    def handle_fixture_drop(self, fixture_item):
+        """Dock/undock on drop: released over a truss -> dock to it
+        (join its layer, snap Z to the hang height, snap onto the truss
+        axis for straight trusses); released elsewhere while docked ->
+        undock (clear docking AND the truss's layer; position and Z
+        stay). Manually assigned non-truss layers are never touched.
+        """
+        from utils.stage_element_catalog import is_truss  # noqa: F401 (doc)
+        truss_item = self._truss_item_at(fixture_item.pos())
+        was_docked = getattr(fixture_item, 'docked_to', "")
+
+        if truss_item is not None:
+            element = truss_item.element
+            layer = self.config.get_stage_layer(element.layer)
+            fixture_item.docked_to = element.element_id
+            if layer is not None:
+                fixture_item.layer = layer.name
+                fixture_item.z_height = layer.z_height
+                fixture_item.z_uses_group_default = False
+            if element.kind == "truss-straight":
+                fixture_item.setPos(self._project_onto_truss(
+                    truss_item, fixture_item.pos()))
+        elif was_docked:
+            fixture_item.docked_to = ""
+            truss = self.get_stage_element(was_docked)
+            # Only clear the layer if it is still the truss's own layer
+            # (the user may have reassigned manually since docking).
+            if truss is not None and fixture_item.layer == truss.layer:
+                fixture_item.layer = ""
+
+        self.save_positions_to_config()
+        self.apply_layer_visibility()
+
+    def _project_onto_truss(self, truss_item, scene_pos):
+        """Scene position snapped onto a straight truss's length axis,
+        clamped to its span."""
+        element = truss_item.element
+        local = truss_item.mapFromScene(scene_pos)
+        angle = radians(-element.rotation)
+        lx = local.x() * cos(angle) - local.y() * sin(angle)
+        half_w = element.width * self.pixels_per_meter / 2
+        lx = max(-half_w, min(half_w, lx))
+        ly = 0.0  # on the axis
+        back = radians(element.rotation)
+        x = lx * cos(back) - ly * sin(back)
+        y = lx * sin(back) + ly * cos(back)
+        return truss_item.mapToScene(QtCore.QPointF(x, y))
+
+    def move_docked_fixtures(self, element, delta):
+        """Carry docked fixtures along with their truss (delta in
+        scene px). Called live from the truss item's drag."""
+        if not element.element_id:
+            return
+        for fixture_item in self.fixtures.values():
+            if getattr(fixture_item, 'docked_to', "") == element.element_id:
+                fixture_item.setPos(fixture_item.pos() + delta)
+
+    def set_truss_height(self, element, z_m):
+        """Change a truss's hang height: updates its layer and snaps
+        every fixture on that layer (docked or manually assigned)."""
+        layer = self.config.get_stage_layer(element.layer)
+        if layer is None:
+            return
+        layer.z_height = z_m
+        for fixture in getattr(self.config, 'fixtures', []) or []:
+            if fixture.layer == layer.name:
+                fixture.z = z_m
+                fixture.z_uses_group_default = False
+        for fixture_item in self.fixtures.values():
+            if getattr(fixture_item, 'layer', "") == layer.name:
+                fixture_item.z_height = z_m
+                fixture_item.z_uses_group_default = False
+                fixture_item.update()
+        self.save_positions_to_config()
         self.fixtures_changed.emit()
 
     def assign_selected_to_layer(self, layer_name):

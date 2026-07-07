@@ -71,6 +71,7 @@ class FixtureItem(QGraphicsItem):
         self.orientation_uses_group_default = True
         self.z_uses_group_default = True  # Whether to use group's default_z_height
         self.layer = ""  # Stage layer assignment ("" = none)
+        self.docked_to = ""  # element_id of the truss this hangs on
         # Active-layer editing: fixtures NOT on the active layer ghost to
         # a faint, locked reference (see StageView.set_active_layer).
         self.ghosted = False
@@ -153,6 +154,18 @@ class FixtureItem(QGraphicsItem):
             return
 
         super().mouseMoveEvent(event)
+
+    def mouseReleaseEvent(self, event):
+        """Drop = dock/undock check against truss elements (the view
+        owns the rules; see StageView.handle_fixture_drop)."""
+        super().mouseReleaseEvent(event)
+        if self.ghosted:
+            return
+        scene = self.scene()
+        if scene is not None:
+            views = scene.views()
+            if views and hasattr(views[0], 'handle_fixture_drop'):
+                views[0].handle_fixture_drop(self)
 
     def paint(self, painter, option, widget):
         painter.save()  # Save the current painter state
@@ -663,7 +676,13 @@ class StageElementItem(QGraphicsItem):
             new_pos = event.scenePos()
             if getattr(view, "snap_enabled", False):
                 new_pos = view.snap_to_grid_position(new_pos)
+            old_pos = self.pos()
             self.setPos(new_pos)
+            # A truss carries its docked fixtures (truss = its own
+            # layer; the fixtures hang on it).
+            delta = self.pos() - old_pos
+            if not delta.isNull() and hasattr(view, "move_docked_fixtures"):
+                view.move_docked_fixtures(self.element, delta)
             if hasattr(view, "save_positions_to_config"):
                 view.save_positions_to_config()
             event.accept()
@@ -675,11 +694,15 @@ class StageElementItem(QGraphicsItem):
             event.ignore()
             return
         from PyQt6.QtWidgets import QMenu, QInputDialog
+        from utils.stage_element_catalog import is_truss
         view = self.scene().views()[0]
         menu = QMenu()
         rotate_left = menu.addAction("Rotate -45°")
         rotate_right = menu.addAction("Rotate +45°")
         rename = menu.addAction("Set Label...")
+        height_action = None
+        if is_truss(self.element.kind):
+            height_action = menu.addAction("Truss Height...")
         layer_menu = menu.addMenu("Assign to Layer")
         layer_actions = {}
         clear_action = layer_menu.addAction("(none)")
@@ -694,6 +717,19 @@ class StageElementItem(QGraphicsItem):
             self.element.rotation = (self.element.rotation - 45) % 360
         elif chosen is rotate_right:
             self.element.rotation = (self.element.rotation + 45) % 360
+        elif height_action is not None and chosen is height_action:
+            config = getattr(view, "config", None)
+            layer = (config.get_stage_layer(self.element.layer)
+                     if config and self.element.layer else None)
+            current = layer.z_height if layer is not None else 4.0
+            value, ok = QInputDialog.getDouble(
+                None, "Truss Height",
+                "Hang height (m) - moves every fixture on this truss's layer:",
+                current, 0.0, 30.0, 1)
+            if ok and hasattr(view, "set_truss_height"):
+                view.set_truss_height(self.element, value)
+            event.accept()
+            return
         elif chosen is rename:
             text, ok = QInputDialog.getText(None, "Element Label",
                                             "Label:", text=self.element.label)
