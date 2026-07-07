@@ -1,10 +1,20 @@
 # Shell + typography pass: North Star chrome on the existing tabs
 
-Status: S1-S4 SHIPPED 2026-07-07 on branch `v1.2-rebrand`. Known
-follow-ups: replace the Qt standard icons on the topbar with the North
-Star 16x16 line-SVG icon set (component pass); contextual statusbar
-hints per screen (currently a static Ready); compiled .qm for German
-needs a Qt lrelease (pip install pyside6 provides pyside6-lrelease). Follows the rebrand
+Status: S1-S4 SHIPPED 2026-07-07 on branch `v1.2-rebrand`.
+
+Component pass C1-C3 also shipped 2026-07-07: North Star line-icon set
+(resources/icons/, 6 icons extracted from the boards + open/import
+authored in style; gui/icons.py rasterizes currentColor SVGs in the
+active theme's color, re-applied on theme switch via
+apply_shell_icons), Chip widget (gui/widgets/chip.py + QSS variants;
+DMX conflict count in the Fixtures tab is the first user), and 3px
+group-color left borders on timeline lane headers
+(timeline_ui/light_lane_widget.py, data-color widget rule).
+
+Remaining follow-ups: contextual statusbar hints per screen (currently
+a static Ready); compiled .qm for German needs a Qt lrelease (pip
+install pyside6 provides pyside6-lrelease); block-frame tints and
+swatch rows (next component slice); engineering-grid background motif. Follows the rebrand
 (docs/rebranding-plan.md); design source is the North Star topbar/
 statusbar anatomy in `design_handoff_lichtmaschine_app/README.md`
 ("App-Struktur") and the `.dc.html` boards. Decisions taken with the

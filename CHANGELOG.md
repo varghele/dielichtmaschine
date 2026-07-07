@@ -60,6 +60,16 @@ verbatim as the GitHub Release notes (see [docs/releasing.md](docs/releasing.md)
   helpers (`gui/typography.py`) provide the condensed-caps display
   and tracked mono micro-label voices; golden screenshots pin the
   topbar and subnav in both themes.
+- **North Star component styling.** The topbar now uses the design
+  system's 16px line icons (extracted from the design boards,
+  currentColor SVGs rasterized in the active theme's color, crisp on
+  HiDPI) instead of Qt's standard icons; the overflow button gets the
+  proper hamburger icon. New reusable Chip element (bordered mono-caps
+  tag with neutral/warning/error/accent variants): the Fixtures tab's
+  DMX addressing issue count is now a warning chip. Timeline lane
+  headers carry a 3px left border in their fixture group's color, so
+  lanes read by group at a glance (mockup lane anatomy); the border
+  follows target changes.
 - **UI translation scaffolding.** Shell strings go through Qt's
   translation system with a started German catalog
   (`translations/lichtmaschine_de.ts`); set the `ui/language` setting
