@@ -293,6 +293,26 @@ class ShellNav:
         self.subnav.set_active_tab(index)
 
 
+def screen_hints():
+    """Per-tab-index statusbar hints (mockup: contextual hint plus
+    shortcut in the 26px mono strip). Only verified shortcuts are
+    named. Literal translate() calls for pylupdate6 extraction."""
+    return {
+        0: QCoreApplication.translate(
+            "Shell", "Add a universe and pick its output · Ctrl+S save · Ctrl+O open"),
+        1: QCoreApplication.translate(
+            "Shell", "Red cells mark DMX address conflicts · Ctrl+N new from template"),
+        2: QCoreApplication.translate(
+            "Shell", "L cycles the active layer · hold Space to pan"),
+        3: QCoreApplication.translate(
+            "Shell", "Define parts, BPM and bars per song"),
+        4: QCoreApplication.translate(
+            "Shell", "Drop riffs onto lanes · Ctrl+Z undo · Auto-Generate builds a show from audio"),
+        5: QCoreApplication.translate(
+            "Shell", "Pick an audio input and press Start · Ctrl+L jumps here"),
+    }
+
+
 def register_menu_shortcuts(window, menu) -> int:
     """Re-register every shortcut-carrying action of a popup menu tree
     on the window, so shortcuts fire without a menubar. Returns how

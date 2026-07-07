@@ -63,6 +63,16 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         from gui.widgets.topbar import register_menu_shortcuts
         register_menu_shortcuts(self, self.overflow_menu)
 
+        # Initial statusbar hint (tab changes keep it current after this).
+        self._update_status_hint(self.tabWidget.currentIndex())
+
+    def _update_status_hint(self, index: int) -> None:
+        """Show the current screen's contextual hint in the statusbar."""
+        from gui.widgets.topbar import screen_hints
+        hint = screen_hints().get(index)
+        if hint and hasattr(self, "status_hint"):
+            self.status_hint.setText(hint)
+
     def _setup_status_timer(self):
         """Set up timer for updating toolbar status indicators."""
         self.status_timer = QTimer()
@@ -488,6 +498,9 @@ class MainWindow(QMainWindow, Ui_MainWindow):
 
             # Show/hide riff browser based on tab (only visible in Shows tab = index 4)
             self._update_riff_browser_visibility(index)
+
+            # Contextual statusbar hint for the new screen.
+            self._update_status_hint(index)
 
         except Exception as e:
             print(f"ERROR in _on_tab_changed: {e}")

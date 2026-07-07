@@ -104,6 +104,22 @@ class TestOverflowMenu:
         assert ui.menuHelp.menuAction() in actions
 
 
+class TestScreenHints:
+    def test_every_screen_has_a_hint(self, qapp):
+        from gui.widgets.topbar import default_sections, screen_hints
+        hints = screen_hints()
+        all_indices = [i for s in default_sections() for i in s.tab_indices()]
+        for index in all_indices:
+            assert hints.get(index), f"no hint for tab index {index}"
+
+    def test_hints_use_the_brand_separator(self, qapp):
+        from gui.widgets.topbar import screen_hints
+        for hint in screen_hints().values():
+            assert "—" not in hint and "–" not in hint
+            if "·" in hint:
+                assert " · " in hint  # spaced separator, per the handoff
+
+
 class TestShortcutRegistration:
     def test_register_menu_shortcuts_recurses_and_counts(self, qapp):
         from gui.widgets.topbar import register_menu_shortcuts
