@@ -1,8 +1,9 @@
 # CLAUDE.md
 
 Working notes for Claude Code sessions on this repo. The user is
-varghele; QLC+ Show Creator is their hobby project (visual show
-authoring for QLC+, PyQt6 + ModernGL, developed primarily on Windows).
+varghele; Die Lichtmaschine (formerly QLC+ Show Creator) is their
+hobby project - standalone visual light-show authoring with native
+ArtNet playback, PyQt6 + ModernGL, developed primarily on Windows.
 
 ## Working agreements
 
@@ -116,3 +117,21 @@ R). Open: manual QLC+ runtime check of a companion .qxf, Phase 4
 (Share browser UI) unstarted, and the test suite globally excludes
 gdtf_fixtures/ (tests/conftest.py) so local Share files never shadow
 bundled test definitions.
+
+**Rebrand shipped (2026-07-07, branch `v1.2-rebrand`):** the product
+is **Die Lichtmaschine** (dielichtmaschine.de). Design North Star in
+`design_handoff_lichtmaschine_app/`, execution plan + follow-ups in
+`docs/rebranding-plan.md`. Identity lives in `utils/app_identity.py`;
+ALL QSettings access goes through `utils/app_settings.py`
+`app_settings()` (one-shot migration from the old QLCShowCreator
+store). Themes are token dicts (`gui/theme_tokens.py`) rendered
+through `resources/themes/theme.qss.template` - there are no .qss
+files anymore; accent Glutorange #F0562E, radius 0, Barlow UI font
+(fonts ship in resources/fonts/, registered by gui/fonts.py; visual
+tests register them via tests/visual/conftest.py, so goldens pin real
+glyphs - regenerate accordingly). Structured logging
+(utils/app_logging.py, QLC_LOG_DIR override) + crash dialog
+(gui/dialogs/crash_dialog.py) are wired in main.py. Packaging:
+`lichtmaschine.spec`. Pending user actions: GitHub repo rename to
+`dielichtmaschine`, demo media regeneration. No em-dashes rule now
+also covers UI copy; separator is " · ".

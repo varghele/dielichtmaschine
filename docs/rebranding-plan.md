@@ -1,6 +1,7 @@
 # Rebranding plan: QLC+ Show Creator becomes Die Lichtmaschine
 
-Status: in progress on branch `v1.2-rebrand` (off `v1.1-stage-rig-data`).
+Status: phases B0-B5 SHIPPED 2026-07-07 on branch `v1.2-rebrand` (off
+`v1.1-stage-rig-data`). Remaining follow-ups are listed at the bottom.
 Source of truth for the design: `design_handoff_lichtmaschine_app/`
 (README + the two `.dc.html` North Star boards). This document covers the
 *rebranding* slice of that package: identity, tokens, packaging, and the
@@ -129,3 +130,24 @@ changelog kept current under `[Unreleased]`.
 - Data-dir migration beyond QSettings: the app stores no per-user
   files outside QSettings today (logs are new in B4), so nothing else
   migrates.
+
+## Follow-ups after B0-B5 (shipped 2026-07-07)
+
+- **Repo rename** (user action): checklist above; afterwards grep
+  `QLCplusShowCreator` for leftover URLs (docs/releasing.md example
+  URL, README links) - GitHub redirects in the meantime.
+- **Demo media regeneration**: the README GIF + stills under
+  `demos/media/` show the old light-gray UI. Regenerate via
+  `python -m demos.generate_media <rig>` once the look settles
+  (they render the visualizer, so the delta is smaller than it
+  sounds, but the GUI stills in any future docs need the new theme).
+- **Light-theme timeline pixel pins**: `timeline_master_bg` /
+  `timeline_lane_bg` light values are pinned to legacy pixels by
+  `tests/visual/test_master_timeline_render.py` (#fafafa/#f8f8f8
+  instead of on-token #FAF8F3). Move them onto the token and update
+  that test together.
+- **Barlow Condensed display typography**: deliberately not applied
+  anywhere yet; lands with the North Star screen redesigns.
+- **Wordmark in the UI chrome**: the North Star topbar (glyph +
+  DIE LICHTMASCHINE wordmark) belongs to the tab-restructure work,
+  not the rebrand.
