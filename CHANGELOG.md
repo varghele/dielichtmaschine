@@ -45,6 +45,27 @@ verbatim as the GitHub Release notes (see [docs/releasing.md](docs/releasing.md)
 
 ### Added
 
+- **North Star shell.** The menubar and tab row were replaced by the
+  Lichtmaschine shell chrome: a 48px topbar with the rotor glyph and
+  wordmark, SETUP · SHOW · AUTO section tabs (Barlow Condensed caps,
+  Glutorange underline on the active one), save/load/export icon
+  buttons, a MENU overflow button hosting the old File/Edit/View/
+  Settings/Render/Help menus (all keyboard shortcuts still work), the
+  current config filename with dirty marker, and the ArtNet /
+  Visualizer status chips (still click-to-toggle). A subnav row lists
+  the active section's screens (Setup: Universes · Fixtures · Stage;
+  Show: Structure · Timeline), remembering the last visited screen
+  per section; Ctrl+L still jumps to Auto. The status bar is now the
+  26px mono strip with the app version on the right. Typography
+  helpers (`gui/typography.py`) provide the condensed-caps display
+  and tracked mono micro-label voices; golden screenshots pin the
+  topbar and subnav in both themes.
+- **UI translation scaffolding.** Shell strings go through Qt's
+  translation system with a started German catalog
+  (`translations/lichtmaschine_de.ts`); set the `ui/language` setting
+  to `de` and compile the catalog (`scripts/update_translations.py`,
+  needs a Qt lrelease) to switch. Default stays English; no
+  language-switcher UI yet.
 - **Structured local logging.** The app now writes a daily-rotated log
   file (14 days kept) to the per-OS app-data directory (Windows:
   `%LOCALAPPDATA%\dielichtmaschine\Lichtmaschine\logs`), capturing a

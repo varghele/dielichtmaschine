@@ -135,3 +135,20 @@ glyphs - regenerate accordingly). Structured logging
 `lichtmaschine.spec`. Pending user actions: GitHub repo rename to
 `dielichtmaschine`, demo media regeneration. No em-dashes rule now
 also covers UI copy; separator is " · ".
+
+**Shell pass shipped (2026-07-07, same branch,
+docs/shell-pass-plan.md):** there is NO QMenuBar anymore - the 48px
+topbar (gui/widgets/topbar.py) carries wordmark, SETUP/SHOW/AUTO nav
++ subnav row driving the tab-bar-hidden QTabWidget by index (Ctrl+L
+etc. unchanged), icon buttons, a MENU overflow QMenu (gui.py inserts
+Edit/Render into `overflow_menu`, not `menubar`), filename readout,
+and the status chips. Shortcuts only work because
+register_menu_shortcuts re-adds them to the window - keep that in
+mind when adding menu actions. Typography: use gui/typography.py
+(display/mono fonts, caps labels; QSS can't do letter-spacing or
+text-transform). i18n: shell strings use literal
+QCoreApplication.translate("Shell", "...") calls - pylupdate6 cannot
+see literals hidden behind wrapper functions or aliases;
+translations/lichtmaschine_de.ts is source of truth,
+scripts/update_translations.py refreshes it (compiling .qm needs an
+lrelease, not in the env).
