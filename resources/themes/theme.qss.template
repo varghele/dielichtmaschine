@@ -440,6 +440,25 @@ QStatusBar QLabel { color: $text_secondary$; background: transparent; }
 #StatusHint { color: $text_secondary$; }
 #StatusVersion { color: $text_disabled$; }
 
+/* -- Home screen (North Star 1a) ---------------------------------------- */
+#HomeScreen {
+    background-color: $window$;
+    background-image: url("$grid_tile$");
+    background-repeat: repeat-xy;
+}
+#HomeWordmark { color: $text$; background: transparent; }
+#HomeSlogan { color: $text_secondary$; background: transparent; }
+#HomeRecentTitle { color: $text_secondary$; background: transparent; }
+#HomeGlyph { background: transparent; }
+QPushButton[role="recent-config"] {
+    background-color: transparent;
+    border: none;
+    color: $text_secondary$;
+    padding: 4px 10px;
+    min-height: 0;
+}
+QPushButton[role="recent-config"]:hover { color: $accent_line$; }
+
 /* -- Playback time readout (Shows + Structure tabs) --------------------- */
 QLabel#TimeReadout {
     font-family: $font_mono$;

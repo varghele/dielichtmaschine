@@ -93,8 +93,16 @@ class Ui_MainWindow(object):
         # The shell topbar + subnav are the visible navigation; the tab
         # bar itself is hidden and the QTabWidget stays as the page host
         # (indices unchanged, so Ctrl+L and _on_tab_changed keep working).
+        # A QStackedWidget hosts [Home | tab pages] so the Home screen
+        # (North Star 1a) never disturbs tab indices.
         self.tabWidget.tabBar().setVisible(False)
-        self.central_layout.addWidget(self.tabWidget)
+        from gui.widgets.home_screen import HomeScreen
+        self.home_screen = HomeScreen(parent=self.centralwidget)
+        self.page_stack = QtWidgets.QStackedWidget(parent=self.centralwidget)
+        self.page_stack.addWidget(self.home_screen)
+        self.page_stack.addWidget(self.tabWidget)
+        self.page_stack.setCurrentWidget(self.home_screen)
+        self.central_layout.addWidget(self.page_stack)
         MainWindow.setCentralWidget(self.centralwidget)
 
         # Setup status bar and menu
@@ -181,6 +189,8 @@ class Ui_MainWindow(object):
         self.actionToggleFullscreen.setShortcut("F11")
         self.actionToggleFullscreen.setCheckable(True)
         self.menuView.addAction(self.actionToggleFullscreen)
+        self.actionScreensaver = QAction("Screensaver", MainWindow)
+        self.menuView.addAction(self.actionScreensaver)
         self.menuView.addSeparator()
 
         self.menuTheme = QtWidgets.QMenu("Theme", parent=self.menuView)
@@ -263,6 +273,29 @@ class Ui_MainWindow(object):
         self.shell_nav = ShellNav(sections, self.topbar, self.subnav,
                                   self.tabWidget)
         self.apply_shell_icons()
+
+        # Home <-> tabs switching. Any navigation shows the tab pages;
+        # the brand block returns Home. On Home no section is active and
+        # the subnav row hides.
+        self.topbar.home_selected.connect(self.show_home)
+        self.topbar.section_selected.connect(lambda _key: self.show_pages())
+        self.subnav.screen_selected.connect(lambda _i: self.show_pages())
+        # External navigation (e.g. Ctrl+L jumping to Auto) must leave
+        # Home too.
+        self.tabWidget.currentChanged.connect(lambda _i: self.show_pages())
+        self.show_home()
+
+    def show_home(self) -> None:
+        """Show the Home landing page (no active section)."""
+        self.page_stack.setCurrentWidget(self.home_screen)
+        self.topbar.set_active_section(None)
+        self.subnav.setVisible(False)
+
+    def show_pages(self) -> None:
+        """Show the tab pages and restore the shell nav state."""
+        self.page_stack.setCurrentWidget(self.tabWidget)
+        self.subnav.setVisible(True)
+        self.shell_nav.sync_to_tab(self.tabWidget.currentIndex())
 
     def apply_shell_icons(self, theme: str = None) -> None:
         """(Re)apply the brand line icons in the active theme's color.

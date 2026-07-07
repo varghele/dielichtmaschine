@@ -32,6 +32,33 @@ def app_settings() -> QSettings:
     return _make(SETTINGS_ORG, SETTINGS_APP)
 
 
+_RECENT_KEY = "recent/configs"
+_RECENT_MAX = 8
+
+
+def record_recent_config(path: str) -> None:
+    """Remember a config file for the Home screen's recent list.
+
+    Most-recent-first, deduplicated by absolute path, capped."""
+    import os
+    if not path:
+        return
+    path = os.path.abspath(path)
+    settings = app_settings()
+    current = settings.value(_RECENT_KEY, [], type=list) or []
+    current = [p for p in current if p and os.path.abspath(p) != path]
+    current.insert(0, path)
+    settings.setValue(_RECENT_KEY, current[:_RECENT_MAX])
+
+
+def recent_configs() -> list:
+    """Recent config paths, most recent first, existing files only."""
+    import os
+    settings = app_settings()
+    stored = settings.value(_RECENT_KEY, [], type=list) or []
+    return [p for p in stored if p and os.path.isfile(p)]
+
+
 def migrate_legacy_settings() -> int:
     """Copy settings from the QLCShowCreator store, once.
 

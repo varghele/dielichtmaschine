@@ -145,6 +145,15 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             style.unpolish(widget)
             style.polish(widget)
 
+    def _start_screensaver(self):
+        """View > Screensaver (North Star 11a). Manual trigger for now;
+        idle / LIVE-pause activation arrives with the Live milestones."""
+        from gui.screens.screensaver import ScreensaverWindow
+        self._screensaver = ScreensaverWindow()
+        self._screensaver.dismissed.connect(
+            lambda: setattr(self, "_screensaver", None))
+        self._screensaver.activate()
+
     def _toggle_fullscreen(self):
         """F11 — switch between fullscreen and the previous (maximized) state."""
         if self.isFullScreen():
@@ -426,6 +435,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
 
         # View menu actions
         self.actionToggleFullscreen.triggered.connect(self._toggle_fullscreen)
+        self.actionScreensaver.triggered.connect(self._start_screensaver)
         self.actionThemeDark.triggered.connect(lambda: self._set_theme("dark"))
         self.actionThemeLight.triggered.connect(lambda: self._set_theme("light"))
         # Reflect the active theme in the menu's check state.
@@ -459,6 +469,13 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         # Help menu actions
         self.actionOpenLogFolder.triggered.connect(self.open_log_folder)
         self.actionAbout.triggered.connect(self.show_about)
+
+        # Home screen quick actions + recents
+        self.home_screen.new_from_template_requested.connect(self.new_from_template)
+        self.home_screen.open_requested.connect(self.load_configuration)
+        self.home_screen.recent_requested.connect(self.open_recent_config)
+        from utils.app_settings import recent_configs
+        self.home_screen.refresh(recent_configs())
 
     def _on_tab_changed(self, index):
         """Handle tab change - notify tabs of activation/deactivation."""
@@ -626,6 +643,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
 
             # Save configuration
             self.config.save(self.config_path)
+            self._record_recent_config(self.config_path)
             QMessageBox.information(
                 self,
                 "Success",
@@ -642,6 +660,35 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             print(f"Error saving configuration: {e}")
             import traceback
             traceback.print_exc()
+
+    def _record_recent_config(self, path: str) -> None:
+        """Track a config for the Home screen recents and refresh it."""
+        from utils.app_settings import recent_configs, record_recent_config
+        try:
+            record_recent_config(path)
+            if hasattr(self, "home_screen"):
+                self.home_screen.refresh(recent_configs())
+        except Exception as e:
+            print(f"recent configs: {e}")
+
+    def open_recent_config(self, path: str):
+        """Open a config picked from the Home screen recent list."""
+        if not os.path.isfile(path):
+            QMessageBox.warning(self, "File missing",
+                                f"The file no longer exists:\n{path}")
+            self._record_recent_config(self.config_path or "")
+            return
+        # Same deferred load flow as File -> Load Configuration.
+        self._pending_config_path = path
+        from PyQt6.QtWidgets import QApplication
+        dialog = self.progress_manager.start_modal(
+            "Loading Configuration", "Opening file...", maximum=8)
+        for _ in range(5):
+            QApplication.processEvents()
+        if dialog:
+            dialog.repaint()
+            QApplication.processEvents()
+        QTimer.singleShot(100, self._do_load_configuration)
 
     def save_configuration_as(self):
         """Save configuration to a new YAML file (always prompts for location)"""
@@ -669,6 +716,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
 
             # Save configuration
             self.config.save(self.config_path)
+            self._record_recent_config(self.config_path)
             QMessageBox.information(
                 self,
                 "Success",
@@ -876,6 +924,12 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             self.progress_manager.finish_modal()
 
             print(f"Configuration loaded from {file_path}")
+
+            # Home screen bookkeeping: remember the file and leave the
+            # landing page for the tab pages.
+            self._record_recent_config(file_path)
+            if hasattr(self, "show_pages"):
+                self.show_pages()
 
             # Legacy-CSV merge prompt. Old configs may have shows on disk in
             # the shows_directory hint that aren't in the YAML (the v1.0

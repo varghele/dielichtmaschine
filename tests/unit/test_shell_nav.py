@@ -35,8 +35,12 @@ class TestShellNav:
         assert window.findChild(QMenuBar) is None
         assert not ui.tabWidget.tabBar().isVisibleTo(window)
 
-    def test_initial_state_is_setup_universes(self, shell_window):
+    def test_initial_state_is_home_then_setup_universes(self, shell_window):
+        """Startup lands on Home (no active section); entering the
+        pages restores SETUP > UNIVERSES."""
         _, ui = shell_window
+        assert ui.topbar.active_section() is None  # Home
+        ui.show_pages()
         assert ui.tabWidget.currentIndex() == 0
         assert ui.topbar.active_section() == "setup"
         assert ui.subnav.tab_indices() == [0, 1, 2]

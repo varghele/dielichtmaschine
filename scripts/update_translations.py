@@ -25,6 +25,7 @@ TRANSLATIONS = os.path.join(ROOT, "translations")
 # the UI gets wrapped.
 SOURCES = [
     os.path.join(ROOT, "gui", "widgets", "topbar.py"),
+    os.path.join(ROOT, "gui", "widgets", "home_screen.py"),
     os.path.join(ROOT, "gui", "Ui_MainWindow.py"),
 ]
 

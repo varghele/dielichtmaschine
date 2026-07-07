@@ -126,10 +126,22 @@ class StatusChip(QWidget):
         self.setFixedHeight(26)
 
 
+class _BrandBlock(QWidget):
+    """Clickable glyph + wordmark; click returns to the Home screen."""
+
+    clicked = pyqtSignal()
+
+    def mousePressEvent(self, event):  # noqa: N802 (Qt API)
+        self.clicked.emit()
+        event.accept()
+
+
 class TopBar(QWidget):
-    """The 48px shell topbar. Emits ``section_selected(key)``."""
+    """The 48px shell topbar. Emits ``section_selected(key)`` for nav
+    clicks and ``home_selected`` when the brand block is clicked."""
 
     section_selected = pyqtSignal(str)
+    home_selected = pyqtSignal()
 
     def __init__(self, sections, parent=None):
         super().__init__(parent)
@@ -142,7 +154,15 @@ class TopBar(QWidget):
         layout.setContentsMargins(12, 0, 8, 0)
         layout.setSpacing(8)
 
-        # Brand block: rotor glyph + wordmark
+        # Brand block: rotor glyph + wordmark, clickable -> Home
+        brand = _BrandBlock()
+        brand.setCursor(Qt.CursorShape.PointingHandCursor)
+        brand.setToolTip(QCoreApplication.translate("Shell", "Home"))
+        brand.clicked.connect(self.home_selected)
+        brand_layout = QHBoxLayout(brand)
+        brand_layout.setContentsMargins(0, 0, 0, 0)
+        brand_layout.setSpacing(8)
+
         glyph = QLabel()
         glyph.setObjectName("TopBarGlyph")
         pixmap = QPixmap(app_icon_path())
@@ -150,13 +170,14 @@ class TopBar(QWidget):
             glyph.setPixmap(pixmap.scaled(
                 22, 22, Qt.AspectRatioMode.KeepAspectRatio,
                 Qt.TransformationMode.SmoothTransformation))
-        layout.addWidget(glyph)
+        brand_layout.addWidget(glyph)
 
         wordmark = QLabel(APP_WORDMARK)
         wordmark.setObjectName("TopBarWordmark")
         wordmark.setFont(display_font(15, QFont.Weight.ExtraBold,
                                       tracking_em=0.08))
-        layout.addWidget(wordmark)
+        brand_layout.addWidget(wordmark)
+        layout.addWidget(brand)
 
         layout.addSpacing(16)
 

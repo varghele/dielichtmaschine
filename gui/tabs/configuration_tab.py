@@ -111,9 +111,11 @@ class ConfigurationTab(BaseTab):
         toolbar.addStretch()
         main_layout.addLayout(toolbar)
 
-        # Config label with tooltip
-        self.config_label = QtWidgets.QLabel("Universe Configuration")
-        self.config_label.setFont(QFont("", 14, QFont.Weight.Bold))
+        # Config label with tooltip (brand display typography)
+        from gui.typography import DisplayLabel
+        self.config_label = DisplayLabel("Universe Configuration",
+                                         point_size=14,
+                                         weight=QFont.Weight.Bold)
         self.config_label.setToolTip(
             "Universe mapping to QLC+:\n"
             "  Universe 1 → QLC+ Line 2 (Gerät 3)\n"

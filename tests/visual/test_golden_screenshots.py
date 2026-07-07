@@ -129,6 +129,23 @@ def test_subnav_golden(qapp, theme):
         window.deleteLater()
 
 
+def test_home_screen_golden(qapp, tmp_path):
+    """The Home landing page (North Star 1a): glyph, wordmark hero,
+    slogan, quick actions, recent list."""
+    from gui.theme_manager import ThemeManager
+    from gui.widgets.home_screen import HomeScreen
+
+    ThemeManager().apply(qapp, "dark")
+    home = HomeScreen()
+    try:
+        home.refresh([str(tmp_path / "festival_mainstage.yaml"),
+                      str(tmp_path / "club_band.yaml")])
+        home.setFixedSize(1000, 640)
+        compare_to_golden(home.grab().toImage(), "home_dark")
+    finally:
+        home.deleteLater()
+
+
 def test_timeline_block_golden(qapp, scene_config):
     """Effect-block anatomy: group-color envelope frame + ~0.18 tint,
     hard corners, sublane blocks (slice N2)."""
@@ -168,6 +185,50 @@ def test_timeline_block_golden(qapp, scene_config):
             block_widget.update_position()
         compare_to_golden(widget.timeline_widget.grab().toImage(),
                           "timeline_block_dark")
+    finally:
+        widget.deleteLater()
+
+
+def test_screensaver_golden(qapp):
+    """The screensaver frame (slice SS1): rotor glyph pinned at the
+    pulse peak, wordmark + slogan, pinned clock, status line on
+    screensaver black."""
+    from gui.screens.screensaver import ScreensaverWindow
+    from gui.theme_manager import ThemeManager
+
+    # Pin the active theme like every other golden here: earlier tests
+    # leave a stylesheet on the app, so without this the render depends
+    # on test order (passes alone, fails after a themed test).
+    ThemeManager().apply(qapp, "dark")
+    window = ScreensaverWindow()
+    try:
+        window.set_animation_enabled(False)
+        # Phase 2.0 = the center-dot pulse peak of the 4 s cosine, so
+        # the pinned frame shows the brand dot at full Glutorange.
+        window.set_phase(2.0)
+        window.set_time_text("21:36")
+        window.setFixedSize(960, 540)
+        compare_to_golden(window.grab().toImage(), "screensaver_dark")
+    finally:
+        window.deleteLater()
+
+
+def test_master_timeline_golden(qapp, mock_song_structure):
+    """Master timeline region bands (slice T2): 3px part-color top bar
+    over a ~0.18-alpha tint, part name in condensed caps, grid lines
+    and the red playhead on the themed background."""
+    from gui.theme_manager import ThemeManager
+    from timeline_ui.master_timeline_widget import MasterTimelineWidget
+
+    ThemeManager().apply(qapp, "dark")
+    widget = MasterTimelineWidget()
+    try:
+        # set_song_structure recomputes the minimum width, so pin the
+        # size afterwards (setFixedSize overrides min and max).
+        widget.set_song_structure(mock_song_structure)
+        widget.setFixedSize(640, 60)
+        widget.set_playhead_position(2.0)
+        compare_to_golden(widget.grab().toImage(), "master_timeline_dark")
     finally:
         widget.deleteLater()
 
