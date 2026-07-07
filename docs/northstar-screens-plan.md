@@ -34,6 +34,18 @@ DisplayLabel.
   DisplayLabel (condensed caps, tracked) and stray hardcoded fonts to
   the typography helpers.
 
+## Round 2 (user-requested, 2026-07-08): per-tab rebuilds SHIPPED
+
+Universes (1d), Fixtures (1c), Structure (1e), Timeline chrome (4a),
+Stage (5a) all rebuilt to their cards; theme fixes (apply/persist
+split + hermetic test settings, dark tab pages, primary-CTA display
+family, micro-label tone). Remaining honest gaps, all feature work:
+stage elements/trusses (data model), SWING + BAR readout (timeline
+engine), fixtures GROUPS side panel + capability chips/channel map
+(definition-cache lookup), autogen entry point stays on the Timeline
+tab. NEEDED-QSS follow-ups: subnav-strip role (bottom-border-only
+bar), accent-filled checked chip variant.
+
 ## Explicitly NOT in this pass
 
 Live 3a/3b (v1.8; variant decision open), Morph wizard / Venue check /

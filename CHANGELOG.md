@@ -25,6 +25,25 @@ verbatim as the GitHub Release notes (see [docs/releasing.md](docs/releasing.md)
 
 ### Changed
 
+- **Fixtures, Structure, Timeline, and Stage screens rebuilt to the
+  North Star designs.** Fixtures (card 1c): brand toolbar with the
+  DMX-conflict chip and an accent ADD FIXTURE button, tracked-mono
+  table headers, a counts + auto-patch status footer, and a right
+  inspector editing the selected fixture (name, manufacturer/model
+  with GDTF/QXF provenance, patch, group, position) in sync with the
+  table. Structure (1e): song parts as color-tinted cards with a 3px
+  part-color top bar, transition chips between parts, a dashed add
+  tile, a MASTER GRID caption over the region-band timeline, and a
+  part inspector (BPM, signature, bars, duration, transition, color,
+  reorder, delete). Timeline (4a): grid subdivision as a chip row,
+  icon transport with play/pause swap, mono readouts, a 3D PREVIEW
+  caption with a collapsible pane toggle. Stage (5a): an active-layer
+  chip row above the plan (ALL, per-layer chips with show/hide/edit/
+  remove, + LAYER, an "others 25% · locked" hint), a restructured
+  left rail with micro captions and a PLOT STAGE accent button, and a
+  SELECTION inspector with direct layer assignment. All behavior,
+  file formats, and shortcuts unchanged; stage-element/truss
+  placement and SWING remain future feature work.
 - **Universes tab rebuilt to the North Star design.** Universes render
   as row cards (UNI · name · output chip · destination · channels-used
   meter · status dot) with an inspector on the right editing the
