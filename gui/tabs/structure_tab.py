@@ -7,13 +7,15 @@ from PyQt6.QtWidgets import (QVBoxLayout, QHBoxLayout, QWidget, QLabel,
                              QPushButton, QComboBox, QScrollArea, QFrame,
                              QLineEdit, QSpinBox, QDoubleSpinBox, QColorDialog,
                              QMessageBox, QSplitter, QInputDialog, QSlider,
-                             QTableWidget, QTableWidgetItem, QHeaderView, QAbstractItemView,
+                             QGridLayout,
                              QSizePolicy, QMenu, QFileDialog, QProgressDialog,
                              QGroupBox, QCheckBox)
 from PyQt6.QtCore import Qt, QTimer, pyqtSignal, QRectF, QPointF
 from PyQt6.QtGui import QPainter, QColor, QPen, QBrush, QFont, QAction
 import shutil
 from config.models import Configuration, Show, ShowPart, TimelineData, MidiInputDevice, PauseShowConfig
+from gui.typography import DisplayLabel, MicroLabel, mono_font
+from gui.widgets.chip import Chip
 from timeline.song_structure import SongStructure
 from timeline_ui import AudioLaneWidget, MasterTimelineContainer, TimelineGrid
 from .base_tab import BaseTab
@@ -144,14 +146,99 @@ class ColorButton(QPushButton):
         self._update_style()
 
 
+class PartCard(QWidget):
+    """One song part as a North Star 1e card: 3px top bar + tint in the
+    part's data color, condensed-caps name, mono bars/signature and BPM
+    readouts. Display-only; editing happens in the part inspector.
+    Emits ``clicked(index)`` on press."""
+
+    clicked = pyqtSignal(int)
+
+    CARD_WIDTH = 190
+
+    def __init__(self, index: int, parent=None):
+        super().__init__(parent)
+        self.index = index
+        self.setObjectName("PartCard")
+        # Theme chrome: 1px border from role="card", accent border when
+        # selected="true" (same convention as the Universes row cards).
+        self.setProperty("role", "card")
+        self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
+        self.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.setFixedWidth(self.CARD_WIDTH)
+
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(16, 14, 16, 12)
+        layout.setSpacing(6)
+
+        self.name_label = DisplayLabel("", point_size=14,
+                                       weight=QFont.Weight.Bold,
+                                       tracking_em=0.06)
+        self.name_label.setObjectName("PartCardName")
+        layout.addWidget(self.name_label)
+
+        self.meta_label = QLabel("")
+        self.meta_label.setObjectName("PartCardMeta")
+        self.meta_label.setFont(mono_font(9))
+        layout.addWidget(self.meta_label)
+
+        self.bpm_label = QLabel("")
+        self.bpm_label.setObjectName("PartCardBpm")
+        self.bpm_label.setFont(mono_font(9))
+        layout.addWidget(self.bpm_label)
+
+        layout.addStretch(1)
+
+    def update_data(self, part: ShowPart, selected: bool,
+                    playing: bool = False) -> None:
+        self.name_label.setText(part.name)
+        self.meta_label.setText(f"{part.num_bars} BARS · {part.signature}")
+        self.bpm_label.setText(f"{part.bpm:.1f} BPM")
+        self._apply_part_style(part.color, selected, playing)
+
+    def _apply_part_style(self, color: str, selected: bool,
+                          playing: bool) -> None:
+        """Part colors are data colors, so tint + 3px top bar are a
+        widget-local stylesheet (the sanctioned pattern, see
+        light_lane_widget._apply_group_border). The 1px chrome border and
+        the accent selected border stay with the theme's role="card"
+        rules; only background and border-top are overridden here."""
+        tint = QColor(color)
+        if not tint.isValid():
+            tint = QColor("#8D9299")
+        alpha = "24%" if playing else ("18%" if selected else "12%")
+        rgb = f"{tint.red()}, {tint.green()}, {tint.blue()}"
+        rules = [
+            f"QWidget#PartCard {{"
+            f" background-color: rgba({rgb}, {alpha});"
+            f" border-top: 3px solid {tint.name()}; }}",
+            "QLabel#PartCardMeta, QLabel#PartCardBpm"
+            " { color: #8D9299; background: transparent; }",
+        ]
+        if selected:
+            # Mockup: the selected card's name renders in the part color.
+            rules.append(f"QLabel#PartCardName {{ color: {tint.name()}; }}")
+        self.setStyleSheet("\n".join(rules))
+        self.setProperty("selected", "true" if selected else "false")
+        style = self.style()
+        if style:
+            style.unpolish(self)
+            style.polish(self)
+
+    def mousePressEvent(self, event):
+        self.clicked.emit(self.index)
+        event.accept()
+
+
 class StructureTab(BaseTab):
-    """Tab for editing show structure with visual timeline and audio reference.
+    """Tab for editing show structure (North Star card 1e).
 
     Features:
-    - Visual timeline for show parts
-    - Audio waveform for alignment
-    - Drag-and-drop editing
-    - Properties panel for selected part
+    - Song parts as colored cards (3px top bar + tint in the part color)
+      with transition chips between them
+    - Master grid (master timeline + audio waveform) below the strip
+    - Part inspector on the right for all editing (name, BPM, signature,
+      bars, duration readout, transition, color, reorder, delete)
     - CSV import/export
     - Audio playback
     """
@@ -159,6 +246,12 @@ class StructureTab(BaseTab):
     def __init__(self, config: Configuration, parent=None):
         self.current_show_name = ""
         self.current_show = None
+
+        # Parts strip / inspector state (set before setup_ui runs)
+        self._selected_index = -1
+        self._playing_index = -1
+        self._cards = []
+        self._chips = []
 
         # Playback state
         self.is_playing = False
@@ -181,7 +274,9 @@ class StructureTab(BaseTab):
         super().__init__(config, parent)
 
     def setup_ui(self):
-        """Set up the structure tab UI."""
+        """Set up the structure tab UI (North Star 1e: song-part cards
+        with transition chips over the master grid, part inspector on
+        the right)."""
         main_layout = QVBoxLayout(self)
         main_layout.setContentsMargins(10, 10, 10, 10)
         main_layout.setSpacing(8)
@@ -190,8 +285,39 @@ class StructureTab(BaseTab):
         toolbar = self._create_toolbar()
         main_layout.addLayout(toolbar)
 
+        # Keep reference to song structure for duration calculations
+        self.song_structure = None
+
+        # Build order matters: the parts strip refreshes the inspector
+        # and the grid caption while it populates, so both must exist
+        # before _create_parts_strip runs.
+        inspector = self._build_inspector()
+        self.grid_caption = MicroLabel("Master grid", point_size=8,
+                                       tracking_em=0.12)
+
+        body = QHBoxLayout()
+        body.setSpacing(12)
+
+        left_column = QVBoxLayout()
+        left_column.setSpacing(8)
+
+        # Parts strip: micro caption row + horizontal card row
+        caption_row = QHBoxLayout()
+        self.parts_caption = MicroLabel("Parts · Select to edit",
+                                        point_size=8, tracking_em=0.12)
+        caption_row.addWidget(self.parts_caption)
+        caption_row.addStretch()
+        self.add_part_btn = QPushButton("+ Add Part")
+        self.add_part_btn.setProperty("role", "success")
+        caption_row.addWidget(self.add_part_btn)
+        left_column.addLayout(caption_row)
+
+        left_column.addWidget(self._create_parts_strip())
+
+        # Master grid: micro caption + shared master/audio grid.
         # Master + audio share a single horizontal scrollbar inside
         # TimelineGrid. Lane references stay so signal/method dispatch works.
+        left_column.addWidget(self.grid_caption)
         self.master_timeline = MasterTimelineContainer()
         self.audio_lane = AudioLaneWidget()
         self.timeline_grid = TimelineGrid()
@@ -201,7 +327,7 @@ class StructureTab(BaseTab):
             QSizePolicy.Policy.Expanding,
             QSizePolicy.Policy.Fixed
         )
-        # Structure tab only ever has master + audio rows — no light lanes —
+        # Structure tab only ever has master + audio rows - no light lanes -
         # so vertical scrolling inside the grid makes no sense here. Force
         # the scrollbar off; otherwise small height-budget squeezes (e.g.
         # the master row height bump in v1.0) leave room for Qt to decide
@@ -209,68 +335,18 @@ class StructureTab(BaseTab):
         self.timeline_grid.stripes_scroll.setVerticalScrollBarPolicy(
             Qt.ScrollBarPolicy.ScrollBarAlwaysOff
         )
-        # Cap the grid height so the structure table below still gets space.
+        # Cap the grid height so the sections below still get space.
         # 200 / 240 fits the current 76-px master + 100-px audio + horizontal
         # scrollbar + frame margins comfortably on both Windows and Linux Qt
         # builds, with belt-and-braces headroom in case row metrics shift.
         self.timeline_grid.setMinimumHeight(200)
         self.timeline_grid.setMaximumHeight(240)
-        main_layout.addWidget(self.timeline_grid)
+        left_column.addWidget(self.timeline_grid)
+        left_column.addStretch(1)
 
-        # Show Structure (table view)
-        structure_header = QHBoxLayout()
-        structure_label = QLabel("Structure:")
-        structure_label.setStyleSheet("font-weight: bold; font-size: 10px;")
-        structure_header.addWidget(structure_label)
-
-        self.add_part_btn = QPushButton("+ Add Part")
-        self.add_part_btn.setProperty("role", "success")
-        structure_header.addWidget(self.add_part_btn)
-
-        self.delete_part_btn = QPushButton("- Delete Part")
-        self.delete_part_btn.setProperty("role", "destructive")
-        structure_header.addWidget(self.delete_part_btn)
-
-        structure_header.addStretch()
-        main_layout.addLayout(structure_header)
-
-        # Create table for show structure
-        self.structure_table = QTableWidget()
-        self.structure_table.setColumnCount(7)
-        self.structure_table.setHorizontalHeaderLabels(["Name", "BPM", "Signature", "Bars", "Duration (s)", "Transition", "Color"])
-
-        # Set column widths
-        header = self.structure_table.horizontalHeader()
-        header.setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)  # Name stretches (but compressed)
-        header.setSectionResizeMode(1, QHeaderView.ResizeMode.Interactive)  # BPM
-        header.setSectionResizeMode(2, QHeaderView.ResizeMode.Interactive)  # Signature
-        header.setSectionResizeMode(3, QHeaderView.ResizeMode.Interactive)  # Bars
-        header.setSectionResizeMode(4, QHeaderView.ResizeMode.Interactive)  # Duration
-        header.setSectionResizeMode(5, QHeaderView.ResizeMode.Interactive)  # Transition
-        header.setSectionResizeMode(6, QHeaderView.ResizeMode.Interactive)  # Color
-
-        # Set minimum column widths
-        self.structure_table.setColumnWidth(1, 80)   # BPM
-        self.structure_table.setColumnWidth(2, 120)  # Signature
-        self.structure_table.setColumnWidth(3, 80)   # Bars
-        self.structure_table.setColumnWidth(4, 100)  # Duration
-        self.structure_table.setColumnWidth(5, 100)  # Transition
-        self.structure_table.setColumnWidth(6, 100)  # Color
-
-        # Modern table styling — alternating rows, no grid, themed header.
-        from gui.widgets.modern_table import apply_modern_table_style
-        apply_modern_table_style(self.structure_table)
-        self.structure_table.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
-        self.structure_table.customContextMenuRequested.connect(self._show_context_menu)
-        self.structure_table.setMinimumHeight(200)
-        # Remove max height to allow table to expand like lanes scroll in Shows tab
-        main_layout.addWidget(self.structure_table, 1)  # Takes remaining space
-
-        # Keep reference to song structure for duration calculations
-        self.song_structure = None
-
-        # Track current highlighted row for playback
-        self.current_highlighted_row = -1
+        body.addLayout(left_column, 1)
+        body.addWidget(inspector)
+        main_layout.addLayout(body, 1)
 
         # Pause Show section
         pause_section = self._create_pause_show_section()
@@ -279,6 +355,124 @@ class StructureTab(BaseTab):
         # Playback controls
         playback_bar = self._create_playback_controls()
         main_layout.addLayout(playback_bar)
+
+    PARTS_STRIP_HEIGHT = 128
+
+    def _create_parts_strip(self) -> QWidget:
+        """Horizontal strip of part cards with transition chips between
+        them and a dashed add tile at the end (card 1e anatomy)."""
+        self.parts_host = QWidget()
+        self.parts_host.setContextMenuPolicy(
+            Qt.ContextMenuPolicy.CustomContextMenu)
+        self.parts_host.customContextMenuRequested.connect(
+            self._show_context_menu)
+        self.parts_row = QHBoxLayout(self.parts_host)
+        self.parts_row.setContentsMargins(0, 0, 0, 0)
+        self.parts_row.setSpacing(0)
+
+        # Persistent add tile (re-attached on every strip rebuild).
+        # Dashed empty-slot chrome has no theme role yet (see NEEDED-QSS
+        # in the rework notes) - widget-local interim styling.
+        self.add_part_tile = QPushButton("+")
+        self.add_part_tile.setObjectName("AddPartTile")
+        self.add_part_tile.setFixedSize(44, 44)
+        self.add_part_tile.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.add_part_tile.setToolTip("Add Part")
+        self.add_part_tile.setStyleSheet(
+            "QPushButton#AddPartTile { border: 1px dashed #5C6068;"
+            " background: transparent; color: #8D9299; font-size: 18px;"
+            " padding: 0; }"
+            "QPushButton#AddPartTile:hover { border-color: #F0562E;"
+            " color: #F0562E; }")
+
+        self.parts_scroll = QScrollArea()
+        self.parts_scroll.setWidgetResizable(True)
+        self.parts_scroll.setFrameShape(QFrame.Shape.NoFrame)
+        self.parts_scroll.setVerticalScrollBarPolicy(
+            Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self.parts_scroll.setWidget(self.parts_host)
+        self.parts_scroll.setFixedHeight(self.PARTS_STRIP_HEIGHT)
+
+        self._rebuild_parts_strip()
+        return self.parts_scroll
+
+    def _build_inspector(self) -> QWidget:
+        """Right-hand part inspector: all editors the structure table
+        used to host as cell widgets (name, BPM, signature, bars,
+        duration readout, transition, color) plus reorder + delete."""
+        panel = QWidget()
+        panel.setObjectName("PartInspector")
+        panel.setProperty("role", "inspector")
+        panel.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
+        panel.setFixedWidth(300)
+        layout = QVBoxLayout(panel)
+        layout.setContentsMargins(16, 14, 16, 14)
+        layout.setSpacing(8)
+
+        self.inspector_title = DisplayLabel("No part selected",
+                                            point_size=14,
+                                            weight=QFont.Weight.Bold)
+        self.inspector_title.setObjectName("PartInspectorTitle")
+        layout.addWidget(self.inspector_title)
+
+        layout.addWidget(MicroLabel("Name", point_size=8, tracking_em=0.1))
+        self.part_name_edit = QLineEdit()
+        layout.addWidget(self.part_name_edit)
+
+        grid = QGridLayout()
+        grid.setHorizontalSpacing(10)
+        grid.setVerticalSpacing(4)
+        grid.addWidget(MicroLabel("BPM", point_size=8, tracking_em=0.1),
+                       0, 0)
+        grid.addWidget(MicroLabel("Time sig", point_size=8,
+                                  tracking_em=0.1), 0, 1)
+        self.bpm_spin = QDoubleSpinBox()
+        self.bpm_spin.setRange(1.0, 999.0)
+        self.bpm_spin.setDecimals(1)
+        self.bpm_spin.setSingleStep(1.0)  # Scroll/arrow increment by 1 BPM
+        grid.addWidget(self.bpm_spin, 1, 0)
+        self.signature_widget = TimeSignatureWidget("4/4")
+        grid.addWidget(self.signature_widget, 1, 1)
+        grid.addWidget(MicroLabel("Bars", point_size=8, tracking_em=0.1),
+                       2, 0)
+        grid.addWidget(MicroLabel("Duration", point_size=8,
+                                  tracking_em=0.1), 2, 1)
+        self.bars_spin = QSpinBox()
+        self.bars_spin.setRange(1, 9999)
+        grid.addWidget(self.bars_spin, 3, 0)
+        self.duration_label = QLabel("0.00 s")
+        self.duration_label.setObjectName("PartDurationReadout")
+        self.duration_label.setFont(mono_font(12))
+        grid.addWidget(self.duration_label, 3, 1)
+        layout.addLayout(grid)
+
+        layout.addWidget(MicroLabel("Transition out", point_size=8,
+                                    tracking_em=0.1))
+        self.transition_combo = QComboBox()
+        self.transition_combo.addItems(["instant", "gradual"])
+        layout.addWidget(self.transition_combo)
+
+        layout.addWidget(MicroLabel("Color", point_size=8, tracking_em=0.1))
+        self.part_color_btn = ColorButton("#4CAF50")
+        layout.addWidget(self.part_color_btn)
+
+        move_row = QHBoxLayout()
+        move_row.setSpacing(6)
+        self.move_left_btn = QPushButton("< Move")
+        self.move_left_btn.setToolTip("Move part earlier")
+        move_row.addWidget(self.move_left_btn)
+        self.move_right_btn = QPushButton("Move >")
+        self.move_right_btn.setToolTip("Move part later")
+        move_row.addWidget(self.move_right_btn)
+        layout.addLayout(move_row)
+
+        layout.addStretch(1)
+
+        self.delete_part_btn = QPushButton("- Delete Part")
+        self.delete_part_btn.setProperty("role", "destructive")
+        layout.addWidget(self.delete_part_btn)
+
+        return panel
 
     def _create_toolbar(self):
         """Create toolbar with buttons."""
@@ -530,12 +724,21 @@ class StructureTab(BaseTab):
         self.trigger_device_combo.currentTextChanged.connect(self._on_trigger_device_changed)
         self.trigger_channel_spin.valueChanged.connect(self._on_trigger_channel_changed)
 
-        # Structure header buttons
+        # Parts strip buttons
         self.add_part_btn.clicked.connect(self._add_new_part)
+        self.add_part_tile.clicked.connect(self._add_new_part)
         self.delete_part_btn.clicked.connect(self._delete_part)
 
-        # Table signals
-        self.structure_table.itemChanged.connect(self._on_table_cell_changed)
+        # Part inspector editors (act on the selected part)
+        self.part_name_edit.textEdited.connect(self._on_part_name_edited)
+        self.bpm_spin.valueChanged.connect(self._on_bpm_changed)
+        self.signature_widget.valueChanged.connect(self._on_signature_changed)
+        self.bars_spin.valueChanged.connect(self._on_bars_changed)
+        self.transition_combo.currentTextChanged.connect(
+            self._on_transition_changed)
+        self.part_color_btn.colorChanged.connect(self._on_color_changed)
+        self.move_left_btn.clicked.connect(lambda: self._move_part(-1))
+        self.move_right_btn.clicked.connect(lambda: self._move_part(1))
 
         # Playback controls
         self.play_btn.clicked.connect(self._toggle_playback)
@@ -572,68 +775,134 @@ class StructureTab(BaseTab):
         self.song_structure = SongStructure()
         self.song_structure.load_from_show_parts(self.current_show.parts)
 
-    def _populate_table_from_parts(self):
-        """Populate table from current show parts."""
-        # Block signals while populating
-        self.structure_table.blockSignals(True)
-        self.structure_table.setRowCount(0)
+    def _rebuild_parts_strip(self):
+        """Rebuild card + chip widgets from the current show's parts.
 
-        if not self.current_show or not self.current_show.parts:
-            self.structure_table.blockSignals(False)
-            return
-
-        # Recalculate durations
+        The chip after card N shows part N's transition (the mockup's
+        "TRANSITION OUT" semantic); the last part's transition only
+        appears in the inspector."""
+        # Recalculate durations first (cards show them via the inspector)
         self._recalculate_structure()
 
-        # Populate table rows
-        for part_idx, part in enumerate(self.current_show.parts):
-            row = self.structure_table.rowCount()
-            self.structure_table.insertRow(row)
+        # Detach the persistent add tile, clear everything else.
+        while self.parts_row.count():
+            item = self.parts_row.takeAt(0)
+            widget = item.widget()
+            if widget is self.add_part_tile:
+                continue
+            if widget:
+                widget.hide()
+                widget.setParent(None)
+                widget.deleteLater()
+        self._cards = []
+        self._chips = []
 
-            # Name (text field)
-            name_item = QTableWidgetItem(part.name)
-            self.structure_table.setItem(row, 0, name_item)
+        parts = self.current_show.parts if self.current_show else []
+        if self._selected_index >= len(parts):
+            self._selected_index = len(parts) - 1
 
-            # BPM (double spinbox widget)
-            bpm_spinbox = QDoubleSpinBox()
-            bpm_spinbox.setRange(1.0, 999.0)
-            bpm_spinbox.setDecimals(1)
-            bpm_spinbox.setSingleStep(1.0)  # Scroll/arrow increment by 1 BPM
-            bpm_spinbox.setValue(part.bpm)
-            bpm_spinbox.valueChanged.connect(lambda value, r=row: self._on_bpm_changed(r, value))
-            self.structure_table.setCellWidget(row, 1, bpm_spinbox)
+        for i in range(len(parts)):
+            if i > 0:
+                chip = Chip("", variant="neutral", point_size=8)
+                self._chips.append(chip)
+                self.parts_row.addSpacing(6)
+                self.parts_row.addWidget(
+                    chip, 0, Qt.AlignmentFlag.AlignVCenter)
+                self.parts_row.addSpacing(6)
+            card = PartCard(i)
+            card.clicked.connect(self._select_part)
+            self._cards.append(card)
+            self.parts_row.addWidget(card)
 
-            # Signature (custom widget with two spinboxes)
-            sig_widget = TimeSignatureWidget(part.signature)
-            sig_widget.valueChanged.connect(lambda sig, r=row: self._on_signature_changed(r, sig))
-            self.structure_table.setCellWidget(row, 2, sig_widget)
+        self.parts_row.addSpacing(14)
+        self.parts_row.addWidget(self.add_part_tile, 0,
+                                 Qt.AlignmentFlag.AlignVCenter)
+        self.add_part_tile.show()
+        self.parts_row.addStretch(1)
 
-            # Bars (integer spinbox)
-            bars_spinbox = QSpinBox()
-            bars_spinbox.setRange(1, 9999)
-            bars_spinbox.setValue(part.num_bars)
-            bars_spinbox.valueChanged.connect(lambda value, r=row: self._on_bars_changed(r, value))
-            self.structure_table.setCellWidget(row, 3, bars_spinbox)
+        self._refresh_cards()
+        self._refresh_inspector()
 
-            # Duration (read-only text item)
-            duration_item = QTableWidgetItem(f"{part.duration:.2f}")
-            duration_item.setFlags(duration_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
-            duration_item.setForeground(QColor(100, 200, 100))  # Light green for read-only
-            self.structure_table.setItem(row, 4, duration_item)
+    def _refresh_cards(self):
+        """Push part data into the existing cards and chips."""
+        parts = self.current_show.parts if self.current_show else []
+        for i, card in enumerate(self._cards):
+            if i < len(parts):
+                card.update_data(parts[i], i == self._selected_index,
+                                 i == self._playing_index)
+        for i, chip in enumerate(self._chips):
+            if i < len(parts):
+                chip.setText(parts[i].transition)
+        self._update_grid_caption()
 
-            # Transition (combobox widget)
-            trans_combo = QComboBox()
-            trans_combo.addItems(["instant", "gradual"])
-            trans_combo.setCurrentText(part.transition)
-            trans_combo.currentTextChanged.connect(lambda text, r=row: self._on_transition_changed(r, text))
-            self.structure_table.setCellWidget(row, 5, trans_combo)
+    def _update_grid_caption(self):
+        parts = self.current_show.parts if self.current_show else []
+        if not parts:
+            self.grid_caption.setText("Master grid")
+            return
+        total_bars = sum(p.num_bars for p in parts)
+        total = (self.song_structure.get_total_duration()
+                 if self.song_structure else 0.0)
+        minutes = int(total // 60)
+        secs = int(total % 60)
+        self.grid_caption.setText(
+            f"Master grid · {total_bars} bars · {minutes:02d}:{secs:02d}")
 
-            # Color (color picker button)
-            color_button = ColorButton(part.color)
-            color_button.colorChanged.connect(lambda color, r=row: self._on_color_changed(r, color))
-            self.structure_table.setCellWidget(row, 6, color_button)
+    def _selected_part(self):
+        parts = self.current_show.parts if self.current_show else []
+        if 0 <= self._selected_index < len(parts):
+            return parts[self._selected_index]
+        return None
 
-        self.structure_table.blockSignals(False)
+    def _select_part(self, index: int):
+        """Select a part card and load it into the inspector."""
+        parts = self.current_show.parts if self.current_show else []
+        self._selected_index = index if 0 <= index < len(parts) else -1
+        self._refresh_cards()
+        self._refresh_inspector()
+
+    def _refresh_inspector(self):
+        """Load the selected part into the inspector editors."""
+        part = self._selected_part()
+        editors = (self.part_name_edit, self.bpm_spin, self.signature_widget,
+                   self.bars_spin, self.transition_combo, self.part_color_btn,
+                   self.move_left_btn, self.move_right_btn,
+                   self.delete_part_btn)
+        for widget in editors:
+            widget.setEnabled(part is not None)
+
+        if part is None:
+            self.inspector_title.setStyleSheet("")
+            self.inspector_title.setText("No part selected")
+            self.part_name_edit.setText("")
+            self.duration_label.setText("0.00 s")
+            return
+
+        self.inspector_title.setText(part.name)
+        # Part color is a data color: title tinted widget-locally.
+        title_color = QColor(part.color)
+        if title_color.isValid():
+            self.inspector_title.setStyleSheet(
+                f"color: {title_color.name()}; background: transparent;")
+        else:
+            self.inspector_title.setStyleSheet("")
+
+        for widget in (self.bpm_spin, self.bars_spin, self.transition_combo):
+            widget.blockSignals(True)
+        self.part_name_edit.setText(part.name)  # textEdited: user-only
+        self.bpm_spin.setValue(part.bpm)
+        self.signature_widget.set_signature(part.signature)  # blocks itself
+        self.bars_spin.setValue(part.num_bars)
+        self.transition_combo.setCurrentText(part.transition)
+        self.part_color_btn.set_color(part.color)  # emits only on pick
+        for widget in (self.bpm_spin, self.bars_spin, self.transition_combo):
+            widget.blockSignals(False)
+
+        self.duration_label.setText(f"{part.duration:.2f} s")
+        parts = self.current_show.parts
+        self.move_left_btn.setEnabled(self._selected_index > 0)
+        self.move_right_btn.setEnabled(
+            self._selected_index < len(parts) - 1)
 
     def _add_new_part(self):
         """Add a new part to the current show."""
@@ -654,93 +923,106 @@ class StructureTab(BaseTab):
         # Add to show
         self.current_show.parts.append(new_part)
 
-        # Recalculate and refresh table
-        self._recalculate_structure()
-        self._populate_table_from_parts()
-
-        # Update timelines
-        if self.song_structure:
-            self.audio_lane.set_song_structure(self.song_structure)
-            self.master_timeline.timeline_widget.set_song_structure(self.song_structure)
+        # Select the new part, rebuild the strip, update timelines
+        self._selected_index = len(self.current_show.parts) - 1
+        self._rebuild_parts_strip()
+        self._update_timelines()
 
         # Auto-save
         self._auto_save()
 
-        # Select the new row
-        self.structure_table.selectRow(self.structure_table.rowCount() - 1)
+    def _refresh_selected_card(self):
+        """Update the selected part's card (and chips) after an edit."""
+        self._refresh_cards()
 
-    def _on_bpm_changed(self, row: int, value: float):
-        """Handle BPM spinbox change."""
-        if not self.current_show or row >= len(self.current_show.parts):
+    def _on_part_name_edited(self, text: str):
+        """Handle name edit from the inspector."""
+        part = self._selected_part()
+        if part is None:
             return
+        part.name = text
+        self.inspector_title.setText(part.name)
+        self._recalculate_structure()
+        self._refresh_selected_card()
+        self._update_timelines()
+        self._auto_save()
 
-        part = self.current_show.parts[row]
+    def _on_bpm_changed(self, value: float):
+        """Handle BPM spinbox change."""
+        part = self._selected_part()
+        if part is None:
+            return
         part.bpm = value
 
         # Recalculate durations and update display
         self._recalculate_structure()
-        self._update_duration_cell(row)
+        self._refresh_selected_card()
+        self.duration_label.setText(f"{part.duration:.2f} s")
         self._update_timelines()
         self._auto_save()
 
-    def _on_signature_changed(self, row: int, signature: str):
+    def _on_signature_changed(self, signature: str):
         """Handle time signature widget change."""
-        if not self.current_show or row >= len(self.current_show.parts):
+        part = self._selected_part()
+        if part is None:
             return
-
-        part = self.current_show.parts[row]
         part.signature = signature
 
         # Recalculate durations and update display
         self._recalculate_structure()
-        self._update_duration_cell(row)
+        self._refresh_selected_card()
+        self.duration_label.setText(f"{part.duration:.2f} s")
         self._update_timelines()
         self._auto_save()
 
-    def _on_bars_changed(self, row: int, value: int):
+    def _on_bars_changed(self, value: int):
         """Handle bars spinbox change."""
-        if not self.current_show or row >= len(self.current_show.parts):
+        part = self._selected_part()
+        if part is None:
             return
-
-        part = self.current_show.parts[row]
         part.num_bars = value
 
         # Recalculate durations and update display
         self._recalculate_structure()
-        self._update_duration_cell(row)
+        self._refresh_selected_card()
+        self.duration_label.setText(f"{part.duration:.2f} s")
         self._update_timelines()
         self._auto_save()
 
-    def _on_transition_changed(self, row: int, transition: str):
+    def _on_transition_changed(self, transition: str):
         """Handle transition combobox change."""
-        if not self.current_show or row >= len(self.current_show.parts):
+        part = self._selected_part()
+        if part is None:
             return
-
-        part = self.current_show.parts[row]
         part.transition = transition
+        self._refresh_selected_card()  # chip between cards shows it
         self._auto_save()
 
-    def _on_color_changed(self, row: int, color: str):
+    def _on_color_changed(self, color: str):
         """Handle color button change."""
-        if not self.current_show or row >= len(self.current_show.parts):
+        part = self._selected_part()
+        if part is None:
             return
-
-        part = self.current_show.parts[row]
         part.color = color
 
-        # Update timelines to reflect new color
+        # Update card tint / top bar, inspector title and timelines
+        self._refresh_selected_card()
+        self._refresh_inspector()
         self._update_timelines()
         self._auto_save()
 
-    def _update_duration_cell(self, row: int):
-        """Update the duration cell for a specific row."""
-        if row >= len(self.current_show.parts):
+    def _move_part(self, delta: int):
+        """Reorder: swap the selected part with its neighbor."""
+        parts = self.current_show.parts if self.current_show else []
+        source = self._selected_index
+        target = source + delta
+        if not (0 <= source < len(parts) and 0 <= target < len(parts)):
             return
-
-        part = self.current_show.parts[row]
-        duration_item = self.structure_table.item(row, 4)
-        if duration_item:
-            duration_item.setText(f"{part.duration:.2f}")
+        parts[source], parts[target] = parts[target], parts[source]
+        self._selected_index = target
+        self._rebuild_parts_strip()
+        self._update_timelines()
+        self._auto_save()
 
     def _update_timelines(self):
         """Update timeline widgets with current song structure."""
@@ -748,73 +1030,20 @@ class StructureTab(BaseTab):
             self.audio_lane.set_song_structure(self.song_structure)
             self.master_timeline.timeline_widget.set_song_structure(self.song_structure)
 
-    def _on_table_cell_changed(self, item):
-        """Handle cell edit - only for Name column now (others use custom widgets)."""
-        if not self.current_show or item is None:
-            return
-
-        row = item.row()
-        col = item.column()
-
-        # Only handle Name column (0) - other columns use custom widgets
-        if col != 0:
-            return
-
-        if row >= len(self.current_show.parts):
-            return
-
-        part = self.current_show.parts[row]
-
-        try:
-            # Name column
-            part.name = item.text()
-
-            # Recalculate durations
-            self._recalculate_structure()
-            self._update_duration_cell(row)
-            self._update_timelines()
-            self._auto_save()
-
-        except (ValueError, AttributeError) as e:
-            print(f"Invalid cell value: {e}")
-            # Revert to previous value
-            self._populate_table_from_parts()
-
-    def _update_row_highlight(self):
-        """Highlight the row corresponding to current playhead position."""
+    def _update_playing_highlight(self):
+        """Emphasize the card whose part contains the playhead."""
         if not self.song_structure or not self.current_show:
             return
 
-        # Find which part we're currently in
-        current_row = -1
+        playing = -1
         for i, part in enumerate(self.current_show.parts):
             if part.start_time <= self.playhead_position < part.start_time + part.duration:
-                current_row = i
+                playing = i
                 break
 
-        # Update highlighting if changed
-        if current_row != self.current_highlighted_row:
-            # Remove old highlighting
-            if self.current_highlighted_row >= 0:
-                for col in range(self.structure_table.columnCount()):
-                    item = self.structure_table.item(self.current_highlighted_row, col)
-                    if item:
-                        item.setBackground(QColor(42, 42, 42) if self.current_highlighted_row % 2 == 0 else QColor(51, 51, 51))
-                        # Restore color column background
-                        if col == 6:
-                            part = self.current_show.parts[self.current_highlighted_row]
-                            item.setBackground(QColor(part.color))
-
-            # Add new highlighting
-            if current_row >= 0:
-                for col in range(self.structure_table.columnCount()):
-                    item = self.structure_table.item(current_row, col)
-                    if item:
-                        # Highlight with blue
-                        if col != 6:  # Don't override color column
-                            item.setBackground(QColor(0, 120, 215, 100))
-
-            self.current_highlighted_row = current_row
+        if playing != self._playing_index:
+            self._playing_index = playing
+            self._refresh_cards()
 
     def update_from_config(self):
         """Refresh from configuration."""
@@ -1140,8 +1369,9 @@ class StructureTab(BaseTab):
             traceback.print_exc()
 
     def _clear_timeline(self):
-        """Clear the timeline and table."""
-        self.structure_table.setRowCount(0)
+        """Clear the timeline and the parts strip."""
+        self._selected_index = -1
+        self._rebuild_parts_strip()
         self.audio_lane.set_song_structure(None)
         self.master_timeline.timeline_widget.set_song_structure(None)
 
@@ -1150,7 +1380,8 @@ class StructureTab(BaseTab):
         if not show_name or show_name not in self.config.shows:
             self.current_show_name = ""
             self.current_show = None
-            self.structure_table.setRowCount(0)
+            self._selected_index = -1
+            self._rebuild_parts_strip()
             self.audio_lane.set_song_structure(None)
             self.master_timeline.timeline_widget.set_song_structure(None)
             return
@@ -1158,8 +1389,11 @@ class StructureTab(BaseTab):
         self.current_show_name = show_name
         self.current_show = self.config.shows[show_name]
 
-        # Populate table from parts
-        self._populate_table_from_parts()
+        # Rebuild the parts strip; select the first part so the
+        # inspector opens on something useful.
+        self._selected_index = 0 if self.current_show.parts else -1
+        self._playing_index = -1
+        self._rebuild_parts_strip()
 
         # Set song structure on both audio lane and master timeline
         if self.song_structure:
@@ -1226,8 +1460,7 @@ class StructureTab(BaseTab):
 
     def _delete_part(self):
         """Delete the selected part."""
-        current_row = self.structure_table.currentRow()
-        if current_row < 0:
+        if self._selected_part() is None:
             QMessageBox.warning(self, "No Selection", "Please select a part to delete.")
             return
 
@@ -1240,21 +1473,16 @@ class StructureTab(BaseTab):
 
         if reply == QMessageBox.StandardButton.Yes:
             # Delete from show parts
-            del self.current_show.parts[current_row]
+            del self.current_show.parts[self._selected_index]
 
-            # Recalculate and refresh
-            self._recalculate_structure()
-            self._populate_table_from_parts()
-
-            # Update timelines
-            if self.song_structure:
-                self.audio_lane.set_song_structure(self.song_structure)
-                self.master_timeline.timeline_widget.set_song_structure(self.song_structure)
+            # Rebuild the strip (clamps the selection) and update timelines
+            self._rebuild_parts_strip()
+            self._update_timelines()
 
             self._auto_save()
 
     def _show_context_menu(self, position):
-        """Show context menu for table right-click."""
+        """Show context menu for the parts strip right-click."""
         menu = QMenu(self)
 
         # Add Part action
@@ -1262,15 +1490,14 @@ class StructureTab(BaseTab):
         add_action.triggered.connect(self._add_new_part)
         menu.addAction(add_action)
 
-        # Delete Part action (only if a row is selected)
-        current_row = self.structure_table.currentRow()
-        if current_row >= 0:
+        # Delete Part action (only if a part is selected)
+        if self._selected_part() is not None:
             delete_action = QAction("Delete Selected Part", self)
             delete_action.triggered.connect(self._delete_part)
             menu.addAction(delete_action)
 
         # Show menu at cursor position
-        menu.exec(self.structure_table.viewport().mapToGlobal(position))
+        menu.exec(self.parts_host.mapToGlobal(position))
 
     def _import_from_csv(self):
         """Import show structure from CSV file."""
@@ -1309,12 +1536,11 @@ class StructureTab(BaseTab):
                     self.current_show.parts.append(part)
 
             # Reload display
-            self._populate_table_from_parts()
+            self._selected_index = 0 if self.current_show.parts else -1
+            self._rebuild_parts_strip()
 
             # Update timelines
-            if self.song_structure:
-                self.audio_lane.set_song_structure(self.song_structure)
-                self.master_timeline.timeline_widget.set_song_structure(self.song_structure)
+            self._update_timelines()
 
             QMessageBox.information(self, "Success", f"Imported {len(self.current_show.parts)} parts from CSV.")
 
@@ -1547,8 +1773,8 @@ class StructureTab(BaseTab):
         self.master_timeline.set_playhead_position(position)
         self.audio_lane.set_playhead_position(position)
 
-        # Update table row highlighting
-        self._update_row_highlight()
+        # Update the playing-part card highlight
+        self._update_playing_highlight()
 
     def _on_position_slider_pressed(self):
         """Handle position slider press - pause updates during drag."""
