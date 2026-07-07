@@ -1,18 +1,12 @@
-"""
-ConfigurationTab — universe-mapping cell visuals.
+"""ConfigurationTab: the North Star 1d card list + inspector.
 
-The tab originally used ``setBackground(Qt.GlobalColor.white)`` for
-enabled cells and ``setBackground(Qt.GlobalColor.lightGray)`` for
-disabled cells. In dark mode that turned the table into a checker-
-board of glaring white cells, and the disabled cells looked *brighter*
-than the enabled ones — so when the user loaded a config with ArtNet
-universes (where Multicast / Port are protocol-disabled by design),
-those cells looked normal but mysteriously refused input. The user
-read it as "broken".
-
-These tests pin the theme-neutral approach: backgrounds are left to
-the theme, disabled cells get a dim foreground brush, and Qt's
-flag-based disabled state still blocks input.
+Supersedes the old table-cell tests: protocol-irrelevant fields are no
+longer disabled table cells (the source of the historical "mysteriously
+dead white cells" bug) - the inspector simply shows the page for the
+selected output type, so wrong-protocol fields cannot be interacted
+with at all. These tests pin the new structure and the unchanged data
+contract (Universe.output edited in place, gui.py's
+update_from_config/save_to_config entry points).
 """
 
 from __future__ import annotations
@@ -25,37 +19,33 @@ import pytest
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 
-def _make_config_with_protocol(protocol: str):
-    """Configuration with one universe wired for the given protocol."""
+def _make_config(protocols=("ArtNet",)):
     from config.models import Configuration, Universe
 
-    if protocol == "ArtNet":
-        params = {"ip": "255.255.255.255", "subnet": "0", "universe": "1"}
-    elif protocol == "E1.31":
-        params = {
-            "multicast": "true", "ip": "239.255.0.1",
-            "port": "5568", "universe": "1",
-        }
-    elif protocol == "DMX USB":
-        params = {"device": ""}
-    else:
-        params = {}
-
+    params_for = {
+        "ArtNet": {"ip": "192.168.1.50", "subnet": "0", "universe": "0"},
+        "E1.31": {"multicast": "true", "ip": "239.255.0.1",
+                  "port": "5568", "universe": "1"},
+        "DMX USB": {"device": ""},
+    }
     cfg = Configuration()
-    cfg.universes = {1: Universe(
-        id=1, name="Universe 1",
-        output={"plugin": protocol, "parameters": params, "line": "0"},
-    )}
+    cfg.universes = {
+        i + 1: Universe(
+            id=i + 1, name=f"Universe {i + 1}",
+            output={"plugin": p, "parameters": dict(params_for[p]),
+                    "line": "0"},
+        )
+        for i, p in enumerate(protocols)
+    }
     return cfg
 
 
-def _make_tab(qapp, protocol: str):
+def _make_tab(qapp, protocols=("ArtNet",), config=None):
     from gui.theme_manager import ThemeManager
     from gui.tabs.configuration_tab import ConfigurationTab
 
     ThemeManager().apply(qapp, "dark")
-    cfg = _make_config_with_protocol(protocol)
-    # Patch device enumeration so the test doesn't depend on real USB.
+    cfg = config if config is not None else _make_config(protocols)
     with patch(
         "gui.tabs.configuration_tab.get_device_display_names",
         return_value=["No Device"],
@@ -64,148 +54,176 @@ def _make_tab(qapp, protocol: str):
     return tab
 
 
-def test_artnet_row_disables_multicast_and_port_without_white_background(qapp):
-    """Loading an ArtNet config (the conf_v8 case) must NOT leave any
-    cell with the hardcoded white/lightGray background that the
-    pre-fix code was painting. Both colours render badly against the
-    dark theme — white is blinding, lightGray is brighter than the
-    enabled neighbours so it reads the wrong way round.
-    """
-    from PyQt6.QtCore import Qt
-    from PyQt6.QtGui import QColor
-    from gui.tabs.configuration_tab import ConfigurationTab
+class TestCardList:
+    def test_one_card_per_universe_first_selected(self, qapp):
+        tab = _make_tab(qapp, ("ArtNet", "E1.31"))
+        try:
+            assert sorted(tab._cards) == [1, 2]
+            assert tab._selected_id == 1
+            assert tab._cards[1].property("selected") == "true"
+            assert tab._cards[2].property("selected") == "false"
+        finally:
+            tab.deleteLater()
 
-    tab = _make_tab(qapp, "ArtNet")
-    try:
-        # Enabled-for-ArtNet columns: IP, Subnet, Universe.
-        # Disabled-for-ArtNet columns: Multicast (cell widget), Port,
-        # DMX Device (cell widget).
-        white = QColor(Qt.GlobalColor.white)
-        light_gray = QColor(Qt.GlobalColor.lightGray)
+    def test_card_shows_protocol_chip_and_destination(self, qapp):
+        tab = _make_tab(qapp, ("ArtNet",))
+        try:
+            card = tab._cards[1]
+            assert card.output_chip.text() == "ARTNET"
+            assert "192.168.1.50" in card.destination_label.text()
+            assert "0-based" in card.destination_label.text()
+            assert card.status_label.text() == "READY"
+        finally:
+            tab.deleteLater()
 
-        for col in (
-            ConfigurationTab.COL_IP_ADDRESS,
-            ConfigurationTab.COL_PORT,
-            ConfigurationTab.COL_SUBNET,
-            ConfigurationTab.COL_ARTNET_UNIVERSE,
-        ):
-            item = tab.universe_list.item(0, col)
-            if item is None:
-                continue
-            bg = item.background().color()
-            assert bg != white, (
-                f"col {col} kept the hardcoded white background — "
-                "dark mode still broken."
-            )
-            assert bg != light_gray, (
-                f"col {col} kept the hardcoded lightGray background — "
-                "disabled cells still look brighter than enabled in dark mode."
-            )
+    def test_click_selects_and_loads_inspector(self, qapp):
+        tab = _make_tab(qapp, ("ArtNet", "E1.31"))
+        try:
+            tab._on_card_clicked(2)
+            assert tab._selected_id == 2
+            assert tab._cards[2].property("selected") == "true"
+            assert tab.protocol_buttons["E1.31"].isChecked()
+            assert tab.param_stack.currentIndex() == 1
+        finally:
+            tab.deleteLater()
 
-        # Port is disabled-for-ArtNet — flags must still block input
-        # (this part of the contract was correct before; we just need
-        # to verify the visual fix didn't accidentally re-enable it).
-        port_item = tab.universe_list.item(0, ConfigurationTab.COL_PORT)
-        assert port_item is not None
-        assert not bool(port_item.flags() & Qt.ItemFlag.ItemIsEditable)
-        assert not bool(port_item.flags() & Qt.ItemFlag.ItemIsEnabled)
-    finally:
-        tab.deleteLater()
+    def test_channels_used_counts_current_mode_footprints(self, qapp):
+        from config.models import Fixture, FixtureMode
+        from gui.tabs.configuration_tab import channels_used
+
+        cfg = _make_config(("ArtNet",))
+        cfg.fixtures = [
+            Fixture(universe=1, address=1, manufacturer="M", model="X",
+                    name="A", group="G", current_mode="Std",
+                    available_modes=[FixtureMode(name="Std", channels=10)],
+                    type="PAR"),
+            Fixture(universe=1, address=20, manufacturer="M", model="X",
+                    name="B", group="G", current_mode="Big",
+                    available_modes=[FixtureMode(name="Std", channels=10),
+                                     FixtureMode(name="Big", channels=24)],
+                    type="PAR"),
+            Fixture(universe=2, address=1, manufacturer="M", model="X",
+                    name="C", group="G", current_mode="Std",
+                    available_modes=[FixtureMode(name="Std", channels=8)],
+                    type="PAR"),
+        ]
+        assert channels_used(cfg, 1) == 34
+        assert channels_used(cfg, 2) == 8
+
+        tab = _make_tab(qapp, config=cfg)
+        try:
+            assert tab._cards[1].used_label.text() == "34/512"
+        finally:
+            tab.deleteLater()
 
 
-def test_artnet_row_disabled_multicast_widget_is_disabled(qapp):
-    """ArtNet doesn't use the multicast checkbox — the cell widget
-    container must be disabled so Qt renders the child checkbox in
-    its dim, unclickable state. This was always correct *behaviourally*
-    but the user couldn't tell visually before the dark-mode fix
-    because the surrounding cells looked equally white."""
-    from PyQt6 import QtWidgets
-    from gui.tabs.configuration_tab import ConfigurationTab
+class TestInspectorEditing:
+    def test_protocol_switch_resets_params_to_defaults(self, qapp):
+        tab = _make_tab(qapp, ("ArtNet",))
+        try:
+            tab._on_protocol_selected("E1.31")
+            output = tab.config.universes[1].output
+            assert output["plugin"] == "E1.31"
+            assert output["parameters"]["multicast"] == "true"
+            assert tab.param_stack.currentIndex() == 1
+            assert tab._cards[1].output_chip.text() == "E1.31"
+        finally:
+            tab.deleteLater()
 
-    tab = _make_tab(qapp, "ArtNet")
-    try:
-        widget = tab.universe_list.cellWidget(0, ConfigurationTab.COL_MULTICAST)
-        assert widget is not None
-        assert not widget.isEnabled(), (
-            "Multicast cell widget must be disabled for ArtNet — "
-            "the user can't click it because the protocol doesn't use it."
+    def test_param_edit_writes_through_and_updates_card(self, qapp):
+        tab = _make_tab(qapp, ("ArtNet",))
+        try:
+            tab._on_param_edited("ip", "10.0.0.7")
+            assert tab.config.universes[1].output["parameters"]["ip"] == "10.0.0.7"
+            assert "10.0.0.7" in tab._cards[1].destination_label.text()
+        finally:
+            tab.deleteLater()
+
+    def test_e131_multicast_locks_ip_and_autocalculates(self, qapp):
+        tab = _make_tab(qapp, ("E1.31",))
+        try:
+            assert not tab.e131_ip.isEnabled()  # multicast on
+            tab._on_e131_universe_edited("258")
+            params = tab.config.universes[1].output["parameters"]
+            assert params["ip"] == "239.255.1.2"  # 258 = 1*256 + 2
+            tab.e131_multicast.setChecked(False)
+            assert tab.e131_ip.isEnabled()
+            assert params["multicast"] == "false"
+        finally:
+            tab.deleteLater()
+
+    def test_name_edit_updates_card(self, qapp):
+        tab = _make_tab(qapp, ("ArtNet",))
+        try:
+            tab._on_name_edited("Main rig")
+            assert tab.config.universes[1].name == "Main rig"
+            assert tab._cards[1].name_label.text() == "Main rig"
+        finally:
+            tab.deleteLater()
+
+    def test_usb_without_device_reads_unset(self, qapp):
+        tab = _make_tab(qapp, ("DMX USB",))
+        try:
+            card = tab._cards[1]
+            assert card.status_label.text() == "UNSET"
+            assert "no device" in card.destination_label.text()
+        finally:
+            tab.deleteLater()
+
+
+class TestAddRemove:
+    def test_add_universe_appends_and_selects(self, qapp):
+        tab = _make_tab(qapp, ("ArtNet",))
+        try:
+            tab._add_universe()
+            assert sorted(tab.config.universes) == [1, 2]
+            assert tab._selected_id == 2
+            assert tab._cards[2].property("selected") == "true"
+        finally:
+            tab.deleteLater()
+
+    def test_remove_selected_universe(self, qapp):
+        tab = _make_tab(qapp, ("ArtNet", "E1.31"))
+        try:
+            tab._on_card_clicked(2)
+            tab._remove_universe()
+            assert sorted(tab.config.universes) == [1]
+            assert 2 not in tab._cards
+            assert tab._selected_id == 1
+        finally:
+            tab.deleteLater()
+
+    def test_empty_config_disables_inspector(self, qapp):
+        from config.models import Configuration
+        cfg = Configuration()
+        cfg.universes = {}
+        tab = _make_tab(qapp, config=cfg)
+        try:
+            assert not tab.name_edit.isEnabled()
+            assert not tab.remove_universe_btn.isEnabled()
+        finally:
+            tab.deleteLater()
+
+
+class TestContract:
+    def test_toolbar_width_constant_still_exported(self):
+        """FixturesTab and StageTab import TOOLBAR_BTN_WIDTH from here."""
+        from gui.tabs.configuration_tab import (
+            TOOLBAR_BTN_SIZE, TOOLBAR_BTN_WIDTH,
         )
-        checkbox = widget.findChild(QtWidgets.QCheckBox)
-        assert checkbox is not None
-        # Disabled propagates from container to child.
-        assert not checkbox.isEnabled()
-    finally:
-        tab.deleteLater()
+        assert TOOLBAR_BTN_WIDTH == TOOLBAR_BTN_SIZE == 40
 
-
-def test_disabled_cell_gets_dim_foreground(qapp):
-    """The fix replaces the hardcoded background with a dim
-    foreground brush. The exact RGB is internal but the brush must be
-    set (not the default invalid brush) so the cell visibly reads as
-    'dimmed' in both themes."""
-    from gui.tabs.configuration_tab import ConfigurationTab, _DISABLED_FG
-
-    tab = _make_tab(qapp, "ArtNet")
-    try:
-        # Port is disabled-for-ArtNet → should have the dim brush.
-        port_item = tab.universe_list.item(0, ConfigurationTab.COL_PORT)
-        assert port_item is not None
-        assert port_item.foreground().color() == _DISABLED_FG.color()
-    finally:
-        tab.deleteLater()
-
-
-def test_toolbar_buttons_match_default_button_styling(qapp):
-    """The +/- toolbar buttons share styling with the surrounding
-    Refresh / Update text buttons: default theme padding (no
-    ``density="compact"``) and a fixed ``TOOLBAR_BTN_WIDTH`` so they
-    line up. Pre-fix attempts used compact-density which made them
-    read as a different widget class from their text-button
-    neighbours, so the tab looked inconsistent with FixturesTab. The
-    contract: NO compact density, fixed width matching
-    ``TOOLBAR_BTN_WIDTH``, height free.
-    """
-    from gui.tabs.configuration_tab import TOOLBAR_BTN_WIDTH
-
-    tab = _make_tab(qapp, "ArtNet")
-    try:
-        # No compact-density: rely on the default
-        # ``QPushButton { padding: 6px 14px; }`` rule.
-        assert tab.add_universe_btn.property("density") in (None, "")
-        assert tab.remove_universe_btn.property("density") in (None, "")
-        # Sanity: the button text is what we think it is.
-        assert tab.add_universe_btn.text() == "+"
-        assert tab.remove_universe_btn.text() == "-"
-        for btn in (tab.add_universe_btn, tab.remove_universe_btn):
-            assert btn.minimumWidth() == TOOLBAR_BTN_WIDTH
-            assert btn.maximumWidth() == TOOLBAR_BTN_WIDTH
-    finally:
-        tab.deleteLater()
-
-
-def test_e131_row_keeps_multicast_and_port_editable(qapp):
-    """The E1.31 protocol uses both Multicast and Port. The cells must
-    be enabled/clickable AND lack the hardcoded white background.
-    Pins the regression-free case: the dark-mode fix shouldn't have
-    accidentally disabled cells that should stay live."""
-    from PyQt6.QtCore import Qt
-    from PyQt6 import QtWidgets
-    from PyQt6.QtGui import QColor
-    from gui.tabs.configuration_tab import ConfigurationTab
-
-    tab = _make_tab(qapp, "E1.31")
-    try:
-        port_item = tab.universe_list.item(0, ConfigurationTab.COL_PORT)
-        assert port_item is not None
-        assert bool(port_item.flags() & Qt.ItemFlag.ItemIsEnabled)
-        assert bool(port_item.flags() & Qt.ItemFlag.ItemIsEditable)
-        assert port_item.background().color() != QColor(Qt.GlobalColor.white)
-
-        widget = tab.universe_list.cellWidget(0, ConfigurationTab.COL_MULTICAST)
-        assert widget is not None
-        assert widget.isEnabled()
-        checkbox = widget.findChild(QtWidgets.QCheckBox)
-        assert checkbox is not None
-        assert checkbox.isEnabled()
-    finally:
-        tab.deleteLater()
+    def test_update_from_config_rebuilds_after_external_change(self, qapp):
+        from config.models import Universe
+        tab = _make_tab(qapp, ("ArtNet",))
+        try:
+            tab.config.universes[9] = Universe(
+                id=9, name="Late", output={
+                    "plugin": "ArtNet", "line": "0",
+                    "parameters": {"ip": "1.2.3.4", "subnet": "0",
+                                   "universe": "3"}})
+            tab.update_from_config()
+            assert 9 in tab._cards
+            assert tab._cards[9].name_label.text() == "Late"
+        finally:
+            tab.deleteLater()

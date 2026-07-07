@@ -77,6 +77,24 @@ def test_stage_plot_golden(qapp, scene_config, tmp_path):
     compare_to_golden(QImage(path), "stage_plot_a4_100dpi")
 
 
+def test_universes_tab_golden(qapp, scene_config):
+    """Universes tab (North Star 1d): row cards with output chip,
+    destination, channels-used bar, status dot; inspector right."""
+    from unittest.mock import patch
+    from gui.theme_manager import ThemeManager
+    from gui.tabs.configuration_tab import ConfigurationTab
+
+    ThemeManager().apply(qapp, "dark")
+    with patch("gui.tabs.configuration_tab.get_device_display_names",
+               return_value=["No Device"]):
+        tab = ConfigurationTab(scene_config, parent=None)
+    try:
+        tab.setFixedSize(1280, 400)
+        compare_to_golden(tab.grab().toImage(), "universes_tab_dark")
+    finally:
+        tab.deleteLater()
+
+
 def test_fixtures_tab_golden(qapp, scene_config):
     """Fixtures table: group tinting + DMX-conflict red cells + toolbar."""
     from gui.theme_manager import ThemeManager
