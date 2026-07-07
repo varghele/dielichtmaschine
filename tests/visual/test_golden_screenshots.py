@@ -129,6 +129,49 @@ def test_subnav_golden(qapp, theme):
         window.deleteLater()
 
 
+def test_timeline_block_golden(qapp, scene_config):
+    """Effect-block anatomy: group-color envelope frame + ~0.18 tint,
+    hard corners, sublane blocks (slice N2)."""
+    from config.models import ColourBlock, DimmerBlock, LightBlock
+    from gui.theme_manager import ThemeManager
+    from timeline.light_lane import LightLane
+    from timeline_ui.light_lane_widget import LightLaneWidget
+
+    ThemeManager().apply(qapp, "dark")
+    lane = LightLane(name="Front lane", fixture_targets=["Front"])
+    lane.light_blocks.append(LightBlock(
+        start_time=0.0, end_time=4.0, effect_name="bars.static",
+        dimmer_blocks=[DimmerBlock(start_time=0.0, end_time=2.0,
+                                   intensity=200.0)],
+        colour_blocks=[ColourBlock(start_time=0.0, end_time=1.5, red=204,
+                                   green=40, blue=40),
+                       ColourBlock(start_time=2.0, end_time=4.0, red=40,
+                                   green=80, blue=204)],
+    ))
+    widget = LightLaneWidget(
+        lane=lane, fixture_groups=list(scene_config.groups),
+        config=scene_config)
+    try:
+        # The synthetic TestMfr/TestModel fixtures resolve no definition,
+        # so capability detection yields all-False and no sublane would
+        # paint. Pin the sublane layout explicitly instead.
+        from config.models import FixtureGroupCapabilities
+        widget.capabilities = FixtureGroupCapabilities(
+            has_dimmer=True, has_colour=True,
+            has_movement=False, has_special=False)
+        widget.num_sublanes = 2
+        widget.sublane_height = 64
+        widget.timeline_widget.setFixedSize(480, 128)
+        # Block widgets size themselves from the timeline at creation;
+        # re-run after the fixed size so the envelope spans all sublanes.
+        for block_widget in widget.light_block_widgets:
+            block_widget.update_position()
+        compare_to_golden(widget.timeline_widget.grab().toImage(),
+                          "timeline_block_dark")
+    finally:
+        widget.deleteLater()
+
+
 def test_stage_layer_panel_golden(qapp, scene_config):
     """The Stage Layers group box: checkboxes, buttons, active-layer label."""
     from gui.theme_manager import ThemeManager

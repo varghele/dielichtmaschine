@@ -7,6 +7,11 @@ from PyQt6.QtCore import Qt, pyqtSignal, QPoint, QRect
 from PyQt6.QtGui import QPainter, QColor, QPen, QBrush, QMouseEvent
 from config.models import LightBlock
 
+# Glutorange, the brand accent (gui/theme_tokens.py); selection marks in
+# this custom-painted widget follow the theme's selection color. Same
+# value in both themes, so a constant is fine here.
+ACCENT = QColor(240, 86, 46)
+
 
 class LightBlockWidget(QWidget):
     """Visual representation of a light effect block on the timeline.
@@ -201,30 +206,46 @@ class LightBlockWidget(QWidget):
         # Draw the sublane marquee rectangle on top of everything else.
         if self._sublane_marquee_active:
             rect = self._compute_sublane_marquee_rect()
-            painter.setBrush(QBrush(QColor(0, 120, 215, 40)))
-            painter.setPen(QPen(QColor(0, 120, 215, 200), 2))
+            marquee_fill = QColor(ACCENT)
+            marquee_fill.setAlpha(40)
+            marquee_pen = QColor(ACCENT)
+            marquee_pen.setAlpha(200)
+            painter.setBrush(QBrush(marquee_fill))
+            painter.setPen(QPen(marquee_pen, 2))
             painter.drawRect(rect)
 
     def _draw_envelope(self, painter):
-        """Draw the effect envelope as a subtle border/background."""
-        # Subtle background color
-        envelope_color = QColor(60, 60, 60, 100)
-        painter.setBrush(QBrush(envelope_color))
+        """Draw the effect envelope: group-color frame + tint fill.
+
+        North Star block anatomy: the effect container is framed in its
+        lane's group color with a ~0.18-alpha tint of the same color as
+        fill. Lanes without a resolvable group keep the old neutral
+        gray. Selection stays distinct: a solid accent border.
+        """
+        group = None
+        if hasattr(self.lane_widget, "group_color"):
+            group = self.lane_widget.group_color()
+        base = QColor(group) if group else QColor(150, 150, 150)
+
+        fill = QColor(base) if group else QColor(60, 60, 60)
+        fill.setAlpha(46 if group else 100)  # ~0.18 tint
+        painter.setBrush(QBrush(fill))
 
         if self._is_multi_selected:
-            # Multi-selection highlight - solid blue border
-            border_color = QColor(0, 120, 215, 255)
-            pen = QPen(border_color, 3, Qt.PenStyle.SolidLine)
+            # Multi-selection highlight - solid accent border
+            pen = QPen(ACCENT, 3, Qt.PenStyle.SolidLine)
         else:
-            # Border color - thicker dashed line
-            border_color = QColor(150, 150, 150, 200)
+            # Envelope outline - dashed group-color line (dashes keep
+            # the envelope visually distinct from its sub-blocks)
+            border_color = QColor(base)
+            border_color.setAlpha(200)
             pen = QPen(border_color, 2, Qt.PenStyle.DashLine)
             pen.setDashPattern([4, 3])  # Custom dash pattern: 4px dash, 3px gap
 
         painter.setPen(pen)
 
-        # Draw envelope rectangle
-        painter.drawRoundedRect(self.rect().adjusted(1, 1, -1, -1), 3, 3)
+        # Hard corners (datasheet aesthetic, radius 0)
+        painter.drawRect(self.rect().adjusted(1, 1, -1, -1))
 
     def _draw_effect_label(self, painter):
         """Draw effect name label on top of everything."""
@@ -255,7 +276,7 @@ class LightBlockWidget(QWidget):
                        text_width + 2 * padding, text_height + 2 * padding)
         painter.setBrush(QBrush(QColor(30, 30, 30, 200)))  # Dark gray, semi-transparent
         painter.setPen(QPen(QColor(100, 100, 100), 1))  # Subtle border
-        painter.drawRoundedRect(bg_rect, 3, 3)
+        painter.drawRect(bg_rect)
 
         # Draw text in white
         painter.setPen(QPen(QColor(255, 255, 255)))  # White text
@@ -299,7 +320,7 @@ class LightBlockWidget(QWidget):
                        text_width + 2 * padding, text_height + 2 * padding)
         painter.setBrush(QBrush(bg_color))
         painter.setPen(QPen(border_color, 1))
-        painter.drawRoundedRect(bg_rect, 3, 3)
+        painter.drawRect(bg_rect)
 
         # Draw text
         painter.setPen(QPen(QColor(255, 255, 255)))
@@ -393,14 +414,13 @@ class LightBlockWidget(QWidget):
         else:
             painter.setPen(QPen(color.darker(130), 2))
 
-        # Draw with some margin from edges
+        # Draw with some margin from edges; hard corners (radius 0)
         margin = 2
-        painter.drawRoundedRect(
+        painter.drawRect(
             int(x_offset + margin),
             int(y_offset + margin),
             int(width - 2 * margin),
             int(sublane_height - 2 * margin),
-            3, 3
         )
 
         # Draw grid and intensity handle for dimmer blocks
@@ -535,7 +555,7 @@ class LightBlockWidget(QWidget):
         bg_rect = QRect(icon_x - 2, icon_y - text_height, text_width + 4, text_height + 2)
         painter.setBrush(QBrush(QColor(0, 0, 0, 150)))
         painter.setPen(QPen(QColor(255, 255, 255, 200), 1))
-        painter.drawRoundedRect(bg_rect, 2, 2)
+        painter.drawRect(bg_rect)
 
         # Draw text
         painter.setPen(QPen(QColor(255, 255, 255)))
@@ -599,7 +619,7 @@ class LightBlockWidget(QWidget):
                 bg_rect = QRect(label_x - 3, label_y - text_height, text_width + 6, text_height + 3)
                 painter.setBrush(QBrush(QColor(40, 40, 40, 200)))
                 painter.setPen(QPen(QColor(255, 255, 255), 1))
-                painter.drawRoundedRect(bg_rect, 2, 2)
+                painter.drawRect(bg_rect)
 
                 # Draw text
                 painter.setPen(QPen(QColor(255, 255, 255)))
@@ -884,12 +904,11 @@ class LightBlockWidget(QWidget):
         painter.setPen(QPen(border_color, 2, Qt.PenStyle.DashLine))
 
         margin = 2
-        painter.drawRoundedRect(
+        painter.drawRect(
             int(x_offset + margin),
             int(y_offset + margin),
             int(width - 2 * margin),
             int(sublane_height - 2 * margin),
-            3, 3
         )
 
     def _get_colour_block_color(self, colour_block):

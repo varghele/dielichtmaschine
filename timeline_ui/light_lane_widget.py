@@ -435,6 +435,12 @@ class LightLaneWidget(QFrame):
     def on_name_changed(self, text):
         self.lane.name = text
 
+    def group_color(self):
+        """Public accessor: the lane's group color as '#rrggbb' or None.
+        Used by the header border and by LightBlockWidget's envelope
+        frame/tint (North Star block anatomy)."""
+        return self._group_border_color()
+
     def _group_border_color(self):
         """The lane's group color: first target's group, resolved
         against the config. None when unresolvable."""
