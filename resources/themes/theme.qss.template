@@ -459,6 +459,51 @@ QPushButton[role="recent-config"] {
 }
 QPushButton[role="recent-config"]:hover { color: $accent_line$; }
 
+/* Tab pages: themed background (bare QWidget pages otherwise fall
+   back to the platform's light-gray palette - the "tabs look light in
+   a dark app" bug). */
+QWidget[role="tab-page"] {
+    background-color: $window$;
+}
+
+/* -- Universes tab: row cards + inspector (North Star 1d) ---------------- */
+QWidget[role="universe-card"] {
+    background-color: $panel$;
+    border: 1px solid $border$;
+}
+QWidget[role="universe-card"][selected="true"] {
+    border: 1px solid $accent$;
+}
+#UniverseCardId { color: $text$; background: transparent; }
+#UniverseCardDestination { color: $text_secondary$; background: transparent; }
+#UniverseCardUsed { color: $text_secondary$; background: transparent; }
+#UniverseCardStatus { color: $text_secondary$; background: transparent; }
+QLabel[role="output-chip"] {
+    background-color: $raised$;
+    border: 1px solid $border$;
+    color: $text_secondary$;
+    padding: 3px 6px;
+}
+QLabel[role="output-chip"][active="true"] {
+    border-color: $accent$;
+    color: $accent_line$;
+}
+QWidget[role="inspector"] {
+    background-color: $panel$;
+    border: 1px solid $border$;
+}
+QPushButton[role="output-select"] {
+    background-color: $raised$;
+    border: 1px solid $border$;
+    color: $text_secondary$;
+    padding: 6px 4px;
+    min-height: 0;
+}
+QPushButton[role="output-select"]:checked {
+    border-color: $accent$;
+    color: $accent_line$;
+}
+
 /* -- Playback time readout (Shows + Structure tabs) --------------------- */
 QLabel#TimeReadout {
     font-family: $font_mono$;
