@@ -44,60 +44,155 @@ class StageTab(BaseTab):
         self._tcp_update_pending = False
 
     def setup_ui(self):
-        """Set up stage visualization UI"""
-        # Create main layout for the tab
-        main_layout = QtWidgets.QHBoxLayout(self)
+        """Set up stage visualization UI (North Star card 5a anatomy).
 
-        # Left control panel
-        control_panel = QtWidgets.QWidget()
-        control_layout = QtWidgets.QVBoxLayout(control_panel)
-        control_panel.setFixedWidth(250)
+        Layout: a layer chip row ABOVE the canvas (active-layer picker),
+        a quiet left rail with micro-caption sections instead of group
+        boxes, the 2D stage plan in the middle, and a 3D preview +
+        selection inspector on the right.
+        """
+        from PyQt6.QtGui import QFont
+        from gui.typography import MicroLabel, display_font, mono_font
 
-        # Stage dimensions group
-        dim_group = QtWidgets.QGroupBox("Stage Dimensions")
-        dim_layout = QtWidgets.QFormLayout(dim_group)
+        outer_layout = QtWidgets.QVBoxLayout(self)
+        outer_layout.setContentsMargins(10, 8, 10, 8)
+        outer_layout.setSpacing(8)
+
+        # ── Layer chip row (5a subnav) ────────────────────────────────
+        # ACTIVE LAYER · [ALL] [NAME · zM]... [+ LAYER] · lock hint.
+        # Chips are checkable output-select buttons (checked = accent)
+        # wired into the same active-layer editing mode as the list
+        # double-click and the L shortcut. Right-click a chip for
+        # visibility / edit / remove.
+        self._chip_font = mono_font(8, tracking_em=0.05)
+        self.layer_bar = QtWidgets.QWidget()
+        self.layer_bar.setProperty("role", "card")
+        self.layer_bar.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
+        bar_layout = QtWidgets.QHBoxLayout(self.layer_bar)
+        bar_layout.setContentsMargins(12, 6, 12, 6)
+        bar_layout.setSpacing(6)
+
+        bar_layout.addWidget(
+            MicroLabel("Active layer", point_size=8, tracking_em=0.12))
+
+        self._layer_chip_group = QtWidgets.QButtonGroup(self)
+        self._layer_chip_group.setExclusive(True)
+
+        self.all_layers_chip = QtWidgets.QPushButton("ALL")
+        self.all_layers_chip.setCheckable(True)
+        self.all_layers_chip.setChecked(True)
+        self.all_layers_chip.setProperty("role", "output-select")
+        self.all_layers_chip.setFont(self._chip_font)
+        self.all_layers_chip.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.all_layers_chip.setToolTip(
+            "Edit all layers (no active-layer ghosting)")
+        self._layer_chip_group.addButton(self.all_layers_chip)
+        bar_layout.addWidget(self.all_layers_chip)
+
+        # Per-layer chips are rebuilt from the config in
+        # _refresh_layer_chips; this sub-layout keeps them grouped
+        # between the ALL chip and the + LAYER chip.
+        self._chip_host = QtWidgets.QHBoxLayout()
+        self._chip_host.setSpacing(6)
+        bar_layout.addLayout(self._chip_host)
+        self.layer_chips = {}
+
+        self.add_layer_chip = QtWidgets.QPushButton("+ LAYER")
+        self.add_layer_chip.setProperty("role", "output-select")
+        self.add_layer_chip.setFont(self._chip_font)
+        self.add_layer_chip.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.add_layer_chip.setToolTip("Add a stage layer (named Z-plane)")
+        bar_layout.addWidget(self.add_layer_chip)
+
+        bar_layout.addStretch(1)
+
+        # Mirrors the mockup's "ANDERE: 25 % · GESPERRT" hint - only
+        # shown while a layer is active.
+        self.layer_lock_hint = MicroLabel(
+            "Others: 25% · locked", point_size=8, tracking_em=0.12)
+        self.layer_lock_hint.setVisible(False)
+        bar_layout.addWidget(self.layer_lock_hint)
+
+        outer_layout.addWidget(self.layer_bar)
+
+        body_layout = QtWidgets.QHBoxLayout()
+        body_layout.setSpacing(8)
+
+        # ── Left control rail ─────────────────────────────────────────
+        # role=tab-page so the rail paints the themed window background
+        # even when rendered standalone (golden tests grab it bare).
+        self.control_panel = QtWidgets.QWidget()
+        self.control_panel.setProperty("role", "tab-page")
+        self.control_panel.setAttribute(
+            Qt.WidgetAttribute.WA_StyledBackground, True)
+        control_layout = QtWidgets.QVBoxLayout(self.control_panel)
+        control_layout.setContentsMargins(0, 0, 0, 0)
+        control_layout.setSpacing(6)
+        self.control_panel.setFixedWidth(250)
+        control_panel = self.control_panel
+
+        def caption(text):
+            """Micro-caption section header (replaces group-box chrome)."""
+            return MicroLabel(text, point_size=8, tracking_em=0.12)
+
+        # Stage dimensions: compact mono-labelled fields.
+        control_layout.addWidget(caption("Stage"))
+        dims_row = QtWidgets.QHBoxLayout()
+        dims_row.setSpacing(6)
 
         self.stage_width = QtWidgets.QSpinBox()
         self.stage_width.setRange(1, 1000)
         self.stage_width.setValue(10)  # Default 10 meters
+        self.stage_width.setFont(mono_font(10))
 
         self.stage_height = QtWidgets.QSpinBox()
         self.stage_height.setRange(1, 1000)
         self.stage_height.setValue(6)  # Default 6 meters
-
-        dim_layout.addRow("Width (m):", self.stage_width)
-        dim_layout.addRow("Depth (m):", self.stage_height)
+        self.stage_height.setFont(mono_font(10))
 
         # No "Update Stage" button — the spinboxes' valueChanged signal
         # already drives _update_stage live, matching how the grid-size
-        # spinbox below works. The button used to fire the same handler
-        # and was redundant.
+        # spinbox below works.
+        for label_text, spin in (("Width / m", self.stage_width),
+                                 ("Depth / m", self.stage_height)):
+            col = QtWidgets.QVBoxLayout()
+            col.setSpacing(2)
+            col.addWidget(MicroLabel(label_text, point_size=8,
+                                     tracking_em=0.1))
+            col.addWidget(spin)
+            dims_row.addLayout(col)
+        control_layout.addLayout(dims_row)
 
-        # Grid controls group
-        grid_group = QtWidgets.QGroupBox("Grid Settings")
-        grid_layout = QtWidgets.QFormLayout(grid_group)
-
-        self.grid_toggle = QtWidgets.QCheckBox("Show Grid")
-        self.grid_toggle.setChecked(True)  # Grid visible by default
+        # Grid: 0.5 m default, snap on.
+        control_layout.addSpacing(4)
+        control_layout.addWidget(caption("Grid"))
 
         self.grid_size = QtWidgets.QDoubleSpinBox()
         self.grid_size.setRange(0.1, 50)
         self.grid_size.setValue(0.5)  # Default 0.5m grid
         self.grid_size.setSingleStep(0.1)
+        self.grid_size.setFont(mono_font(10))
 
-        self.snap_to_grid = QtWidgets.QCheckBox("Snap to Grid")
+        grid_size_row = QtWidgets.QHBoxLayout()
+        grid_size_row.setSpacing(6)
+        grid_size_row.addWidget(MicroLabel("Size / m", point_size=8,
+                                           tracking_em=0.1))
+        grid_size_row.addWidget(self.grid_size, 1)
+        control_layout.addLayout(grid_size_row)
+
+        self.grid_toggle = QtWidgets.QCheckBox("Show grid")
+        self.grid_toggle.setChecked(True)  # Grid visible by default
+        control_layout.addWidget(self.grid_toggle)
+
+        self.snap_to_grid = QtWidgets.QCheckBox("Snap to grid")
         self.snap_to_grid.setChecked(True)  # Enable by default
+        control_layout.addWidget(self.snap_to_grid)
 
-        grid_layout.addRow(self.grid_toggle)
-        grid_layout.addRow("Grid Size (m):", self.grid_size)
-        grid_layout.addRow(self.snap_to_grid)
-
-        # View controls — fit the stage plot back to the viewport
-        # after the user has zoomed/panned. The 'F' shortcut below
-        # (wired in connect_signals) duplicates the button so the
-        # user can reset without moving the mouse off the plot.
-        view_group = QtWidgets.QGroupBox("View")
-        view_layout = QtWidgets.QVBoxLayout(view_group)
+        # View: fit-view + orientation axes. The 'F' shortcut (wired in
+        # connect_signals) duplicates the button so the user can reset
+        # without moving the mouse off the plot.
+        control_layout.addSpacing(4)
+        control_layout.addWidget(caption("View"))
         self.fit_view_btn = QtWidgets.QPushButton("Fit View (F)")
         self.fit_view_btn.setToolTip(
             "Reset zoom and pan to fit the whole stage.\n\n"
@@ -106,24 +201,38 @@ class StageTab(BaseTab):
             "  • Space + left-drag — pan\n"
             "  • F — fit view"
         )
-        view_layout.addWidget(self.fit_view_btn)
+        control_layout.addWidget(self.fit_view_btn)
 
-        # Stage marks group
-        spot_group = QtWidgets.QGroupBox("Stage Marks")
-        spot_layout = QtWidgets.QVBoxLayout(spot_group)
+        # Single checkbox - when on, every fixture draws its XYZ
+        # axes. The previous two-checkbox UX (selected-only by
+        # default, with a separate "Show all" toggle) was non-
+        # discoverable and read as broken.
+        self.show_axes_checkbox = QtWidgets.QCheckBox("Show orientation axes")
+        self.show_axes_checkbox.setToolTip("Show XYZ axes on every fixture")
+        control_layout.addWidget(self.show_axes_checkbox)
 
+        # Stage marks.
+        control_layout.addSpacing(4)
+        control_layout.addWidget(caption("Stage marks"))
         self.add_spot_btn = QtWidgets.QPushButton("Add Mark")
         self.remove_item_btn = QtWidgets.QPushButton("Remove Selected")
+        control_layout.addWidget(self.add_spot_btn)
+        control_layout.addWidget(self.remove_item_btn)
 
-        spot_layout.addWidget(self.add_spot_btn)
-        spot_layout.addWidget(self.remove_item_btn)
-
-        # Stage layers group — named Z-planes (ground stack / mid-truss /
+        # Stage layers card - named Z-planes (ground stack / mid-truss /
         # top-truss). Checkbox = visibility; hidden layers disappear from
         # the 2D plot and every 3D preview. Fixtures are assigned via the
-        # stage right-click menu ("Assign to Layer").
-        layer_group = QtWidgets.QGroupBox("Stage Layers")
-        layer_layout = QtWidgets.QVBoxLayout(layer_group)
+        # stage right-click menu ("Assign to Layer") or the inspector's
+        # Layer combo. Kept as one card: it is THE 5a feature.
+        control_layout.addSpacing(4)
+        self.layer_panel = QtWidgets.QWidget()
+        self.layer_panel.setProperty("role", "card")
+        self.layer_panel.setAttribute(
+            Qt.WidgetAttribute.WA_StyledBackground, True)
+        layer_layout = QtWidgets.QVBoxLayout(self.layer_panel)
+        layer_layout.setContentsMargins(10, 8, 10, 8)
+        layer_layout.setSpacing(6)
+        layer_layout.addWidget(caption("Stage layers"))
 
         self.layer_list = QtWidgets.QListWidget()
         self.layer_list.setMaximumHeight(110)
@@ -138,6 +247,7 @@ class StageTab(BaseTab):
         layer_layout.addWidget(self.layer_list)
 
         self.active_layer_label = QtWidgets.QLabel("Editing: all layers")
+        self.active_layer_label.setFont(mono_font(8))
         self.active_layer_label.setToolTip(
             "Active-layer editing. Double-click a layer or press L to cycle;\n"
             "double-click the active layer again to return to all layers."
@@ -163,15 +273,16 @@ class StageTab(BaseTab):
         layer_btn_row.addWidget(self.edit_layer_btn)
         layer_btn_row.addStretch()
         layer_layout.addLayout(layer_btn_row)
+        control_layout.addWidget(self.layer_panel)
 
-        # Stage planes group — picker for the 6 faces of the stage
-        # bounding cuboid. Hovering an entry highlights that face in the
+        # Stage planes - picker for the 6 faces of the stage bounding
+        # cuboid. Hovering an entry highlights that face in the
         # embedded 3D preview; clicking selects it persistently; clicking
         # the selected entry again clears. Display-only for now — plane
         # *targeting* from movement blocks is v1.4a.
         from visualizer.renderer.stage_planes import PLANE_NAMES
-        plane_group = QtWidgets.QGroupBox("Stage Planes")
-        plane_layout = QtWidgets.QVBoxLayout(plane_group)
+        control_layout.addSpacing(4)
+        control_layout.addWidget(caption("Stage planes"))
 
         self.plane_list = QtWidgets.QListWidget()
         self.plane_list.setMaximumHeight(120)
@@ -186,46 +297,40 @@ class StageTab(BaseTab):
             item.setData(Qt.ItemDataRole.UserRole, plane_name)
             self.plane_list.addItem(item)
         self._selected_plane = None
-        plane_layout.addWidget(self.plane_list)
+        control_layout.addWidget(self.plane_list)
 
-        # Fixture Orientation group
-        orientation_group = QtWidgets.QGroupBox("Fixture Orientation")
-        orientation_layout = QtWidgets.QVBoxLayout(orientation_group)
+        control_layout.addStretch(1)
 
-        # Single checkbox — when on, every fixture draws its XYZ
-        # axes. The previous two-checkbox UX (selected-only by
-        # default, with a separate "Show all" toggle) was non-
-        # discoverable: checking only "Show orientation axes" with
-        # nothing selected made no visible change, so the user read
-        # the whole control as broken.
-        self.show_axes_checkbox = QtWidgets.QCheckBox("Show orientation axes")
-        self.show_axes_checkbox.setToolTip("Show XYZ axes on every fixture")
-        orientation_layout.addWidget(self.show_axes_checkbox)
+        # Bottom actions: Plot Stage (the deliverable) + 3D visualizer
+        # launch, as proper buttons per the 5a subnav's EXPORT RIDER PDF.
+        self.plot_stage_btn = QtWidgets.QPushButton("PLOT STAGE")
+        self.plot_stage_btn.setProperty("role", "primary")
+        self.plot_stage_btn.setFont(display_font(11, QFont.Weight.Bold,
+                                                 tracking_em=0.08))
+        self.plot_stage_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.plot_stage_btn.setToolTip(
+            "Export the rig as a PDF or PNG stage plot")
+        control_layout.addWidget(self.plot_stage_btn)
 
-        # Plot stage group
-        plot_group = QtWidgets.QGroupBox("Stage Plot")
-        plot_layout = QtWidgets.QVBoxLayout(plot_group)
-
-        self.plot_stage_btn = QtWidgets.QPushButton("Plot Stage")
-        plot_layout.addWidget(self.plot_stage_btn)
-
-        # Visualizer group
-        visualizer_group = QtWidgets.QGroupBox("3D Visualizer")
-        visualizer_layout = QtWidgets.QVBoxLayout(visualizer_group)
-
-        # Launch button
-        self.launch_visualizer_btn = QtWidgets.QPushButton("Launch Visualizer")
-        self.launch_visualizer_btn.setToolTip("Start the 3D Visualizer application")
-        visualizer_layout.addWidget(self.launch_visualizer_btn)
+        self.launch_visualizer_btn = QtWidgets.QPushButton("LAUNCH VISUALIZER")
+        self.launch_visualizer_btn.setFont(
+            display_font(11, QFont.Weight.DemiBold, tracking_em=0.08))
+        self.launch_visualizer_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.launch_visualizer_btn.setToolTip(
+            "Start the 3D Visualizer application")
+        control_layout.addWidget(self.launch_visualizer_btn)
 
         # TCP status indicator
         tcp_status_layout = QtWidgets.QHBoxLayout()
-        tcp_status_layout.addWidget(QtWidgets.QLabel("TCP Server:"))
+        tcp_status_layout.setSpacing(6)
+        tcp_status_layout.addWidget(
+            MicroLabel("TCP server", point_size=8, tracking_em=0.1))
         self.tcp_status_label = QtWidgets.QLabel()
         self.tcp_status_label.setStyleSheet("font-weight: bold;")
+        self.tcp_status_label.setFont(mono_font(8))
         tcp_status_layout.addWidget(self.tcp_status_label)
         tcp_status_layout.addStretch()
-        visualizer_layout.addLayout(tcp_status_layout)
+        control_layout.addLayout(tcp_status_layout)
 
         # Visualizer process reference
         self.visualizer_process = None
@@ -238,24 +343,14 @@ class StageTab(BaseTab):
         # Initial status update
         self._update_tcp_status()
 
-        # Add groups to control panel in order
-        control_layout.addWidget(dim_group)
-        control_layout.addWidget(grid_group)
-        control_layout.addWidget(view_group)
-        control_layout.addWidget(spot_group)
-        control_layout.addWidget(layer_group)
-        control_layout.addWidget(plane_group)
-        control_layout.addWidget(orientation_group)
-        control_layout.addWidget(plot_group)
-        control_layout.addWidget(visualizer_group)
-        control_layout.addStretch()
-
         # Initialize StageView with configuration (the 2D top-down).
         self.stage_view = StageView(self)
         self.stage_view.set_config(self.config)
 
         # Right pane stacks the embedded 3D preview over a persistent
-        # OrientationPanel (driven from the right-click Set Orientation flow).
+        # selection inspector (micro captions + layer field wrapping the
+        # OrientationPanel, which is driven from the right-click Set
+        # Orientation flow and plain selection).
         self.embedded_visualizer = EmbeddedVisualizer(self)
         self.embedded_visualizer.set_pop_out_callback(self._launch_visualizer)
         self.embedded_visualizer.set_config(self.config)
@@ -266,10 +361,48 @@ class StageTab(BaseTab):
         # the bound fixtures via the values_changed hook below.
         self.orientation_panel = OrientationPanel([], self.config, self)
         self.orientation_panel.values_changed.connect(self._on_inline_orientation_changed)
+        # The inspector's SELECTION header below owns the selection
+        # readout; the panel's internal info label would repeat it.
+        self.orientation_panel.info_label.setVisible(False)
+
+        # Inspector wrapper: SELECTION caption + fixture name + LAYER
+        # combo (assigns via the same StageView code path as the
+        # right-click "Assign to Layer" menu), then the orientation
+        # editor (presets / fine adjustment / group defaults).
+        self.inspector_panel = QtWidgets.QWidget()
+        self.inspector_panel.setProperty("role", "inspector")
+        self.inspector_panel.setAttribute(
+            Qt.WidgetAttribute.WA_StyledBackground, True)
+        inspector_layout = QtWidgets.QVBoxLayout(self.inspector_panel)
+        inspector_layout.setContentsMargins(12, 10, 12, 10)
+        inspector_layout.setSpacing(6)
+
+        inspector_layout.addWidget(
+            MicroLabel("Selection", point_size=8, tracking_em=0.15))
+        self.selection_label = QtWidgets.QLabel("No fixture selected")
+        self.selection_label.setFont(mono_font(10))
+        inspector_layout.addWidget(self.selection_label)
+
+        layer_combo_row = QtWidgets.QHBoxLayout()
+        layer_combo_row.setSpacing(6)
+        layer_combo_row.addWidget(
+            MicroLabel("Layer", point_size=8, tracking_em=0.12))
+        self.layer_combo = QtWidgets.QComboBox()
+        self.layer_combo.setFont(mono_font(9))
+        self.layer_combo.setEnabled(False)
+        self.layer_combo.setToolTip(
+            "Assign the selected fixtures to a stage layer.\n"
+            "Assignment snaps the fixtures' Z to the layer height\n"
+            "(same as right-click > Assign to Layer)."
+        )
+        layer_combo_row.addWidget(self.layer_combo, 1)
+        inspector_layout.addLayout(layer_combo_row)
+
+        inspector_layout.addWidget(self.orientation_panel, 1)
 
         right_splitter = QtWidgets.QSplitter(Qt.Orientation.Vertical)
         right_splitter.addWidget(self.embedded_visualizer)
-        right_splitter.addWidget(self.orientation_panel)
+        right_splitter.addWidget(self.inspector_panel)
         right_splitter.setStretchFactor(0, 6)
         right_splitter.setStretchFactor(1, 4)
         self._right_splitter = right_splitter
@@ -296,8 +429,9 @@ class StageTab(BaseTab):
             except Exception:
                 pass
 
-        main_layout.addWidget(control_panel)
-        main_layout.addWidget(main_splitter, stretch=1)
+        body_layout.addWidget(control_panel)
+        body_layout.addWidget(main_splitter, stretch=1)
+        outer_layout.addLayout(body_layout, 1)
 
     def connect_signals(self):
         """Connect widget signals to handlers"""
@@ -330,6 +464,17 @@ class StageTab(BaseTab):
         self.edit_layer_btn.clicked.connect(self._edit_layer)
         self.layer_list.itemChanged.connect(self._on_layer_item_changed)
         self.layer_list.itemDoubleClicked.connect(self._on_layer_double_clicked)
+
+        # Layer chip row: ALL leaves active-layer editing, + LAYER runs
+        # the same add flow as the panel's + button. Per-layer chips
+        # connect their own clicked handlers when built.
+        self.all_layers_chip.clicked.connect(
+            lambda: self._set_active_layer(None))
+        self.add_layer_chip.clicked.connect(self._add_layer)
+
+        # Inspector layer combo - activated (user picks) only, so
+        # programmatic syncs never trigger an assignment.
+        self.layer_combo.activated.connect(self._on_layer_combo_activated)
 
         # L cycles the active layer (all -> layer 1 -> ... -> all), scoped
         # to the Stage tab like the F fit-view shortcut.
@@ -790,7 +935,8 @@ class StageTab(BaseTab):
     # ── Stage layers ──────────────────────────────────────────────────
 
     def _refresh_layer_list(self):
-        """Rebuild the layer list widget from config.stage_layers."""
+        """Rebuild the layer list widget, the chip row and the inspector
+        combo from config.stage_layers."""
         self.layer_list.blockSignals(True)
         self.layer_list.clear()
         for layer in self.config.stage_layers:
@@ -802,7 +948,85 @@ class StageTab(BaseTab):
             item.setData(Qt.ItemDataRole.UserRole, layer.name)
             self.layer_list.addItem(item)
         self.layer_list.blockSignals(False)
+        self._refresh_layer_chips()
+        self._refresh_layer_combo_items()
         self._update_active_layer_ui()
+
+    # ── Layer chip row ────────────────────────────────────────────────
+
+    @staticmethod
+    def _chip_text(layer) -> str:
+        """Mono-caps chip label per the 5a mockup: 'NAME · <z>M'."""
+        return f"{layer.name} · {layer.z_height:g}M".upper()
+
+    def _refresh_layer_chips(self):
+        """Rebuild the per-layer chips between ALL and + LAYER."""
+        for chip in self.layer_chips.values():
+            self._layer_chip_group.removeButton(chip)
+            self._chip_host.removeWidget(chip)
+            chip.deleteLater()
+        self.layer_chips = {}
+        if not self.config:
+            return
+        for layer in self.config.stage_layers:
+            chip = QtWidgets.QPushButton(self._chip_text(layer))
+            chip.setCheckable(True)
+            chip.setProperty("role", "output-select")
+            chip.setFont(self._chip_font)
+            chip.setCursor(Qt.CursorShape.PointingHandCursor)
+            chip.setToolTip(
+                f"Edit only '{layer.name}' (others ghost to a locked "
+                "reference).\nRight-click for visibility / edit / remove."
+            )
+            chip.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+            chip.clicked.connect(
+                lambda _=False, n=layer.name: self._set_active_layer(n))
+            chip.customContextMenuRequested.connect(
+                lambda pos, n=layer.name, c=chip:
+                self._show_layer_chip_menu(c, n, pos))
+            self._layer_chip_group.addButton(chip)
+            self._chip_host.addWidget(chip)
+            self.layer_chips[layer.name] = chip
+
+    def _show_layer_chip_menu(self, chip, name, pos):
+        """Right-click menu on a layer chip: visibility / edit / remove."""
+        layer = self.config.get_stage_layer(name)
+        if layer is None:
+            return
+        menu = QtWidgets.QMenu(self)
+        vis_action = menu.addAction(
+            "Hide layer" if layer.visible else "Show layer")
+        edit_action = menu.addAction("Edit...")
+        remove_action = menu.addAction("Remove")
+        action = menu.exec(chip.mapToGlobal(pos))
+        if action is vis_action:
+            self._set_layer_visible(name, not layer.visible)
+        elif action is edit_action:
+            self._select_layer_row(name)
+            self._edit_layer()
+        elif action is remove_action:
+            self._select_layer_row(name)
+            self._remove_layer()
+
+    def _select_layer_row(self, name):
+        """Point the panel list's current row at the named layer (the
+        edit/remove flows operate on the current row)."""
+        for i in range(self.layer_list.count()):
+            if self.layer_list.item(i).data(Qt.ItemDataRole.UserRole) == name:
+                self.layer_list.setCurrentRow(i)
+                return
+
+    def _set_layer_visible(self, name, visible):
+        """Flip a layer's visibility through the panel checkbox so the
+        chip menu and the list share one code path
+        (_on_layer_item_changed)."""
+        for i in range(self.layer_list.count()):
+            item = self.layer_list.item(i)
+            if item.data(Qt.ItemDataRole.UserRole) == name:
+                item.setCheckState(
+                    Qt.CheckState.Checked if visible
+                    else Qt.CheckState.Unchecked)
+                return
 
     # ── Active-layer editing ──────────────────────────────────────────
 
@@ -841,7 +1065,8 @@ class StageTab(BaseTab):
         self._set_active_layer(order[(idx + 1) % len(order)])
 
     def _update_active_layer_ui(self):
-        """Bold the active layer's row + update the status label."""
+        """Sync the chip row, bold the active layer's row and update the
+        status label."""
         active = self.stage_view.active_layer if hasattr(self, "stage_view") else None
         self.active_layer_label.setText(
             f"Editing: {active} only" if active else "Editing: all layers"
@@ -854,6 +1079,14 @@ class StageTab(BaseTab):
             font.setBold(item.data(Qt.ItemDataRole.UserRole) == active)
             item.setFont(font)
         self.layer_list.blockSignals(False)
+
+        # Chips: checked = accent (exclusive group unchecks the rest).
+        # Programmatic setChecked doesn't emit clicked, so no feedback
+        # loop into _set_active_layer.
+        target = self.layer_chips.get(active) if active else self.all_layers_chip
+        if target is not None:
+            target.setChecked(True)
+        self.layer_lock_hint.setVisible(active is not None)
 
     def _on_layer_item_changed(self, item):
         """Checkbox toggle — flip the layer's visible flag everywhere."""
@@ -1028,6 +1261,68 @@ class StageTab(BaseTab):
         ]
         self._inline_orientation_fixtures = selected
         self.orientation_panel.set_fixtures(selected)
+        self._update_selection_inspector(selected)
+
+    # ── Selection inspector (layer field) ─────────────────────────────
+
+    def _refresh_layer_combo_items(self):
+        """Rebuild the inspector's layer combo from config.stage_layers.
+        Item data carries the layer name ('' = no layer)."""
+        self.layer_combo.blockSignals(True)
+        self.layer_combo.clear()
+        self.layer_combo.addItem("No layer", "")
+        if self.config:
+            for layer in self.config.stage_layers:
+                self.layer_combo.addItem(
+                    f"{layer.name} · {layer.z_height:g} m", layer.name)
+        self.layer_combo.blockSignals(False)
+        self._sync_layer_combo_to_selection()
+
+    def _selected_fixture_items(self):
+        if not hasattr(self, "stage_view"):
+            return []
+        return [
+            item for item in self.stage_view.scene.selectedItems()
+            if isinstance(item, FixtureItem)
+        ]
+
+    def _update_selection_inspector(self, selected):
+        """Selection name + layer combo enable state."""
+        if not selected:
+            self.selection_label.setText("No fixture selected")
+        elif len(selected) == 1:
+            self.selection_label.setText(selected[0].fixture_name)
+        else:
+            self.selection_label.setText(f"{len(selected)} fixtures")
+        self.layer_combo.setEnabled(
+            bool(selected) and self.layer_combo.count() > 1)
+        self._sync_layer_combo_to_selection()
+
+    def _sync_layer_combo_to_selection(self):
+        """Point the combo at the selection's layer; mixed selection or
+        no selection shows no entry."""
+        selected = self._selected_fixture_items()
+        layers = {getattr(item, "layer", "") for item in selected}
+        self.layer_combo.blockSignals(True)
+        if len(layers) == 1:
+            index = self.layer_combo.findData(layers.pop())
+            self.layer_combo.setCurrentIndex(index if index >= 0 else 0)
+        else:
+            self.layer_combo.setCurrentIndex(-1)
+        self.layer_combo.blockSignals(False)
+
+    def _on_layer_combo_activated(self, index):
+        """User picked a layer in the inspector - assign the selection
+        through the same StageView path as the right-click menu (snaps
+        Z to the layer plane, saves, re-applies visibility/ghosting)."""
+        name = self.layer_combo.itemData(index) or ""
+        self.stage_view.assign_selected_to_layer(name)
+        # Z changed with the assignment: re-load the orientation panel
+        # so its Z-Height spin shows the layer plane.
+        selected = self._selected_fixture_items()
+        self._inline_orientation_fixtures = selected
+        self.orientation_panel.set_fixtures(selected)
+        self._sync_layer_combo_to_selection()
 
     def _on_inline_orientation_changed(self):
         """Slot fired by OrientationPanel.values_changed — push edits live

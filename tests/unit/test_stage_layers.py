@@ -325,3 +325,149 @@ class TestActiveLayerTab:
         assert tab.stage_view.active_layer == "Deck"
         # Still ghosting the non-members after the rebuild.
         assert tab.stage_view.fixtures["Top Wash"].ghosted is True
+
+
+class TestLayerChipRow:
+    """North Star 5a layer chip row above the canvas: one checkable chip
+    per layer ('NAME · <z>M' mono caps), an ALL chip (= no active layer)
+    and a + LAYER chip. Chips drive the same active-layer editing mode
+    as the panel list."""
+
+    @pytest.fixture
+    def tab(self, qapp, layered_config):
+        from gui.tabs.stage_tab import StageTab
+        tab = StageTab(layered_config, parent=None)
+        tab.update_from_config()
+        yield tab
+        tab.deleteLater()
+
+    def test_chips_reflect_layers(self, tab):
+        assert set(tab.layer_chips) == {"Ground", "Top truss"}
+        assert tab.layer_chips["Ground"].text() == "GROUND · 0M"
+        assert tab.layer_chips["Top truss"].text() == "TOP TRUSS · 5M"
+        # No active layer -> ALL is the checked (accent) chip.
+        assert tab.all_layers_chip.isChecked()
+        assert tab.layer_lock_hint.isHidden()
+
+    def test_chip_click_activates_layer(self, tab):
+        tab.layer_chips["Ground"].click()
+        assert tab.stage_view.active_layer == "Ground"
+        assert tab.layer_chips["Ground"].isChecked()
+        assert not tab.all_layers_chip.isChecked()
+        assert not tab.layer_lock_hint.isHidden()
+        # Ghosting applied exactly like the list double-click path.
+        assert tab.stage_view.fixtures["Floater"].ghosted is True
+
+    def test_chip_click_on_hidden_layer_forces_it_visible(self, tab, layered_config):
+        assert layered_config.get_stage_layer("Top truss").visible is False
+        tab.layer_chips["Top truss"].click()
+        assert layered_config.get_stage_layer("Top truss").visible is True
+        assert tab.stage_view.fixtures["Top Wash"].isVisible()
+
+    def test_all_chip_returns_to_all_layers(self, tab):
+        tab.layer_chips["Ground"].click()
+        tab.all_layers_chip.click()
+        assert tab.stage_view.active_layer is None
+        assert tab.all_layers_chip.isChecked()
+        assert tab.layer_lock_hint.isHidden()
+        assert all(not i.ghosted for i in tab.stage_view.fixtures.values())
+
+    def test_external_activation_syncs_chips(self, tab):
+        # L-shortcut / list double-click path must reflect on the chips.
+        tab._cycle_active_layer()  # all -> Ground
+        assert tab.layer_chips["Ground"].isChecked()
+        tab._set_active_layer(None)
+        assert tab.all_layers_chip.isChecked()
+
+    def test_add_layer_chip_uses_add_flow(self, tab, layered_config, monkeypatch):
+        monkeypatch.setattr(tab, "_layer_dialog", lambda *a, **k: ("Booms", 1.5))
+        tab.add_layer_chip.click()
+        assert layered_config.get_stage_layer("Booms") is not None
+        assert "Booms" in tab.layer_chips
+        assert tab.layer_chips["Booms"].text() == "BOOMS · 1.5M"
+
+    def test_chips_follow_rename_and_remove(self, tab, layered_config, monkeypatch):
+        from PyQt6 import QtWidgets
+
+        monkeypatch.setattr(tab, "_layer_dialog", lambda *a, **k: ("Deck", 0.8))
+        tab.layer_list.setCurrentRow(0)  # Ground
+        tab._edit_layer()
+        assert "Ground" not in tab.layer_chips
+        assert tab.layer_chips["Deck"].text() == "DECK · 0.8M"
+
+        # Removing goes through a confirm when fixtures are assigned.
+        monkeypatch.setattr(
+            QtWidgets.QMessageBox, "question",
+            lambda *a, **k: QtWidgets.QMessageBox.StandardButton.Yes,
+        )
+        tab.layer_list.setCurrentRow(0)  # Deck
+        tab._remove_layer()
+        assert "Deck" not in tab.layer_chips
+
+    def test_set_layer_visible_reuses_checkbox_path(self, tab, layered_config):
+        tab._set_layer_visible("Top truss", True)
+        assert layered_config.get_stage_layer("Top truss").visible is True
+        assert tab.stage_view.fixtures["Top Wash"].isVisible()
+        item = tab.layer_list.item(1)
+        from PyQt6.QtCore import Qt
+        assert item.checkState() == Qt.CheckState.Checked
+
+        tab._set_layer_visible("Top truss", False)
+        assert layered_config.get_stage_layer("Top truss").visible is False
+        assert not tab.stage_view.fixtures["Top Wash"].isVisible()
+
+
+class TestInspectorLayerCombo:
+    """The inspector's LAYER field assigns the selection through the
+    same StageView code path as right-click > Assign to Layer."""
+
+    @pytest.fixture
+    def tab(self, qapp, layered_config):
+        from gui.tabs.stage_tab import StageTab
+        tab = StageTab(layered_config, parent=None)
+        tab.update_from_config()
+        yield tab
+        tab.deleteLater()
+
+    def test_combo_lists_layers(self, tab):
+        texts = [tab.layer_combo.itemText(i)
+                 for i in range(tab.layer_combo.count())]
+        assert texts == ["No layer", "Ground · 0 m", "Top truss · 5 m"]
+        # Disabled until something is selected.
+        assert not tab.layer_combo.isEnabled()
+
+    def test_combo_follows_selection(self, tab):
+        tab.stage_view.fixtures["Ground Par"].setSelected(True)
+        assert tab.selection_label.text() == "Ground Par"
+        assert tab.layer_combo.isEnabled()
+        assert tab.layer_combo.currentData() == "Ground"
+
+        tab.stage_view.fixtures["Floater"].setSelected(True)
+        # Mixed layers -> no entry shown.
+        assert tab.selection_label.text() == "2 fixtures"
+        assert tab.layer_combo.currentIndex() == -1
+
+    def test_combo_assignment_snaps_z_like_context_menu(self, tab, layered_config):
+        tab.stage_view.fixtures["Floater"].setSelected(True)
+        index = tab.layer_combo.findData("Ground")
+        tab._on_layer_combo_activated(index)
+
+        fixture = layered_config.fixtures[2]  # Floater
+        assert fixture.layer == "Ground"
+        assert fixture.z == 0.0
+        assert fixture.z_uses_group_default is False
+        assert tab.layer_combo.currentData() == "Ground"
+
+    def test_combo_clears_assignment(self, tab, layered_config):
+        tab.stage_view.fixtures["Ground Par"].setSelected(True)
+        tab._on_layer_combo_activated(0)  # "No layer"
+        fixture = layered_config.fixtures[0]
+        assert fixture.layer == ""
+        assert fixture.z == 0.0  # keeps its height
+
+    def test_deselecting_resets_inspector(self, tab):
+        item = tab.stage_view.fixtures["Ground Par"]
+        item.setSelected(True)
+        item.setSelected(False)
+        assert tab.selection_label.text() == "No fixture selected"
+        assert not tab.layer_combo.isEnabled()
