@@ -27,6 +27,17 @@ verbatim as the GitHub Release notes (see [docs/releasing.md](docs/releasing.md)
 
 ### Added
 
+- **Structured local logging.** The app now writes a daily-rotated log
+  file (14 days kept) to the per-OS app-data directory (Windows:
+  `%LOCALAPPDATA%\dielichtmaschine\Lichtmaschine\logs`), capturing a
+  startup banner (version, Python/Qt, platform), warnings, Qt
+  messages, and every uncaught exception including background threads.
+  Help > Open Log Folder reveals it. Override the location with the
+  `QLC_LOG_DIR` environment variable.
+- **Crash reporter dialog.** Uncaught exceptions now surface a dialog
+  with the full traceback and app version, with copy-to-clipboard,
+  save-as-file, and open-log-folder actions for attaching to a GitHub
+  issue. Nothing is uploaded automatically.
 - **GDTF fixture import (first pass).** `.gdtf` files (General Device Type
   Format, DIN SPEC 15800) are now a first-class fixture-definition source:
   drop them into `gdtf_fixtures/` and they appear in the Add Fixture

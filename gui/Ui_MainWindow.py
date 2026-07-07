@@ -219,6 +219,8 @@ class Ui_MainWindow(object):
 
         # Help menu
         self.menuHelp = QtWidgets.QMenu("Help", parent=self.menubar)
+        self.actionOpenLogFolder = QAction("Open Log Folder", MainWindow)
+        self.menuHelp.addAction(self.actionOpenLogFolder)
         self.actionAbout = QAction("About", MainWindow)
         self.menuHelp.addAction(self.actionAbout)
 

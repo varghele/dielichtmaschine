@@ -431,6 +431,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.addAction(self.actionGotoAuto)
 
         # Help menu actions
+        self.actionOpenLogFolder.triggered.connect(self.open_log_folder)
         self.actionAbout.triggered.connect(self.show_about)
 
     def _on_tab_changed(self, index):
@@ -1492,6 +1493,18 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             print(f"Error opening audio settings: {e}")
             import traceback
             traceback.print_exc()
+
+    def open_log_folder(self):
+        """Open the application log directory in the system file browser."""
+        from PyQt6.QtCore import QUrl
+        from PyQt6.QtGui import QDesktopServices
+        from utils.app_logging import log_dir
+        directory = log_dir()
+        try:
+            os.makedirs(directory, exist_ok=True)
+        except OSError:
+            pass
+        QDesktopServices.openUrl(QUrl.fromLocalFile(directory))
 
     def show_about(self):
         """Show about dialog"""

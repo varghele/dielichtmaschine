@@ -44,6 +44,14 @@ def main():
         app.setApplicationDisplayName(app_identity.APP_NAME)
         app.setApplicationVersion(app_identity.APP_VERSION)
 
+        # Structured local logging plus the crash reporter dialog.
+        # Installed right after QApplication creation so any startup
+        # failure below already lands in the log file.
+        from utils.app_logging import setup_logging, install_exception_hooks
+        from gui.dialogs.crash_dialog import install_crash_dialog
+        setup_logging()
+        install_exception_hooks(install_crash_dialog())
+
         # One-shot copy of persisted settings from the pre-rebrand
         # QLCShowCreator store (theme, splitter sizes, ...).
         from utils.app_settings import migrate_legacy_settings
@@ -85,6 +93,8 @@ def main():
         sys.exit(app.exec())
 
     except Exception as e:
+        import logging
+        logging.getLogger("crash").exception("Error starting application")
         print(f"Error starting application: {e}")
         import traceback
         traceback.print_exc()
