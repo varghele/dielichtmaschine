@@ -36,60 +36,38 @@ class Ui_MainWindow(object):
             style_obj.standardIcon(QtWidgets.QStyle.StandardPixmap.SP_MediaSeekForward),
             "Create Workspace", MainWindow)
 
-        # Status indicators container — shared by ArtNet and TCP/Visualizer
-        # state widgets. Will be packed into the menubar corner below.
-        status_container = QtWidgets.QWidget()
-        status_layout = QtWidgets.QHBoxLayout(status_container)
-        status_layout.setContentsMargins(0, 0, 10, 0)
-        status_layout.setSpacing(15)
-
-        # ArtNet status indicator with toggle button. Per-theme styling lives
-        # in resources/themes/*.qss; here we only set role/status dynamic
-        # properties that the stylesheets target.
-        artnet_layout = QtWidgets.QHBoxLayout()
-        artnet_layout.setSpacing(4)
-        artnet_label = QtWidgets.QLabel("ArtNet:")
-        artnet_label.setProperty("role", "status-label")
+        # ArtNet / TCP-Visualizer status widgets. Per-theme styling lives
+        # in the QSS template; here we only set role/status dynamic
+        # properties that the stylesheet targets. gui.py's
+        # _update_toolbar_status drives text + status props; the widgets
+        # are packed into topbar StatusChips in setupStatusAndMenu.
         self.artnet_status_indicator = QtWidgets.QLabel("OFF")
         self.artnet_status_indicator.setProperty("status", "off")
         self.artnet_status_indicator.setToolTip("ArtNet DMX Output Status")
-        self.artnet_toggle_btn = QtWidgets.QPushButton("●")
-        self.artnet_toggle_btn.setFixedSize(24, 24)
+        # The toggle is a small square that fills with the status color
+        # (QSS [status=...] rules); no glyph, so no font dependency.
+        self.artnet_toggle_btn = QtWidgets.QPushButton("")
+        self.artnet_toggle_btn.setFixedSize(14, 14)
         self.artnet_toggle_btn.setProperty("role", "status-pill")
         self.artnet_toggle_btn.setProperty("status", "off")
         self.artnet_toggle_btn.setToolTip("Click to toggle ArtNet")
         self.artnet_toggle_btn.setCursor(QtCore.Qt.CursorShape.PointingHandCursor)
-        artnet_layout.addWidget(artnet_label)
-        artnet_layout.addWidget(self.artnet_status_indicator)
-        artnet_layout.addWidget(self.artnet_toggle_btn)
-        status_layout.addLayout(artnet_layout)
 
-        # TCP/Visualizer status indicator with toggle button. Same dynamic-
-        # property pattern as the ArtNet pill; theme files do the colors.
-        tcp_layout = QtWidgets.QHBoxLayout()
-        tcp_layout.setSpacing(4)
-        tcp_label = QtWidgets.QLabel("Visualizer:")
-        tcp_label.setProperty("role", "status-label")
         self.tcp_status_indicator = QtWidgets.QLabel("OFF")
         self.tcp_status_indicator.setProperty("status", "off")
         self.tcp_status_indicator.setToolTip("TCP Visualizer Server Status")
-        self.tcp_toggle_btn = QtWidgets.QPushButton("●")
-        self.tcp_toggle_btn.setFixedSize(24, 24)
+        self.tcp_toggle_btn = QtWidgets.QPushButton("")
+        self.tcp_toggle_btn.setFixedSize(14, 14)
         self.tcp_toggle_btn.setProperty("role", "status-pill")
         self.tcp_toggle_btn.setProperty("status", "off")
         self.tcp_toggle_btn.setToolTip("Click to toggle Visualizer Server")
         self.tcp_toggle_btn.setCursor(QtCore.Qt.CursorShape.PointingHandCursor)
-        tcp_layout.addWidget(tcp_label)
-        tcp_layout.addWidget(self.tcp_status_indicator)
-        tcp_layout.addWidget(self.tcp_toggle_btn)
-        status_layout.addLayout(tcp_layout)
 
-        # Hold the assembled status container; the corner widget is wired
-        # up after the menubar exists (in setupStatusAndMenu).
-        self._status_container = status_container
-
-        # Main layout
-        self.horizontalLayout = QtWidgets.QHBoxLayout(self.centralwidget)
+        # Main layout: [topbar][subnav][tab pages]; the topbar + subnav
+        # rows are inserted by setupStatusAndMenu once actions exist.
+        self.central_layout = QtWidgets.QVBoxLayout(self.centralwidget)
+        self.central_layout.setContentsMargins(0, 0, 0, 0)
+        self.central_layout.setSpacing(0)
         self.tabWidget = QtWidgets.QTabWidget(parent=self.centralwidget)
 
         # Configuration/Universes tab (UI created by ConfigurationTab)
@@ -122,7 +100,11 @@ class Ui_MainWindow(object):
         self.tabWidget.addTab(self.tab_2, "Shows")
         self.tabWidget.addTab(self.tab_auto, "Auto(Experimental)")
 
-        self.horizontalLayout.addWidget(self.tabWidget)
+        # The shell topbar + subnav are the visible navigation; the tab
+        # bar itself is hidden and the QTabWidget stays as the page host
+        # (indices unchanged, so Ctrl+L and _on_tab_changed keep working).
+        self.tabWidget.tabBar().setVisible(False)
+        self.central_layout.addWidget(self.tabWidget)
         MainWindow.setCentralWidget(self.centralwidget)
 
         # Setup status bar and menu
@@ -146,14 +128,25 @@ class Ui_MainWindow(object):
         self.loadAction.setText(_translate("MainWindow", "Load Configuration"))
 
     def setupStatusAndMenu(self, MainWindow):
+        # 26px mono status strip: contextual hint left, version right.
+        # showMessage() still works for transient messages (saves etc.).
+        from gui.typography import MicroLabel
+        from utils.app_identity import APP_VERSION
+
         self.statusbar = QtWidgets.QStatusBar(parent=MainWindow)
+        self.statusbar.setFixedHeight(26)
+        self.statusbar.setSizeGripEnabled(False)
+        self.status_hint = MicroLabel("Ready", point_size=8, tracking_em=0.1)
+        self.status_hint.setObjectName("StatusHint")
+        self.statusbar.addWidget(self.status_hint)
+        version_label = MicroLabel(f"v{APP_VERSION}", point_size=8,
+                                   tracking_em=0.1)
+        version_label.setObjectName("StatusVersion")
+        self.statusbar.addPermanentWidget(version_label)
         MainWindow.setStatusBar(self.statusbar)
 
-        self.menubar = QtWidgets.QMenuBar(parent=MainWindow)
-        self.menubar.setGeometry(QtCore.QRect(0, 0, 1200, 22))
-
         # File menu
-        self.menuFile = QtWidgets.QMenu("File", parent=self.menubar)
+        self.menuFile = QtWidgets.QMenu("File", parent=MainWindow)
         self.actionNewFromTemplate = QAction("New from Template...", MainWindow)
         self.actionNewFromTemplate.setShortcut("Ctrl+N")
         self.actionSaveConfig = QAction("Save Configuration", MainWindow)
@@ -191,7 +184,7 @@ class Ui_MainWindow(object):
         self.menuFile.addAction(self.actionExit)
 
         # View menu — fullscreen toggle + theme picker.
-        self.menuView = QtWidgets.QMenu("View", parent=self.menubar)
+        self.menuView = QtWidgets.QMenu("View", parent=MainWindow)
         self.actionToggleFullscreen = QAction("Toggle Fullscreen", MainWindow)
         self.actionToggleFullscreen.setShortcut("F11")
         self.actionToggleFullscreen.setCheckable(True)
@@ -212,49 +205,75 @@ class Ui_MainWindow(object):
         self.menuView.addMenu(self.menuTheme)
 
         # Settings menu
-        self.menuSettings = QtWidgets.QMenu("Settings", parent=self.menubar)
+        self.menuSettings = QtWidgets.QMenu("Settings", parent=MainWindow)
         self.actionAudioSettings = QAction("Audio Settings...", MainWindow)
         self.actionAudioSettings.setShortcut("Ctrl+,")
         self.menuSettings.addAction(self.actionAudioSettings)
 
         # Help menu
-        self.menuHelp = QtWidgets.QMenu("Help", parent=self.menubar)
+        self.menuHelp = QtWidgets.QMenu("Help", parent=MainWindow)
         self.actionOpenLogFolder = QAction("Open Log Folder", MainWindow)
         self.menuHelp.addAction(self.actionOpenLogFolder)
         self.actionAbout = QAction("About", MainWindow)
         self.menuHelp.addAction(self.actionAbout)
 
-        # Add menus to menubar
-        MainWindow.setMenuBar(self.menubar)
-        self.menubar.addAction(self.menuFile.menuAction())
-        self.menubar.addAction(self.menuView.menuAction())
-        self.menubar.addAction(self.menuSettings.menuAction())
-        self.menubar.addAction(self.menuHelp.menuAction())
+        # No QMenuBar (North Star shell): the menus live in one overflow
+        # QMenu behind the topbar's ☰ button. gui.py inserts the Edit and
+        # Render menus into this container (before Settings / Help), and
+        # re-registers every shortcut on the window afterwards
+        # (register_menu_shortcuts) since popup-only actions don't fire
+        # their shortcuts app-wide.
+        self.overflow_menu = QtWidgets.QMenu(MainWindow)
+        self.overflow_menu.addMenu(self.menuFile)
+        self.overflow_menu.addMenu(self.menuView)
+        self.overflow_menu.addMenu(self.menuSettings)
+        self.overflow_menu.addMenu(self.menuHelp)
 
-        # Right corner of the menubar: the four icon shortcuts plus the
-        # ArtNet/Visualizer status pills (assembled earlier in setupUi).
-        # Replaces the old standalone QToolBar, freeing one full row of
-        # vertical space.
-        corner = QtWidgets.QWidget()
-        corner_layout = QtWidgets.QHBoxLayout(corner)
-        corner_layout.setContentsMargins(0, 0, 6, 0)
-        corner_layout.setSpacing(2)
+        # ── Shell topbar + subnav ────────────────────────────────────
+        from gui.widgets.topbar import (
+            ShellNav, StatusChip, SubNav, TopBar, TopBarIconButton,
+            default_sections,
+        )
 
+        sections = default_sections()
+        self.topbar = TopBar(sections, parent=self.centralwidget)
+        self.subnav = SubNav(parent=self.centralwidget)
+
+        # Right side of the topbar: icon shortcuts, overflow menu,
+        # filename, status chips.
         for action in (self.saveAction, self.loadAction,
                        self.importWorkspaceAction, self.createWorkspaceAction):
-            btn = QToolButton()
+            btn = TopBarIconButton()
             btn.setDefaultAction(action)
-            btn.setToolButtonStyle(QtCore.Qt.ToolButtonStyle.ToolButtonIconOnly)
-            btn.setAutoRaise(True)
-            corner_layout.addWidget(btn)
+            self.topbar.right_layout.addWidget(btn)
 
-        # Vertical separator between the icons and the status pills.
-        sep = QtWidgets.QFrame()
-        sep.setFrameShape(QtWidgets.QFrame.Shape.VLine)
-        sep.setFrameShadow(QtWidgets.QFrame.Shadow.Sunken)
-        corner_layout.addWidget(sep)
+        # Text instead of a ☰ glyph: the hamburger code point is not in
+        # Barlow and offscreen/exotic platforms draw a fallback box.
+        from gui.typography import mono_font
+        self.overflow_btn = TopBarIconButton()
+        self.overflow_btn.setText("MENU")
+        self.overflow_btn.setFont(mono_font(8, tracking_em=0.1))
+        self.overflow_btn.setFixedSize(46, 30)
+        self.overflow_btn.setToolButtonStyle(
+            QtCore.Qt.ToolButtonStyle.ToolButtonTextOnly)
+        self.overflow_btn.setToolTip("Menu")
+        self.overflow_btn.setMenu(self.overflow_menu)
+        self.overflow_btn.setPopupMode(
+            QToolButton.ToolButtonPopupMode.InstantPopup)
+        self.topbar.right_layout.addWidget(self.overflow_btn)
 
-        if hasattr(self, "_status_container") and self._status_container is not None:
-            corner_layout.addWidget(self._status_container)
+        self.topbar.right_layout.addSpacing(8)
+        self.topbar.right_layout.addWidget(self.topbar.filename_label)
+        self.topbar.right_layout.addSpacing(8)
 
-        self.menubar.setCornerWidget(corner, QtCore.Qt.Corner.TopRightCorner)
+        self.artnet_chip = StatusChip(
+            "ArtNet", self.artnet_status_indicator, self.artnet_toggle_btn)
+        self.tcp_chip = StatusChip(
+            "Vis", self.tcp_status_indicator, self.tcp_toggle_btn)
+        self.topbar.right_layout.addWidget(self.artnet_chip)
+        self.topbar.right_layout.addWidget(self.tcp_chip)
+
+        self.central_layout.insertWidget(0, self.topbar)
+        self.central_layout.insertWidget(1, self.subnav)
+        self.shell_nav = ShellNav(sections, self.topbar, self.subnav,
+                                  self.tabWidget)

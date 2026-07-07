@@ -334,21 +334,82 @@ QLabel[status="on"]  { color: $success$; font-weight: bold; }
 QLabel[status="active"] { color: $success$; font-weight: bold; }
 QLabel[status="ready"] { color: $info$; font-weight: bold; }
 
-/* Toolbar pill toggle buttons (the round-glyph buttons next to
-   ArtNet/Visualizer). Square chrome per the radius-0 rule; the glyph
-   itself stays a circle character. */
+/* Status toggle squares (ArtNet/Visualizer chips): a glyph-free
+   square that fills with the status color. Square chrome per the
+   radius-0 rule. */
 QPushButton[role="status-pill"] {
-    font-size: 14px;
     background-color: transparent;
     border: 1px solid $border$;
     padding: 0;
     min-height: 0;
-    color: $text_disabled$;
 }
 QPushButton[role="status-pill"]:hover { background-color: $accent_tint$; }
-QPushButton[role="status-pill"][status="on"]     { color: $success$; border-color: $success$; }
-QPushButton[role="status-pill"][status="active"] { color: $success$; border-color: $success$; }
-QPushButton[role="status-pill"][status="ready"]  { color: $info$; border-color: $info$; }
+QPushButton[role="status-pill"][status="on"]     { background-color: $success$; border-color: $success$; }
+QPushButton[role="status-pill"][status="active"] { background-color: $success$; border-color: $success$; }
+QPushButton[role="status-pill"][status="ready"]  { background-color: $info$; border-color: $info$; }
+
+/* -- Shell chrome: topbar, subnav, chips (North Star anatomy) ----------- */
+#TopBar {
+    background-color: $panel$;
+    border-bottom: 1px solid $border$;
+}
+#TopBarWordmark { color: $text$; }
+#TopBarFilename { color: $text_secondary$; }
+
+/* Section tabs: flat condensed caps, 3px accent underline when active.
+   Padding compensates the underline slot so the text stays centred. */
+QPushButton[role="nav"] {
+    background-color: transparent;
+    border: none;
+    border-bottom: 3px solid transparent;
+    padding: 3px 14px 0 14px;
+    min-height: 0;
+    color: $text_secondary$;
+}
+QPushButton[role="nav"]:hover { color: $text$; }
+QPushButton[role="nav"]:checked {
+    color: $text$;
+    border-bottom: 3px solid $accent$;
+}
+
+#SubNav {
+    background-color: $window$;
+    border-bottom: 1px solid $border$;
+}
+QPushButton[role="subnav"] {
+    background-color: transparent;
+    border: none;
+    border-bottom: 2px solid transparent;
+    padding: 2px 12px 0 12px;
+    min-height: 0;
+    color: $text_secondary$;
+}
+QPushButton[role="subnav"]:hover { color: $text$; }
+QPushButton[role="subnav"]:checked {
+    color: $accent_line$;
+    border-bottom: 2px solid $accent$;
+}
+
+QToolButton[role="topbar-icon"] {
+    background-color: transparent;
+    border: 1px solid $border$;
+    color: $text_secondary$;
+    font-size: 13px;
+}
+QToolButton[role="topbar-icon"]:hover {
+    background-color: $accent_tint$;
+    color: $text$;
+}
+QToolButton[role="topbar-icon"]::menu-indicator { image: none; }
+
+QWidget[role="chip"] {
+    background-color: transparent;
+    border: 1px solid $border$;
+}
+
+QStatusBar QLabel { color: $text_secondary$; background: transparent; }
+#StatusHint { color: $text_secondary$; }
+#StatusVersion { color: $text_disabled$; }
 
 /* -- Playback time readout (Shows + Structure tabs) --------------------- */
 QLabel#TimeReadout {

@@ -91,6 +91,44 @@ def test_fixtures_tab_golden(qapp, scene_config):
         tab.deleteLater()
 
 
+def _build_shell(qapp, theme):
+    """Ui shell on a bare QMainWindow, themed, on SHOW > TIMELINE."""
+    from PyQt6.QtWidgets import QMainWindow
+    from gui.theme_manager import ThemeManager
+    from gui.Ui_MainWindow import Ui_MainWindow
+
+    ThemeManager().apply(qapp, theme)
+    window = QMainWindow()
+    ui = Ui_MainWindow()
+    ui.setupUi(window)
+    ui.topbar.set_filename("demo_show.yaml")
+    ui.tabWidget.setCurrentIndex(4)
+    window.resize(1280, 200)
+    ui.centralwidget.setFixedWidth(1280)
+    return window, ui
+
+
+@pytest.mark.parametrize("theme", ["dark", "light"])
+def test_topbar_golden(qapp, theme):
+    """The shell topbar: wordmark, section nav with accent underline,
+    icon buttons, filename, status chips (shell pass S2)."""
+    window, ui = _build_shell(qapp, theme)
+    try:
+        compare_to_golden(ui.topbar.grab().toImage(), f"topbar_{theme}")
+    finally:
+        window.deleteLater()
+
+
+@pytest.mark.parametrize("theme", ["dark", "light"])
+def test_subnav_golden(qapp, theme):
+    """The subnav row for the SHOW section (STRUCTURE · TIMELINE)."""
+    window, ui = _build_shell(qapp, theme)
+    try:
+        compare_to_golden(ui.subnav.grab().toImage(), f"subnav_{theme}")
+    finally:
+        window.deleteLater()
+
+
 def test_stage_layer_panel_golden(qapp, scene_config):
     """The Stage Layers group box: checkboxes, buttons, active-layer label."""
     from gui.theme_manager import ThemeManager

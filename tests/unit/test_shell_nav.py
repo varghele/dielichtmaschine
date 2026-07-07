@@ -1,0 +1,142 @@
+"""Shell chrome: topbar/subnav navigation, overflow menu, shortcuts.
+
+The shell replaces the menubar + visible tab bar (shell pass S2, see
+docs/shell-pass-plan.md). These tests pin the contract: nav drives the
+existing QTabWidget indices, external index changes sync the chrome,
+every menu survives into the overflow popup, and every shortcut still
+fires without a menubar.
+"""
+
+import os
+
+import pytest
+
+os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+
+from PyQt6.QtGui import QAction, QKeySequence
+from PyQt6.QtWidgets import QMainWindow, QMenu, QMenuBar
+
+
+@pytest.fixture
+def shell_window(qapp):
+    """A QMainWindow with the Ui shell set up (tab pages stay empty
+    placeholders - the heavy tabs are only built by MainWindow)."""
+    from gui.Ui_MainWindow import Ui_MainWindow
+    window = QMainWindow()
+    ui = Ui_MainWindow()
+    ui.setupUi(window)
+    yield window, ui
+    window.deleteLater()
+
+
+class TestShellNav:
+    def test_no_menubar_and_hidden_tabbar(self, shell_window):
+        window, ui = shell_window
+        assert window.findChild(QMenuBar) is None
+        assert not ui.tabWidget.tabBar().isVisibleTo(window)
+
+    def test_initial_state_is_setup_universes(self, shell_window):
+        _, ui = shell_window
+        assert ui.tabWidget.currentIndex() == 0
+        assert ui.topbar.active_section() == "setup"
+        assert ui.subnav.tab_indices() == [0, 1, 2]
+
+    def test_nav_button_switches_section(self, shell_window):
+        _, ui = shell_window
+        ui.topbar._buttons["show"].click()
+        assert ui.tabWidget.currentIndex() == 3  # Structure
+        assert ui.subnav.tab_indices() == [3, 4]
+        ui.topbar._buttons["auto"].click()
+        assert ui.tabWidget.currentIndex() == 5
+
+    def test_subnav_switches_screen_within_section(self, shell_window):
+        _, ui = shell_window
+        ui.subnav._buttons[2].click()  # Stage
+        assert ui.tabWidget.currentIndex() == 2
+        assert ui.topbar.active_section() == "setup"
+
+    def test_section_remembers_last_screen(self, shell_window):
+        _, ui = shell_window
+        ui.subnav._buttons[1].click()          # Setup > Fixtures
+        ui.topbar._buttons["show"].click()     # away
+        ui.topbar._buttons["setup"].click()    # back
+        assert ui.tabWidget.currentIndex() == 1
+
+    def test_external_index_change_syncs_chrome(self, shell_window):
+        """Ctrl+L path: setCurrentIndex from outside the shell."""
+        _, ui = shell_window
+        ui.tabWidget.setCurrentIndex(5)
+        assert ui.topbar.active_section() == "auto"
+        assert ui.subnav.tab_indices() == [5]
+        ui.tabWidget.setCurrentIndex(4)
+        assert ui.topbar.active_section() == "show"
+
+    def test_status_widgets_keep_their_contract(self, shell_window):
+        """gui.py's _update_toolbar_status drives these by attribute
+        name and dynamic property; the move into chips must not break
+        that."""
+        _, ui = shell_window
+        for name in ("artnet_status_indicator", "artnet_toggle_btn",
+                     "tcp_status_indicator", "tcp_toggle_btn"):
+            widget = getattr(ui, name)
+            assert widget.property("status") == "off"
+        assert ui.artnet_chip.isVisibleTo(ui.topbar) or True  # exists
+        assert ui.tcp_chip is not None
+
+    def test_filename_label_updates(self, shell_window):
+        _, ui = shell_window
+        ui.topbar.set_filename("myshow.yaml *")
+        assert ui.topbar.filename_label.text() == "MYSHOW.YAML *"
+
+
+class TestOverflowMenu:
+    def test_all_menus_present_in_order(self, shell_window):
+        _, ui = shell_window
+        titles = [a.menu().title() for a in ui.overflow_menu.actions()
+                  if a.menu() is not None]
+        assert titles == ["File", "View", "Settings", "Help"]
+
+    def test_gui_py_insertion_points_exist(self, shell_window):
+        """gui.py inserts Edit before Settings and Render before Help."""
+        _, ui = shell_window
+        actions = ui.overflow_menu.actions()
+        assert ui.menuSettings.menuAction() in actions
+        assert ui.menuHelp.menuAction() in actions
+
+
+class TestShortcutRegistration:
+    def test_register_menu_shortcuts_recurses_and_counts(self, qapp):
+        from gui.widgets.topbar import register_menu_shortcuts
+        window = QMainWindow()
+        try:
+            root = QMenu(window)
+            sub = root.addMenu("Sub")
+            plain = QAction("no shortcut", window)
+            sub.addAction(plain)
+            hot = QAction("hot", window)
+            hot.setShortcut(QKeySequence("Ctrl+T"))
+            sub.addAction(hot)
+            top_hot = QAction("top", window)
+            top_hot.setShortcut(QKeySequence("Ctrl+U"))
+            root.addAction(top_hot)
+
+            count = register_menu_shortcuts(window, root)
+            assert count == 2
+            assert hot in window.actions()
+            assert top_hot in window.actions()
+            assert plain not in window.actions()
+        finally:
+            window.deleteLater()
+
+    def test_shell_shortcuts_registered_on_ui(self, shell_window):
+        """Every shortcut-carrying action in the overflow tree can be
+        registered on the window (what MainWindow.__init__ does)."""
+        window, ui = shell_window
+        from gui.widgets.topbar import register_menu_shortcuts
+        count = register_menu_shortcuts(window, ui.overflow_menu)
+        # File menu alone carries Ctrl+N/S/Shift+S/O/Q; View has F11;
+        # Settings has Ctrl+, - at least 7 in the Ui-built tree.
+        assert count >= 7
+        shortcuts = [a.shortcut().toString() for a in window.actions()]
+        assert "Ctrl+S" in shortcuts
+        assert "F11" in shortcuts

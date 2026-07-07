@@ -57,6 +57,12 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         # Initialize undo stack
         self._create_undo_stack()
 
+        # With no menubar, actions living only in the overflow popup
+        # would never fire their shortcuts; re-register them all on the
+        # window (must run after every menu exists, incl. Edit/Render).
+        from gui.widgets.topbar import register_menu_shortcuts
+        register_menu_shortcuts(self, self.overflow_menu)
+
     def _setup_status_timer(self):
         """Set up timer for updating toolbar status indicators."""
         self.status_timer = QTimer()
@@ -66,12 +72,20 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self._update_toolbar_status()
 
     def _update_toolbar_status(self):
-        """Update ArtNet and TCP status indicators in toolbar.
+        """Update ArtNet and TCP status indicators in the topbar.
 
         Drives the QSS dynamic-property selectors (`status="off"|"on"|"active"|"ready"`)
         rather than re-applying inline stylesheets, so the active theme stays
-        in charge of the actual colors.
+        in charge of the actual colors. Also refreshes the topbar's
+        filename readout (config basename + dirty marker) on the same
+        1 s tick.
         """
+        if hasattr(self, 'topbar'):
+            name = (os.path.basename(self.config_path)
+                    if getattr(self, 'config_path', None) else "unsaved")
+            if self.windowTitle().endswith(" *"):
+                name += " *"
+            self.topbar.set_filename(name)
         # ArtNet
         artnet_controller = getattr(self.shows_tab, 'artnet_controller', None)
         artnet_enabled = getattr(self.shows_tab, 'artnet_enabled', False)
@@ -329,9 +343,9 @@ class MainWindow(QMainWindow, Ui_MainWindow):
 
         # Create Edit menu if it doesn't exist
         if not hasattr(self, 'menuEdit'):
-            self.menuEdit = QtWidgets.QMenu("Edit", parent=self.menubar)
+            self.menuEdit = QtWidgets.QMenu("Edit", parent=self)
             # Insert Edit menu after File menu (before Settings menu)
-            self.menubar.insertMenu(self.menuSettings.menuAction(), self.menuEdit)
+            self.overflow_menu.insertMenu(self.menuSettings.menuAction(), self.menuEdit)
 
         # Create undo action
         self.undo_action = self.undo_stack.createUndoAction(self, "Undo")
@@ -411,8 +425,8 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             self.actionThemeDark.setChecked(True)
 
         # Render menu (insert before Help)
-        self.menuRender = QtWidgets.QMenu("Render", parent=self.menubar)
-        self.menubar.insertMenu(self.menuHelp.menuAction(), self.menuRender)
+        self.menuRender = QtWidgets.QMenu("Render", parent=self)
+        self.overflow_menu.insertMenu(self.menuHelp.menuAction(), self.menuRender)
         self.actionRenderToVideo = QAction("Render Show to Video...", self)
         self.menuRender.addAction(self.actionRenderToVideo)
         self.actionRenderToVideo.triggered.connect(self.render_to_video)
