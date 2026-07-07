@@ -93,9 +93,11 @@ class FixtureItem(QGraphicsItem):
         # For bar-type fixtures, account for the rotated extent
         if self.fixture_type in ("BAR", "PIXELBAR", "SUNSTRIP"):
             rotation_2d = self._get_2d_rotation_angle()
-            # Bar dimensions: width = size*2, height = size/3
+            # Bar symbol dimensions: width = size*2; the vertical extent
+            # covers the SVG bar body plus its beam tick (tick top sits
+            # 0.583*size above center) and the selection ring.
             bar_half_width = self.size  # half of bar_width
-            bar_half_height = self.size / 6  # half of bar_height
+            bar_half_height = self.size * 0.62
             # Calculate the extent after rotation
             angle_rad = radians(rotation_2d)
             horizontal_extent = abs(bar_half_width * cos(angle_rad)) + abs(bar_half_height * sin(angle_rad))
@@ -180,9 +182,10 @@ class FixtureItem(QGraphicsItem):
             painter.setPen(QPen(Qt.GlobalColor.black, 2))
             painter.setBrush(QBrush(QColor(self.channel_color)))
 
-        # Draw the chassis-keyed icon. PIXELBAR / SUNSTRIP are both
-        # Chassis.BAR; the legacy fixture_type string still drives the
-        # accent so visual fidelity is preserved.
+        # Draw the fixture icon. Mapped types render their North Star
+        # stage-plot symbol (line art in the group color); unknown types
+        # fall back to the chassis-keyed primitives, where the legacy
+        # fixture_type string still drives the accent.
         chassis = chassis_from_legacy_type(self.fixture_type)
         if self.fixture_type == "PIXELBAR":
             accent = ACCENT_PIXELS
@@ -190,7 +193,22 @@ class FixtureItem(QGraphicsItem):
             accent = ACCENT_LAMPS
         else:
             accent = None
-        paint_fixture_icon(painter, chassis, self.size, accent=accent)
+        used_symbol = paint_fixture_icon(
+            painter, chassis, self.size, accent=accent,
+            fixture_type=self.fixture_type,
+        )
+        if used_symbol and self.isSelected():
+            # The line symbols have no filled body for the blue selection
+            # pen to outline (the legacy primitives got that for free), so
+            # draw an explicit selection ring around the symbol box.
+            painter.setBrush(Qt.BrushStyle.NoBrush)
+            if self.fixture_type in ("BAR", "PIXELBAR", "SUNSTRIP"):
+                ring = QRectF(-self.size - 2, -self.size * 0.62 - 2,
+                              2 * self.size + 4, 2 * self.size * 0.62 + 4)
+            else:
+                ring = QRectF(-self.size / 2 - 2, -self.size / 2 - 2,
+                              self.size + 4, self.size + 4)
+            painter.drawRect(ring)
 
         # Draw mounting indicator (colored dot/ring in center)
         self._draw_mounting_indicator(painter)
@@ -214,9 +232,10 @@ class FixtureItem(QGraphicsItem):
         # For bar-type fixtures, account for the rotated extent
         if self.fixture_type in ("BAR", "PIXELBAR", "SUNSTRIP"):
             rotation_2d = self._get_2d_rotation_angle()
-            # Bar dimensions: width = size*2, height = size/3
+            # Must match boundingRect's bar extents (symbol body + beam
+            # tick + selection ring) so labels clear the artwork.
             bar_half_width = self.size  # half of bar_width
-            bar_half_height = self.size / 6  # half of bar_height
+            bar_half_height = self.size * 0.62
             # Calculate the maximum vertical extent after rotation
             angle_rad = radians(rotation_2d)
             # The vertical extent is the max of the rotated corners

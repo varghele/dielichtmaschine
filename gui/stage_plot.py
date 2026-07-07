@@ -316,7 +316,11 @@ class StagePlotRenderer:
             chassis = chassis_from_legacy_type(fixture.type)
             accent = (ACCENT_PIXELS if fixture.type == "PIXELBAR"
                       else ACCENT_LAMPS if fixture.type == "SUNSTRIP" else None)
-            paint_fixture_icon(painter, chassis, symbol_size, accent=accent)
+            # Mapped types draw their North Star stage-plot symbol in the
+            # group color; unknown types keep the legacy primitives (accent
+            # only applies there).
+            paint_fixture_icon(painter, chassis, symbol_size, accent=accent,
+                               fixture_type=fixture.type)
             # Orientation tick: short line out of the symbol along the
             # facing direction (+X in the rotated frame).
             tick_from = symbol_size * (1.0 if is_bar else 0.5)
