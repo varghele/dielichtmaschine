@@ -1,6 +1,6 @@
 # Architecture
 
-QLC+ Show Creator is a PyQt6 desktop application for designing DMX light shows. It exports to QLC+ workspace files (.qxw) and provides real-time preview via ArtNet and a 3D Visualizer.
+Die Lichtmaschine is a PyQt6 desktop application for designing DMX light shows. It provides real-time playback and preview via ArtNet and a 3D Visualizer, and exports QLC+ workspace files (.qxw) for interop.
 
 ## Directory Structure
 

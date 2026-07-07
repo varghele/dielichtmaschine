@@ -4,7 +4,7 @@ Themed milestones. Order within a milestone is rough; order *across* milestones 
 
 If you want to influence the order, open an issue or pick something up.
 
-> **Direction change (July 2026):** the QLC+ extension route was rejected upstream, so Show Creator continues as a standalone tool. Native playback (the built-in ArtNet output) is the primary path going forward; the QLC+ workspace export stays as an interop feature, not the product target. v1.2 below covers the groundwork this pivot implies (the switch to GDTF as the primary fixture format, OSC), including a branding switch and UI rework away from the "QLC+ Show Creator" name.
+> **Direction change (July 2026):** the QLC+ extension route was rejected upstream, so the app (now **Die Lichtmaschine**, formerly QLC+ Show Creator) continues as a standalone tool. Native playback (the built-in ArtNet output) is the primary path going forward; the QLC+ workspace export stays as an interop feature, not the product target. v1.2 below covers the groundwork this pivot implies (the switch to GDTF as the primary fixture format, OSC), including a branding switch and UI rework away from the "QLC+ Show Creator" name.
 
 ---
 
@@ -66,7 +66,7 @@ Quality-of-life work that doesn't fit a movement / morphing milestone but earns 
 
 - [ ] **Autosave + crash recovery.** Periodic `.autosave` write of the active config (every N minutes, debounced on modification). On launch, if an autosave is newer than the last saved config, prompt to recover. Covers Qt crashes, power cuts, and the "I forgot to save before closing" case.
 - [ ] **Undo / redo on the timeline.** The Shows tab is where the time-cost lives; a stack of timeline edits with reasonable granularity (block add / move / resize / delete, lane add / remove) covers the worst footguns. Out of scope: undoing config-level structural changes (fixture patch edits, group renames).
-- [ ] **Headless export CLI.** Wrap `Configuration.load + create_qlc_workspace` as a documented entry point: `qlcshowcreator export config.yaml --out workspace.qxw --qlc-version 5.2.1`. Already proven via the v1.0 roundtrip work; just needs an `argparse` shell + a console-script entry. Useful for batch workflows (export N variants for N venues) and for scripted setups.
+- [ ] **Headless export CLI.** Wrap `Configuration.load + create_qlc_workspace` as a documented entry point: `lichtmaschine export config.yaml --out workspace.qxw --qlc-version 5.2.1`. Already proven via the v1.0 roundtrip work; just needs an `argparse` shell + a console-script entry. Useful for batch workflows (export N variants for N venues) and for scripted setups.
 - [ ] **Riff library tagging + search.** As the library grows, the flat list scales badly. Tags, free-text search, and a favourites pin scale better than nested folders. The data model addition is small (`tags: List[str]`, a search index built lazily).
 - [ ] **Fixtures table delegate-based editing.** The fixtures table still uses `setCellWidget` for Universe / Address / Mode / Group / Role columns with per-widget `setStyleSheet` for per-row tinting, which reads as "fields coloured" rather than "row coloured with fields embedded". Proper fix: a `QStyledItemDelegate` per column. The half-finished experiments `gui/widgets/tinted_table.py` and `gui/widgets/tinted_rows_table.py` were kept for this; either complete them or remove them as part of this work.
 

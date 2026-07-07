@@ -375,7 +375,7 @@ def synthesize_qlc_root(fixture_type, dims_mm=None) -> ET.Element:
     root = ET.Element(_q('FixtureDefinition'))
 
     creator = ET.SubElement(root, _q('Creator'))
-    ET.SubElement(creator, _q('Name')).text = 'QLC+ Show Creator GDTF import'
+    ET.SubElement(creator, _q('Name')).text = 'Die Lichtmaschine GDTF import'
     ET.SubElement(creator, _q('Version')).text = str(
         getattr(fixture_type, 'data_version', '1.2'))
     ET.SubElement(root, _q('Manufacturer')).text = getattr(

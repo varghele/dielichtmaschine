@@ -1,10 +1,10 @@
 # ArtNet DMX Output Module
 
-Real-time ArtNet DMX output for QLC+ Show Creator.
+Real-time ArtNet DMX output for Die Lichtmaschine.
 
 ## Overview
 
-This module enables the Show Creator to send DMX data via ArtNet during playback, allowing real-time preview in the Visualizer or other ArtNet-compatible software.
+This module enables the app to send DMX data via ArtNet during playback, driving a real rig live and allowing real-time preview in the Visualizer or other ArtNet-compatible software.
 
 ## Components
 

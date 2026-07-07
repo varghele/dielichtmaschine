@@ -24,6 +24,24 @@ verbatim as the GitHub Release notes (see [docs/releasing.md](docs/releasing.md)
   The three brand font families (Barlow, Barlow Condensed, IBM Plex
   Mono; all SIL OFL) now ship with the app. File formats, config
   compatibility, and the QLC+ workspace export are unchanged.
+- **New brand themes.** Both themes now carry the Lichtmaschine design
+  tokens: Glutorange `#F0562E` accent (selections, hovers, checked
+  states), near-black `#141416` surfaces with warm off-white `#F4F1EA`
+  text in dark, warm paper tones in light, hard edges everywhere
+  (border radius 0), Barlow as the UI font and IBM Plex Mono for time
+  readouts. Under the hood the two hand-maintained `.qss` files became
+  one QSS template rendered from per-theme token dictionaries
+  (`gui/theme_tokens.py`), so palette changes are one dict edit.
+  Function colors (green/blue/orange/red status and destructive
+  states) keep their roles.
+- **Packaging and docs renamed.** The PyInstaller spec is now
+  `lichtmaschine.spec` building a `Lichtmaschine` app with the rotor
+  icon; release artifacts are named `Lichtmaschine-<os>-<version>`;
+  README (with the new banner), FEATURES, and docs present the app as
+  Die Lichtmaschine with QLC+ export as one interop path. Fixture-list
+  JSON exports are stamped `lichtmaschine-fixture-list`; files with
+  the old `qlcshowcreator-fixture-list` stamp import unchanged.
+  Companion `.qxf` files are stamped `Die Lichtmaschine GDTF import`.
 
 ### Added
 

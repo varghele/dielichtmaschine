@@ -30,7 +30,7 @@ MANIFEST
 # PyInstaller
 *.manifest
 *.spec
-!qlcshowcreator.spec
+!lichtmaschine.spec
 
 # Installer logs
 pip-log.txt

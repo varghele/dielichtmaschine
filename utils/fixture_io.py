@@ -38,7 +38,10 @@ CSV_FIELDNAMES = [
     'mounting', 'yaw', 'pitch', 'roll',
 ]
 
-JSON_FORMAT_NAME = 'qlcshowcreator-fixture-list'
+JSON_FORMAT_NAME = 'lichtmaschine-fixture-list'
+# Rigs exported before the Die Lichtmaschine rebrand carry the old
+# format stamp; they stay importable forever.
+LEGACY_JSON_FORMAT_NAMES = frozenset({'qlcshowcreator-fixture-list'})
 JSON_FORMAT_VERSION = 1
 
 GROUP_PROP_KEYS = [
@@ -218,9 +221,10 @@ def read_fixture_list_json(path: str) -> Tuple[List[Fixture], Dict[str, dict], L
     """
     with open(path, 'r') as f:
         data = json.load(f)
-    if data.get('format') != JSON_FORMAT_NAME:
+    fmt = data.get('format')
+    if fmt != JSON_FORMAT_NAME and fmt not in LEGACY_JSON_FORMAT_NAMES:
         raise ValueError(
-            f"Not a fixture list file (format field is {data.get('format')!r})"
+            f"Not a fixture list file (format field is {fmt!r})"
         )
 
     definitions = data.get('definitions', [])

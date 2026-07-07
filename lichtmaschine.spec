@@ -1,5 +1,5 @@
 # -*- mode: python ; coding: utf-8 -*-
-"""PyInstaller spec for QLC+ Show Creator (bundled with Visualizer)."""
+"""PyInstaller spec for Die Lichtmaschine (bundled with Visualizer)."""
 
 import os
 
@@ -11,11 +11,14 @@ a = Analysis(
     binaries=[],
     datas=[
         ('custom_fixtures', 'custom_fixtures'),
+        # resources/ carries the themes plus the brand assets
+        # (resources/brand/) and the bundled fonts (resources/fonts/),
+        # so the rebranded identity ships without extra entries.
         ('resources', 'resources'),
         ('riffs', 'riffs'),
         ('visualizer', 'visualizer'),
         # Starter rigs + demo shows for File -> New from Template. Only
-        # rigs/ and shows/ — demos/media, demos/reference and the
+        # rigs/ and shows/ - demos/media, demos/reference and the
         # generator scripts stay out of the bundle.
         ('demos/rigs', 'demos/rigs'),
         ('demos/shows', 'demos/shows'),
@@ -69,13 +72,13 @@ exe = EXE(
     a.scripts,
     [],
     exclude_binaries=True,
-    name='QLCShowCreator',
+    name='Lichtmaschine',
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
     upx=True,
     console=False,
-    icon=os.path.join(project_root, 'resources', 'lightbulb.png'),
+    icon=os.path.join(project_root, 'resources', 'brand', 'lichtmaschine.ico'),
 )
 
 coll = COLLECT(
@@ -85,5 +88,5 @@ coll = COLLECT(
     strip=False,
     upx=True,
     upx_exclude=[],
-    name='QLCShowCreator',
+    name='Lichtmaschine',
 )

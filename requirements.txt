@@ -1,4 +1,4 @@
-# QLC+ Show Creator - Python Dependencies
+# Die Lichtmaschine - Python Dependencies
 # Install with: pip install -r requirements.txt
 
 # Core dependencies

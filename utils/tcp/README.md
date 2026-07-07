@@ -1,10 +1,10 @@
-# TCP Server for Visualizer Integration
+﻿# TCP Server for Visualizer Integration
 
 TCP server implementation for sending stage/fixture configuration to the Visualizer application.
 
 ## Overview
 
-The TCP server runs in Show Creator and sends configuration data to connected Visualizer clients. This enables the Visualizer to know:
+The TCP server runs in Die Lichtmaschine and sends configuration data to connected Visualizer clients. This enables the Visualizer to know:
 - Stage dimensions
 - Fixture positions and types
 - Fixture groups and colors
@@ -45,7 +45,7 @@ Multi-threaded TCP server:
 
 **UI Elements:**
 - `Visualizer Server` checkbox - Enable/disable server
-- Status indicator (●) - Shows connection state:
+- Status indicator (â—) - Shows connection state:
   - Gray: Server not running
   - Blue: Server running, no clients
   - Green: Clients connected
@@ -56,7 +56,7 @@ Multi-threaded TCP server:
 
 ## Usage
 
-### In Show Creator GUI
+### In the main app GUI
 
 1. Go to Shows tab
 2. Check "Visualizer Server" checkbox
@@ -260,7 +260,7 @@ sock.close()
 - [ ] Compression for large configurations
 - [ ] Configurable port from GUI
 - [ ] Selective updates (not full config)
-- [ ] Bidirectional communication (Visualizer → Show Creator)
+- [ ] Bidirectional communication (Visualizer -> main app)
 - [ ] Client capabilities negotiation
 
 ## Troubleshooting

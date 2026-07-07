@@ -171,6 +171,30 @@ class TestJsonRoundTrip:
         with pytest.raises(ValueError, match="Not a fixture list"):
             read_fixture_list_json(str(path))
 
+    def test_exports_carry_new_format_name(self, rig_config, tmp_path):
+        import json
+        from utils.fixture_io import JSON_FORMAT_NAME
+        path = str(tmp_path / "rig.json")
+        write_fixture_list_json(path, rig_config)
+        with open(path) as f:
+            data = json.load(f)
+        assert data['format'] == JSON_FORMAT_NAME == 'lichtmaschine-fixture-list'
+
+    def test_reads_legacy_qlcshowcreator_format(self, rig_config, tmp_path):
+        """Rigs exported before the rebrand keep importing."""
+        import json
+        path = str(tmp_path / "rig.json")
+        write_fixture_list_json(path, rig_config)
+        with open(path) as f:
+            data = json.load(f)
+        data['format'] = 'qlcshowcreator-fixture-list'
+        with open(path, 'w') as f:
+            json.dump(data, f)
+
+        fixtures, _, _ = read_fixture_list_json(path)
+        assert [f.name for f in fixtures] == [
+            f.name for f in rig_config.fixtures]
+
 
 class TestFormatDispatch:
 

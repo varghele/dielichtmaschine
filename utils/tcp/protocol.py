@@ -1,5 +1,5 @@
-# utils/tcp/protocol.py
-# Protocol definition for Show Creator <-> Visualizer communication
+﻿# utils/tcp/protocol.py
+# Protocol definition for Lichtmaschine <-> Visualizer communication
 
 import json
 from enum import Enum
@@ -611,7 +611,7 @@ class VisualizerProtocol:
         for fixture in config.fixtures:
             # Fixtures on hidden stage layers are omitted from every 3D
             # preview (embedded + standalone via TCP). They still patch,
-            # output DMX, and export — this is display-only.
+            # output DMX, and export â€” this is display-only.
             if hasattr(config, 'is_fixture_visible') and not config.is_fixture_visible(fixture):
                 continue
 
@@ -680,7 +680,7 @@ class VisualizerProtocol:
         Returns:
             JSON string with newline delimiter
         """
-        # Strip the live ``capabilities`` field — it's a Python dataclass
+        # Strip the live ``capabilities`` field â€” it's a Python dataclass
         # (not JSON-serializable) used by the in-process composable renderer.
         # The standalone TCP visualizer consumes only the legacy fields.
         payload = VisualizerProtocol.build_fixtures_payload(config)
