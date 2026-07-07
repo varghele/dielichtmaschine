@@ -94,6 +94,34 @@ def test_theme_manager_available_themes_match_token_dicts():
 
 
 # ---------------------------------------------------------------------------
+# Engineering-grid motif
+# ---------------------------------------------------------------------------
+@pytest.mark.parametrize("name,tile", [("dark", "grid-dark.png"),
+                                       ("light", "grid-light.png")])
+def test_grid_tile_wired_into_theme(name, tile):
+    qss = render_theme(name)
+    assert f"{tile}" in qss and "background-repeat: repeat-xy" in qss
+    path = THEMES[name]["grid_tile"]
+    assert os.path.isfile(path), path
+    assert "\\" not in path, "QSS url() needs forward slashes"
+
+
+@pytest.mark.parametrize("tile", ["grid-dark.png", "grid-light.png"])
+def test_grid_tile_is_a_faint_48px_grid(tile):
+    """48x48 RGBA, 1px steel line top+left at near-invisible alpha,
+    transparent elsewhere (the handoff's 0.04-0.07 alpha motif)."""
+    from PIL import Image
+    path = os.path.join(os.path.dirname(template_path()), tile)
+    image = Image.open(path).convert("RGBA")
+    assert image.size == (48, 48)
+    r, g, b, a = image.getpixel((10, 0))
+    assert (r, g, b) == (141, 146, 153)
+    assert 5 <= a <= 25, f"grid line alpha {a} outside the faint range"
+    assert image.getpixel((0, 10))[3] == a
+    assert image.getpixel((10, 10))[3] == 0  # cell interior transparent
+
+
+# ---------------------------------------------------------------------------
 # Single source of truth
 # ---------------------------------------------------------------------------
 def test_template_is_the_single_source():

@@ -31,6 +31,14 @@ from utils.paths import get_project_root
 
 TEMPLATE_RELPATH = os.path.join("resources", "themes", "theme.qss.template")
 
+
+def _grid_tile(name: str) -> str:
+    """Absolute forward-slash path of an engineering-grid tile, for a
+    QSS url(). Computed at import so it follows the install location
+    (source tree or PyInstaller _MEIPASS)."""
+    return os.path.join(get_project_root(), "resources", "themes",
+                        name).replace("\\", "/")
+
 # Shared function colors: semantic roles, never brand accents.
 _FUNCTION = {
     "success": "#4CAF50",
@@ -55,6 +63,8 @@ _FONTS = {
 DARK = {
     **_FONTS,
     **_FUNCTION,
+    # Engineering-grid background tile (scripts/generate_grid_tiles.py)
+    "grid_tile": _grid_tile("grid-dark.png"),
     # Surfaces
     "window": "#141416",
     "panel": "#1E1E1E",
@@ -97,6 +107,8 @@ DARK = {
 LIGHT = {
     **_FONTS,
     **_FUNCTION,
+    # Engineering-grid background tile (scripts/generate_grid_tiles.py)
+    "grid_tile": _grid_tile("grid-light.png"),
     # Surfaces
     "window": "#ECE9E2",
     "panel": "#F4F1EA",

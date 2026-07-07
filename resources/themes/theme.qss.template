@@ -24,6 +24,14 @@ QDialog {
     color: $text$;
 }
 
+/* Engineering-grid motif: a faint 48px steel grid tiled across the
+   main window, visible where panels leave the window surface exposed.
+   Deliberately near-invisible (0.04-0.07 alpha per the handoff). */
+QMainWindow {
+    background-image: url("$grid_tile$");
+    background-repeat: repeat-xy;
+}
+
 QWidget {
     color: $text$;
     font-family: $font_ui$;
