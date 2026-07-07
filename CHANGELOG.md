@@ -11,6 +11,20 @@ verbatim as the GitHub Release notes (see [docs/releasing.md](docs/releasing.md)
 
 ## [Unreleased]
 
+### Changed
+
+- **The app is now Die Lichtmaschine** (dielichtmaschine.de). The
+  QLC+ Show Creator name described a companion tool; since the
+  standalone pivot the product authors and plays shows on its own, so
+  the identity follows. This first slice covers the runtime identity:
+  window title, application/organisation names, About dialog,
+  `--version` output, the new rotor app icon, and the visualizer
+  window title. Persisted settings (theme, splitter layouts) migrate
+  automatically from the old QLCShowCreator store on first launch.
+  The three brand font families (Barlow, Barlow Condensed, IBM Plex
+  Mono; all SIL OFL) now ship with the app. File formats, config
+  compatibility, and the QLC+ workspace export are unchanged.
+
 ### Added
 
 - **GDTF fixture import (first pass).** `.gdtf` files (General Device Type

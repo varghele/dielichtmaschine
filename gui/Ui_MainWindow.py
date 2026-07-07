@@ -2,15 +2,16 @@ from PyQt6 import QtCore, QtWidgets, QtGui
 from PyQt6.QtWidgets import QToolButton
 from PyQt6.QtGui import QAction, QFont
 from gui.StageView import StageView
+from utils.app_identity import APP_NAME, SETTINGS_APP
 
 
 class Ui_MainWindow(object):
     def setupUi(self, MainWindow):
-        MainWindow.setObjectName("QLCShowCreator")
+        MainWindow.setObjectName(SETTINGS_APP)
         # Fallback geometry only — main.py uses showMaximized so this only
         # applies if the window is later un-maximized by the user.
         MainWindow.resize(1600, 1000)
-        MainWindow.setWindowTitle("QLC+ Show Creator")
+        MainWindow.setWindowTitle(APP_NAME)
 
         # Create central widget
         self.centralwidget = QtWidgets.QWidget(parent=MainWindow)
@@ -132,7 +133,7 @@ class Ui_MainWindow(object):
 
     def retranslateUi(self, MainWindow):
         _translate = QtCore.QCoreApplication.translate
-        MainWindow.setWindowTitle(_translate("MainWindow", "QLC+ Show Creator"))
+        MainWindow.setWindowTitle(_translate("MainWindow", APP_NAME))
         # Tab titles
         self.tabWidget.setTabText(self.tabWidget.indexOf(self.tab_config), _translate("MainWindow", "Configuration"))
         self.tabWidget.setTabText(self.tabWidget.indexOf(self.tab), _translate("MainWindow", "Fixtures"))

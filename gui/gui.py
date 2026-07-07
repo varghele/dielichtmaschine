@@ -1495,18 +1495,21 @@ class MainWindow(QMainWindow, Ui_MainWindow):
 
     def show_about(self):
         """Show about dialog"""
+        from utils import app_identity
         QMessageBox.about(
             self,
-            "About QLC+ Show Creator",
-            "QLC+ Show Creator\n\n"
-            "A tool for creating QLC+ light shows with timeline-based editing.\n\n"
-            "Features:\n"
-            "- Fixture management and grouping\n"
-            "- Stage layout visualization\n"
-            "- Timeline-based show editing\n"
-            "- Audio playback with waveform display\n"
-            "- Real-time 3D Visualizer preview\n"
-            "- QLC+ workspace export"
+            f"About {app_identity.APP_NAME}",
+            f"{app_identity.APP_NAME}\n"
+            f"{app_identity.SLOGAN_EN}\n\n"
+            f"Version {app_identity.APP_VERSION} · {app_identity.APP_DOMAIN}\n\n"
+            "Visual light show authoring:\n"
+            "- Beat-synced timeline editing\n"
+            "- Fixture management and grouping (GDTF and QLC+ formats)\n"
+            "- Stage layout and printable stage plots\n"
+            "- Automatic show generation from audio\n"
+            "- Real-time 3D visualizer preview\n"
+            "- Live ArtNet/DMX playback\n"
+            "- QLC+ workspace export (interop)"
         )
 
     def closeEvent(self, event):

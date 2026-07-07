@@ -10,14 +10,12 @@ restarts.
 import os
 from typing import Optional
 
-from PyQt6.QtCore import QSettings
 from PyQt6.QtWidgets import QApplication
 
+from utils.app_settings import app_settings
 from utils.paths import get_project_root
 
 
-_SETTINGS_ORG = "QLCShowCreator"
-_SETTINGS_APP = "QLCShowCreator"
 _SETTINGS_KEY = "ui/theme"
 _DEFAULT_THEME = "dark"
 
@@ -31,14 +29,12 @@ class ThemeManager:
 
     def current(self) -> Optional[str]:
         """Read the persisted theme name. None if never set."""
-        settings = QSettings(_SETTINGS_ORG, _SETTINGS_APP)
-        value = settings.value(_SETTINGS_KEY, type=str)
+        value = app_settings().value(_SETTINGS_KEY, type=str)
         return value or None
 
     def set_current(self, name: str) -> None:
         """Persist the chosen theme name."""
-        settings = QSettings(_SETTINGS_ORG, _SETTINGS_APP)
-        settings.setValue(_SETTINGS_KEY, name)
+        app_settings().setValue(_SETTINGS_KEY, name)
 
     def apply(self, app: QApplication, name: str) -> bool:
         """Load ``resources/themes/<name>.qss`` and apply it to ``app``.

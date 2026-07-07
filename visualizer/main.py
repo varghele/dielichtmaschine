@@ -42,7 +42,8 @@ class VisualizerWindow(QMainWindow):
 
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("QLC+ Visualizer")
+        from utils.app_identity import APP_NAME
+        self.setWindowTitle(f"{APP_NAME} · Visualizer")
         self.setMinimumSize(1024, 768)
 
         # Configuration state (received via TCP)
@@ -378,7 +379,7 @@ def main():
     """Entry point for the Visualizer application."""
     try:
         # Verify shared module imports work
-        print("QLC+ Visualizer starting...")
+        print("Lichtmaschine Visualizer starting...")
         print(f"  - Shared modules imported successfully")
         print(f"  - Configuration model: {Configuration.__name__}")
         print(f"  - Fixture model: {Fixture.__name__}")
@@ -386,7 +387,7 @@ def main():
 
         # Create application
         app = QApplication(sys.argv)
-        app.setApplicationName("QLC+ Visualizer")
+        app.setApplicationName("Lichtmaschine Visualizer")
 
         # Create and show main window
         window = VisualizerWindow()

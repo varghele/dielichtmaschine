@@ -5,7 +5,9 @@ import sys
 import os
 
 from PyQt6 import QtWidgets
-from PyQt6.QtCore import Qt, QTimer, QSettings, QEvent
+from PyQt6.QtCore import Qt, QTimer, QEvent
+
+from utils.app_settings import app_settings
 from config.models import Configuration
 from .base_tab import BaseTab
 from gui.StageView import StageView
@@ -280,7 +282,7 @@ class StageTab(BaseTab):
         self._main_splitter = main_splitter
 
         # Restore persisted splitter sizes if we have them.
-        settings = QSettings("QLCShowCreator", "QLCShowCreator")
+        settings = app_settings()
         main_state = settings.value("stage/main_splitter")
         if main_state is not None:
             try:
@@ -634,7 +636,7 @@ class StageTab(BaseTab):
         Stage tab opens with the same proportions next session."""
         if not hasattr(self, "_main_splitter") or not hasattr(self, "_right_splitter"):
             return
-        settings = QSettings("QLCShowCreator", "QLCShowCreator")
+        settings = app_settings()
         settings.setValue("stage/main_splitter", self._main_splitter.saveState())
         settings.setValue("stage/right_splitter", self._right_splitter.saveState())
 

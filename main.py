@@ -16,12 +16,12 @@ import os
 from PyQt6 import QtWidgets
 from PyQt6.QtGui import QIcon
 from gui import MainWindow
-from _version import __version__
+from utils import app_identity
 from utils.paths import get_project_root
 
 # Handle --version flag early
 if '--version' in sys.argv:
-    print(f"QLCShowCreator {__version__}")
+    print(app_identity.version_string())
     sys.exit(0)
 
 # Performance profiling - enable with --profile flag
@@ -39,11 +39,23 @@ def main():
 
         # Start the application
         app = QtWidgets.QApplication(sys.argv)
-        app.setOrganizationName("QLCShowCreator")
-        app.setApplicationName("QLCShowCreator")
+        app.setOrganizationName(app_identity.SETTINGS_ORG)
+        app.setApplicationName(app_identity.SETTINGS_APP)
+        app.setApplicationDisplayName(app_identity.APP_NAME)
+        app.setApplicationVersion(app_identity.APP_VERSION)
+
+        # One-shot copy of persisted settings from the pre-rebrand
+        # QLCShowCreator store (theme, splitter sizes, ...).
+        from utils.app_settings import migrate_legacy_settings
+        migrate_legacy_settings()
+
+        # Brand fonts must register before any widget is created so the
+        # stylesheet's font families resolve on first paint.
+        from gui.fonts import register_brand_fonts
+        register_brand_fonts()
 
         # Set application icon
-        icon_path = os.path.join(project_root, "resources", "lightbulb.png")
+        icon_path = app_identity.app_icon_path()
         if os.path.exists(icon_path):
             app_icon = QIcon(icon_path)
             app.setWindowIcon(app_icon)

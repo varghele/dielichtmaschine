@@ -1419,8 +1419,8 @@ class ShowsTab(BaseTab):
         ~290 / riff fills below. 520×290 is roughly 16:9 so the
         visualizer reads as a wide preview rather than a tall column.
         """
-        from PyQt6.QtCore import QSettings
-        settings = QSettings("QLCShowCreator", "QLCShowCreator")
+        from utils.app_settings import app_settings
+        settings = app_settings()
 
         main_state = settings.value("shows/main_splitter")
         if main_state is not None:
@@ -1441,13 +1441,13 @@ class ShowsTab(BaseTab):
             self._right_splitter.setSizes([290, 600])
 
     def _save_main_splitter_state(self, *_args) -> None:
-        from PyQt6.QtCore import QSettings
-        settings = QSettings("QLCShowCreator", "QLCShowCreator")
+        from utils.app_settings import app_settings
+        settings = app_settings()
         settings.setValue("shows/main_splitter", self._main_splitter.saveState())
 
     def _save_right_splitter_state(self, *_args) -> None:
-        from PyQt6.QtCore import QSettings
-        settings = QSettings("QLCShowCreator", "QLCShowCreator")
+        from utils.app_settings import app_settings
+        settings = app_settings()
         settings.setValue("shows/right_splitter", self._right_splitter.saveState())
 
     def cleanup(self):

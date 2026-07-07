@@ -92,3 +92,99 @@ class TestBrandFonts:
         first = register_brand_fonts()
         second = register_brand_fonts()
         assert sorted(first) == sorted(second)
+
+
+@pytest.fixture
+def ini_settings(tmp_path, monkeypatch):
+    """Redirect QSettings to INI files under tmp_path so tests never
+    touch the real registry/config dir. Yields the tmp path."""
+    from PyQt6.QtCore import QSettings
+    from utils import app_settings as mod
+    monkeypatch.setattr(mod, "_settings_format", QSettings.Format.IniFormat)
+    QSettings.setPath(QSettings.Format.IniFormat,
+                      QSettings.Scope.UserScope, str(tmp_path))
+    yield tmp_path
+
+
+class TestSettingsMigration:
+    def _legacy(self):
+        from utils import app_settings as mod
+        return mod._make(app_identity.LEGACY_SETTINGS_ORG,
+                         app_identity.LEGACY_SETTINGS_APP)
+
+    def test_copies_legacy_keys_once(self, ini_settings):
+        from utils.app_settings import app_settings, migrate_legacy_settings
+        legacy = self._legacy()
+        legacy.setValue("ui/theme", "light")
+        legacy.setValue("stage/main_splitter", b"state")
+        legacy.sync()
+
+        assert migrate_legacy_settings() == 2
+        assert app_settings().value("ui/theme") == "light"
+        # Second run is a no-op even if the legacy store changes.
+        legacy.setValue("ui/theme", "dark")
+        legacy.sync()
+        assert migrate_legacy_settings() == 0
+        assert app_settings().value("ui/theme") == "light"
+
+    def test_existing_new_keys_never_clobbered(self, ini_settings):
+        from utils.app_settings import app_settings, migrate_legacy_settings
+        legacy = self._legacy()
+        legacy.setValue("ui/theme", "light")
+        legacy.sync()
+        app_settings().setValue("ui/theme", "dark")
+
+        migrate_legacy_settings()
+        assert app_settings().value("ui/theme") == "dark"
+
+    def test_empty_legacy_store_is_fine(self, ini_settings):
+        from utils.app_settings import migrate_legacy_settings
+        assert migrate_legacy_settings() == 0
+
+    def test_theme_manager_uses_new_store(self, ini_settings, qapp):
+        from gui.theme_manager import ThemeManager
+        from utils.app_settings import app_settings
+        tm = ThemeManager()
+        tm.set_current("light")
+        assert app_settings().value("ui/theme") == "light"
+        assert tm.current() == "light"
+
+
+class TestIdentitySwitchover:
+    def test_main_window_title_is_product_name(self, qapp):
+        from PyQt6.QtWidgets import QMainWindow
+        from gui.Ui_MainWindow import Ui_MainWindow
+        window = QMainWindow()
+        try:
+            ui = Ui_MainWindow()
+            ui.setupUi(window)
+            assert window.windowTitle() == app_identity.APP_NAME
+            assert "QLC" not in window.windowTitle()
+        finally:
+            window.deleteLater()
+
+    def test_no_stray_legacy_qsettings_constructions(self):
+        """No code outside the settings module may build the legacy
+        QSettings identity; everything goes through app_settings()."""
+        import subprocess
+        result = subprocess.run(
+            ["git", "grep", "-l", 'QSettings("QLCShowCreator"', "--",
+             "*.py", ":!utils/app_settings.py", ":!tests/"],
+            capture_output=True, text=True,
+            cwd=os.path.dirname(os.path.dirname(os.path.dirname(
+                os.path.abspath(__file__)))),
+        )
+        assert result.stdout.strip() == "", result.stdout
+
+    def test_version_flag_prints_brand(self):
+        import subprocess
+        import sys as _sys
+        root = os.path.dirname(os.path.dirname(os.path.dirname(
+            os.path.abspath(__file__))))
+        env = dict(os.environ, QT_QPA_PLATFORM="offscreen")
+        result = subprocess.run(
+            [_sys.executable, "main.py", "--version"],
+            capture_output=True, text=True, cwd=root, env=env, timeout=120,
+        )
+        assert result.returncode == 0, result.stderr
+        assert app_identity.version_string() in result.stdout

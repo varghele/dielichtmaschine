@@ -648,8 +648,8 @@ class AutoTab(BaseTab):
     def _restore_right_splitter_state(self) -> None:
         """Load the [visualizer | controls] split sizes from QSettings;
         fall back to the ~16:9 default when no setting is present."""
-        from PyQt6.QtCore import QSettings
-        settings = QSettings("QLCShowCreator", "QLCShowCreator")
+        from utils.app_settings import app_settings
+        settings = app_settings()
         state = settings.value("auto/right_splitter")
         if state is not None:
             try:
@@ -660,8 +660,8 @@ class AutoTab(BaseTab):
         self._right_splitter.setSizes(self._right_splitter_default_sizes)
 
     def _save_right_splitter_state(self, *_args) -> None:
-        from PyQt6.QtCore import QSettings
-        settings = QSettings("QLCShowCreator", "QLCShowCreator")
+        from utils.app_settings import app_settings
+        settings = app_settings()
         settings.setValue("auto/right_splitter", self._right_splitter.saveState())
 
     # ── Lazy fixture definitions ──────────────────────────────────────
