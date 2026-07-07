@@ -17,24 +17,14 @@ class Ui_MainWindow(object):
         self.centralwidget = QtWidgets.QWidget(parent=MainWindow)
         self.centralwidget.setObjectName("centralwidget")
 
-        # The Save/Load/Import/Create actions used to live on a separate
-        # QToolBar row. They now sit on the menubar's right corner together
-        # with the ArtNet/Visualizer status pills, freeing a vertical line
-        # of UI. The QAction objects stay around so gui.py's existing
-        # connections keep working — only the visual host changed.
-        style_obj = QtWidgets.QApplication.style()
-        self.saveAction = QAction(
-            style_obj.standardIcon(QtWidgets.QStyle.StandardPixmap.SP_DialogSaveButton),
-            "Save Configuration", MainWindow)
-        self.loadAction = QAction(
-            style_obj.standardIcon(QtWidgets.QStyle.StandardPixmap.SP_DialogOpenButton),
-            "Load Configuration", MainWindow)
-        self.importWorkspaceAction = QAction(
-            style_obj.standardIcon(QtWidgets.QStyle.StandardPixmap.SP_FileDialogDetailedView),
-            "Import Workspace", MainWindow)
-        self.createWorkspaceAction = QAction(
-            style_obj.standardIcon(QtWidgets.QStyle.StandardPixmap.SP_MediaSeekForward),
-            "Create Workspace", MainWindow)
+        # The Save/Load/Import/Create actions live on the shell topbar.
+        # Icons are brand line-SVGs applied theme-aware in
+        # apply_shell_icons (re-run on theme switch); the QAction objects
+        # keep their names so gui.py's existing connections keep working.
+        self.saveAction = QAction("Save Configuration", MainWindow)
+        self.loadAction = QAction("Load Configuration", MainWindow)
+        self.importWorkspaceAction = QAction("Import Workspace", MainWindow)
+        self.createWorkspaceAction = QAction("Create Workspace", MainWindow)
 
         # ArtNet / TCP-Visualizer status widgets. Per-theme styling lives
         # in the QSS template; here we only set role/status dynamic
@@ -249,15 +239,7 @@ class Ui_MainWindow(object):
             btn.setDefaultAction(action)
             self.topbar.right_layout.addWidget(btn)
 
-        # Text instead of a ☰ glyph: the hamburger code point is not in
-        # Barlow and offscreen/exotic platforms draw a fallback box.
-        from gui.typography import mono_font
         self.overflow_btn = TopBarIconButton()
-        self.overflow_btn.setText("MENU")
-        self.overflow_btn.setFont(mono_font(8, tracking_em=0.1))
-        self.overflow_btn.setFixedSize(46, 30)
-        self.overflow_btn.setToolButtonStyle(
-            QtCore.Qt.ToolButtonStyle.ToolButtonTextOnly)
         self.overflow_btn.setToolTip(
             QtCore.QCoreApplication.translate("Shell", "Menu"))
         self.overflow_btn.setMenu(self.overflow_menu)
@@ -280,3 +262,21 @@ class Ui_MainWindow(object):
         self.central_layout.insertWidget(1, self.subnav)
         self.shell_nav = ShellNav(sections, self.topbar, self.subnav,
                                   self.tabWidget)
+        self.apply_shell_icons()
+
+    def apply_shell_icons(self, theme: str = None) -> None:
+        """(Re)apply the brand line icons in the active theme's color.
+
+        Called once at setup and again after every theme switch - the
+        icons are rasterized pixmaps, so unlike QSS they don't recolor
+        on repolish.
+        """
+        from gui.icons import shell_icon
+        for action, name in (
+            (self.saveAction, "save"),
+            (self.loadAction, "open"),
+            (self.importWorkspaceAction, "import"),
+            (self.createWorkspaceAction, "export"),
+        ):
+            action.setIcon(shell_icon(name, theme))
+        self.overflow_btn.setIcon(shell_icon("menu", theme))

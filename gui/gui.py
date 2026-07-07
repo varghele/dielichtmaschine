@@ -149,8 +149,10 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         from gui.theme_manager import ThemeManager
         ThemeManager().apply(QtWidgets.QApplication.instance(), name)
         # Force the toolbar-status pills to re-evaluate their dynamic props
-        # against the new theme.
+        # against the new theme, and re-rasterize the topbar line icons
+        # in the new theme's color.
         self._update_toolbar_status()
+        self.apply_shell_icons(name)
 
     def _toggle_artnet(self):
         """Toggle ArtNet output via shows tab."""
