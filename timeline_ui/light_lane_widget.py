@@ -70,6 +70,7 @@ class LightLaneWidget(QFrame):
         # this layout down and hands both children over.
         self.controls_widget = self.create_controls_widget()
         main_layout.addWidget(self.controls_widget)
+        self._apply_group_border()
 
         # Timeline section (right side) - scrollable
         self.timeline_scroll = QScrollArea()
@@ -434,8 +435,31 @@ class LightLaneWidget(QFrame):
     def on_name_changed(self, text):
         self.lane.name = text
 
+    def _group_border_color(self):
+        """The lane's group color: first target's group, resolved
+        against the config. None when unresolvable."""
+        if not self.config or not self.lane.fixture_targets:
+            return None
+        from utils.target_resolver import parse_target
+        group_name, _ = parse_target(self.lane.fixture_targets[0])
+        group = self.config.groups.get(group_name) if self.config.groups else None
+        return getattr(group, "color", None) or None
+
+    def _apply_group_border(self):
+        """3px group-color left border on the lane header (North Star
+        lane anatomy). Group colors are data colors, so a widget-local
+        rule is the sanctioned override of the theme's header rule;
+        only border-left is set, background stays with the theme."""
+        if not hasattr(self, "controls_widget") or self.controls_widget is None:
+            return
+        color = self._group_border_color() or "transparent"
+        self.controls_widget.setStyleSheet(
+            f"QWidget#LightLaneHeader {{ border-left: 3px solid {color}; }}"
+        )
+
     def _update_targets_display(self):
         """Update the targets display label."""
+        self._apply_group_border()
         targets = self.lane.fixture_targets
         if not targets:
             self.targets_display.setText("(none)")
