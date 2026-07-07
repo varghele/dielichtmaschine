@@ -139,12 +139,13 @@ class FixturesTab(BaseTab):
         label_row = QtWidgets.QHBoxLayout()
         label_row.setSpacing(12)
 
-        self.label = QtWidgets.QLabel("Fixtures")
-        self.label.setFont(QFont("", 14, QFont.Weight.Bold))
+        from gui.typography import DisplayLabel
+        self.label = DisplayLabel("Fixtures", point_size=14,
+                                  weight=QFont.Weight.Bold)
         label_row.addWidget(self.label)
 
-        self.conflict_label = QtWidgets.QLabel("")
-        self.conflict_label.setStyleSheet("color: #d9534f; font-weight: bold;")
+        from gui.widgets.chip import Chip
+        self.conflict_label = Chip("", variant="warning")
         self.conflict_label.hide()
         label_row.addWidget(self.conflict_label)
 
@@ -760,7 +761,9 @@ class FixturesTab(BaseTab):
         issue_count = len(lint.conflicts) + len(lint.overflows)
         if issue_count:
             noun = "issue" if issue_count == 1 else "issues"
-            self.conflict_label.setText(f"⚠ {issue_count} DMX addressing {noun}")
+            # No ⚠ glyph: the chip's warning variant carries the signal,
+            # and the character is missing from Barlow (fallback box).
+            self.conflict_label.setText(f"{issue_count} DMX addressing {noun}")
             self.conflict_label.show()
         else:
             self.conflict_label.hide()

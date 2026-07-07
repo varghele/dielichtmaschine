@@ -407,6 +407,27 @@ QWidget[role="chip"] {
     border: 1px solid $border$;
 }
 
+/* Chip labels (gui/widgets/chip.py): bordered micro-caps tags. */
+QLabel[role="chip-label"] {
+    background-color: transparent;
+    border: 1px solid $border$;
+    color: $text_secondary$;
+    padding: 3px 8px;
+}
+QLabel[role="chip-label"][variant="warning"] {
+    color: $warning$;
+    border-color: $warning$;
+}
+QLabel[role="chip-label"][variant="error"] {
+    color: $destructive$;
+    border-color: $destructive$;
+}
+QLabel[role="chip-label"][variant="accent"] {
+    background-color: $accent$;
+    color: $on_accent$;
+    border-color: $accent$;
+}
+
 QStatusBar QLabel { color: $text_secondary$; background: transparent; }
 #StatusHint { color: $text_secondary$; }
 #StatusVersion { color: $text_disabled$; }

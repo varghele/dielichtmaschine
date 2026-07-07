@@ -87,7 +87,8 @@ def test_conflicting_fixtures_are_flagged(qapp, sample_configuration):
     tab = FixturesTab(config, parent=None)
     try:
         assert tab.conflict_label.isVisibleTo(tab)
-        assert "1 DMX addressing issue" in tab.conflict_label.text()
+        # The label is a warning Chip and renders in caps.
+        assert "1 DMX ADDRESSING ISSUE" in tab.conflict_label.text()
 
         for row, other_name in ((0, "Test Fixture 2"), (1, "Test Fixture 1")):
             for col in (0, 1):
