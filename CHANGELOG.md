@@ -70,6 +70,15 @@ verbatim as the GitHub Release notes (see [docs/releasing.md](docs/releasing.md)
   headers carry a 3px left border in their fixture group's color, so
   lanes read by group at a glance (mockup lane anatomy); the border
   follows target changes.
+- **North Star detailing.** The statusbar now shows a contextual hint
+  per screen (verified shortcuts only, e.g. "L cycles the active
+  layer · hold Space to pan" on Stage). Timeline effect blocks carry
+  the mockup's block anatomy: envelope framed and tinted (~0.18
+  alpha) in the lane's group color, hard corners across all block
+  painting, and selection marks in Glutorange; colour blocks keep
+  rendering their actual color as the swatch. A faint 48px
+  engineering grid (steel at 0.04-0.07 alpha) tiles the main-window
+  background in both themes.
 - **UI translation scaffolding.** Shell strings go through Qt's
   translation system with a started German catalog
   (`translations/lichtmaschine_de.ts`); set the `ui/language` setting

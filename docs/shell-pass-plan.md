@@ -11,10 +11,19 @@ DMX conflict count in the Fixtures tab is the first user), and 3px
 group-color left borders on timeline lane headers
 (timeline_ui/light_lane_widget.py, data-color widget rule).
 
-Remaining follow-ups: contextual statusbar hints per screen (currently
-a static Ready); compiled .qm for German needs a Qt lrelease (pip
-install pyside6 provides pyside6-lrelease); block-frame tints and
-swatch rows (next component slice); engineering-grid background motif. Follows the rebrand
+Slices N1-N3 shipped 2026-07-07 evening: contextual statusbar hints
+per screen (gui/widgets/topbar.py screen_hints, wired in gui.py),
+North Star block anatomy on the timeline (group-color envelope frame +
+~0.18 tint, radius 0, accent selection; golden timeline_block_dark),
+and the engineering-grid window background (48px steel tiles from
+scripts/generate_grid_tiles.py, paths injected as theme tokens). Note:
+the mockup's "colour swatch row" maps onto the existing colour-block
+fill (blocks are single-color in the data model); a literal swatch row
+becomes relevant only if colour blocks grow multi-color sequences.
+
+Remaining follow-ups: compiled .qm for German needs a Qt lrelease (pip
+install pyside6 provides pyside6-lrelease); registration-cross corner
+marks (screen-specific, land with their screens). Follows the rebrand
 (docs/rebranding-plan.md); design source is the North Star topbar/
 statusbar anatomy in `design_handoff_lichtmaschine_app/README.md`
 ("App-Struktur") and the `.dc.html` boards. Decisions taken with the
