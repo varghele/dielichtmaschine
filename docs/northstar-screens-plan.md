@@ -1,9 +1,14 @@
 # North Star screens: autonomous integration pass
 
-Status: in progress on `v1.2-rebrand` (2026-07-07 evening, user away;
-scope agreed as "everything visual on existing functionality plus
-self-contained new screens"). Design source:
+Status: ALL SLICES SHIPPED 2026-07-07 late evening (H1, T1, T2, S1,
+SS1, TY1; scope agreed as "everything visual on existing functionality
+plus self-contained new screens"). Design source:
 `design_handoff_lichtmaschine_app/` (card IDs in parentheses).
+1208 tests green at completion; every screen verified via goldens and
+a full offscreen boot. TY1 note: most panel "titles" are QGroupBoxes
+where a QSS ::title font would cascade into children, so only the true
+QLabel titles (Fixtures, Universe Configuration) moved to
+DisplayLabel.
 
 ## Slices
 

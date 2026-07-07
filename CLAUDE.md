@@ -136,6 +136,20 @@ glyphs - regenerate accordingly). Structured logging
 `dielichtmaschine`, demo media regeneration. No em-dashes rule now
 also covers UI copy; separator is " · ".
 
+**North Star screens shipped (2026-07-07 late,
+docs/northstar-screens-plan.md):** Home landing page
+(gui/widgets/home_screen.py, hosted in Ui_MainWindow's page_stack;
+recents via utils/app_settings record_recent_config/recent_configs),
+screensaver (gui/screens/screensaver.py, View menu, set_phase for
+deterministic tests), stageplot SVG symbols (resources/stageplot/,
+routed in gui/widgets/fixture_icons.py via fixture_type kwarg with
+legacy-primitive fallback), lane sub-row labels + master-timeline
+region bands. Still feature-milestone work, NOT rebrand leftovers:
+Live 3a/3b screens, Morph/Venue-check/Patch-flow, truss library,
+.lms format. Gotcha pinned by the screensaver work: the app-wide QSS
+`QWidget { font-family }` rule overrides setFont families - widgets
+needing a non-Barlow family must pin it in their own stylesheet.
+
 **Shell pass shipped (2026-07-07, same branch,
 docs/shell-pass-plan.md):** there is NO QMenuBar anymore - the 48px
 topbar (gui/widgets/topbar.py) carries wordmark, SETUP/SHOW/AUTO nav

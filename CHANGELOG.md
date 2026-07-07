@@ -70,6 +70,27 @@ verbatim as the GitHub Release notes (see [docs/releasing.md](docs/releasing.md)
   headers carry a 3px left border in their fixture group's color, so
   lanes read by group at a glance (mockup lane anatomy); the border
   follows target changes.
+- **Home screen.** The app now opens on a landing page: rotor hero,
+  wordmark, slogan, New from Template / Open Configuration quick
+  actions, and a recent-configurations list (tracked automatically on
+  load and save). Clicking the wordmark in the topbar returns Home;
+  any navigation, shortcut, or file open leaves it. Tab behavior and
+  shortcuts are unchanged underneath.
+- **Screensaver.** View > Screensaver starts the fullscreen brand
+  screensaver: the rotor glyph animating (counter-rotating rings,
+  pulsing Glutorange center), a large mono clock, and a status line;
+  any key or mouse input exits. Automatic idle / live-pause activation
+  arrives with the Live milestones.
+- **Stage plot symbols.** The stage view and the printable stage plot
+  now draw fixtures as the design system's line symbols (PAR, moving
+  head, wash, LED bar, pixel bar, sunstrip) in their group color, with
+  the beam tick showing orientation; unknown types keep the old
+  primitive shapes. The full 30-symbol set (stage elements + trusses)
+  ships in resources/stageplot/ for the upcoming stage work.
+- **Timeline anatomy.** Lane headers list their sub-lanes (DIM / COL /
+  MOV / SPC) as micro-labels; the master timeline's song parts render
+  as North Star region bands (3px part-color bar + tint, condensed
+  caps names, mono BPM readouts).
 - **North Star detailing.** The statusbar now shows a contextual hint
   per screen (verified shortcuts only, e.g. "L cycles the active
   layer · hold Space to pan" on Stage). Timeline effect blocks carry
