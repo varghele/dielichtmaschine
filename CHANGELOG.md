@@ -11,8 +11,33 @@ verbatim as the GitHub Release notes (see [docs/releasing.md](docs/releasing.md)
 
 ## [Unreleased]
 
+### Fixed
+
+- **Theme choice no longer resets to light.** Running the test suite
+  (or anything else calling the theme engine) could overwrite the
+  saved theme, so the app kept opening in light mode regardless of
+  the View > Theme choice. Applying a theme and persisting it are now
+  separate; only the View > Theme action saves, and the test suite is
+  fully isolated from the real settings store.
+- **Tab pages are actually dark.** Tab contents sat on the platform's
+  default light-gray background because the stylesheet never painted
+  bare page widgets; every tab page now uses the theme's window color.
+
 ### Changed
 
+- **Universes tab rebuilt to the North Star design.** Universes render
+  as row cards (UNI · name · output chip · destination · channels-used
+  meter · status dot) with an inspector on the right editing the
+  selected universe: name, output type as selectable chips, and only
+  the fields the chosen protocol actually uses (the old table's
+  confusing protocol-disabled dead cells are gone structurally).
+  Channels-used is computed live from the patched fixtures. Data
+  format and behavior (E1.31 multicast auto-IP, device refresh,
+  add/remove) unchanged.
+- **Stage plan matches the design language.** The 2D stage view keeps
+  its 3D-matching axis hues but as quiet dashed hairlines, gains the
+  AUDIENCE marker at the front edge, and fixture labels moved to the
+  mono readout style with the Z/layer line one step quieter.
 - **The app is now Die Lichtmaschine** (dielichtmaschine.de). The
   QLC+ Show Creator name described a companion tool; since the
   standalone pivot the product authors and plays shows on its own, so
