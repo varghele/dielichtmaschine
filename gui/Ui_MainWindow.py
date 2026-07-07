@@ -136,7 +136,9 @@ class Ui_MainWindow(object):
         self.statusbar = QtWidgets.QStatusBar(parent=MainWindow)
         self.statusbar.setFixedHeight(26)
         self.statusbar.setSizeGripEnabled(False)
-        self.status_hint = MicroLabel("Ready", point_size=8, tracking_em=0.1)
+        self.status_hint = MicroLabel(
+            QtCore.QCoreApplication.translate("Shell", "Ready"),
+            point_size=8, tracking_em=0.1)
         self.status_hint.setObjectName("StatusHint")
         self.statusbar.addWidget(self.status_hint)
         version_label = MicroLabel(f"v{APP_VERSION}", point_size=8,
@@ -256,7 +258,8 @@ class Ui_MainWindow(object):
         self.overflow_btn.setFixedSize(46, 30)
         self.overflow_btn.setToolButtonStyle(
             QtCore.Qt.ToolButtonStyle.ToolButtonTextOnly)
-        self.overflow_btn.setToolTip("Menu")
+        self.overflow_btn.setToolTip(
+            QtCore.QCoreApplication.translate("Shell", "Menu"))
         self.overflow_btn.setMenu(self.overflow_menu)
         self.overflow_btn.setPopupMode(
             QToolButton.ToolButtonPopupMode.InstantPopup)

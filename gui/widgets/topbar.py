@@ -26,10 +26,6 @@ from gui.typography import MicroLabel, display_font
 from utils.app_identity import APP_WORDMARK, app_icon_path
 
 
-def _tr(text: str) -> str:
-    return QCoreApplication.translate("Shell", text)
-
-
 class Section:
     """One topbar section with its subnav screens."""
 
@@ -48,20 +44,26 @@ def default_sections():
 
     Labels are translated lazily (call this after QApplication and any
     translators are installed). Tab indices match the QTabWidget pages
-    built in Ui_MainWindow.setupUi.
+    built in Ui_MainWindow.setupUi. The translate() calls use string
+    literals on purpose: pylupdate6 only extracts literals, a wrapper
+    function would hide them from the catalog.
     """
     return [
-        Section("setup", _tr("Setup"), [
-            ("universes", _tr("Universes"), 0),
-            ("fixtures", _tr("Fixtures"), 1),
-            ("stage", _tr("Stage"), 2),
+        Section("setup", QCoreApplication.translate("Shell", "Setup"), [
+            ("universes",
+             QCoreApplication.translate("Shell", "Universes"), 0),
+            ("fixtures",
+             QCoreApplication.translate("Shell", "Fixtures"), 1),
+            ("stage", QCoreApplication.translate("Shell", "Stage"), 2),
         ]),
-        Section("show", _tr("Show"), [
-            ("structure", _tr("Structure"), 3),
-            ("timeline", _tr("Timeline"), 4),
+        Section("show", QCoreApplication.translate("Shell", "Show"), [
+            ("structure",
+             QCoreApplication.translate("Shell", "Structure"), 3),
+            ("timeline",
+             QCoreApplication.translate("Shell", "Timeline"), 4),
         ]),
-        Section("auto", _tr("Auto"), [
-            ("auto", _tr("Auto"), 5),
+        Section("auto", QCoreApplication.translate("Shell", "Auto"), [
+            ("auto", QCoreApplication.translate("Shell", "Auto"), 5),
         ]),
     ]
 

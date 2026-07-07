@@ -57,6 +57,12 @@ def main():
         from utils.app_settings import migrate_legacy_settings
         migrate_legacy_settings()
 
+        # UI language (i18n scaffolding): installs a translator only if
+        # ui/language is set and its compiled catalog exists; must run
+        # before any widget is created so shell strings translate.
+        from utils.translations import install_translator
+        install_translator(app)
+
         # Brand fonts must register before any widget is created so the
         # stylesheet's font families resolve on first paint.
         from gui.fonts import register_brand_fonts
