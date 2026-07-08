@@ -380,6 +380,12 @@ QLabel[role="micro"] {
     font-family: $font_mono$;
 }
 
+/* Timeline block inspector + status footer (reference screen 06). */
+#ShowBlockInspectorTitle { color: $accent_line$; background: transparent; }
+#ShowBlockInspectorMeta { color: $text_secondary$; background: transparent; }
+#ShowBlockInspectorEmpty { padding: 8px 10px; }
+#ShowsStatusLine { color: $text_disabled$; background: transparent; }
+
 /* Flat pane icons (collapse chevrons): the base QPushButton:checked
    rule would otherwise paint an accent border on an always-checked
    toggle. */

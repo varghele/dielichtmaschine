@@ -871,6 +871,9 @@ class AutoTab(BaseTab):
         self.embedded_visualizer.set_pop_out_callback(self._launch_visualizer)
         self.embedded_visualizer.set_config(self.config)
         self.embedded_visualizer.set_preview_mode("build")
+        # The 3D pane header carries POP-OUT (reference 07); don't offer
+        # the same action twice.
+        self.embedded_visualizer.set_inner_pop_out_visible(False)
         self._right_splitter.addWidget(self.embedded_visualizer)
 
         lower = QWidget()

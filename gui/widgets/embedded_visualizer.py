@@ -196,6 +196,15 @@ class EmbeddedVisualizer(QWidget):
         provided by the hosting tab."""
         self._pop_out_callback = callback
 
+    def set_inner_pop_out_visible(self, visible: bool) -> None:
+        """Show or hide the visualizer's own Pop Out button.
+
+        Tabs whose 3D-pane header already carries a POP-OUT control
+        (the design references put it there) hide this one so the
+        action is not offered twice.
+        """
+        self._popout_btn.setVisible(visible)
+
     def cleanup(self) -> None:
         """Stop the FPS timer. The engine's GL teardown happens through Qt's
         normal child-deletion when the widget itself is destroyed."""

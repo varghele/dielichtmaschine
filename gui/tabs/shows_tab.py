@@ -17,7 +17,7 @@ from timeline_ui import (MasterTimelineContainer, LightLaneWidget, AudioLaneWidg
                          TimelineGrid)
 from timeline_ui.master_timeline_widget import SUBDIVISION_CHOICES
 from gui.icons import line_icon, shell_icon
-from gui.typography import MicroLabel, mono_font
+from gui.typography import DisplayLabel, MicroLabel, mono_font
 from gui.tabs.configuration_tab import TOOLBAR_BTN_WIDTH
 from timeline_ui.selection_manager import SelectionManager
 from timeline_ui.selection_overlay import SelectionOverlay
@@ -68,6 +68,9 @@ class ShowsTab(BaseTab):
     Provides a visual timeline interface for managing show structure,
     audio tracks, and light effect lanes with full playback support.
     """
+
+    # Versioned: the right pane gained a third child (block inspector).
+    RIGHT_SPLITTER_KEY = "shows/right_splitter_v2"
 
     def __init__(self, config: Configuration, parent=None):
         """Initialize shows tab.
@@ -169,6 +172,9 @@ class ShowsTab(BaseTab):
         self.embedded_visualizer.set_pop_out_callback(self._launch_visualizer)
         self.embedded_visualizer.set_config(self.config)
         self.embedded_visualizer.set_preview_mode("build")
+        # The 3D pane header carries Pop Out (reference 06); don't offer
+        # the same action twice.
+        self.embedded_visualizer.set_inner_pop_out_visible(False)
 
         # Inline riff browser under the visualizer. Reuses the shared
         # RiffLibrary instance from MainWindow so we don't double-load
@@ -178,30 +184,43 @@ class ShowsTab(BaseTab):
         riff_library = self._get_shared_riff_library()
         self.embedded_riff_panel = RiffBrowserPanel(riff_library, self)
 
-        # Pane caption in tracked micro caps (North Star 4a: the right
-        # pane header reads "3D PREVIEW"). The visualizer keeps its own
-        # Reset Camera / Pop Out row; this wrapper only adds the caption.
+        # Pane caption in tracked micro caps (reference right pane header:
+        # "3D PREVIEW" + POP-OUT + collapse chevron). The visualizer keeps
+        # its own Reset Camera / FPS row; this wrapper adds the header.
         vis_pane = QWidget()
         vis_pane.setObjectName("VisualizerPane")
         vis_layout = QVBoxLayout(vis_pane)
         vis_layout.setContentsMargins(0, 0, 0, 0)
         vis_layout.setSpacing(2)
-        caption_row = QHBoxLayout()
-        caption_row.setContentsMargins(4, 2, 4, 0)
-        caption_row.addWidget(MicroLabel("3D Preview", point_size=8))
-        caption_row.addStretch()
-        vis_layout.addLayout(caption_row)
+        vis_layout.addWidget(self._create_pane_header())
         vis_layout.addWidget(self.embedded_visualizer, 1)
         self._vis_pane = vis_pane
 
-        # Right pane: visualizer (~16:9 top) + riff panel (fills below).
+        # Read-only inspector for the selected effect block (reference:
+        # "EFFECT BLOCK · <name>" under the render).
+        self.block_inspector = self._create_block_inspector()
+
+        # Riff browser gets the reference's caption treatment.
+        riff_pane = QWidget()
+        riff_pane.setObjectName("RiffPane")
+        riff_layout = QVBoxLayout(riff_pane)
+        riff_layout.setContentsMargins(0, 0, 0, 0)
+        riff_layout.setSpacing(2)
+        riff_layout.addWidget(self._caption_strip("Riff Library"))
+        riff_layout.addWidget(self.embedded_riff_panel, 1)
+        self._riff_pane = riff_pane
+
+        # Right pane: visualizer (~16:9 top) + block inspector + riff panel.
         right_splitter = QSplitter(Qt.Orientation.Vertical)
         right_splitter.addWidget(vis_pane)
-        right_splitter.addWidget(self.embedded_riff_panel)
+        right_splitter.addWidget(self.block_inspector)
+        right_splitter.addWidget(riff_pane)
         right_splitter.setStretchFactor(0, 0)
-        right_splitter.setStretchFactor(1, 1)
+        right_splitter.setStretchFactor(1, 0)
+        right_splitter.setStretchFactor(2, 1)
         right_splitter.setCollapsible(0, True)
         right_splitter.setCollapsible(1, True)
+        right_splitter.setCollapsible(2, True)
         self._right_splitter = right_splitter
 
         # Outer splitter: timeline (left) | right pane. Collapsible so
@@ -236,8 +255,15 @@ class ShowsTab(BaseTab):
         self.transport_bar = self._create_playback_controls()
         main_layout.addWidget(self.transport_bar)
 
+        # Footer status line (reference statusbar): one mono line of real
+        # timeline state.
+        self.status_footer = self._create_status_footer()
+        main_layout.addWidget(self.status_footer)
+
         # Rasterize the line icons for the active theme.
         self._apply_chrome_icons()
+        self._update_status_line()
+        self._refresh_block_inspector()
 
     def _create_toolbar(self):
         """Create the top toolbar (North Star card 4a chrome).
@@ -313,6 +339,18 @@ class ShowsTab(BaseTab):
         self.grid_chips[SUBDIVISION_CHOICES[0][1]].setChecked(True)
         toolbar.addLayout(chips)
 
+        # SNAP chip (reference toolbar, right of the grid switcher). Real
+        # state: TimelineGrid.set_snap_to_grid fans out to master + audio +
+        # every lane, and the master checkbox syncs back via snap_changed.
+        self.snap_chip = QPushButton("SNAP")
+        self.snap_chip.setCheckable(True)
+        self.snap_chip.setChecked(True)
+        self.snap_chip.setProperty("role", "output-select")
+        self.snap_chip.setFont(mono_font(8, tracking_em=0.05))
+        self.snap_chip.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.snap_chip.setToolTip("Snap block edges to the grid")
+        toolbar.addWidget(self.snap_chip)
+
         toolbar.addSpacing(10)
 
         # Zoom control
@@ -383,10 +421,13 @@ class ShowsTab(BaseTab):
         controls.addSpacing(20)
 
         # Time display — styled by `#TimeReadout` rule in the active theme.
-        # 112px: 100 clipped the final digit under wide fallback fonts.
-        self.time_label = QLabel("00:00.00")
+        # Reference readout is bar-based: "BAR 28.3 · 01:52.6". The bar
+        # position is derived from the SongStructure parts (bars, meter,
+        # BPM); with no structure loaded the bar field reads "--.-".
+        # 230px: the combined readout needs room under wide fallback fonts.
+        self.time_label = QLabel(self._format_readout(0.0))
         self.time_label.setObjectName("TimeReadout")
-        self.time_label.setFixedWidth(112)
+        self.time_label.setFixedWidth(230)
         controls.addWidget(self.time_label)
 
         controls.addSpacing(10)
@@ -403,6 +444,255 @@ class ShowsTab(BaseTab):
         controls.addWidget(self.total_time_label)
 
         return bar
+
+    # ── Right pane chrome ─────────────────────────────────────────────
+
+    def _caption_strip(self, text: str) -> QWidget:
+        """A hairline-bounded micro-caps caption strip (reference: panel
+        headers such as "3D PREVIEW" / the riff library caption)."""
+        strip = QWidget()
+        strip.setProperty("role", "section-caption")
+        strip.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
+        row = QHBoxLayout(strip)
+        row.setContentsMargins(10, 4, 10, 4)
+        row.setSpacing(8)
+        row.addWidget(MicroLabel(text, point_size=8))
+        row.addStretch()
+        return strip
+
+    def _create_pane_header(self) -> QWidget:
+        """The reference's "3D PREVIEW" header: caption, POP-OUT, chevron."""
+        header = self._caption_strip("3D Preview")
+        row = header.layout()
+
+        self.pane_popout_btn = QPushButton("Pop Out")
+        self.pane_popout_btn.setProperty("role", "cta-outline")
+        self.pane_popout_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.pane_popout_btn.setToolTip("Open the visualizer on a second monitor")
+        row.addWidget(self.pane_popout_btn)
+
+        # Second affordance for the same collapse action the toolbar
+        # chevron drives (reference puts one in the pane header).
+        self.pane_collapse_btn = QPushButton()
+        self.pane_collapse_btn.setFixedWidth(TOOLBAR_BTN_WIDTH)
+        self.pane_collapse_btn.setToolTip("Collapse the 3D preview pane")
+        row.addWidget(self.pane_collapse_btn)
+        return header
+
+    def _stat_tile(self, caption: str, value: str) -> QWidget:
+        """Bordered caption-over-value readout cell (theme stat-tile role)."""
+        tile = QWidget()
+        tile.setProperty("role", "stat-tile")
+        tile.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
+        box = QVBoxLayout(tile)
+        box.setContentsMargins(8, 5, 8, 5)
+        box.setSpacing(1)
+        cap = QLabel(caption)
+        cap.setProperty("role", "stat-caption")
+        cap.setFont(mono_font(7, tracking_em=0.12))
+        val = QLabel(value)
+        val.setProperty("role", "stat-value")
+        val.setFont(mono_font(10))
+        val.setObjectName(f"BlockStat{caption}")
+        box.addWidget(cap)
+        box.addWidget(val)
+        return tile
+
+    def _create_block_inspector(self) -> QWidget:
+        """Read-only inspector for the current block selection.
+
+        The reference shows an EFFECT BLOCK inspector with a per-block
+        overlap-function chip row (XFADE / HTP / LTP / ADD). Overlap
+        functions do not exist in the data model (roadmap v1.6), so the
+        chip row is deliberately absent - everything here reflects real
+        state: the block name, its lane (in the lane's group color), its
+        bar range and duration, and the sub-lane block counts.
+        """
+        panel = QWidget()
+        panel.setObjectName("ShowBlockInspector")
+        panel.setProperty("role", "inspector")
+        panel.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
+        outer = QVBoxLayout(panel)
+        outer.setContentsMargins(12, 10, 12, 10)
+        outer.setSpacing(6)
+
+        self.inspector_title = DisplayLabel("Effect Block", point_size=11)
+        self.inspector_title.setObjectName("ShowBlockInspectorTitle")
+        outer.addWidget(self.inspector_title)
+
+        self.inspector_meta = QLabel("")
+        self.inspector_meta.setObjectName("ShowBlockInspectorMeta")
+        self.inspector_meta.setFont(mono_font(8))
+        self.inspector_meta.setTextFormat(Qt.TextFormat.RichText)
+        outer.addWidget(self.inspector_meta)
+
+        self.inspector_stats_row = QWidget()
+        stats = QHBoxLayout(self.inspector_stats_row)
+        stats.setContentsMargins(0, 0, 0, 0)
+        stats.setSpacing(5)
+        self.inspector_stat_values = {}
+        for caption in ("DIM", "COL", "MOV", "SPC"):
+            tile = self._stat_tile(caption, "0")
+            self.inspector_stat_values[caption] = tile.findChild(
+                QLabel, f"BlockStat{caption}")
+            stats.addWidget(tile)
+        outer.addWidget(self.inspector_stats_row)
+
+        # Dim empty state (dashed hint-box role = the theme's disabled
+        # placeholder treatment).
+        self.inspector_empty = QLabel("No block selected")
+        self.inspector_empty.setObjectName("ShowBlockInspectorEmpty")
+        self.inspector_empty.setProperty("role", "hint-box")
+        self.inspector_empty.setFont(mono_font(8, tracking_em=0.12))
+        outer.addWidget(self.inspector_empty)
+
+        outer.addStretch()
+        return panel
+
+    def _create_status_footer(self) -> QWidget:
+        """The reference's bottom status line, as real timeline state."""
+        footer = QWidget()
+        footer.setObjectName("ShowsStatusFooter")
+        footer.setProperty("role", "tab-page")
+        footer.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
+        row = QHBoxLayout(footer)
+        row.setContentsMargins(0, 0, 0, 0)
+        row.setSpacing(8)
+        self.status_line = MicroLabel("", point_size=8)
+        self.status_line.setObjectName("ShowsStatusLine")
+        row.addWidget(self.status_line)
+        row.addStretch()
+        return footer
+
+    # ── Readouts derived from real state ──────────────────────────────
+
+    @staticmethod
+    def _beats_per_bar(signature: str) -> float:
+        try:
+            numerator, denominator = map(int, signature.split("/"))
+            return (numerator * 4) / denominator
+        except (ValueError, ZeroDivisionError, AttributeError):
+            return 4.0
+
+    def _bar_beat_at(self, position: float):
+        """(bar, beat) for a time in seconds, both 1-based, or None.
+
+        Derived from the loaded SongStructure: parts carry num_bars,
+        signature, bpm, start_time and duration, so the bar index is the
+        count of bars in earlier parts plus the fraction through this
+        part. Exact for instant transitions (duration == bars * beats *
+        60/bpm); for gradual transitions it linearises within the part,
+        which is the same approximation the ruler uses.
+        """
+        structure = self.song_structure
+        if not structure or not structure.parts:
+            return None
+
+        bars_before = 0
+        for part in structure.parts:
+            duration = part.duration or 0.0
+            beats_per_bar = self._beats_per_bar(part.signature)
+            if duration > 0 and position < part.start_time + duration:
+                frac = max(0.0, (position - part.start_time) / duration)
+                beats_in = frac * part.num_bars * beats_per_bar
+                bar_in_part = int(beats_in // beats_per_bar)
+                beat_in_bar = int(beats_in % beats_per_bar) + 1
+                return (bars_before + bar_in_part + 1, beat_in_bar)
+            bars_before += part.num_bars
+
+        # At or past the end: pin to the final beat of the final bar.
+        last = structure.parts[-1]
+        return (bars_before, int(self._beats_per_bar(last.signature)))
+
+    def _bar_number_at(self, position: float):
+        """1-based bar number for a time, or None with no structure."""
+        bar_beat = self._bar_beat_at(position)
+        return bar_beat[0] if bar_beat else None
+
+    def _format_readout(self, position: float) -> str:
+        """"BAR 28.3 · 01:52.6" - bar.beat plus tenths-of-a-second time."""
+        bar_beat = self._bar_beat_at(position)
+        bar = f"{bar_beat[0]}.{bar_beat[1]}" if bar_beat else "--.-"
+        minutes = int(position // 60)
+        seconds = position % 60
+        return f"BAR {bar} · {minutes:02d}:{seconds:04.1f}"
+
+    def _grid_label(self) -> str:
+        for value, chip in self.grid_chips.items():
+            if chip.isChecked():
+                return "1" if value == 1 else f"1/{value}"
+        return "1"
+
+    def _update_status_line(self):
+        """"<n> LANES · <n> BLOCKS · GRID 1/4 · ZOOM 1.0x"."""
+        if not hasattr(self, "status_line"):
+            return
+        lanes = len(self.lane_widgets)
+        blocks = sum(len(w.lane.light_blocks) for w in self.lane_widgets)
+        zoom = self.zoom_slider.value() / 100.0
+        self.status_line.setText(
+            f"{lanes} LANES · {blocks} BLOCKS · "
+            f"GRID {self._grid_label()} · ZOOM {zoom:.1f}X"
+        )
+
+    def _refresh_block_inspector(self):
+        """Mirror the current block selection into the right-pane inspector.
+
+        Blocks enter the selection through the marquee, Ctrl+A or the
+        block context menu (SelectionManager is the single source).
+        """
+        if not hasattr(self, "inspector_title"):
+            return
+        selected = self.selection_manager.get_selected_blocks()
+
+        if len(selected) != 1:
+            self.inspector_stats_row.setVisible(False)
+            self.inspector_meta.setVisible(False)
+            self.inspector_empty.setVisible(True)
+            if selected:
+                self.inspector_title.setText("Effect Blocks")
+                self.inspector_empty.setText(
+                    f"{len(selected)} BLOCKS SELECTED")
+            else:
+                self.inspector_title.setText("Effect Block")
+                self.inspector_empty.setText("NO BLOCK SELECTED")
+            return
+
+        widget = selected[0]
+        block = widget.block
+        lane_widget = widget.lane_widget
+        name = block.name or block.effect_name or "base"
+        self.inspector_title.setText(f"Effect Block · {name}")
+
+        lane_name = lane_widget.lane.name if lane_widget else "-"
+        color = None
+        if lane_widget is not None and hasattr(lane_widget, "group_color"):
+            color = lane_widget.group_color()
+        # Group colors are data colors: inlining one is the sanctioned
+        # widget-local override (same rule as the lane header border).
+        lane_html = (f'<span style="color:{color}">{lane_name.upper()}</span>'
+                     if color else lane_name.upper())
+
+        start_bar = self._bar_number_at(block.start_time)
+        end_bar = self._bar_number_at(block.end_time)
+        bars = (f"BARS {start_bar}-{end_bar}"
+                if start_bar and end_bar else "BARS -")
+        duration = block.get_duration()
+        self.inspector_meta.setText(
+            f"{lane_html} · {bars} · {duration:.1f}S")
+
+        counts = {
+            "DIM": len(block.dimmer_blocks),
+            "COL": len(block.colour_blocks),
+            "MOV": len(block.movement_blocks),
+            "SPC": len(block.special_blocks),
+        }
+        for caption, value in counts.items():
+            self.inspector_stat_values[caption].setText(str(value))
+
+        self.inspector_empty.setVisible(False)
+        self.inspector_meta.setVisible(True)
+        self.inspector_stats_row.setVisible(True)
 
     def _apply_chrome_icons(self):
         """(Re)rasterize the toolbar/transport line icons.
@@ -422,6 +712,8 @@ class ShowsTab(BaseTab):
         expanded = self.pane_toggle_btn.isChecked()
         self.pane_toggle_btn.setIcon(
             shell_icon("chevron-right" if expanded else "chevron-left"))
+        if hasattr(self, "pane_collapse_btn"):
+            self.pane_collapse_btn.setIcon(shell_icon("chevron-right"))
 
     def changeEvent(self, event):
         # Theme switches restyle the whole app via app.setStyleSheet,
@@ -447,6 +739,20 @@ class ShowsTab(BaseTab):
             chip.clicked.connect(
                 lambda _=False, v=value: self._on_grid_chip_clicked(v))
         self.timeline_grid.subdivision_changed.connect(self._sync_grid_chips)
+
+        # SNAP chip: same non-looping pattern (set_snap_to_grid syncs the
+        # master checkbox silently; snap_changed only fires from the master).
+        self.snap_chip.clicked.connect(self._on_snap_chip_clicked)
+        self.timeline_grid.snap_changed.connect(self._sync_snap_chip)
+
+        # Right-pane header affordances.
+        self.pane_popout_btn.clicked.connect(lambda: self._launch_visualizer())
+        self.pane_collapse_btn.clicked.connect(
+            lambda: self.pane_toggle_btn.setChecked(False))
+
+        # Block inspector follows the shared selection state.
+        self.selection_manager.selection_changed.connect(
+            self._refresh_block_inspector)
 
         # Playback controls
         self.play_btn.clicked.connect(self._toggle_playback)
@@ -687,6 +993,10 @@ class ShowsTab(BaseTab):
             if self.audio_mixer:
                 self.audio_mixer.remove_lane("audio")
 
+        # Footer + bar readout now that the structure and lanes are in place.
+        self._update_status_line()
+        self._update_playhead_display(self.playhead_position)
+
     def _clear_timeline(self):
         """Clear all timeline data."""
         self.current_show_name = ""
@@ -706,7 +1016,12 @@ class ShowsTab(BaseTab):
         Python-side cleanup. This pattern fixed a native crash on Windows
         (STATUS_STACK_BUFFER_OVERRUN) where a paint event arriving for a
         deleted-but-still-visible widget tore through PyQt's binding.
+
+        Selection is dropped first: the selected block widgets are children
+        of these lanes, and SelectionManager touches every selected block
+        when it clears.
         """
+        self.selection_manager.clear_selection()
         for lane_widget in self.lane_widgets:
             try:
                 lane_widget.remove_requested.disconnect()
@@ -720,6 +1035,7 @@ class ShowsTab(BaseTab):
             lane_widget.setParent(None)
             lane_widget.deleteLater()
         self.lane_widgets.clear()
+        self._update_status_line()
 
     def _add_lane_widget(self, lane: LightLane):
         """Add a lane widget for the given lane data."""
@@ -746,6 +1062,7 @@ class ShowsTab(BaseTab):
         # and stripe and inserts a new aligned row.
         self.timeline_grid.add_light_lane(lane_widget)
         self.lane_widgets.append(lane_widget)
+        self._update_status_line()
 
     def _add_new_lane(self):
         """Add a new empty light lane."""
@@ -927,6 +1244,10 @@ class ShowsTab(BaseTab):
     def _remove_lane_widget(self, lane_widget: LightLaneWidget):
         """Remove a lane widget."""
         if lane_widget in self.lane_widgets:
+            # Drop this lane's blocks from the shared selection before the
+            # widgets go away (the inspector reads them back).
+            for block in lane_widget.get_all_block_widgets():
+                self.selection_manager.remove_block(block)
             lane_widget.remove_requested.disconnect()
             lane_widget.zoom_changed.disconnect()
             lane_widget.playhead_moved.disconnect()
@@ -934,6 +1255,8 @@ class ShowsTab(BaseTab):
             self.timeline_grid.remove_light_lane(lane_widget)
             self.lane_widgets.remove(lane_widget)
             lane_widget.deleteLater()
+            self._update_status_line()
+            self._refresh_block_inspector()
 
             # Update ArtNet controller with the updated lane list
             if self.artnet_controller:
@@ -1021,6 +1344,7 @@ class ShowsTab(BaseTab):
         self.audio_lane.set_zoom_factor(zoom_factor)
         for lane in self.lane_widgets:
             lane.set_zoom_factor(zoom_factor)
+        self._update_status_line()
 
     # === Grid Subdivision Chips ===
 
@@ -1028,6 +1352,7 @@ class ShowsTab(BaseTab):
         """Toolbar chip -> TimelineGrid (fans out to master + audio +
         every lane; the master combobox syncs without re-emitting)."""
         self.timeline_grid.set_grid_subdivision(value)
+        self._update_status_line()
 
     def _sync_grid_chips(self, value: int):
         """Master combobox change -> check the matching toolbar chip.
@@ -1038,6 +1363,16 @@ class ShowsTab(BaseTab):
         chip = self.grid_chips.get(value)
         if chip is not None and not chip.isChecked():
             chip.setChecked(True)
+        self._update_status_line()
+
+    def _on_snap_chip_clicked(self, checked: bool):
+        """Toolbar SNAP chip -> TimelineGrid (master + audio + lanes)."""
+        self.timeline_grid.set_snap_to_grid(checked)
+
+    def _sync_snap_chip(self, snap: bool):
+        """Master snap checkbox -> toolbar chip (no clicked signal, no loop)."""
+        if self.snap_chip.isChecked() != snap:
+            self.snap_chip.setChecked(snap)
 
     # === 3D Preview Pane Toggle ===
 
@@ -1075,7 +1410,7 @@ class ShowsTab(BaseTab):
 
     def _update_playhead_display(self, position: float):
         """Update time display and position slider."""
-        self.time_label.setText(self._format_time(position))
+        self.time_label.setText(self._format_readout(position))
 
         if self.song_structure:
             total = self.song_structure.get_total_duration()
@@ -1109,7 +1444,7 @@ class ShowsTab(BaseTab):
             if self.song_structure:
                 total = self.song_structure.get_total_duration()
                 position = (value / 1000.0) * total
-                self.time_label.setText(self._format_time(position))
+                self.time_label.setText(self._format_readout(position))
 
     def _toggle_playback(self):
         """Toggle play/pause."""
@@ -1583,9 +1918,11 @@ class ShowsTab(BaseTab):
     def _restore_splitter_states(self) -> None:
         """Restore both splitter sizes from QSettings.
 
-        Defaults — main: timeline ~1000 / right pane ~520; right: vis
-        ~290 / riff fills below. 520×290 is roughly 16:9 so the
-        visualizer reads as a wide preview rather than a tall column.
+        Defaults - main: timeline ~1000 / right pane ~520; right: vis
+        ~290 / block inspector ~170 / riff fills below. 520x290 is roughly
+        16:9 so the visualizer reads as a wide preview rather than a tall
+        column. The right key is versioned: the pane gained a third child
+        (the block inspector), and a two-child saved state restores wrong.
         """
         from utils.app_settings import app_settings
         settings = app_settings()
@@ -1599,14 +1936,14 @@ class ShowsTab(BaseTab):
         else:
             self._main_splitter.setSizes([1000, 520])
 
-        right_state = settings.value("shows/right_splitter")
+        right_state = settings.value(self.RIGHT_SPLITTER_KEY)
         if right_state is not None:
             try:
                 self._right_splitter.restoreState(right_state)
             except Exception:
-                self._right_splitter.setSizes([290, 600])
+                self._right_splitter.setSizes([290, 170, 430])
         else:
-            self._right_splitter.setSizes([290, 600])
+            self._right_splitter.setSizes([290, 170, 430])
 
     def _save_main_splitter_state(self, *_args) -> None:
         from utils.app_settings import app_settings
@@ -1626,7 +1963,8 @@ class ShowsTab(BaseTab):
     def _save_right_splitter_state(self, *_args) -> None:
         from utils.app_settings import app_settings
         settings = app_settings()
-        settings.setValue("shows/right_splitter", self._right_splitter.saveState())
+        settings.setValue(self.RIGHT_SPLITTER_KEY,
+                          self._right_splitter.saveState())
 
     def cleanup(self):
         """Clean up audio and ArtNet resources."""
@@ -2182,6 +2520,7 @@ class ShowsTab(BaseTab):
             if results:
                 print(f"Pasted {len(results)} block(s)")
                 self.save_to_config()
+                self._update_status_line()
 
         elif has_clipboard_data():
             # Paste single block - use first lane or currently focused lane
@@ -2236,6 +2575,8 @@ class ShowsTab(BaseTab):
 
         print(f"Deleted {count} block(s)")
         self.save_to_config()
+        self._update_status_line()
+        self._refresh_block_inspector()
 
     def _clear_selection(self):
         """Clear all selection."""

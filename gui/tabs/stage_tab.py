@@ -895,9 +895,8 @@ class StageTab(BaseTab):
         self.embedded_visualizer.set_pop_out_callback(self._launch_visualizer)
         self.embedded_visualizer.set_config(self.config)
         self.embedded_visualizer.set_preview_mode("build")
-        inner_popout = getattr(self.embedded_visualizer, "_popout_btn", None)
-        if inner_popout is not None:
-            inner_popout.setVisible(False)
+        # The pane header carries POP-OUT (reference 04); don't offer it twice.
+        self.embedded_visualizer.set_inner_pop_out_visible(False)
 
         inspector_scroll = QtWidgets.QScrollArea()
         inspector_scroll.setWidgetResizable(True)

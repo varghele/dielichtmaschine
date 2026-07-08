@@ -49,6 +49,9 @@ def _stub_visualizer(monkeypatch):
         def set_pop_out_callback(self, callback):
             pass
 
+        def set_inner_pop_out_visible(self, visible):
+            pass
+
         def set_config(self, config):
             pass
 
