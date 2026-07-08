@@ -64,7 +64,18 @@ def scene_config():
 
 
 @pytest.fixture
-def stage_tab(qapp, scene_config):
+def clean_sections():
+    """The library's collapse states persist to (session-shared)
+    QSettings; the goldens must render the defaults regardless of what
+    ran before them."""
+    from utils.app_settings import app_settings
+    app_settings().remove("stage/section")
+    yield
+    app_settings().remove("stage/section")
+
+
+@pytest.fixture
+def stage_tab(qapp, clean_sections, scene_config):
     from gui.theme_manager import ThemeManager
     from gui.tabs.stage_tab import StageTab
 
@@ -87,12 +98,25 @@ def test_stage_action_strip_golden(qapp, stage_tab):
 
 
 def test_stage_library_panel_golden(qapp, stage_tab):
-    """Left library: RIG · FIXTURES rows in group colors, the stage
-    element and truss tile grids, the dashed truss hint and the
-    collapsed STAGE SETTINGS toggle."""
+    """Left library in its default state: the expanded STAGE SETTINGS
+    section first (STAGE + GRID open, VIEW / MARKS / LAYERS / PLANES
+    collapsed), then RIG · FIXTURES rows in group colors, the
+    stage element and truss tile grids, the dashed truss hint - with
+    PLOT STAGE / LAUNCH VISUALIZER pinned at the foot."""
     panel = stage_tab.control_panel
     panel.setFixedSize(260, 900)
     compare_to_golden(panel.grab().toImage(), "stage_library_panel_dark")
+
+
+def test_stage_library_panel_collapsed_golden(qapp, stage_tab):
+    """Every section collapsed: four header rows with the right-pointing
+    chevron marker, and the pinned action foot still reachable."""
+    for section in stage_tab.sections.values():
+        section.set_expanded(False)
+    panel = stage_tab.control_panel
+    panel.setFixedSize(260, 900)
+    compare_to_golden(panel.grab().toImage(),
+                      "stage_library_panel_collapsed_dark")
 
 
 def test_stage_inspector_golden(qapp, stage_tab):

@@ -8,13 +8,17 @@ Anatomy (top to bottom, left to right):
   caption, a bordered segmented chip group (ALL + one chip per stage
   layer + "+ LAYER" + "DEFINE..."), the "OTHERS: 25% · LOCKED" hint,
   a disabled "MORPH..." button and "EXPORT RIDER PDF".
-- a 260px LIBRARY panel on the left: "RIG · FIXTURES" group rows (3px
-  left border in the group color, caps name, "4x · FLOWN" mono count +
+- a 260px LIBRARY panel on the left, top to bottom: an expanded
+  "STAGE SETTINGS" section (itself split into STAGE / GRID / VIEW /
+  MARKS / STAGE LAYERS / STAGE PLANES collapsibles - dimensions are
+  what you set first), then "RIG · FIXTURES" group rows (3px left
+  border in the group color, caps name, "4x · FLOWN" mono count +
   dominant layer; clicking selects that group's fixtures on the plan),
-  a 2-column tile grid of stage elements, a 2-column tile grid of
-  trusses, a dashed hint box, and a collapsed "STAGE SETTINGS" section
-  that holds every old left-rail control (dimensions, grid, view,
-  marks, layers card, planes, plot/launch, TCP status).
+  then a 2-column tile grid of stage elements, then one of trusses plus
+  a dashed hint box. Every section collapses via the same header
+  affordance and remembers its state in QSettings. PLOT STAGE / LAUNCH
+  VISUALIZER / the TCP status readout are pinned to the panel's foot,
+  outside the collapsibles.
 - the plan (StageView) in the middle, with non-interactive overlay
   chrome parented to the view: a top-left caption, a top-right accent
   badge naming the active layer, a bottom-left legend and a bottom-
@@ -77,6 +81,162 @@ def _active_tokens() -> dict:
     if light is not None and light["window"] in qss:
         return light
     return THEMES["dark"]
+
+
+def _chevron_icon(expanded: bool, color: str, size: int = 12):
+    """The collapsible-section marker.
+
+    resources/icons ships chevron-left / chevron-right only, and Barlow
+    has no chevron glyph, so the "expanded" marker is the right chevron
+    rotated a quarter turn (pointing down). No new asset, no glyph.
+    """
+    from PyQt6.QtGui import QIcon, QTransform
+    from gui.icons import line_icon
+
+    icon = line_icon("chevron-right", color, size)
+    if not expanded:
+        return icon
+    pixmap = icon.pixmap(size * 3, size * 3)
+    if pixmap.isNull():
+        return icon
+    return QIcon(pixmap.transformed(QTransform().rotate(90)))
+
+
+class _CollapsibleSection(QtWidgets.QWidget):
+    """Header toggle + content container.
+
+    The affordance the old STAGE SETTINGS section introduced (a checkable
+    QToolButton whose text is a mono caps caption, hiding/showing a
+    container below it), factored out so every library section speaks the
+    same visual language. ``settings_key`` persists the expanded state
+    under ``stage/section/<key>`` via ``utils.app_settings``.
+    """
+
+    def __init__(self, title: str, color: str, *, expanded: bool = True,
+                 settings_key: str = "", margins=(16, 8, 16, 12),
+                 spacing: int = 6, parent=None):
+        super().__init__(parent)
+        from gui.fonts import FONT_MONO
+
+        self._color = color
+        self._settings_key = settings_key
+        if settings_key:
+            stored = app_settings().value(
+                f"stage/section/{settings_key}", expanded, type=bool)
+            expanded = bool(stored)
+
+        outer = QtWidgets.QVBoxLayout(self)
+        outer.setContentsMargins(0, 0, 0, 0)
+        outer.setSpacing(0)
+
+        self.toggle = QtWidgets.QToolButton()
+        self.toggle.setText(title.upper())
+        self.toggle.setCheckable(True)
+        self.toggle.setToolButtonStyle(
+            Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
+        self.toggle.setProperty("role", "topbar-icon")
+        self.toggle.setStyleSheet(
+            "QToolButton {"
+            f" font-family: \"{FONT_MONO}\"; font-size: 10px;"
+            " padding: 8px 16px; text-align: left; }")
+        self.toggle.setSizePolicy(
+            QtWidgets.QSizePolicy.Policy.Expanding,
+            QtWidgets.QSizePolicy.Policy.Fixed)
+        # A QToolButton reports its label advance as its minimum width;
+        # a long caption would widen the 260px library panel.
+        self.toggle.setMinimumWidth(1)
+        self.toggle.setCursor(Qt.CursorShape.PointingHandCursor)
+        outer.addWidget(self.toggle)
+
+        self.container = QtWidgets.QWidget()
+        self.content = QtWidgets.QVBoxLayout(self.container)
+        self.content.setContentsMargins(*margins)
+        self.content.setSpacing(spacing)
+        outer.addWidget(self.container)
+
+        self.toggle.setChecked(expanded)
+        self.container.setVisible(expanded)
+        self._sync_marker(expanded)
+        self.toggle.toggled.connect(self._on_toggled)
+
+    # -- content forwarding (keeps call sites terse) -------------------
+    def addWidget(self, widget, *args):
+        self.content.addWidget(widget, *args)
+
+    def addLayout(self, layout, *args):
+        self.content.addLayout(layout, *args)
+
+    def addSpacing(self, px: int):
+        self.content.addSpacing(px)
+
+    def set_expanded(self, expanded: bool) -> None:
+        self.toggle.setChecked(bool(expanded))
+
+    def is_expanded(self) -> bool:
+        return self.toggle.isChecked()
+
+    def _sync_marker(self, expanded: bool) -> None:
+        self.toggle.setIcon(_chevron_icon(expanded, self._color))
+        self.toggle.setToolTip(
+            f"Collapse {self.toggle.text()}" if expanded
+            else f"Expand {self.toggle.text()}")
+
+    def _on_toggled(self, checked: bool) -> None:
+        self.container.setVisible(checked)
+        self._sync_marker(checked)
+        if self._settings_key:
+            app_settings().setValue(
+                f"stage/section/{self._settings_key}", bool(checked))
+
+
+class _ElementTile(QtWidgets.QToolButton):
+    """A palette tile: click places at stage centre, drag drops in place.
+
+    The drag carries ``ELEMENT_MIME_TYPE`` with the catalog kind as its
+    payload; StageView.dropEvent turns it into a stage element at the
+    cursor. Clicking is untouched - the drag only starts once the press
+    has travelled the platform's startDragDistance.
+    """
+
+    def __init__(self, kind: str, parent=None):
+        super().__init__(parent)
+        self.kind = kind
+        self._press_pos = None
+
+    def mousePressEvent(self, event):
+        if event.button() == Qt.MouseButton.LeftButton:
+            self._press_pos = event.position().toPoint()
+        super().mousePressEvent(event)
+
+    def mouseMoveEvent(self, event):
+        if (self._press_pos is not None
+                and event.buttons() & Qt.MouseButton.LeftButton
+                and (event.position().toPoint() - self._press_pos
+                     ).manhattanLength()
+                >= QtWidgets.QApplication.startDragDistance()):
+            self._press_pos = None
+            # The press never gets its release once the drag loop takes
+            # over; un-sink the button by hand or it stays pressed.
+            self.setDown(False)
+            self.start_drag()
+            return
+        super().mouseMoveEvent(event)
+
+    def mouseReleaseEvent(self, event):
+        self._press_pos = None
+        super().mouseReleaseEvent(event)
+
+    def start_drag(self):
+        from PyQt6.QtGui import QDrag
+        from gui.StageView import element_mime_data
+
+        drag = QDrag(self)
+        drag.setMimeData(element_mime_data(self.kind))
+        pixmap = self.icon().pixmap(30, 30)
+        if not pixmap.isNull():
+            drag.setPixmap(pixmap)
+            drag.setHotSpot(pixmap.rect().center())
+        drag.exec(Qt.DropAction.CopyAction)
 
 
 def ordered_element_specs(specs):
@@ -280,9 +440,21 @@ class StageTab(BaseTab):
 
     # -- left library panel ---------------------------------------------
 
+    def _make_section(self, title: str, key: str, *, expanded: bool = True,
+                      margins=(16, 8, 16, 12), spacing: int = 6):
+        """A library collapsible, registered under ``self.sections[key]``."""
+        section = _CollapsibleSection(
+            title, self._tokens["text_secondary"], expanded=expanded,
+            settings_key=key, margins=margins, spacing=spacing)
+        self.sections[key] = section
+        return section
+
     def _build_library_panel(self) -> QtWidgets.QWidget:
-        """The 260px library: fixtures, elements, trusses, settings."""
+        """The 260px library: settings first, then fixtures, elements,
+        trusses; export/visualizer actions pinned at the foot."""
         from gui.typography import MicroLabel
+
+        self.sections = {}
 
         # role=tab-page so the rail paints the themed window background
         # even when rendered standalone (golden tests grab it bare).
@@ -308,38 +480,47 @@ class StageTab(BaseTab):
         scroll.setWidget(inner)
         panel_layout.addWidget(scroll, 1)
 
-        control_layout.addWidget(self._section_caption("Rig · fixtures"))
+        # 1. Stage settings - the dimensions come first, so does this.
+        control_layout.addWidget(self._build_settings_section())
+
+        # 2. Rig · fixtures.
+        fixtures_section = self._make_section(
+            "Rig · fixtures", "fixtures",
+            margins=(0, 0, 0, 0), spacing=0)
 
         self._group_rows_container = QtWidgets.QWidget()
         self._group_rows_layout = QtWidgets.QVBoxLayout(
             self._group_rows_container)
         self._group_rows_layout.setContentsMargins(0, 0, 0, 0)
         self._group_rows_layout.setSpacing(0)
-        control_layout.addWidget(self._group_rows_container)
+        fixtures_section.addWidget(self._group_rows_container)
 
         self.groups_empty_hint = MicroLabel(
             "No fixture groups yet", point_size=8, tracking_em=0.1)
         self.groups_empty_hint.setMinimumWidth(1)
         self.groups_empty_hint.setContentsMargins(16, 8, 16, 8)
-        control_layout.addWidget(self.groups_empty_hint)
+        fixtures_section.addWidget(self.groups_empty_hint)
+        control_layout.addWidget(fixtures_section)
 
-        # Element palette: click a symbol to place a static stage element
-        # at stage center; drag it into place on the plan. Symbols and
-        # default footprints come from utils/stage_element_catalog.py.
+        # 3+4. Element palette: drag a symbol onto the plan to place it
+        # where you dropped it, or click it to place it at stage centre.
+        # Symbols and footprints come from utils/stage_element_catalog.py.
         from utils.stage_element_catalog import (
             CATEGORY_STAGE, CATEGORY_TRUSS, specs_for_category,
         )
         self.element_buttons = {}
 
-        control_layout.addWidget(
-            self._section_caption("Stage elements · click to place"))
-        control_layout.addLayout(
+        elements_section = self._make_section(
+            "Stage elements · drag", "elements",
+            margins=(0, 0, 0, 0), spacing=0)
+        elements_section.addLayout(
             self._element_grid(ordered_element_specs(
                 specs_for_category(CATEGORY_STAGE))))
+        control_layout.addWidget(elements_section)
 
-        control_layout.addWidget(
-            self._section_caption("Trusses · height freely set"))
-        control_layout.addLayout(
+        trusses_section = self._make_section(
+            "Trusses · drag", "trusses", margins=(0, 0, 0, 0), spacing=0)
+        trusses_section.addLayout(
             self._element_grid(specs_for_category(CATEGORY_TRUSS)))
 
         self.truss_hint = QtWidgets.QLabel(
@@ -353,30 +534,17 @@ class StageTab(BaseTab):
         hint_wrap = QtWidgets.QVBoxLayout()
         hint_wrap.setContentsMargins(12, 10, 12, 10)
         hint_wrap.addWidget(self.truss_hint)
-        control_layout.addLayout(hint_wrap)
+        trusses_section.addLayout(hint_wrap)
+        control_layout.addWidget(trusses_section)
 
         control_layout.addStretch(1)
-        control_layout.addWidget(self._build_settings_section())
+        panel_layout.addWidget(self._build_action_footer())
         return self.control_panel
-
-    def _section_caption(self, text: str) -> QtWidgets.QWidget:
-        """A caption with the reference's hairline separators."""
-        holder = QtWidgets.QWidget()
-        holder.setObjectName("StageSectionCaption")
-        holder.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
-        # Theme-owned: QWidget[role="section-caption"].
-        holder.setProperty("role", "section-caption")
-        row = QtWidgets.QHBoxLayout(holder)
-        row.setContentsMargins(16, 8, 16, 8)
-        row.addWidget(self._caption(text))
-        row.addStretch()
-        return holder
 
     def _element_grid(self, specs) -> QtWidgets.QGridLayout:
         """A 2-column tile grid: 30px symbol above a mono caps label."""
         from PyQt6.QtCore import QSize
         from PyQt6.QtGui import QIcon
-        from gui.fonts import FONT_MONO
         from utils.stage_element_catalog import symbol_path
 
         grid = QtWidgets.QGridLayout()
@@ -387,7 +555,7 @@ class StageTab(BaseTab):
         grid.setColumnStretch(0, 1)
         grid.setColumnStretch(1, 1)
         for i, spec in enumerate(specs):
-            tile = QtWidgets.QToolButton()
+            tile = _ElementTile(spec.kind)
             tile.setIcon(QIcon(symbol_path(spec.kind)))
             tile.setIconSize(QSize(30, 30))
             tile.setText(spec.label.upper())
@@ -410,7 +578,9 @@ class StageTab(BaseTab):
                                QtWidgets.QSizePolicy.Policy.Fixed)
             tile.setCursor(Qt.CursorShape.PointingHandCursor)
             tile.setToolTip(f"{spec.label} "
-                            f"({spec.width:g} x {spec.depth:g} m)")
+                            f"({spec.width:g} x {spec.depth:g} m)\n"
+                            "Drag onto the plan, or click to place it at "
+                            "stage centre")
             tile.clicked.connect(
                 lambda _=False, k=spec.kind: self._add_stage_element(k))
             grid.addWidget(tile, i // 2, i % 2)
@@ -420,49 +590,27 @@ class StageTab(BaseTab):
     # -- stage settings (the old left-rail controls) ---------------------
 
     def _build_settings_section(self) -> QtWidgets.QWidget:
-        """Collapsed-by-default section holding every old left-rail
-        control, attribute names unchanged."""
-        from PyQt6.QtGui import QFont
-        from gui.fonts import FONT_MONO
-        from gui.icons import line_icon
-        from gui.typography import MicroLabel, display_font, mono_font
+        """STAGE SETTINGS: expanded by default, split into one
+        collapsible per concern. Attribute names unchanged."""
+        from gui.typography import MicroLabel, mono_font
 
-        holder = QtWidgets.QWidget()
-        holder_layout = QtWidgets.QVBoxLayout(holder)
-        holder_layout.setContentsMargins(0, 0, 0, 0)
-        holder_layout.setSpacing(0)
+        # The outer section keeps the historical settings_toggle /
+        # settings_container attribute names; its content is a stack of
+        # nested collapsibles rather than one blob.
+        outer = self._make_section("Stage settings", "settings",
+                                   expanded=True, margins=(0, 0, 0, 6),
+                                   spacing=0)
+        self.settings_toggle = outer.toggle
+        self.settings_container = outer.container
 
-        self.settings_toggle = QtWidgets.QToolButton()
-        self.settings_toggle.setText("STAGE SETTINGS")
-        self.settings_toggle.setCheckable(True)
-        self.settings_toggle.setChecked(False)
-        self.settings_toggle.setIcon(
-            line_icon("settings", self._tokens["text_secondary"]))
-        self.settings_toggle.setToolButtonStyle(
-            Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
-        self.settings_toggle.setProperty("role", "topbar-icon")
-        self.settings_toggle.setStyleSheet(
-            "QToolButton {"
-            f" font-family: \"{FONT_MONO}\"; font-size: 10px;"
-            " padding: 8px 16px; text-align: left; }")
-        self.settings_toggle.setSizePolicy(
-            QtWidgets.QSizePolicy.Policy.Expanding,
-            QtWidgets.QSizePolicy.Policy.Fixed)
-        self.settings_toggle.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.settings_toggle.setToolTip(
-            "Stage dimensions, grid, view, marks, layers, planes, export")
-        holder_layout.addWidget(self.settings_toggle)
+        def subsection(title, key, expanded=True):
+            section = self._make_section(title, key, expanded=expanded,
+                                         margins=(16, 6, 16, 10))
+            outer.addWidget(section)
+            return section
 
-        self.settings_container = QtWidgets.QWidget()
-        self.settings_container.setVisible(False)
-        control_layout = QtWidgets.QVBoxLayout(self.settings_container)
-        control_layout.setContentsMargins(16, 8, 16, 12)
-        control_layout.setSpacing(6)
-
-        caption = self._caption
-
-        # Stage dimensions: compact mono-labelled fields.
-        control_layout.addWidget(caption("Stage"))
+        # -- STAGE: the dimensions, set first ---------------------------
+        stage_section = subsection("Stage", "stage_dims")
         dims_row = QtWidgets.QHBoxLayout()
         dims_row.setSpacing(6)
 
@@ -487,11 +635,10 @@ class StageTab(BaseTab):
                                      tracking_em=0.1))
             col.addWidget(spin)
             dims_row.addLayout(col)
-        control_layout.addLayout(dims_row)
+        stage_section.addLayout(dims_row)
 
-        # Grid: 0.5 m default, snap on.
-        control_layout.addSpacing(4)
-        control_layout.addWidget(caption("Grid"))
+        # -- GRID: 0.5 m default, snap on -------------------------------
+        grid_section = subsection("Grid", "grid")
 
         self.grid_size = QtWidgets.QDoubleSpinBox()
         self.grid_size.setRange(0.1, 50)
@@ -504,21 +651,20 @@ class StageTab(BaseTab):
         grid_size_row.addWidget(MicroLabel("Size / m", point_size=8,
                                            tracking_em=0.1))
         grid_size_row.addWidget(self.grid_size, 1)
-        control_layout.addLayout(grid_size_row)
+        grid_section.addLayout(grid_size_row)
 
         self.grid_toggle = QtWidgets.QCheckBox("Show grid")
         self.grid_toggle.setChecked(True)  # Grid visible by default
-        control_layout.addWidget(self.grid_toggle)
+        grid_section.addWidget(self.grid_toggle)
 
         self.snap_to_grid = QtWidgets.QCheckBox("Snap to grid")
         self.snap_to_grid.setChecked(True)  # Enable by default
-        control_layout.addWidget(self.snap_to_grid)
+        grid_section.addWidget(self.snap_to_grid)
 
-        # View: fit-view + orientation axes. The 'F' shortcut (wired in
-        # connect_signals) duplicates the button so the user can reset
+        # -- VIEW: fit-view + orientation axes. The 'F' shortcut (wired
+        # in connect_signals) duplicates the button so the user can reset
         # without moving the mouse off the plot.
-        control_layout.addSpacing(4)
-        control_layout.addWidget(caption("View"))
+        view_section = subsection("View", "view", expanded=False)
         self.fit_view_btn = QtWidgets.QPushButton("Fit View (F)")
         self.fit_view_btn.setToolTip(
             "Reset zoom and pan to fit the whole stage.\n\n"
@@ -527,7 +673,7 @@ class StageTab(BaseTab):
             "  • Space + left-drag — pan\n"
             "  • F — fit view"
         )
-        control_layout.addWidget(self.fit_view_btn)
+        view_section.addWidget(self.fit_view_btn)
 
         # Single checkbox - when on, every fixture draws its XYZ
         # axes. The previous two-checkbox UX (selected-only by
@@ -535,22 +681,21 @@ class StageTab(BaseTab):
         # discoverable and read as broken.
         self.show_axes_checkbox = QtWidgets.QCheckBox("Show orientation axes")
         self.show_axes_checkbox.setToolTip("Show XYZ axes on every fixture")
-        control_layout.addWidget(self.show_axes_checkbox)
+        view_section.addWidget(self.show_axes_checkbox)
 
-        # Stage marks.
-        control_layout.addSpacing(4)
-        control_layout.addWidget(caption("Stage marks"))
+        # -- MARKS ------------------------------------------------------
+        marks_section = subsection("Stage marks", "marks", expanded=False)
         self.add_spot_btn = QtWidgets.QPushButton("Add Mark")
         self.remove_item_btn = QtWidgets.QPushButton("Remove Selected")
-        control_layout.addWidget(self.add_spot_btn)
-        control_layout.addWidget(self.remove_item_btn)
+        marks_section.addWidget(self.add_spot_btn)
+        marks_section.addWidget(self.remove_item_btn)
 
-        # Stage layers card - named Z-planes (ground stack / mid-truss /
+        # -- LAYERS: named Z-planes (ground stack / mid-truss /
         # top-truss). Checkbox = visibility; hidden layers disappear from
         # the 2D plot and every 3D preview. Fixtures are assigned via the
         # stage right-click menu ("Assign to Layer") or the inspector's
         # Layer combo.
-        control_layout.addSpacing(4)
+        layers_section = subsection("Stage layers", "layers", expanded=False)
         self.layer_panel = QtWidgets.QWidget()
         self.layer_panel.setProperty("role", "card")
         self.layer_panel.setAttribute(
@@ -558,7 +703,9 @@ class StageTab(BaseTab):
         layer_layout = QtWidgets.QVBoxLayout(self.layer_panel)
         layer_layout.setContentsMargins(10, 8, 10, 8)
         layer_layout.setSpacing(6)
-        layer_layout.addWidget(caption("Stage layers"))
+        # The card is grabbed standalone by the golden suite, so it keeps
+        # its own caption even though the section header repeats it.
+        layer_layout.addWidget(self._caption("Stage layers"))
 
         self.layer_list = QtWidgets.QListWidget()
         self.layer_list.setMaximumHeight(110)
@@ -601,16 +748,15 @@ class StageTab(BaseTab):
         layer_btn_row.addWidget(self.edit_layer_btn)
         layer_btn_row.addStretch()
         layer_layout.addLayout(layer_btn_row)
-        control_layout.addWidget(self.layer_panel)
+        layers_section.addWidget(self.layer_panel)
 
-        # Stage planes - picker for the 6 faces of the stage bounding
+        # -- PLANES: picker for the 6 faces of the stage bounding
         # cuboid. Hovering an entry highlights that face in the
         # embedded 3D preview; clicking selects it persistently; clicking
         # the selected entry again clears. Display-only for now — plane
         # *targeting* from movement blocks is v1.4a.
         from visualizer.renderer.stage_planes import PLANE_NAMES
-        control_layout.addSpacing(4)
-        control_layout.addWidget(caption("Stage planes"))
+        planes_section = subsection("Stage planes", "planes", expanded=False)
 
         self.plane_list = QtWidgets.QListWidget()
         self.plane_list.setMaximumHeight(120)
@@ -625,19 +771,35 @@ class StageTab(BaseTab):
             item.setData(Qt.ItemDataRole.UserRole, plane_name)
             self.plane_list.addItem(item)
         self._selected_plane = None
-        control_layout.addWidget(self.plane_list)
+        planes_section.addWidget(self.plane_list)
 
-        # Bottom actions: Plot Stage (the deliverable, same handler as
-        # the strip's EXPORT RIDER PDF) + 3D visualizer launch.
-        control_layout.addSpacing(4)
+        return outer
+
+    def _build_action_footer(self) -> QtWidgets.QWidget:
+        """The library's pinned foot: PLOT STAGE (the deliverable, same
+        handler as the strip's EXPORT RIDER PDF), the 3D visualizer
+        launch and the TCP status readout. Outside every collapsible so
+        the two exports are always one click away."""
+        from PyQt6.QtGui import QFont
+        from gui.typography import MicroLabel, display_font, mono_font
+
+        self.action_footer = QtWidgets.QWidget()
+        self.action_footer.setObjectName("StageLibraryFooter")
+        self.action_footer.setProperty("role", "section-caption")
+        self.action_footer.setAttribute(
+            Qt.WidgetAttribute.WA_StyledBackground, True)
+        footer_layout = QtWidgets.QVBoxLayout(self.action_footer)
+        footer_layout.setContentsMargins(16, 10, 16, 12)
+        footer_layout.setSpacing(6)
+
         self.plot_stage_btn = QtWidgets.QPushButton("PLOT STAGE")
-        self.plot_stage_btn.setProperty("role", "primary")
+        self.plot_stage_btn.setProperty("role", "cta-accent")
         self.plot_stage_btn.setFont(display_font(11, QFont.Weight.Bold,
                                                  tracking_em=0.08))
         self.plot_stage_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self.plot_stage_btn.setToolTip(
             "Export the rig as a PDF or PNG stage plot")
-        control_layout.addWidget(self.plot_stage_btn)
+        footer_layout.addWidget(self.plot_stage_btn)
 
         self.launch_visualizer_btn = QtWidgets.QPushButton("LAUNCH VISUALIZER")
         self.launch_visualizer_btn.setFont(
@@ -645,7 +807,7 @@ class StageTab(BaseTab):
         self.launch_visualizer_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self.launch_visualizer_btn.setToolTip(
             "Start the 3D Visualizer application")
-        control_layout.addWidget(self.launch_visualizer_btn)
+        footer_layout.addWidget(self.launch_visualizer_btn)
 
         # TCP status indicator
         tcp_status_layout = QtWidgets.QHBoxLayout()
@@ -657,7 +819,7 @@ class StageTab(BaseTab):
         self.tcp_status_label.setFont(mono_font(8))
         tcp_status_layout.addWidget(self.tcp_status_label)
         tcp_status_layout.addStretch()
-        control_layout.addLayout(tcp_status_layout)
+        footer_layout.addLayout(tcp_status_layout)
 
         # Visualizer process reference
         self.visualizer_process = None
@@ -669,9 +831,7 @@ class StageTab(BaseTab):
 
         # Initial status update
         self._update_tcp_status()
-
-        holder_layout.addWidget(self.settings_container)
-        return holder
+        return self.action_footer
 
     # -- centre plan + overlay chrome ------------------------------------
 
@@ -1086,6 +1246,12 @@ class StageTab(BaseTab):
         self.stage_view.fixtures_changed.connect(self._notify_tcp_update)
         self.stage_view.fixtures_changed.connect(self._broadcast_visualizer_refresh)
 
+        # A placed element may have created a stage layer (trusses do),
+        # so the layer list / chips / combo need a rebuild. Fires for
+        # palette clicks and palette drops alike.
+        self.stage_view.stage_element_added.connect(
+            lambda _element: self._refresh_layer_list())
+
         # Spot/mark controls
         self.add_spot_btn.clicked.connect(lambda: self.stage_view.add_spot())
         self.remove_item_btn.clicked.connect(self.stage_view.remove_selected_items)
@@ -1135,9 +1301,8 @@ class StageTab(BaseTab):
         self.popout_btn.clicked.connect(self._launch_visualizer)
         self.preview_collapse_btn.toggled.connect(self._on_preview_collapsed)
 
-        # Stage settings section
-        self.settings_toggle.toggled.connect(
-            self.settings_container.setVisible)
+        # Library sections own their own show/hide + persistence
+        # (_CollapsibleSection); nothing to wire here.
 
         # Orientation display control
         self.show_axes_checkbox.stateChanged.connect(self._on_show_axes_changed)
@@ -1171,9 +1336,10 @@ class StageTab(BaseTab):
             else "Collapse the 3D preview")
 
     def _add_stage_element(self, kind: str):
-        """Palette click: place a static element at stage center."""
+        """Palette click: place a static element at stage center. Drops
+        go straight to StageView; both paths refresh the layer UI through
+        the stage_element_added signal."""
         self.stage_view.add_stage_element(kind)
-        self._refresh_layer_list()
 
     # ── Config sync ───────────────────────────────────────────────────
 
@@ -2012,16 +2178,25 @@ class StageTab(BaseTab):
         scene.update()
 
     def _on_set_orientation_requested(self, fixture_items: list):
-        """Handle right-click "Set Orientation" — re-bind the inline panel.
+        """Handle right-click "Set Orientation...".
 
-        Replaces the legacy modal flow. The persistent OrientationPanel in
-        the right-side splitter rebinds to the selected fixtures and live-
-        edits write through via :meth:`_on_inline_orientation_changed`.
+        Binds the inline OrientationPanel AND opens the modal dialog.
+        The inline panel alone was not enough: it sits under the 3D
+        preview inside the 380px inspector column, so on normal window
+        sizes the user could not reach it at all and had no way to set
+        fixture rotation. The modal is size-independent; the inline
+        panel stays for quick edits.
         """
         if not fixture_items:
             return
         self._inline_orientation_fixtures = list(fixture_items)
         self.orientation_panel.set_fixtures(self._inline_orientation_fixtures)
+
+        dialog = OrientationDialog(fixture_items, self.config, self)
+        if dialog.exec() == QtWidgets.QDialog.DialogCode.Accepted:
+            self._apply_orientation_to_fixtures(
+                fixture_items, dialog.get_orientation_values())
+            self.orientation_panel.set_fixtures(fixture_items)
 
     def _on_stage_selection_changed(self):
         """Re-bind the inline orientation panel to whatever fixtures are

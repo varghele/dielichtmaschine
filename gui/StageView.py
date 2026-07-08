@@ -18,12 +18,37 @@ _FALLBACK_LABEL = QColor(60, 60, 60)
 _FALLBACK_FIXTURE_TEXT = QColor(0, 0, 0)
 
 
+# Drag-and-drop contract between the Stage tab's element palette and the
+# 2D plan: the payload is the catalog kind, UTF-8 encoded. Kept here
+# because the drop target owns the format; the palette imports it.
+ELEMENT_MIME_TYPE = "application/x-lichtmaschine-element"
+
+
+def element_mime_data(kind: str) -> QtCore.QMimeData:
+    """The QMimeData a palette tile drags: one catalog kind."""
+    mime = QtCore.QMimeData()
+    mime.setData(ELEMENT_MIME_TYPE, QtCore.QByteArray(kind.encode("utf-8")))
+    return mime
+
+
+def element_kind_from_mime(mime) -> str:
+    """The catalog kind carried by a drag, or '' when it carries none."""
+    if mime is None or not mime.hasFormat(ELEMENT_MIME_TYPE):
+        return ""
+    return bytes(mime.data(ELEMENT_MIME_TYPE)).decode("utf-8", "replace")
+
+
 class StageView(QtWidgets.QGraphicsView):
     # Signal emitted when fixture positions/rotations/heights change
     fixtures_changed = QtCore.pyqtSignal()
 
     # Signal emitted when user requests to set orientation for selected fixtures
     set_orientation_requested = QtCore.pyqtSignal(list)  # List of FixtureItem
+
+    # Emitted with the freshly placed StageElement after a palette click
+    # or a palette drop (the tab refreshes its layer UI on it: placing a
+    # truss creates a stage layer).
+    stage_element_added = QtCore.pyqtSignal(object)
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -415,15 +440,27 @@ class StageView(QtWidgets.QGraphicsView):
     def add_stage_element(self, kind):
         """Place a catalog element at stage center; returns the model.
 
+        Palette click-to-place. Everything happens in
+        :meth:`add_stage_element_at` so the drag-and-drop path and this
+        one cannot drift apart.
+        """
+        return self.add_stage_element_at(kind, 0.0, 0.0)
+
+    def add_stage_element_at(self, kind, x_m=0.0, y_m=0.0):
+        """Place a catalog element at (x_m, y_m); returns the model.
+
         Trusses are their own layer: placing one auto-creates a
         StageLayer (unique "Truss N" name, default hang height 4 m)
         that the truss defines; docked fixtures join that layer and
         its z_height is the hang height.
+
+        Any other element joins the layer currently being edited (if
+        any), so a placed element is never born ghosted.
         """
         from config.models import StageLayer
         from gui.stage_items import StageElementItem
         from utils.stage_element_catalog import is_truss, make_element
-        element = make_element(kind, x=0.0, y=0.0)
+        element = make_element(kind, x=float(x_m), y=float(y_m))
         if not hasattr(self.config, 'stage_elements') or self.config.stage_elements is None:
             self.config.stage_elements = []
 
@@ -435,6 +472,8 @@ class StageView(QtWidgets.QGraphicsView):
             self.config.stage_layers.append(layer)
             element.layer = layer.name
             element.label = layer.name
+        elif self.active_layer:
+            element.layer = self.active_layer
 
         self.config.stage_elements.append(element)
         item = StageElementItem(element, self.pixels_per_meter)
@@ -443,8 +482,43 @@ class StageView(QtWidgets.QGraphicsView):
         self.scene.addItem(item)
         self.stage_element_items.append(item)
         self.apply_layer_visibility()
+        self.stage_element_added.emit(element)
         self.fixtures_changed.emit()
         return element
+
+    # ── Palette drag-and-drop ─────────────────────────────────────────
+
+    def _dropped_element_kind(self, event) -> str:
+        """The catalog kind of a palette drag, '' when it is some other
+        drag (fixture drags, file drops) - those fall through to the
+        QGraphicsView default so nothing existing breaks."""
+        from utils.stage_element_catalog import CATALOG
+        kind = element_kind_from_mime(event.mimeData())
+        return kind if kind in CATALOG else ""
+
+    def dragEnterEvent(self, event):
+        if self.config is not None and self._dropped_element_kind(event):
+            event.acceptProposedAction()
+            return
+        super().dragEnterEvent(event)
+
+    def dragMoveEvent(self, event):
+        if self.config is not None and self._dropped_element_kind(event):
+            event.acceptProposedAction()
+            return
+        super().dragMoveEvent(event)
+
+    def dropEvent(self, event):
+        """Drop a palette tile: create the element under the cursor."""
+        kind = self._dropped_element_kind(event) if self.config is not None else ""
+        if not kind:
+            super().dropEvent(event)
+            return
+        scene_pos = self.mapToScene(event.position().toPoint())
+        scene_pos = self.snap_to_grid_position(scene_pos)
+        x_m, y_m = self.pixels_to_meters(scene_pos.x(), scene_pos.y())
+        self.add_stage_element_at(kind, x_m, y_m)
+        event.acceptProposedAction()
 
     def remove_stage_element(self, item):
         """Remove an element item and its model from the config.

@@ -18,6 +18,8 @@ import pytest
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
+from PyQt6 import QtWidgets
+
 from config.models import (
     Configuration, Fixture, FixtureGroup, FixtureMode, StageLayer, Universe,
 )
@@ -562,12 +564,21 @@ def _row_texts(row):
 
 
 class TestLibraryPanel:
-    """Left 260px panel: RIG · FIXTURES rows, element/truss tiles, the
-    dashed hint, and the collapsed STAGE SETTINGS section that holds
-    every control the old left rail used to show."""
+    """Left 260px panel: the expanded STAGE SETTINGS section first, then
+    RIG · FIXTURES rows, element/truss tiles and the dashed hint - all
+    collapsible - with the export/visualizer actions pinned at the foot."""
 
     @pytest.fixture
-    def tab(self, qapp, rig_config):
+    def clean_sections(self):
+        """The library's collapse states persist to (session-shared)
+        QSettings, so each test starts and ends from the defaults."""
+        from utils.app_settings import app_settings
+        app_settings().remove("stage/section")
+        yield
+        app_settings().remove("stage/section")
+
+    @pytest.fixture
+    def tab(self, qapp, clean_sections, rig_config):
         from gui.tabs.stage_tab import StageTab
         tab = StageTab(rig_config, parent=None)
         tab.update_from_config()
@@ -615,22 +626,87 @@ class TestLibraryPanel:
     def test_truss_hint_uses_the_theme_hint_box(self, tab):
         assert tab.truss_hint.property("role") == "hint-box"
 
-    def test_settings_section_is_collapsed_but_keeps_the_old_controls(self, tab):
-        assert tab.settings_toggle.isChecked() is False
-        assert tab.settings_container.isVisibleTo(tab.control_panel) is False
+    def test_settings_section_is_expanded_and_keeps_the_old_controls(self, tab):
+        """Stage dimensions are set first, so STAGE SETTINGS opens
+        expanded - and every control that used to live in the blob is
+        still somewhere inside it."""
+        assert tab.settings_toggle.isChecked() is True
+        assert tab.settings_container.isVisibleTo(tab.control_panel) is True
         for name in ("stage_width", "stage_height", "grid_size",
                      "grid_toggle", "snap_to_grid", "fit_view_btn",
                      "show_axes_checkbox", "add_spot_btn", "remove_item_btn",
-                     "plane_list", "plot_stage_btn", "launch_visualizer_btn",
-                     "layer_list", "add_layer_btn", "remove_layer_btn",
-                     "edit_layer_btn", "tcp_status_label", "layer_panel"):
+                     "plane_list", "layer_list", "add_layer_btn",
+                     "remove_layer_btn", "edit_layer_btn", "layer_panel"):
             widget = getattr(tab, name)
             assert tab.settings_container.isAncestorOf(widget), (
                 f"{name} is not inside the STAGE SETTINGS section")
 
-    def test_settings_toggle_expands(self, tab):
-        tab.settings_toggle.setChecked(True)
-        assert tab.settings_container.isVisibleTo(tab.control_panel) is True
+    def test_export_actions_are_pinned_outside_the_collapsibles(self, tab):
+        """PLOT STAGE / LAUNCH VISUALIZER / TCP status must stay reachable
+        with every section collapsed."""
+        for name in ("plot_stage_btn", "launch_visualizer_btn",
+                     "tcp_status_label"):
+            widget = getattr(tab, name)
+            assert tab.action_footer.isAncestorOf(widget)
+            assert not tab.settings_container.isAncestorOf(widget)
+
+    def test_settings_toggle_collapses(self, tab):
+        tab.settings_toggle.setChecked(False)
+        assert tab.settings_container.isVisibleTo(tab.control_panel) is False
+
+    def test_section_order_puts_stage_settings_first(self, tab):
+        """Panel order: STAGE SETTINGS, RIG · FIXTURES, elements, trusses."""
+        from gui.tabs.stage_tab import _CollapsibleSection
+        scroll = tab.control_panel.findChild(QtWidgets.QScrollArea)
+        layout = scroll.widget().layout()
+        top_level = []
+        for i in range(layout.count()):
+            widget = layout.itemAt(i).widget()
+            if isinstance(widget, _CollapsibleSection):
+                top_level.append(widget.toggle.text())
+        assert top_level == ["STAGE SETTINGS", "RIG · FIXTURES",
+                             "STAGE ELEMENTS · DRAG", "TRUSSES · DRAG"]
+
+    def test_every_library_section_is_collapsible(self, tab):
+        """Elements and trusses collapse with the same affordance as the
+        settings section (the user's report: they could not)."""
+        for key in ("settings", "stage_dims", "grid", "view", "marks",
+                    "layers", "planes", "fixtures", "elements", "trusses"):
+            section = tab.sections[key]
+            assert section.toggle.isCheckable()
+            section.set_expanded(False)
+            # isVisibleTo(section), not the panel: STAGE / GRID / ... are
+            # nested inside the STAGE SETTINGS section.
+            assert section.container.isVisibleTo(section) is False
+            section.set_expanded(True)
+            assert section.container.isVisibleTo(section) is True
+
+    def test_default_expansion_state(self, tab):
+        expanded = {key: s.is_expanded() for key, s in tab.sections.items()}
+        assert expanded == {
+            "settings": True, "stage_dims": True, "grid": True,
+            "view": False, "marks": False, "layers": False, "planes": False,
+            "fixtures": True, "elements": True, "trusses": True,
+        }
+
+    def test_section_state_persists_via_app_settings(self, qapp,
+                                                     clean_sections,
+                                                     rig_config):
+        """QSettings is isolated by tests/conftest.py, so this is safe."""
+        from gui.tabs.stage_tab import StageTab
+        from utils.app_settings import app_settings
+
+        tab = StageTab(rig_config, parent=None)
+        tab.sections["elements"].set_expanded(False)
+        assert app_settings().value(
+            "stage/section/elements", True, type=bool) is False
+        tab.deleteLater()
+
+        reborn = StageTab(rig_config, parent=None)
+        assert reborn.sections["elements"].is_expanded() is False
+        # ... and the rest kept their defaults.
+        assert reborn.sections["settings"].is_expanded() is True
+        reborn.deleteLater()
 
 
 class TestActionStrip:
