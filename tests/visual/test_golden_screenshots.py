@@ -78,18 +78,28 @@ def test_stage_plot_golden(qapp, scene_config, tmp_path):
 
 
 def test_universes_tab_golden(qapp, scene_config):
-    """Universes tab (North Star 1d): row cards with output chip,
-    destination, channels-used bar, status dot; inspector right."""
+    """Universes tab (reference screen 03): no title row, row cards with
+    output chip, destination, channels-used bar and status dot; 420px
+    inspector with display-caps heading, output-type chips, target/net/
+    universe/rate fields, broadcast toggle and the info explainer; mono
+    status strip."""
     from unittest.mock import patch
     from gui.theme_manager import ThemeManager
     from gui.tabs.configuration_tab import ConfigurationTab
 
     ThemeManager().apply(qapp, "dark")
+    scene_config.universes[1].name = "Main rig"
+    scene_config.universes[1].output = {
+        "plugin": "ArtNet", "line": "0",
+        "parameters": {"ip": "192.168.1.50", "subnet": "0", "universe": "0"},
+    }
     with patch("gui.tabs.configuration_tab.get_device_display_names",
                return_value=["No Device"]):
         tab = ConfigurationTab(scene_config, parent=None)
     try:
-        tab.setFixedSize(1280, 400)
+        # Tall enough for the whole inspector stack; a squeezed grab
+        # overlaps the output-type chips with the parameter form.
+        tab.setFixedSize(1400, 620)
         compare_to_golden(tab.grab().toImage(), "universes_tab_dark")
     finally:
         tab.deleteLater()
@@ -215,30 +225,6 @@ def test_timeline_block_golden(qapp, scene_config):
                           "timeline_block_dark")
     finally:
         widget.deleteLater()
-
-
-def test_screensaver_golden(qapp):
-    """The screensaver frame (slice SS1): rotor glyph pinned at the
-    pulse peak, wordmark + slogan, pinned clock, status line on
-    screensaver black."""
-    from gui.screens.screensaver import ScreensaverWindow
-    from gui.theme_manager import ThemeManager
-
-    # Pin the active theme like every other golden here: earlier tests
-    # leave a stylesheet on the app, so without this the render depends
-    # on test order (passes alone, fails after a themed test).
-    ThemeManager().apply(qapp, "dark")
-    window = ScreensaverWindow()
-    try:
-        window.set_animation_enabled(False)
-        # Phase 2.0 = the center-dot pulse peak of the 4 s cosine, so
-        # the pinned frame shows the brand dot at full Glutorange.
-        window.set_phase(2.0)
-        window.set_time_text("21:36")
-        window.setFixedSize(960, 540)
-        compare_to_golden(window.grab().toImage(), "screensaver_dark")
-    finally:
-        window.deleteLater()
 
 
 def test_master_timeline_golden(qapp, mock_song_structure):

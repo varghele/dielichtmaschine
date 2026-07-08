@@ -205,6 +205,89 @@ class TestAddRemove:
             tab.deleteLater()
 
 
+class TestReferenceChrome:
+    """Deltas closed in the screen-03 diff pass."""
+
+    def test_no_tab_title(self, qapp):
+        """The shell subnav names the screen (reference has no title)."""
+        tab = _make_tab(qapp, ("ArtNet",))
+        try:
+            assert not hasattr(tab, "config_label")
+        finally:
+            tab.deleteLater()
+
+    def test_inspector_title_is_uni_and_name(self, qapp):
+        tab = _make_tab(qapp, ("ArtNet",))
+        try:
+            assert tab.inspector_title.text() == "U1 · UNIVERSE 1"
+            tab._on_name_edited("Main rig")
+            assert tab.inspector_title.text() == "U1 · MAIN RIG"
+        finally:
+            tab.deleteLater()
+
+    def test_rate_readout_comes_from_the_sender_constant(self, qapp):
+        """Rate is a fixed property of the ArtNet sender, not a setting."""
+        from utils.artnet.sender import ArtNetSender
+        tab = _make_tab(qapp, ("ArtNet",))
+        try:
+            assert tab.artnet_rate.text() == \
+                f"{ArtNetSender.MAX_SEND_RATE_HZ} Hz"
+        finally:
+            tab.deleteLater()
+
+    def test_broadcast_toggle_drives_the_ip(self, qapp):
+        """'Broadcast' is the 255.255.255.255 convention, not a field."""
+        from gui.tabs.configuration_tab import BROADCAST_IP
+        tab = _make_tab(qapp, ("ArtNet",))
+        try:
+            params = tab.config.universes[1].output["parameters"]
+            assert not tab.artnet_broadcast.isChecked()
+
+            tab.artnet_broadcast.setChecked(True)
+            assert params["ip"] == BROADCAST_IP
+            assert not tab.artnet_ip.isEnabled()
+
+            tab.artnet_broadcast.setChecked(False)
+            assert params["ip"] == "192.168.1.50"  # restored unicast
+            assert tab.artnet_ip.isEnabled()
+        finally:
+            tab.deleteLater()
+
+    def test_typing_the_broadcast_ip_checks_the_toggle(self, qapp):
+        from gui.tabs.configuration_tab import BROADCAST_IP
+        tab = _make_tab(qapp, ("ArtNet",))
+        try:
+            tab.artnet_ip.setText(BROADCAST_IP)
+            tab._sync_broadcast_checkbox()
+            assert tab.artnet_broadcast.isChecked()
+        finally:
+            tab.deleteLater()
+
+    def test_numbering_hint_is_artnet_only(self, qapp):
+        tab = _make_tab(qapp, ("ArtNet",))
+        try:
+            assert tab.numbering_hint.isVisibleTo(tab)
+            assert tab.numbering_hint.property("role") == "hint-info"
+            tab._on_protocol_selected("E1.31")
+            assert not tab.numbering_hint.isVisibleTo(tab)
+        finally:
+            tab.deleteLater()
+
+    def test_hint_info_role_uses_the_info_colour(self):
+        from gui.theme_tokens import THEMES, render_theme
+        rule = render_theme("dark").split(
+            'QLabel[role="hint-info"] {', 1)[1].split("}", 1)[0]
+        assert THEMES["dark"]["info"] in rule
+
+    def test_status_strip_counts_configured_universes(self, qapp):
+        tab = _make_tab(qapp, ("ArtNet", "DMX USB"))
+        try:
+            # ArtNet has an ip; the USB universe has no device yet.
+            assert tab.status_line.text() == "2 UNIVERSES · 1 CONFIGURED"
+        finally:
+            tab.deleteLater()
+
+
 class TestContract:
     def test_toolbar_width_constant_still_exported(self):
         """FixturesTab and StageTab import TOOLBAR_BTN_WIDTH from here."""

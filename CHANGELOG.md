@@ -31,6 +31,14 @@ verbatim as the GitHub Release notes (see [docs/releasing.md](docs/releasing.md)
 
 ### Added
 
+- **Universes screen matched to the original design reference.** The
+  tab title row is gone (the subnav names the screen), the inspector
+  now leads with a "U1 · MAIN RIG" heading, labels its ArtNet fields
+  Target IP / Net / Universe, shows the fixed 44 Hz output rate as a
+  readout, offers a Broadcast toggle (which is simply the
+  255.255.255.255 target convention, kept in sync when the IP is typed
+  by hand), and carries an info explainer about ArtNet's 0-based
+  numbering. A mono status strip reads "3 UNIVERSES · 2 CONFIGURED".
 - **Timeline chrome rebuilt against the original design reference.**
   The transport readout now shows the real musical position ("BAR
   19.4 · 00:52.6"), derived from the song structure's parts, bars and

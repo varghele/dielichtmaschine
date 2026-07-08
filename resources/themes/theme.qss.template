@@ -659,6 +659,14 @@ QComboBox[role="accent-field"] {
     color: $accent_line$;
 }
 
+/* Explainer with an info-blue left bar (facts, not warnings). */
+QLabel[role="hint-info"] {
+    background-color: $raised$;
+    border-left: 3px solid $info$;
+    color: $text_secondary$;
+    padding: 9px 12px;
+}
+
 /* Explainer with an accent left bar (as opposed to the dashed hint). */
 QLabel[role="hint-accent"] {
     background-color: $raised$;

@@ -31,6 +31,12 @@ _TOOLBAR_BTN_WIDTH = TOOLBAR_BTN_WIDTH
 
 PROTOCOLS = ("ArtNet", "E1.31", "DMX USB")
 
+# Reference 03 puts the universe inspector at 420px.
+INSPECTOR_WIDTH = 420
+
+# The ArtNet "broadcast" destination convention (utils/artnet/README.md).
+BROADCAST_IP = "255.255.255.255"
+
 _PROTOCOL_DEFAULTS = {
     "ArtNet": {"ip": "192.168.1.100", "subnet": "0", "universe": "0"},
     "E1.31": {"multicast": "true", "ip": "239.255.0.1", "port": "5568",
@@ -252,22 +258,13 @@ class ConfigurationTab(BaseTab):
         main_layout.setContentsMargins(16, 12, 16, 12)
         main_layout.setSpacing(10)
 
-        # Title row: display title left, actions right
+        # Action strip. No tab title: the shell subnav already names the
+        # screen (reference 03).
         title_row = QtWidgets.QHBoxLayout()
-        self.config_label = DisplayLabel("Universes", point_size=14,
-                                         weight=QFont.Weight.Bold)
-        self.config_label.setToolTip(
-            "Universe mapping to QLC+:\n"
-            "  Universe 1 → QLC+ Line 2 (Gerät 3)\n"
-            "  Universe 2 → QLC+ Line 3 (Gerät 4)\n"
-            "  etc.\n\n"
-            "Note: QLC+ Lines 0-1 are reserved for hardcoded interfaces\n"
-            "(10.2.0.2 and 127.0.0.1) and are skipped."
-        )
-        title_row.addWidget(self.config_label)
         title_row.addStretch(1)
 
         self.update_config_btn = QtWidgets.QPushButton("Update Config")
+        self.update_config_btn.setProperty("role", "cta-outline")
         self.update_config_btn.setToolTip("Write the current settings "
                                           "into the configuration")
         title_row.addWidget(self.update_config_btn)
@@ -322,23 +319,28 @@ class ConfigurationTab(BaseTab):
         # -- Right: inspector -------------------------------------------
         body.addWidget(self._build_inspector())
         main_layout.addLayout(body, 1)
+        main_layout.addWidget(self._build_status_strip())
 
         self.update_from_config()
 
     def _build_inspector(self) -> QtWidgets.QWidget:
-        from gui.typography import MicroLabel, display_font, mono_font
+        from gui.typography import (
+            DisplayLabel, MicroLabel, display_font, mono_font,
+        )
 
         panel = QtWidgets.QWidget()
         panel.setObjectName("UniverseInspector")
         panel.setProperty("role", "inspector")
         panel.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
-        panel.setFixedWidth(300)
+        panel.setFixedWidth(INSPECTOR_WIDTH)
         layout = QtWidgets.QVBoxLayout(panel)
         layout.setContentsMargins(16, 14, 16, 14)
         layout.setSpacing(10)
 
-        self.inspector_title = MicroLabel("Universe", point_size=8,
-                                          tracking_em=0.15)
+        # Reference: display-caps "U1 · MAIN RIG" heading.
+        self.inspector_title = DisplayLabel("Universe", point_size=13,
+                                            weight=QFont.Weight.Bold,
+                                            tracking_em=0.05)
         layout.addWidget(self.inspector_title)
 
         layout.addWidget(MicroLabel("Name", point_size=8, tracking_em=0.1))
@@ -376,14 +378,34 @@ class ConfigurationTab(BaseTab):
         self.artnet_ip = QtWidgets.QLineEdit()
         self.artnet_subnet = QtWidgets.QLineEdit()
         self.artnet_universe = QtWidgets.QLineEdit()
-        artnet_form.addRow("IP address", self.artnet_ip)
-        artnet_form.addRow("Subnet", self.artnet_subnet)
+        artnet_form.addRow("Target IP", self.artnet_ip)
+        artnet_form.addRow("Net", self.artnet_subnet)
         artnet_form.addRow("Universe (0-based)", self.artnet_universe)
+        # Output rate is a real constant of the ArtNet sender, not a
+        # setting: show it as a read-only readout (reference RATE cell).
+        from utils.artnet.sender import ArtNetSender
+        self.artnet_rate = QtWidgets.QLabel(
+            f"{ArtNetSender.MAX_SEND_RATE_HZ} Hz")
+        self.artnet_rate.setFont(mono_font(9))
+        self.artnet_rate.setToolTip(
+            "ArtNet output is rate limited to "
+            f"{ArtNetSender.MAX_SEND_RATE_HZ} Hz (fixed).")
+        artnet_form.addRow("Rate", self.artnet_rate)
+        # "Broadcast" is the 255.255.255.255 target convention, not a
+        # separate model field: the toggle just drives the IP.
+        self.artnet_broadcast = QtWidgets.QCheckBox("Broadcast")
+        self.artnet_broadcast.setToolTip(
+            "Send to 255.255.255.255 so every node on the subnet "
+            "receives the universe.")
+        self.artnet_broadcast.toggled.connect(self._on_broadcast_toggled)
+        artnet_form.addRow("", self.artnet_broadcast)
         for edit, key in ((self.artnet_ip, "ip"),
                           (self.artnet_subnet, "subnet"),
                           (self.artnet_universe, "universe")):
             edit.textEdited.connect(
                 lambda text, k=key: self._on_param_edited(k, text))
+        self.artnet_ip.textEdited.connect(
+            lambda _: self._sync_broadcast_checkbox())
         self.param_stack.addWidget(artnet_page)
 
         # E1.31 page
@@ -425,6 +447,19 @@ class ConfigurationTab(BaseTab):
         self.param_stack.addWidget(usb_page)
 
         layout.addWidget(self.param_stack)
+
+        # Info explainer (reference: info-blue left bar). Only meaningful
+        # for ArtNet's 0-based numbering, so it hides on other protocols.
+        self.numbering_hint = QtWidgets.QLabel(
+            "ArtNet universe numbering is 0-based to match the wire "
+            "protocol. QLC+ shows this universe as \"1\".")
+        self.numbering_hint.setProperty("role", "hint-info")
+        self.numbering_hint.setWordWrap(True)
+        hint_font = self.numbering_hint.font()
+        hint_font.setPointSize(8)
+        self.numbering_hint.setFont(hint_font)
+        layout.addWidget(self.numbering_hint)
+
         layout.addStretch(1)
 
         self.remove_universe_btn = QtWidgets.QPushButton("Remove Universe")
@@ -433,6 +468,25 @@ class ConfigurationTab(BaseTab):
 
         self._page_for = {"ArtNet": 0, "E1.31": 1, "DMX USB": 2}
         return panel
+
+    def _build_status_strip(self) -> QtWidgets.QWidget:
+        """Mono footer: universe count + how many have a destination."""
+        from gui.typography import MicroLabel
+
+        strip = QtWidgets.QWidget()
+        row = QtWidgets.QHBoxLayout(strip)
+        row.setContentsMargins(0, 0, 0, 0)
+        self.status_line = MicroLabel("", point_size=8, tracking_em=0.1)
+        row.addWidget(self.status_line)
+        row.addStretch(1)
+        return strip
+
+    def _refresh_status_strip(self) -> None:
+        universes = getattr(self.config, "universes", {}) or {}
+        ready = sum(1 for u in universes.values() if is_ready(u))
+        total = len(universes)
+        noun = "UNIVERSE" if total == 1 else "UNIVERSES"
+        self.status_line.setText(f"{total} {noun} · {ready} CONFIGURED")
 
     def connect_signals(self):
         self.add_universe_btn.clicked.connect(self._add_universe)
@@ -473,6 +527,8 @@ class ConfigurationTab(BaseTab):
                 continue
             card.update_data(universe, channels_used(self.config, universe_id),
                              universe_id == self._selected_id)
+        if hasattr(self, "status_line"):
+            self._refresh_status_strip()
 
     def _selected_universe(self):
         if self._selected_id is None:
@@ -490,9 +546,12 @@ class ConfigurationTab(BaseTab):
         if universe is None:
             self.inspector_title.setText("No universe")
             self.name_edit.setText("")
+            self.numbering_hint.setVisible(False)
             return
 
-        self.inspector_title.setText(f"Universe U{universe.id}")
+        # Reference heading: "U1 · MAIN RIG".
+        name = universe.name or f"Universe {universe.id}"
+        self.inspector_title.setText(f"U{universe.id} · {name}")
         protocol = universe.output.get("plugin", "E1.31")
         params = universe.output.get("parameters", {}) or {}
 
@@ -506,11 +565,16 @@ class ConfigurationTab(BaseTab):
             button.blockSignals(False)
         self.param_stack.setCurrentIndex(self._page_for.get(protocol, 1))
 
+        # The 0-based-numbering explainer only applies to ArtNet.
+        self.numbering_hint.setVisible(protocol == "ArtNet")
+
         if protocol == "ArtNet":
             self._set_text_silent(self.artnet_ip, params.get("ip", ""))
             self._set_text_silent(self.artnet_subnet, params.get("subnet", "0"))
             self._set_text_silent(self.artnet_universe,
                                   params.get("universe", "0"))
+            self._sync_broadcast_checkbox()
+            self.artnet_ip.setEnabled(not self.artnet_broadcast.isChecked())
         elif protocol == "E1.31":
             multicast = (params.get("multicast", "true") or
                          "true").lower() == "true"
@@ -552,6 +616,7 @@ class ConfigurationTab(BaseTab):
         universe = self._selected_universe()
         if universe is not None:
             universe.name = text
+            self.inspector_title.setText(f"U{universe.id} · {text}")
             self._refresh_cards()
 
     def _on_protocol_selected(self, protocol: str):
@@ -586,6 +651,28 @@ class ConfigurationTab(BaseTab):
             params["ip"] = f"239.255.{number >> 8}.{number & 0xFF}"
             self._set_text_silent(self.e131_ip, params["ip"])
         self._refresh_cards()
+
+    def _on_broadcast_toggled(self, checked: bool):
+        """Broadcast is the 255.255.255.255 target, not a model flag."""
+        universe = self._selected_universe()
+        if universe is None:
+            return
+        params = universe.output.setdefault("parameters", {})
+        if checked:
+            self._previous_unicast_ip = params.get("ip", "")
+            params["ip"] = BROADCAST_IP
+        elif params.get("ip") == BROADCAST_IP:
+            params["ip"] = getattr(self, "_previous_unicast_ip", "") or ""
+        self._set_text_silent(self.artnet_ip, params.get("ip", ""))
+        self.artnet_ip.setEnabled(not checked)
+        self._refresh_cards()
+
+    def _sync_broadcast_checkbox(self):
+        """Keep the toggle honest when the IP is typed by hand."""
+        is_broadcast = self.artnet_ip.text().strip() == BROADCAST_IP
+        self.artnet_broadcast.blockSignals(True)
+        self.artnet_broadcast.setChecked(is_broadcast)
+        self.artnet_broadcast.blockSignals(False)
 
     def _on_multicast_toggled(self, checked: bool):
         universe = self._selected_universe()
