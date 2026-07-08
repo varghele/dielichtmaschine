@@ -31,6 +31,14 @@ verbatim as the GitHub Release notes (see [docs/releasing.md](docs/releasing.md)
 
 ### Added
 
+- **Screensaver matched to the original design reference.** The
+  fullscreen brand screen gained the faint engineering grid, corner
+  registration marks, and a state kicker above the clock; the rotor's
+  rotation periods now match the design (16 s inner, 40 s
+  counter-rotating outer). Its status bar no longer claims things the
+  widget cannot know: the rig and ArtNet readouts are optional and
+  injectable rather than hardcoded text, and the activation hint names
+  the real trigger (View > Screensaver).
 - **Autogenerate dialog rebuilt against the original design
   reference.** A 420px setup column (audio file with LOADED / MISSING
   chip, structure summary, song key, colour-palette source chips with

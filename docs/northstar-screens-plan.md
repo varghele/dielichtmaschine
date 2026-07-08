@@ -62,8 +62,14 @@ Auto's latency row and "MID" plane, Structure's per-part audio analysis
 values (rendered as dashes with a tooltip until a generation report
 exists), the reference's invented transition labels ("XFADE 2").
 
-Screens still to diff: 03 universes (already close), 10 autogen dialog,
-12 screensaver. 08/09 live and 11 morph belong to their milestones.
+DONE: every reference screen that maps onto shipped functionality is
+now rebuilt or diffed against its original file - 01 home, 02 fixtures,
+03 universes, 04 stage, 05 structure, 06 timeline, 07 auto, 10 autogen
+dialog, 12 screensaver. 08/09 live console and 11 morph wizard remain
+with their feature milestones (v1.8 / v1.5b); the Live variant decision
+(3a vs 3b) is still open.
+
+Next: polish passes across the rebuilt screens.
 
 ## Explicitly NOT in this pass
 

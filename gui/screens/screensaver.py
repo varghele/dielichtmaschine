@@ -1,18 +1,30 @@
-"""The screensaver / pause screen (North Star card 11a, slice SS1).
+"""The screensaver / pause screen (design reference screen 12).
 
-A frameless fullscreen window shown between songs and sets: the animated
-brand rotor, the wordmark, a large mono clock, and a status line. Any
-key press, mouse click, or real mouse movement dismisses it (with a
-small dead zone so the wake-up jiggle that opened it does not instantly
-close it again).
+A frameless fullscreen window shown between songs and sets: the faint
+48px registration grid, four corner marks, the animated brand rotor, the
+wordmark with its slogan, a state kicker over a large mono clock, and a
+bottom status bar. Any key press, mouse click, or real mouse movement
+dismisses it (with a small dead zone so the wake-up jiggle that opened
+it does not instantly close it again).
 
 The widget is deliberately self-contained: no imports from gui.gui, no
-QSettings. Colors are hardcoded from the design handoff rather than
-taken from theme tokens because the screensaver always renders on the
-screensaver black, independent of the app theme.
+QSettings, no reach into the ArtNet controllers. Colors are hardcoded
+from ``design_handoff_lichtmaschine_app/screens/12-screensaver.html``
+rather than taken from theme tokens because the screensaver always
+renders on the screensaver black, independent of the app theme.
 
-Animation (design handoff "Brand" section): the inner 8-segment rotor
-spins at INNER_PERIOD_S per revolution, the thin outer ring
+Live state the widget cannot know (which rig look the pause light is
+holding, whether ArtNet output is running) is *injectable*: the
+constructor and the ``set_rig_text`` / ``set_artnet_text`` setters take
+it from the caller. The honest default omits those segments entirely -
+the reference's "RIG: PAUSENLICHT / WARMWEISS 20%" and "ARTNET AKTIV /
+44 Hz" would be fiction here, and the reference's activation hint
+("LIVE pause key or auto after 5 min idle") describes triggers that do
+not exist yet, so the default hint names the one that does: the View
+menu (gui/gui.py::_start_screensaver).
+
+Animation (reference screen 12): the inner 8-segment rotor spins
+clockwise at INNER_PERIOD_S per revolution, the thin dashed outer ring
 counter-rotates slower at OUTER_PERIOD_S, and the Glutorange center dot
 pulses its alpha over PULSE_PERIOD_S. A ~30 fps QTimer advances a phase
 clock; ``set_phase(t_seconds)`` computes all angles deterministically
@@ -25,57 +37,86 @@ import time
 
 from PyQt6.QtCore import QDateTime, QPointF, QRectF, Qt, QTimer, pyqtSignal
 from PyQt6.QtGui import QColor, QFont, QPainter, QPen
-from PyQt6.QtWidgets import QLabel, QVBoxLayout, QWidget
+from PyQt6.QtWidgets import (
+    QGridLayout, QHBoxLayout, QLabel, QStyle, QStyleOption, QVBoxLayout,
+    QWidget,
+)
 
 from gui.fonts import FONT_DISPLAY, FONT_MONO
-from gui.typography import DisplayLabel, MicroLabel, mono_font
+from gui.typography import DisplayLabel, MicroLabel
 from utils.app_identity import APP_WORDMARK, SLOGAN_EN
 
 # The screensaver black: deliberately darker than the dark theme's
 # window token (#141416) - this is the "screen off" surface from the
-# design handoff card 11a, hardcoded on purpose.
+# design reference, hardcoded on purpose.
 SCREENSAVER_BG = "#0E0E10"
 
-# Handoff palette for the on-black elements (card 11a values).
+# Reference palette for the on-black elements.
 INK = "#F4F1EA"            # wordmark + clock
-DIM_INK = "#5C6068"        # slogan + status line
+MUTED_INK = "#8D9299"      # the state kicker above the clock
+DIM_INK = "#5C6068"        # slogan + status bar
 ROTOR_SEGMENT = "#C9CDD2"  # the 8 inner arc segments
 OUTER_RING = "#3F4348"     # the thin outer registration ring
 ACCENT = "#F0562E"         # Glutorange center dot
+MARK_INK = "#3A3A3A"       # the four corner registration crosses
 
-# Animation timing (handoff: inner 10-16 s/rev, outer counter-rotating
-# 24-40 s/rev, center pulses).
-INNER_PERIOD_S = 12.0
-OUTER_PERIOD_S = 30.0
+# Backdrop: 1px lines every 48px in rgba(141,146,153,0.04).
+GRID_PITCH_PX = 48
+GRID_INK = QColor(141, 146, 153, 10)
+
+# Corner registration crosses: 15x15 px, 24px in from each corner.
+MARK_SIZE_PX = 15
+MARK_INSET_PX = 24
+
+# Bottom status bar: 34px tall, spans the full width, 28px between the
+# segments and the interpunct separators that sit between them.
+STATUS_BAR_H = 34
+STATUS_GAP_PX = 28
+STATUS_SEPARATOR = "·"  # MIDDLE DOT; IBM Plex Mono has it
+
+# Animation timing (reference: inner ring 16 s/rev, outer ring
+# counter-rotating 40 s/rev, center pulses over 4 s).
+INNER_PERIOD_S = 16.0
+OUTER_PERIOD_S = 40.0
 PULSE_PERIOD_S = 4.0
 PULSE_MIN_ALPHA = 0.35
 PULSE_MAX_ALPHA = 1.0
 TICK_MS = 33  # ~30 fps
 
-# Segments of the default bottom status line; real ArtNet / pause-light
-# state gets injected by the caller once that wiring exists.
-DEFAULT_STATUS_SEGMENTS = (
-    "PAUSE LIGHT ACTIVE",
-    "ARTNET RUNNING",
-    "PRESS ANY KEY TO EXIT",
-)
-STATUS_SEPARATOR = " · "
+# Design pixel sizes at 1080p, pinned regardless of DPI.
+ROTOR_SIZE_PX = 220
+BLOCK_GAP_PX = 36
+WORDMARK_PX = 44
+SLOGAN_PX = 12
+STATE_PX = 13
+CLOCK_PX = 72
+STATUS_PX = 10
+SLOGAN_GAP_PX = 8
+
+# The state kicker above the clock. "PAUSE" is what the screensaver
+# itself means; anything richer is the caller's to inject.
+DEFAULT_STATE_TEXT = "PAUSE"
+
+# The two status segments the widget can state truthfully on its own.
+KEY_HINT = "PRESS ANY KEY TO EXIT"
+ACTIVATION_HINT = "ACTIVATE: VIEW MENU > SCREENSAVER"
 
 
 class RotorGlyph(QWidget):
     """The brand rotor, drawn programmatically with QPainter.
 
-    Geometry follows the 64-unit glyph viewBox from the handoff, scaled
-    to the widget size: 8 arc segments of 22.5 degrees every 45 degrees
-    at radius 21 (stroke 8), a thin outer ring at radius 30, and a
-    radius-6 accent center dot. The outer ring is finely dashed (card
-    11a: dash 7.85 / gap 3.93) - a solid ring's counter-rotation would
+    Geometry follows the 64-unit glyph viewBox from the reference,
+    scaled to the widget size: an inner ring at radius 21 with stroke 8
+    dashed 8.24/8.24 (that is exactly 8 arc segments of 22.5 degrees
+    every 45 degrees, since 2*pi*21 / 16 = 8.246), a thin outer ring at
+    radius 30 stroke 1.2 dashed 7.85/3.93, and a radius-6 accent center
+    dot. Both rings are dashed on purpose: a solid ring's rotation would
     be invisible.
     """
 
     GLYPH_UNITS = 64.0
 
-    def __init__(self, size: int = 220, parent=None):
+    def __init__(self, size: int = ROTOR_SIZE_PX, parent=None):
         super().__init__(parent)
         self.setFixedSize(size, size)
         # All input is the window's business.
@@ -136,7 +177,8 @@ class RotorGlyph(QWidget):
 
 
 class ScreensaverWindow(QWidget):
-    """Fullscreen pause screen: rotor, wordmark, clock, status line.
+    """Fullscreen pause screen: grid, corner marks, rotor, wordmark,
+    slogan, state kicker, clock, status bar.
 
     Contract: ``activate()`` shows it fullscreen; any key press, mouse
     press, or mouse move beyond a small dead zone emits ``dismissed``
@@ -147,14 +189,15 @@ class ScreensaverWindow(QWidget):
 
     MOUSE_DEAD_ZONE_PX = 24  # manhattan px the pointer may jiggle
 
-    def __init__(self, status_segments=None, parent=None):
+    def __init__(self, status_segments=None, rig_text=None, artnet_text=None,
+                 state_text=DEFAULT_STATE_TEXT, parent=None):
         super().__init__(parent)
         self.setWindowFlags(Qt.WindowType.FramelessWindowHint
                             | Qt.WindowType.WindowStaysOnTopHint)
         self.setObjectName("screensaver")
         # Local stylesheet so the screensaver black wins over any
         # app-wide theme QSS; WA_StyledBackground makes a plain QWidget
-        # honor it.
+        # honor it (paintEvent draws PE_Widget for it explicitly).
         self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
         self.setStyleSheet(
             f"QWidget#screensaver {{ background-color: {SCREENSAVER_BG}; }}")
@@ -167,7 +210,12 @@ class ScreensaverWindow(QWidget):
         self._phase = 0.0
         self._last_tick = None
 
-        self._build_ui(status_segments)
+        self._explicit_segments = (list(status_segments)
+                                   if status_segments is not None else None)
+        self._rig_text = rig_text or None
+        self._artnet_text = artnet_text or None
+
+        self._build_ui(state_text)
 
         self._timer = QTimer(self)
         self._timer.setInterval(TICK_MS)
@@ -180,48 +228,84 @@ class ScreensaverWindow(QWidget):
 
     # ------------------------------------------------------------------ UI
 
-    def _build_ui(self, status_segments) -> None:
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(0, 0, 0, 12)
-        layout.setSpacing(0)
+    def _build_ui(self, state_text: str) -> None:
+        # One grid cell holds both children, so the centered column
+        # spans the full window and the status bar overlays its bottom
+        # 34px - exactly the reference's absolutely positioned flex
+        # column (inset:0) plus a separate bottom bar. A stacking layout
+        # rather than manual geometry, because resizeEvent is not
+        # delivered to a hidden widget (grab() would render a stale
+        # layout).
+        root = QGridLayout(self)
+        root.setContentsMargins(0, 0, 0, 0)
+        root.setSpacing(0)
 
-        layout.addStretch(3)
+        self.content = QWidget(self)
+        column = QVBoxLayout(self.content)
+        column.setContentsMargins(0, 0, 0, 0)
+        column.setSpacing(0)
 
-        self.rotor = RotorGlyph(220, self)
-        layout.addWidget(self.rotor, 0,
-                         Qt.AlignmentFlag.AlignHCenter)
+        column.addStretch(1)
 
-        layout.addSpacing(36)
+        self.rotor = RotorGlyph(ROTOR_SIZE_PX, self.content)
+        column.addWidget(self.rotor, 0, Qt.AlignmentFlag.AlignHCenter)
 
+        column.addSpacing(BLOCK_GAP_PX)
+
+        brand = QWidget(self.content)
+        brand_box = QVBoxLayout(brand)
+        brand_box.setContentsMargins(0, 0, 0, 0)
+        brand_box.setSpacing(0)
         self.wordmark_label = DisplayLabel(
             APP_WORDMARK, weight=QFont.Weight.ExtraBold, tracking_em=0.06,
-            parent=self)
-        self._pin_label_style(self.wordmark_label, FONT_DISPLAY, 44, 800, INK)
-        layout.addWidget(self.wordmark_label)
+            parent=brand)
+        self._pin_label_style(self.wordmark_label, FONT_DISPLAY,
+                              WORDMARK_PX, 800, INK)
+        brand_box.addWidget(self.wordmark_label)
+        brand_box.addSpacing(SLOGAN_GAP_PX)
+        self.slogan_label = MicroLabel(
+            SLOGAN_EN, weight=QFont.Weight.Normal, tracking_em=0.2,
+            parent=brand)
+        self._pin_label_style(self.slogan_label, FONT_MONO,
+                              SLOGAN_PX, 400, DIM_INK)
+        brand_box.addWidget(self.slogan_label)
+        column.addWidget(brand)
 
-        layout.addSpacing(8)
+        column.addSpacing(BLOCK_GAP_PX)
 
-        self.slogan_label = MicroLabel(SLOGAN_EN, tracking_em=0.2,
-                                       parent=self)
-        self._pin_label_style(self.slogan_label, FONT_MONO, 12, 500, DIM_INK)
-        layout.addWidget(self.slogan_label)
+        clock_block = QWidget(self.content)
+        clock_box = QVBoxLayout(clock_block)
+        clock_box.setContentsMargins(0, 0, 0, 0)
+        clock_box.setSpacing(0)
+        self.state_label = MicroLabel(state_text, tracking_em=0.2,
+                                      parent=clock_block)
+        self._pin_label_style(self.state_label, FONT_MONO,
+                              STATE_PX, 500, MUTED_INK)
+        clock_box.addWidget(self.state_label)
+        self.clock_label = QLabel("--:--", clock_block)
+        self._pin_label_style(self.clock_label, FONT_MONO,
+                              CLOCK_PX, 400, INK)
+        # line-height 1.2 in the reference.
+        self.clock_label.setFixedHeight(int(CLOCK_PX * 1.2))
+        clock_box.addWidget(self.clock_label)
+        column.addWidget(clock_block)
 
-        layout.addSpacing(36)
+        column.addStretch(1)
+        root.addWidget(self.content, 0, 0)
 
-        self.clock_label = QLabel("--:--", self)
-        self.clock_label.setFont(mono_font(48, QFont.Weight.Medium))
-        self._pin_label_style(self.clock_label, FONT_MONO, 72, 500, INK)
-        layout.addWidget(self.clock_label)
+        self.status_bar = QWidget(self)
+        self.status_bar.setFixedHeight(STATUS_BAR_H)
+        root.addWidget(self.status_bar, 0, 0,
+                       Qt.AlignmentFlag.AlignBottom)
+        self._status_box = QHBoxLayout(self.status_bar)
+        self._status_box.setContentsMargins(0, 0, 0, 0)
+        self._status_box.setSpacing(STATUS_GAP_PX)
+        self._status_labels = []
+        self._rebuild_status()
 
-        layout.addStretch(4)
+        self._make_children_click_through()
 
-        segments = (list(status_segments) if status_segments is not None
-                    else list(DEFAULT_STATUS_SEGMENTS))
-        self.status_label = MicroLabel(STATUS_SEPARATOR.join(segments),
-                                       tracking_em=0.12, parent=self)
-        self._pin_label_style(self.status_label, FONT_MONO, 10, 500, DIM_INK)
-        layout.addWidget(self.status_label)
-
+    def _make_children_click_through(self) -> None:
         for child in self.findChildren(QWidget):
             child.setAttribute(
                 Qt.WidgetAttribute.WA_TransparentForMouseEvents)
@@ -248,6 +332,116 @@ class ScreensaverWindow(QWidget):
             f'font-weight: {weight_css};')
         label.setAlignment(Qt.AlignmentFlag.AlignHCenter)
 
+    # -------------------------------------------------------------- status
+
+    def status_segments(self) -> list:
+        """The segments currently shown, left to right.
+
+        Explicitly injected segments win; otherwise the optional rig and
+        ArtNet segments (only when the caller supplied them) precede the
+        two hints the widget can state truthfully by itself.
+        """
+        if self._explicit_segments is not None:
+            return list(self._explicit_segments)
+        return [s for s in (self._rig_text, self._artnet_text,
+                            KEY_HINT, ACTIVATION_HINT) if s]
+
+    def status_text(self) -> str:
+        """The status bar read as one line (tests, logs)."""
+        return f" {STATUS_SEPARATOR} ".join(self.status_segments())
+
+    def set_status_segments(self, segments) -> None:
+        """Replace the whole status bar (None restores the default)."""
+        self._explicit_segments = (list(segments) if segments is not None
+                                   else None)
+        self._rebuild_status()
+
+    def set_rig_text(self, text) -> None:
+        """Inject the rig / pause-light segment, e.g. "RIG: PAUSE LIGHT
+        WARM WHITE 20%". None removes it. Never guessed here."""
+        self._rig_text = text or None
+        self._rebuild_status()
+
+    def set_artnet_text(self, text) -> None:
+        """Inject the ArtNet segment, e.g. "ARTNET ACTIVE 44 HZ". None
+        removes it. The widget never inspects the output controller."""
+        self._artnet_text = text or None
+        self._rebuild_status()
+
+    def set_state_text(self, text: str) -> None:
+        """The kicker above the clock (default "PAUSE")."""
+        self.state_label.setText(text)
+
+    def _rebuild_status(self) -> None:
+        while self._status_box.count():
+            item = self._status_box.takeAt(0)
+            widget = item.widget()
+            if widget is not None:
+                widget.setParent(None)
+                widget.deleteLater()
+        self._status_labels = []
+
+        self._status_box.addStretch(1)
+        segments = self.status_segments()
+        for index, segment in enumerate(segments):
+            if index:
+                self._status_box.addWidget(self._status_micro(
+                    STATUS_SEPARATOR))
+            label = self._status_micro(segment)
+            self._status_labels.append(label)
+            self._status_box.addWidget(label)
+        self._status_box.addStretch(1)
+        self._make_children_click_through()
+
+    def _status_micro(self, text: str) -> MicroLabel:
+        # Tracking 0: the reference sets no letter-spacing on the bar.
+        label = MicroLabel(text, weight=QFont.Weight.Normal, tracking_em=0.0,
+                           parent=self.status_bar)
+        self._pin_label_style(label, FONT_MONO, STATUS_PX, 400, DIM_INK)
+        return label
+
+    # ------------------------------------------------------------ backdrop
+
+    def paintEvent(self, event):  # noqa: N802 (Qt API)
+        # WA_StyledBackground normally paints the object-name rule for
+        # us, but overriding paintEvent takes that over: draw PE_Widget
+        # first, then the backdrop.
+        option = QStyleOption()
+        option.initFrom(self)
+        painter = QPainter(self)
+        style = self.style()
+        if style is not None:
+            style.drawPrimitive(QStyle.PrimitiveElement.PE_Widget, option,
+                                painter, self)
+        self._paint_grid(painter)
+        self._paint_corner_marks(painter)
+
+    def _paint_grid(self, painter: QPainter) -> None:
+        width, height = self.width(), self.height()
+        for x in range(0, width, GRID_PITCH_PX):
+            painter.fillRect(x, 0, 1, height, GRID_INK)
+        for y in range(0, height, GRID_PITCH_PX):
+            painter.fillRect(0, y, width, 1, GRID_INK)
+
+    def _paint_corner_marks(self, painter: QPainter) -> None:
+        painter.save()
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing, False)
+        pen = QPen(QColor(MARK_INK))
+        pen.setWidth(1)
+        painter.setPen(pen)
+        half = MARK_SIZE_PX / 2.0
+        inset = MARK_INSET_PX
+        centers = (
+            (inset + half, inset + half),
+            (self.width() - inset - half, inset + half),
+            (inset + half, self.height() - inset - half),
+            (self.width() - inset - half, self.height() - inset - half),
+        )
+        for cx, cy in centers:
+            painter.drawLine(QPointF(cx, cy - half), QPointF(cx, cy + half))
+            painter.drawLine(QPointF(cx - half, cy), QPointF(cx + half, cy))
+        painter.restore()
+
     # ----------------------------------------------------------- animation
 
     def set_animation_enabled(self, enabled: bool) -> None:
@@ -267,7 +461,7 @@ class ScreensaverWindow(QWidget):
         self._phase = t_seconds
         inner = (t_seconds / INNER_PERIOD_S * 360.0) % 360.0
         outer = -((t_seconds / OUTER_PERIOD_S * 360.0) % 360.0)
-        # Cosine ease between min and max alpha, min at t=0 (card 11a:
+        # Cosine ease between min and max alpha, min at t=0 (reference:
         # opacity 0.35 at 0%/100%, 1.0 at 50%).
         wave = 0.5 - 0.5 * math.cos(
             2.0 * math.pi * t_seconds / PULSE_PERIOD_S)
