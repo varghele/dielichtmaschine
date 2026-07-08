@@ -1,16 +1,20 @@
 """
-FixturesTab (North Star card 1c): toolbar, table headers, inspector.
+FixturesTab, rebuilt to the reference screen 02 (Setup Fixtures).
 
-Toolbar contract: the -/duplicate icon buttons keep the shared fixed
-``TOOLBAR_BTN_WIDTH`` (no compact density - the glyph-clipping saga,
-see tests/visual/test_widget_clipping.py); add-fixture is the accent
-primary CTA ("+ ADD FIXTURE", role="primary") like ConfigurationTab's
-"+ ADD UNIVERSE".
-
-Inspector contract: the right-hand panel (role="inspector") edits the
-selected fixture. Its editors write through the table's cell widgets
-(the single write path into the config), and table edits mirror back
-into the inspector, so both always agree with config.fixtures.
+Contract under test:
+- Action strip: DMX-conflict chip (hidden when clean) left, accent
+  "+ ADD FIXTURE" CTA right. No tab title row.
+- GROUPS panel: one row per group (name caps, "N FIX" mono, role line),
+  "+" add-group button, clicking a row selects that group's fixtures.
+- Table: read-only display items in reference column order
+  (# / FIXTURE / TYPE / MODE / UNI / ADDRESS / GROUP), group-tinted row
+  backgrounds at low alpha, group names in the group color, red
+  UNI/ADDRESS cells + tooltip on DMX conflicts.
+- Inspector: the single write path - Name/Universe/Address/Mode/Group/
+  Role editors write directly to the config and refresh the table row;
+  CAPABILITIES chips + CHANNEL MAP come from the definition cache;
+  Duplicate/Remove live in the inspector footer.
+- Status strip: counts + per-universe channel usage.
 """
 
 from __future__ import annotations
@@ -21,202 +25,283 @@ import pytest
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
+from gui.tabs.fixtures_tab import (
+    COL_ADDRESS, COL_FIXTURE, COL_GROUP, COL_MODE, COL_NUM, COL_TYPE,
+    COL_UNI, CONFLICT_BG, GROUP_TINT_ALPHA,
+)
 
-def test_toolbar_buttons_match_default_button_styling(qapp, sample_configuration):
+
+def _make_tab(qapp, config):
     from gui.theme_manager import ThemeManager
-    from gui.tabs.configuration_tab import TOOLBAR_BTN_WIDTH
     from gui.tabs.fixtures_tab import FixturesTab
 
     ThemeManager().apply(qapp, "dark")
-    tab = FixturesTab(sample_configuration, parent=None)
+    return FixturesTab(config, parent=None)
+
+
+# ---------------------------------------------------------------------------
+# Action strip
+# ---------------------------------------------------------------------------
+
+def test_action_strip_cta_and_chip(qapp, sample_configuration):
+    tab = _make_tab(qapp, sample_configuration)
     try:
-        # No compact-density: rely on the default
-        # ``QPushButton { padding: 6px 14px; }`` rule so the icon
-        # buttons render with the same proportions as text buttons.
-        assert tab.remove_btn.property("density") in (None, "")
-        assert tab.duplicate_btn.property("density") in (None, "")
-
-        # Sanity: button glyphs are what we think they are.
-        assert tab.remove_btn.text() == "-"
-        assert tab.duplicate_btn.text() == "⎘"
-
-        # The icon buttons match the shared icon-button width.
-        for btn in (tab.remove_btn, tab.duplicate_btn):
-            assert btn.minimumWidth() == TOOLBAR_BTN_WIDTH
-            assert btn.maximumWidth() == TOOLBAR_BTN_WIDTH
-
-        # Add-fixture is the accent primary CTA (auto-sized, no fixed
-        # width - it carries text, not a glyph).
+        # Accent primary CTA on the right of the strip.
         assert tab.add_btn.text() == "+ ADD FIXTURE"
         assert tab.add_btn.property("role") == "primary"
-        assert tab.add_btn.maximumWidth() > TOOLBAR_BTN_WIDTH
+
+        # Conflict chip hidden while the patch is clean.
+        assert not tab.conflict_label.isVisibleTo(tab)
+
+        # No title label - the shell subnav names the screen.
+        assert not hasattr(tab, "label")
     finally:
         tab.deleteLater()
 
 
-def test_table_headers_are_mono_caps(qapp, sample_configuration):
-    """Column headers read as tracked mono micro-labels (card 1c).
+def test_duplicate_remove_live_in_inspector_footer(qapp,
+                                                   sample_configuration):
+    tab = _make_tab(qapp, sample_configuration)
+    try:
+        from PyQt6.QtWidgets import QWidget
 
-    The mono family is pinned by the theme's QHeaderView::section rule,
-    NOT asserted via header.font(): what font() reports depends on
-    stylesheet polish order (setFont families race the app-wide QSS
-    font rule), which made this test order-dependent.
-    """
+        panel = tab.findChild(QWidget, "FixtureInspector")
+        assert panel is not None
+        assert tab.duplicate_btn.text() == "Duplicate"
+        assert tab.remove_btn.text() == "Remove"
+        assert tab.remove_btn.property("role") == "destructive"
+        assert panel.isAncestorOf(tab.duplicate_btn)
+        assert panel.isAncestorOf(tab.remove_btn)
+    finally:
+        tab.deleteLater()
+
+
+# ---------------------------------------------------------------------------
+# Table: reference columns, read-only display items
+# ---------------------------------------------------------------------------
+
+def test_table_headers_reference_order_mono_caps(qapp, sample_configuration):
+    """Headers are # FIXTURE TYPE MODE UNI ADDRESS GROUP; the mono
+    family is pinned by the theme's QHeaderView::section rule, NOT
+    asserted via header.font() (polish-order race)."""
     from gui.fonts import FONT_MONO
-    from gui.tabs.fixtures_tab import FixturesTab
     from gui.theme_tokens import render_theme
 
     qss = render_theme("dark")
     header_rule = qss.split("QHeaderView::section {", 1)[1].split("}", 1)[0]
     assert FONT_MONO in header_rule
 
-    tab = FixturesTab(sample_configuration, parent=None)
+    tab = _make_tab(qapp, sample_configuration)
     try:
-        for col in range(tab.table.columnCount()):
-            text = tab.table.horizontalHeaderItem(col).text()
-            assert text == text.upper()
+        headers = [tab.table.horizontalHeaderItem(c).text()
+                   for c in range(tab.table.columnCount())]
+        assert headers == ["#", "FIXTURE", "TYPE", "MODE", "UNI",
+                           "ADDRESS", "GROUP"]
     finally:
         tab.deleteLater()
 
 
-def test_status_footer_counts(qapp, sample_configuration):
-    from gui.tabs.fixtures_tab import FixturesTab
+def test_table_is_read_only_display(qapp, sample_configuration):
+    from PyQt6.QtCore import Qt
+    from PyQt6.QtWidgets import QAbstractItemView
 
-    tab = FixturesTab(sample_configuration, parent=None)
+    tab = _make_tab(qapp, sample_configuration)
     try:
-        # MicroLabel renders caps; one fixture, one group in the sample.
-        assert tab.summary_label.text() == "1 FIXTURE · 1 GROUP"
-        assert "AUTO-PATCH" in tab.autopatch_label.text()
+        assert (tab.table.editTriggers()
+                == QAbstractItemView.EditTrigger.NoEditTriggers)
+        for col in range(tab.table.columnCount()):
+            item = tab.table.item(0, col)
+            assert item is not None, f"column {col} must be a plain item"
+            assert not (item.flags() & Qt.ItemFlag.ItemIsEditable)
+            # No cell widgets anywhere - display items only.
+            assert tab.table.cellWidget(0, col) is None
+    finally:
+        tab.deleteLater()
+
+
+def test_table_cell_texts(qapp, sample_configuration):
+    tab = _make_tab(qapp, sample_configuration)
+    try:
+        texts = {col: tab.table.item(0, col).text()
+                 for col in range(tab.table.columnCount())}
+        assert texts[COL_NUM] == "01"
+        assert texts[COL_FIXTURE] == "Test Fixture 1"
+        assert texts[COL_TYPE] == "MOVING HEAD"     # sample type "MH"
+        assert texts[COL_MODE] == "10 CH"
+        assert texts[COL_UNI] == "U0"
+        assert texts[COL_ADDRESS] == "001-010"
+        assert texts[COL_GROUP] == "TESTGROUP"
+    finally:
+        tab.deleteLater()
+
+
+def test_group_tint_and_colored_group_name(qapp, sample_configuration):
+    from PyQt6.QtGui import QColor
+    from gui.theme_tokens import DARK
+    from gui.tabs.fixtures_tab import group_tint_color
+
+    tab = _make_tab(qapp, sample_configuration)
+    try:
+        group_color = QColor("#FF0000")  # saved on the sample group
+
+        # Row background: the group color at the reference's low alpha,
+        # pre-blended over the panel color (opaque - see
+        # group_tint_color for the PE_PanelItemViewRow story).
+        bg = tab.table.item(0, COL_FIXTURE).background().color()
+        expected = group_tint_color(group_color, QColor(DARK["panel"]))
+        assert bg.name() == expected.name()
+        assert bg.alpha() == 255
+
+        # Group name renders in the group color (foreground brush).
+        fg = tab.table.item(0, COL_GROUP).foreground().color()
+        assert fg.name() == group_color.name()
+    finally:
+        tab.deleteLater()
+
+
+def test_ungrouped_rows_have_no_tint(qapp, sample_configuration):
+    from PyQt6.QtGui import QColor
+    from gui.theme_tokens import DARK
+
+    tab = _make_tab(qapp, sample_configuration)
+    try:
+        tab.insp_group.setCurrentText("")
+        item = tab.table.item(0, COL_FIXTURE)
+        # Plain opaque panel background - no group tint.
+        assert item.background().color().name() == QColor(DARK["panel"]).name()
+        assert tab.table.item(0, COL_GROUP).text() == ""
     finally:
         tab.deleteLater()
 
 
 # ---------------------------------------------------------------------------
-# Inspector panel (card 1c right column)
+# Inspector: loads the selection, writes directly to the config
 # ---------------------------------------------------------------------------
 
 def test_inspector_loads_selected_fixture(qapp, sample_configuration):
-    from gui.tabs.fixtures_tab import FixturesTab
-
-    tab = FixturesTab(sample_configuration, parent=None)
+    tab = _make_tab(qapp, sample_configuration)
     try:
         # Row 0 is auto-selected after every rebuild.
         assert tab._selected_fixture_row() == 0
 
         assert tab.inspector_title.text() == "TEST FIXTURE 1"
-        # Provenance line: manufacturer, model, definition source.
         assert tab.inspector_source.text() == "TESTMFR · TESTMODEL · QXF"
         assert tab.insp_name.text() == "Test Fixture 1"
         assert tab.insp_address.value() == 1
         assert tab.insp_mode.currentText() == "Standard (10ch)"
         assert tab.insp_group.currentText() == "TestGroup"
-        # Position readout: raw x/y, effective z (group default 3.0).
         assert tab.insp_position.text() == "X 1.00   Y 2.00   Z 3.00 m"
     finally:
         tab.deleteLater()
 
 
 def test_inspector_shows_gdtf_provenance(qapp, sample_configuration):
-    from gui.tabs.fixtures_tab import FixturesTab
-
     sample_configuration.fixtures[0].definition_source = "gdtf"
-    tab = FixturesTab(sample_configuration, parent=None)
+    tab = _make_tab(qapp, sample_configuration)
     try:
         assert tab.inspector_source.text().endswith("GDTF")
     finally:
         tab.deleteLater()
 
 
-def test_inspector_edits_write_through_table_to_config(
-        qapp, sample_configuration):
-    from gui.tabs.fixtures_tab import FixturesTab
-
-    tab = FixturesTab(sample_configuration, parent=None)
+def test_inspector_address_writes_config_and_row(qapp, sample_configuration):
+    tab = _make_tab(qapp, sample_configuration)
     try:
-        # Address via inspector spin -> table spin -> config.
         tab.insp_address.setValue(21)
-        assert tab.table.cellWidget(0, 1).value() == 21
         assert sample_configuration.fixtures[0].address == 21
+        assert tab.table.item(0, COL_ADDRESS).text() == "021-030"
+    finally:
+        tab.deleteLater()
 
-        # Name via inspector line edit (textEdited = user typing).
+
+def test_inspector_name_writes_config_and_row(qapp, sample_configuration):
+    tab = _make_tab(qapp, sample_configuration)
+    try:
         tab.insp_name.setText("Renamed")
         tab.insp_name.textEdited.emit("Renamed")
-        assert tab.table.item(0, 6).text() == "Renamed"
         assert sample_configuration.fixtures[0].name == "Renamed"
+        assert tab.table.item(0, COL_FIXTURE).text() == "Renamed"
         assert tab.inspector_title.text() == "RENAMED"
     finally:
         tab.deleteLater()
 
 
-def test_inspector_mode_change_updates_table_and_channels(
+def test_inspector_mode_change_updates_channel_footprint(
         qapp, sample_configuration):
     from config.models import FixtureMode
-    from gui.tabs.fixtures_tab import FixturesTab
 
     fixture = sample_configuration.fixtures[0]
     fixture.available_modes.append(FixtureMode(name="Extended", channels=16))
-    tab = FixturesTab(sample_configuration, parent=None)
+    tab = _make_tab(qapp, sample_configuration)
     try:
         tab.insp_mode.setCurrentIndex(1)
         assert fixture.current_mode == "Extended"
-        assert tab.table.cellWidget(0, 5).currentIndex() == 1
-        assert tab.table.item(0, 4).text() == "16"
+        assert tab.table.item(0, COL_MODE).text() == "16 CH"
+        # The address range widens with the footprint.
+        assert tab.table.item(0, COL_ADDRESS).text() == "001-016"
     finally:
         tab.deleteLater()
 
 
 def test_inspector_group_change_writes_config(qapp, sample_configuration):
-    from gui.tabs.fixtures_tab import FixturesTab
-
-    tab = FixturesTab(sample_configuration, parent=None)
+    tab = _make_tab(qapp, sample_configuration)
     try:
         tab.insp_group.setCurrentText("")
         assert sample_configuration.fixtures[0].group == ""
-        assert tab.table.cellWidget(0, 7).currentText() == ""
+        # The empty group vanished from the rebuilt group table.
+        assert "TestGroup" not in sample_configuration.groups
     finally:
         tab.deleteLater()
 
 
-def test_table_edits_mirror_into_inspector(qapp, sample_configuration):
-    from gui.tabs.fixtures_tab import FixturesTab
-
-    tab = FixturesTab(sample_configuration, parent=None)
+def test_inspector_role_edits_group_role(qapp, sample_configuration):
+    tab = _make_tab(qapp, sample_configuration)
     try:
-        tab.table.cellWidget(0, 1).setValue(33)
-        assert tab.insp_address.value() == 33
+        tab.insp_role.setCurrentText("accent")
+        assert (sample_configuration.groups["TestGroup"].lighting_role
+                == "accent")
+    finally:
+        tab.deleteLater()
 
-        tab.table.item(0, 6).setText("From Table")
-        assert tab.insp_name.text() == "From Table"
-        assert tab.inspector_title.text() == "FROM TABLE"
+
+def test_selection_binds_inspector(qapp, sample_configuration):
+    from config.models import Fixture, FixtureMode
+
+    sample_configuration.fixtures.append(Fixture(
+        universe=0, address=11, manufacturer="TestMfr", model="TestModel",
+        name="Second", group="TestGroup", current_mode="Standard",
+        available_modes=[FixtureMode(name="Standard", channels=10)],
+    ))
+    tab = _make_tab(qapp, sample_configuration)
+    try:
+        tab.table.selectRow(1)
+        assert tab.inspector_title.text() == "SECOND"
+        assert tab.insp_address.value() == 11
     finally:
         tab.deleteLater()
 
 
 def test_inspector_disables_without_selection(qapp, sample_configuration):
-    from gui.tabs.fixtures_tab import FixturesTab
-
-    tab = FixturesTab(sample_configuration, parent=None)
+    tab = _make_tab(qapp, sample_configuration)
     try:
         tab.table.clearSelection()
         assert tab.inspector_title.text() == "NO FIXTURE"
         for editor in tab._inspector_editors:
             assert not editor.isEnabled()
+        assert not tab.duplicate_btn.isEnabled()
+        assert not tab.remove_btn.isEnabled()
 
-        # Re-selecting brings it back.
         tab.table.selectRow(0)
         assert tab.inspector_title.text() == "TEST FIXTURE 1"
-        for editor in tab._inspector_editors:
-            assert editor.isEnabled()
+        assert tab.duplicate_btn.isEnabled()
     finally:
         tab.deleteLater()
 
 
 def test_inspector_panel_uses_inspector_role(qapp, sample_configuration):
-    from gui.tabs.fixtures_tab import FixturesTab
-
     from PyQt6.QtWidgets import QWidget
 
-    tab = FixturesTab(sample_configuration, parent=None)
+    tab = _make_tab(qapp, sample_configuration)
     try:
         panel = tab.findChild(QWidget, "FixtureInspector")
         assert panel is not None
@@ -226,13 +311,236 @@ def test_inspector_panel_uses_inspector_role(qapp, sample_configuration):
 
 
 # ---------------------------------------------------------------------------
+# Capabilities + channel map (definition cache)
+# ---------------------------------------------------------------------------
+
+def _seeded_definition():
+    """A legacy definition dict matching the sample fixture's identity
+    and its 'Standard' 10-channel mode."""
+    names = ["Dimmer", "Strobe", "Pan", "Pan Fine", "Tilt", "Tilt Fine",
+             "Red", "Green", "Blue", "White"]
+    presets = {
+        "Dimmer": "IntensityMasterDimmer", "Strobe": "ShutterStrobeSlowFast",
+        "Pan": "PositionPan", "Pan Fine": "PositionPanFine",
+        "Tilt": "PositionTilt", "Tilt Fine": "PositionTiltFine",
+        "Red": "IntensityRed", "Green": "IntensityGreen",
+        "Blue": "IntensityBlue", "White": "IntensityWhite",
+    }
+    return {
+        "manufacturer": "TestMfr",
+        "model": "TestModel",
+        "channels": [
+            {"name": n, "preset": presets[n], "group": None,
+             "capabilities": []}
+            for n in names
+        ],
+        "modes": [{
+            "name": "Standard",
+            "channels": [{"number": i, "name": n}
+                         for i, n in enumerate(names)],
+        }],
+    }
+
+
+def test_capabilities_and_channel_map_from_definition(
+        qapp, sample_configuration):
+    from utils.fixture_utils import _fixture_definitions_cache
+    from gui.widgets.chip import Chip
+
+    _fixture_definitions_cache["TestMfr_TestModel"] = _seeded_definition()
+    tab = None
+    try:
+        tab = _make_tab(qapp, sample_configuration)
+
+        assert not tab.caps_placeholder.isVisibleTo(tab)
+        chips = [tab._caps_flow.itemAt(i).widget()
+                 for i in range(tab._caps_flow.count())]
+        assert all(isinstance(c, Chip) for c in chips)
+        assert [c.text() for c in chips] == [
+            "PAN/TILT", "RGBW", "DIMMER", "STROBE"]
+
+        assert tab.channel_map_header.text() == "CHANNEL MAP · MODE 10 CH"
+        # 10 channel rows + the trailing stretch.
+        rows = [tab._map_layout.itemAt(i).widget()
+                for i in range(tab._map_layout.count())]
+        assert sum(1 for r in rows if r is not None) == 10
+    finally:
+        _fixture_definitions_cache.pop("TestMfr_TestModel", None)
+        if tab is not None:
+            tab.deleteLater()
+
+
+def test_unresolvable_definition_shows_placeholder(
+        qapp, sample_configuration):
+    tab = _make_tab(qapp, sample_configuration)
+    try:
+        # Synthetic TestMfr/TestModel resolves to nothing.
+        assert tab.caps_placeholder.isVisibleTo(tab)
+        assert tab.caps_placeholder.text() == "NO DEFINITION FOUND"
+        assert tab._caps_flow.count() == 0
+        assert tab.channel_map_header.text() == "CHANNEL MAP · MODE 10 CH"
+    finally:
+        tab.deleteLater()
+
+
+# ---------------------------------------------------------------------------
+# GROUPS panel
+# ---------------------------------------------------------------------------
+
+def _group_rows(tab):
+    rows = []
+    for i in range(tab._groups_layout.count()):
+        widget = tab._groups_layout.itemAt(i).widget()
+        if widget is not None:
+            rows.append(widget)
+    return rows
+
+
+def test_groups_panel_rows(qapp, sample_configuration):
+    from PyQt6.QtWidgets import QLabel
+
+    sample_configuration.groups["TestGroup"].lighting_role = "wash"
+    tab = _make_tab(qapp, sample_configuration)
+    try:
+        rows = _group_rows(tab)
+        assert len(rows) == 1
+        labels = [lbl.text() for lbl in rows[0].findChildren(QLabel)]
+        assert "TESTGROUP" in labels
+        assert "1 FIX" in labels
+        assert "Role: wash · MH x1" in labels
+        # The colored left border carries the group's data color.
+        assert "border-left: 3px solid #ff0000" in rows[0].styleSheet()
+    finally:
+        tab.deleteLater()
+
+
+def test_group_row_click_selects_group_fixtures(qapp, sample_configuration):
+    from config.models import Fixture, FixtureMode
+
+    sample_configuration.fixtures.append(Fixture(
+        universe=0, address=11, manufacturer="TestMfr", model="TestModel",
+        name="Loose", group="", current_mode="Standard",
+        available_modes=[FixtureMode(name="Standard", channels=10)],
+    ))
+    sample_configuration.fixtures.append(Fixture(
+        universe=0, address=21, manufacturer="TestMfr", model="TestModel",
+        name="Second grouped", group="TestGroup", current_mode="Standard",
+        available_modes=[FixtureMode(name="Standard", channels=10)],
+    ))
+    sample_configuration.groups["TestGroup"].fixtures.append(
+        sample_configuration.fixtures[-1])
+    tab = _make_tab(qapp, sample_configuration)
+    try:
+        tab.table.clearSelection()
+        tab._on_group_row_clicked("TestGroup")
+        selected = sorted({i.row() for i in tab.table.selectedItems()})
+        assert selected == [0, 2]
+        assert tab._selected_group == "TestGroup"
+        # Selected row carries the raised background.
+        assert "background-color: transparent" not in \
+            _group_rows(tab)[0].styleSheet()
+    finally:
+        tab.deleteLater()
+
+
+def test_create_group_persists_while_empty(qapp, sample_configuration):
+    tab = _make_tab(qapp, sample_configuration)
+    try:
+        tab._create_group("Movers", role="accent")
+        assert "Movers" in sample_configuration.groups
+        assert sample_configuration.groups["Movers"].lighting_role == "accent"
+        assert sample_configuration.groups["Movers"].fixtures == []
+        # It got a data color and a panel row.
+        assert sample_configuration.groups["Movers"].color != "#808080"
+        assert len(_group_rows(tab)) == 2
+
+        # A group rebuild (any config edit) must NOT drop it.
+        tab._update_groups()
+        assert "Movers" in sample_configuration.groups
+
+        # It is offered in the inspector's group editor.
+        items = [tab.insp_group.itemText(i)
+                 for i in range(tab.insp_group.count())]
+        assert "Movers" in items
+    finally:
+        tab.deleteLater()
+
+
+def test_group_add_button_exists(qapp, sample_configuration):
+    from gui.tabs.configuration_tab import TOOLBAR_BTN_WIDTH
+
+    tab = _make_tab(qapp, sample_configuration)
+    try:
+        assert tab.group_add_btn.text() == "+"
+        assert tab.group_add_btn.minimumWidth() == TOOLBAR_BTN_WIDTH
+        assert tab.group_add_btn.maximumWidth() == TOOLBAR_BTN_WIDTH
+    finally:
+        tab.deleteLater()
+
+
+# ---------------------------------------------------------------------------
+# Status strip + footer
+# ---------------------------------------------------------------------------
+
+def test_status_strip_counts_and_universe_usage(qapp, sample_configuration):
+    tab = _make_tab(qapp, sample_configuration)
+    try:
+        assert tab.summary_label.text() == "1 FIXTURE · 1 GROUP"
+        assert tab.universe_usage_label.text() == "U0 10/512"
+        assert "AUTO-PATCH" in tab.autopatch_label.text()
+    finally:
+        tab.deleteLater()
+
+
+def test_universe_usage_tracks_moves(qapp, sample_configuration):
+    tab = _make_tab(qapp, sample_configuration)
+    try:
+        tab.insp_universe.setValue(2)
+        assert "U2 10/512" in tab.universe_usage_label.text()
+    finally:
+        tab.deleteLater()
+
+
+# ---------------------------------------------------------------------------
+# Duplicate / Remove semantics (unchanged from the toolbar era)
+# ---------------------------------------------------------------------------
+
+def test_duplicate_creates_conflict_free_copy(qapp, sample_configuration):
+    from utils.dmx_conflicts import lint_dmx_addresses
+
+    tab = _make_tab(qapp, sample_configuration)
+    try:
+        tab.duplicate_btn.click()
+        fixtures = sample_configuration.fixtures
+        assert len(fixtures) == 2
+        assert fixtures[1].name == "Test Fixture 1 (Copy)"
+        assert fixtures[1].group == "TestGroup"
+        assert lint_dmx_addresses(fixtures).is_clean
+        assert tab.table.rowCount() == 2
+    finally:
+        tab.deleteLater()
+
+
+def test_remove_deletes_selected_fixture(qapp, sample_configuration):
+    tab = _make_tab(qapp, sample_configuration)
+    try:
+        tab.remove_btn.click()
+        assert sample_configuration.fixtures == []
+        assert tab.table.rowCount() == 0
+        # Group emptied out and was dropped.
+        assert sample_configuration.groups == {}
+    finally:
+        tab.deleteLater()
+
+
+# ---------------------------------------------------------------------------
 # DMX address conflict indicators
 #
-# Contract: fixtures whose (universe, address range) footprints overlap get
-# the warning stylesheet + a tooltip naming the other fixture on their
-# Universe/Address cell widgets, and the summary label shows the issue
-# count. Resolving the conflict via the Address spinbox clears all of it
-# (save_to_config re-lints; no full table rebuild involved).
+# Contract: fixtures whose (universe, address range) footprints overlap
+# get the red background + white text + a tooltip naming the other
+# fixture on their UNI/ADDRESS display items, and the action-strip chip
+# shows the issue count. Resolving the conflict via the inspector's
+# Address spin clears all of it (no full rebuild involved).
 # ---------------------------------------------------------------------------
 
 def _overlapping_config(sample_configuration):
@@ -255,55 +563,51 @@ def _overlapping_config(sample_configuration):
 
 
 def test_conflicting_fixtures_are_flagged(qapp, sample_configuration):
-    from gui.tabs.fixtures_tab import CONFLICT_CELL_QSS, FixturesTab
-
     config = _overlapping_config(sample_configuration)
-    tab = FixturesTab(config, parent=None)
+    tab = _make_tab(qapp, config)
     try:
         assert tab.conflict_label.isVisibleTo(tab)
-        # The label is a warning Chip and renders in caps.
         assert "1 DMX ADDRESSING ISSUE" in tab.conflict_label.text()
 
         for row, other_name in ((0, "Test Fixture 2"), (1, "Test Fixture 1")):
-            for col in (0, 1):
-                widget = tab.table.cellWidget(row, col)
-                assert widget.styleSheet() == CONFLICT_CELL_QSS
-                assert other_name in widget.toolTip()
-                assert "channels 5-10" in widget.toolTip()
+            for col in (COL_UNI, COL_ADDRESS):
+                item = tab.table.item(row, col)
+                assert item.background().color().name() == CONFLICT_BG
+                assert other_name in item.toolTip()
+                assert "channels 5-10" in item.toolTip()
     finally:
         tab.deleteLater()
 
 
 def test_resolving_conflict_clears_flags(qapp, sample_configuration):
-    from gui.tabs.fixtures_tab import CONFLICT_CELL_QSS, FixturesTab
-
     config = _overlapping_config(sample_configuration)
-    tab = FixturesTab(config, parent=None)
+    tab = _make_tab(qapp, config)
     try:
-        # Move the second fixture clear of the first (1-10 -> 11-20).
-        tab.table.cellWidget(1, 1).setValue(11)
+        # Move the second fixture clear of the first (1-10 -> 11-20)
+        # through the inspector, the only write path.
+        tab.table.selectRow(1)
+        tab.insp_address.setValue(11)
 
         assert not tab.conflict_label.isVisibleTo(tab)
         for row in (0, 1):
-            for col in (0, 1):
-                widget = tab.table.cellWidget(row, col)
-                assert widget.styleSheet() != CONFLICT_CELL_QSS
-                assert widget.toolTip() == ""
+            for col in (COL_UNI, COL_ADDRESS):
+                item = tab.table.item(row, col)
+                assert item.background().color().name() != CONFLICT_BG
+                assert item.toolTip() == ""
+        assert tab.table.item(1, COL_ADDRESS).text() == "011-020"
     finally:
         tab.deleteLater()
 
 
 def test_overflow_past_universe_end_is_flagged(qapp, sample_configuration):
-    from gui.tabs.fixtures_tab import CONFLICT_CELL_QSS, FixturesTab
-
-    tab = FixturesTab(sample_configuration, parent=None)
+    tab = _make_tab(qapp, sample_configuration)
     try:
         # 10-channel fixture at 510 runs to 519, past the 512 limit.
-        tab.table.cellWidget(0, 1).setValue(510)
+        tab.insp_address.setValue(510)
 
         assert tab.conflict_label.isVisibleTo(tab)
-        widget = tab.table.cellWidget(0, 1)
-        assert widget.styleSheet() == CONFLICT_CELL_QSS
-        assert "ends at channel 519" in widget.toolTip()
+        item = tab.table.item(0, COL_ADDRESS)
+        assert item.background().color().name() == CONFLICT_BG
+        assert "ends at channel 519" in item.toolTip()
     finally:
         tab.deleteLater()

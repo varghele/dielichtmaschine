@@ -34,10 +34,13 @@ from tests.visual.harness import assert_text_not_clipped
 def _fixtures_tab_buttons(config):
     from gui.tabs.fixtures_tab import FixturesTab
     tab = FixturesTab(config, parent=None)
+    # Duplicate/Remove moved to the inspector footer as auto-sized text
+    # buttons - out of sweep scope (auto-width buttons can't clip, and
+    # blanking their text re-layouts the stretch row, breaking the
+    # with/without-text diff). Only the fixed-width buttons stay.
     return tab, {
         "add": tab.add_btn,
-        "remove": tab.remove_btn,
-        "duplicate": tab.duplicate_btn,
+        "group_add": tab.group_add_btn,
     }
 
 

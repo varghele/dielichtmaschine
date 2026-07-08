@@ -15,8 +15,10 @@ from PyQt6.QtGui import QColor, QPainter, QPen
 from PyQt6.QtWidgets import QTableWidget, QWidget
 
 
-_OUTLINE_COLOR = QColor("#2196F3")
-_OUTLINE_WIDTH = 2
+# Glutorange selection outline per the design reference (screen 02
+# outlines the selected patch row in the accent, 1px, not info-blue).
+_OUTLINE_COLOR = QColor("#F0562E")
+_OUTLINE_WIDTH = 1
 
 
 class _RowOutlineOverlay(QWidget):

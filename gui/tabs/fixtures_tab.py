@@ -1,20 +1,40 @@
 # gui/tabs/fixtures_tab.py
-"""Setup > Fixtures: group-tinted patch table (North Star card 1c).
+"""Setup > Fixtures, rebuilt to the reference screen
+design_handoff_lichtmaschine_app/screens/02-setup-fixtures.html.
 
-Layout: brand title row (display-caps title, DMX-conflict chip, icon
--/duplicate buttons, accent "+ ADD FIXTURE" CTA), the group-tinted
-fixtures table with tracked-mono column headers, a mono status footer
-(counts + auto-patch hint), and a right-hand inspector editing the
-selected fixture (name, provenance, patch, group, position readout).
+Anatomy (left to right, top to bottom):
 
-Data contract unchanged: config.fixtures / config.groups edited in
-place; the table cell widgets (Universe/Address spins, Mode/Group/Role
-combos) remain the single write path - inspector editors write through
-them so both stay in sync.
+- a slim 38px action strip: DMX-conflict warning chip left (hidden when
+  clean), accent "+ ADD FIXTURE" CTA right. No tab title - the shell
+  subnav already names the screen.
+- a 280px GROUPS panel: one row per group with a 3px left border in the
+  group color, caps group name, "N FIX" mono count, a secondary role
+  line, plus a dashed hint box at the bottom. Clicking a row selects
+  that group's fixtures in the table.
+- the display-styled patch table: # / FIXTURE / TYPE / MODE / UNI /
+  ADDRESS / GROUP. Plain read-only items, group-tinted rows (low-alpha
+  background brushes - allowed because the theme has no
+  QTableView::item rule, see docs/qt-gotchas.md #1), group names in the
+  group color, red UNI/ADDRESS cells on DMX conflicts. The AUTO-PATCH
+  footer line sits underneath.
+- a 380px inspector: display-caps fixture name + mono provenance,
+  CAPABILITIES chip row, CHANNEL MAP mono list (both derived from the
+  fixture-definition cache), the editors (name / universe / address /
+  mode / group / role), position readout, and a Duplicate / Remove
+  footer.
+- a mono status strip: "N FIXTURES · M GROUPS" and per-universe usage
+  ("U1 92/512 · U2 58/512").
+
+All editing happens in the inspector; the table is a pure display of
+config.fixtures (row index == config index, no sorting). Inspector
+editors write straight into the config, then refresh the affected table
+row(s), the DMX lint, the groups panel and the status strip.
 """
 
 from PyQt6 import QtWidgets, QtCore, QtGui
-from PyQt6.QtWidgets import QDialog, QDialogButtonBox, QFormLayout, QLineEdit, QComboBox
+from PyQt6.QtWidgets import (
+    QComboBox, QDialog, QDialogButtonBox, QFormLayout, QLineEdit,
+)
 from PyQt6.QtGui import QFont
 from PyQt6.QtCore import Qt
 from config.models import Configuration, Fixture, FixtureMode, FixtureGroup
@@ -27,41 +47,327 @@ from utils.dmx_conflicts import (
 )
 from .base_tab import BaseTab
 
-# Warning tint for Universe / Address cells of conflicting fixtures.
+# Table columns, reference order.
+COL_NUM, COL_FIXTURE, COL_TYPE, COL_MODE, COL_UNI, COL_ADDRESS, COL_GROUP = \
+    range(7)
+TABLE_HEADERS = ("#", "FIXTURE", "TYPE", "MODE", "UNI", "ADDRESS", "GROUP")
+
+# Row tint: the group color at the reference's rgba(...,0.17).
+GROUP_TINT_ALPHA = 43
+
+# Warning treatment for Universe / Address cells of conflicting fixtures.
 # A fixed red (not theme-derived) so it reads as "error" on both themes
-# and can't collide with the pastel group tints.
-CONFLICT_CELL_QSS = "background-color: #d9534f; color: #ffffff;"
+# and can't collide with the group tints.
+CONFLICT_BG = "#d9534f"
+CONFLICT_FG = "#ffffff"
+
+# Readable words for the legacy fixture-type strings.
+TYPE_LABELS = {
+    "PAR": "PAR",
+    "MH": "MOVING HEAD",
+    "WASH": "WASH",
+    "BAR": "LED BAR",
+    "PIXELBAR": "PIXEL BAR",
+    "SUNSTRIP": "SUNSTRIP",
+}
+
+# Group data colors, reference-flavoured (amber / cyan / magenta /
+# green / blue / terracotta / violet / gray). Saturated mid-tones so
+# they read as foreground text on the dark theme and as a tint at
+# GROUP_TINT_ALPHA on both themes.
+GROUP_PALETTE = (
+    "#D9A441", "#4ECBD4", "#C95FD0", "#6F9E4C",
+    "#5F86C9", "#C96A5F", "#9A7FD0", "#8D9299",
+)
+
+LIGHTING_ROLES = ("", "wash", "key", "texture", "accent")
+
+
+# ---------------------------------------------------------------------------
+# Pure helpers (unit-tested in tests/unit/test_fixture_capabilities_chips.py)
+# ---------------------------------------------------------------------------
+
+def type_label(raw_type: str) -> str:
+    """A readable type word for a legacy fixture-type string."""
+    token = (raw_type or "").strip().upper()
+    if not token:
+        return "PAR"
+    return TYPE_LABELS.get(token, token)
+
+
+def format_address_range(address: int, channels: int) -> str:
+    """Zero-padded inclusive DMX range, e.g. (1, 8) -> '001-008'."""
+    end = address + max(int(channels), 1) - 1
+    return f"{address:03d}-{end:03d}"
+
+
+def group_role_line(group) -> str:
+    """The secondary line of a groups-panel row.
+
+    "Role: accent · MH x2" - lighting role when set, then a summary of
+    member types. Empty string when there is nothing to say.
+    """
+    parts = []
+    role = (getattr(group, "lighting_role", "") or "").strip()
+    if role:
+        parts.append(f"Role: {role}")
+    counts = {}
+    for fixture in getattr(group, "fixtures", None) or []:
+        token = (getattr(fixture, "type", "") or "PAR").strip().upper() or "PAR"
+        counts[token] = counts.get(token, 0) + 1
+    if counts:
+        parts.append(" · ".join(f"{t} x{n}" for t, n in counts.items()))
+    return " · ".join(parts)
+
+
+def _channel_blob(channel: dict) -> str:
+    """Lower-cased name+preset haystack for capability matching."""
+    return f"{channel.get('name') or ''} {channel.get('preset') or ''}".lower()
+
+
+def mode_channel_dicts(definition: dict, mode_name: str,
+                       channel_count=None):
+    """The ordered channel dicts of a mode from a legacy definition dict
+    (the get_cached_fixture_definitions shape).
+
+    Resolution: exact mode-name match, then a channel-count match (mode
+    names drift between config and definition), else None. Channel refs
+    that don't resolve to a global <Channel> keep their name with no
+    preset/capabilities.
+    """
+    if not definition:
+        return None
+    modes = definition.get("modes") or []
+    mode = next((m for m in modes if m.get("name") == mode_name), None)
+    if mode is None and channel_count is not None:
+        mode = next(
+            (m for m in modes if len(m.get("channels") or []) == channel_count),
+            None)
+    if mode is None:
+        return None
+    by_name = {ch.get("name"): ch for ch in definition.get("channels") or []}
+    out = []
+    refs = sorted(mode.get("channels") or [],
+                  key=lambda r: r.get("number", 0))
+    for ref in refs:
+        name = ref.get("name") or ""
+        channel = by_name.get(name)
+        if channel is None:
+            channel = {"name": name, "preset": None, "capabilities": []}
+        out.append(channel)
+    return out
+
+
+def derive_capability_chips(channels) -> list:
+    """Capability chip texts for a mode's channel dicts.
+
+    Rules (all case-insensitive over channel name + preset):
+    - PAN/TILT when both a pan and a tilt channel exist
+    - RGBW / RGB when red+green+blue (+white) components exist,
+      else CMY when cyan+magenta+yellow exist
+    - DIMMER on any 'dimmer' channel
+    - GOBO on a gobo wheel channel (not a rotation channel); "xN" when
+      N wheel capabilities carry 'gobo' in their name (slot count on
+      the cheap)
+    - PRISM / ZOOM / FOCUS on the matching term
+    - STROBE on 'strobe' or 'shutter'
+    """
+    blobs = [(_channel_blob(ch), ch) for ch in channels or []]
+
+    def present(term):
+        return any(term in blob for blob, _ in blobs)
+
+    chips = []
+    if present("pan") and present("tilt"):
+        chips.append("PAN/TILT")
+    if present("red") and present("green") and present("blue"):
+        chips.append("RGBW" if present("white") else "RGB")
+    elif present("cyan") and present("magenta") and present("yellow"):
+        chips.append("CMY")
+    if present("dimmer"):
+        chips.append("DIMMER")
+
+    gobo_wheel = False
+    slots = 0
+    for blob, channel in blobs:
+        if "gobo" in blob and "rot" not in blob:
+            gobo_wheel = True
+            for cap in channel.get("capabilities") or []:
+                cap_name = (cap.get("name") or "").lower()
+                if "gobo" in cap_name:
+                    slots += 1
+    if gobo_wheel:
+        chips.append(f"GOBO x{slots}" if slots else "GOBO")
+
+    if present("prism"):
+        chips.append("PRISM")
+    if present("strobe") or present("shutter"):
+        chips.append("STROBE")
+    if present("zoom"):
+        chips.append("ZOOM")
+    if present("focus"):
+        chips.append("FOCUS")
+    return chips
+
+
+def channel_map_rows(channels) -> list:
+    """(label, qualifier) rows for the CHANNEL MAP list.
+
+    Label is 'NN CHANNELNAME'; qualifier is 'fine' when the channel
+    name/preset says so, else empty.
+    """
+    rows = []
+    for i, channel in enumerate(channels or [], start=1):
+        name = (channel.get("name") or f"CH {i}").upper()
+        qualifier = "fine" if "fine" in _channel_blob(channel) else ""
+        rows.append((f"{i:02d} {name}", qualifier))
+    return rows
+
+
+def group_tint_color(group_color: QtGui.QColor,
+                     base_color: QtGui.QColor) -> QtGui.QColor:
+    """The group color at GROUP_TINT_ALPHA pre-blended over the table
+    base, as an OPAQUE color.
+
+    Opaque on purpose: QTableView paints PE_PanelItemViewRow (the
+    selection fill) *before* the item delegate runs, so a translucent
+    item brush lets the accent selection color bleed through on
+    selected rows even though GroupRowDelegate strips State_Selected.
+    An opaque brush covers it, exactly like the pre-rebuild tints did.
+    """
+    alpha = GROUP_TINT_ALPHA / 255.0
+    return QtGui.QColor(
+        round(group_color.red() * alpha + base_color.red() * (1 - alpha)),
+        round(group_color.green() * alpha + base_color.green() * (1 - alpha)),
+        round(group_color.blue() * alpha + base_color.blue() * (1 - alpha)),
+    )
+
+
+def _active_tokens() -> dict:
+    """The token dict of the theme currently applied to the app.
+
+    The applied stylesheet is the only reliable record of the active
+    theme (ThemeManager.apply deliberately doesn't persist), so sniff
+    it: the light theme's window color is unique to light. Falls back
+    to dark.
+    """
+    from PyQt6.QtWidgets import QApplication
+    from gui.theme_tokens import THEMES
+
+    app = QApplication.instance()
+    qss = app.styleSheet() if app is not None else ""
+    light = THEMES.get("light")
+    if light is not None and light["window"] in qss:
+        return light
+    return THEMES["dark"]
+
+
+class _FlowLayout(QtWidgets.QLayout):
+    """Minimal left-to-right wrapping layout for the capability chips."""
+
+    def __init__(self, parent=None, hspacing: int = 6, vspacing: int = 6):
+        super().__init__(parent)
+        self._items = []
+        self._h = hspacing
+        self._v = vspacing
+        self.setContentsMargins(0, 0, 0, 0)
+
+    def addItem(self, item):
+        self._items.append(item)
+
+    def count(self):
+        return len(self._items)
+
+    def itemAt(self, index):
+        if 0 <= index < len(self._items):
+            return self._items[index]
+        return None
+
+    def takeAt(self, index):
+        if 0 <= index < len(self._items):
+            return self._items.pop(index)
+        return None
+
+    def expandingDirections(self):
+        return QtCore.Qt.Orientation(0)
+
+    def hasHeightForWidth(self):
+        return True
+
+    def heightForWidth(self, width):
+        return self._do_layout(QtCore.QRect(0, 0, width, 0), True)
+
+    def setGeometry(self, rect):
+        super().setGeometry(rect)
+        self._do_layout(rect, False)
+
+    def sizeHint(self):
+        return self.minimumSize()
+
+    def minimumSize(self):
+        size = QtCore.QSize()
+        for item in self._items:
+            size = size.expandedTo(item.minimumSize())
+        margins = self.contentsMargins()
+        size += QtCore.QSize(margins.left() + margins.right(),
+                             margins.top() + margins.bottom())
+        return size
+
+    def _do_layout(self, rect, test_only: bool) -> int:
+        x, y, line_height = rect.x(), rect.y(), 0
+        for item in self._items:
+            hint = item.sizeHint()
+            if x + hint.width() > rect.right() + 1 and line_height > 0:
+                x = rect.x()
+                y += line_height + self._v
+                line_height = 0
+            if not test_only:
+                item.setGeometry(QtCore.QRect(QtCore.QPoint(x, y), hint))
+            x += hint.width() + self._h
+            line_height = max(line_height, hint.height())
+        return y + line_height - rect.y()
+
+
+class _GroupRow(QtWidgets.QWidget):
+    """One clickable row of the GROUPS panel."""
+
+    clicked = QtCore.pyqtSignal(str)
+
+    def __init__(self, group_name: str, parent=None):
+        super().__init__(parent)
+        self._group_name = group_name
+        self.setObjectName("GroupRow")
+        self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
+        self.setCursor(Qt.CursorShape.PointingHandCursor)
+
+    def mousePressEvent(self, event):
+        if event.button() == Qt.MouseButton.LeftButton:
+            self.clicked.emit(self._group_name)
+        super().mousePressEvent(event)
 
 
 class FixturesTab(BaseTab):
-    """Fixture inventory and group management tab
+    """Fixture inventory and group management tab.
 
-    Handles fixture CRUD operations, QLC+ fixture scanning, group management,
-    and color-coded table display. This is the central tab for fixture configuration.
+    Handles fixture CRUD, QLC+/GDTF fixture browsing, group management,
+    and the group-tinted patch table. The table is read-only display;
+    the inspector is the single write path into the config.
     """
 
     def __init__(self, config: Configuration, parent=None):
-        """Initialize fixtures tab
-
-        Args:
-            config: Shared Configuration object
-            parent: Parent widget (typically MainWindow)
-        """
-        # Initialize color management before super().__init__()
+        # Color management state (before super().__init__ builds the UI).
         self.group_colors = {}
         self.color_index = 0
-        self.predefined_colors = [
-            QtGui.QColor(255, 182, 193),  # Light pink
-            QtGui.QColor(173, 216, 230),  # Light blue
-            QtGui.QColor(144, 238, 144),  # Light green
-            QtGui.QColor(255, 218, 185),  # Peach
-            QtGui.QColor(221, 160, 221),  # Plum
-            QtGui.QColor(176, 196, 222),  # Light steel blue
-            QtGui.QColor(255, 255, 224),  # Light yellow
-            QtGui.QColor(230, 230, 250)   # Lavender
-        ]
+        self.predefined_colors = [QtGui.QColor(c) for c in GROUP_PALETTE]
         self.existing_groups = set()
-        self.fixture_paths = []
+        # Groups created via the panel's "+" that no fixture references
+        # yet; _update_groups preserves them instead of dropping them.
+        self._manual_groups = set()
+        # Groups-panel selection (independent of the table selection).
+        self._selected_group = None
+        # (manufacturer, model) -> legacy definition dict or None.
+        self._definition_memo = {}
+        self._tokens = None
 
         # Track fixture state to avoid unnecessary rebuilds
         self._last_fixture_fingerprint = None
@@ -73,6 +379,9 @@ class FixturesTab(BaseTab):
 
         super().__init__(config, parent)
 
+    # ------------------------------------------------------------------
+    # Tab lifecycle
+    # ------------------------------------------------------------------
     def showEvent(self, event):
         """Handle tab becoming visible - trigger pending update if needed."""
         super().showEvent(event)
@@ -109,127 +418,219 @@ class FixturesTab(BaseTab):
         finally:
             self._is_activating = False
 
+    # ------------------------------------------------------------------
+    # UI construction
+    # ------------------------------------------------------------------
     def setup_ui(self):
-        """Set up fixture management UI (North Star card 1c)."""
-        from gui.typography import DisplayLabel, MicroLabel, display_font
+        """Build the reference screen: action strip, groups panel,
+        display table + AUTO-PATCH footer, inspector, status strip."""
+        from gui.typography import MicroLabel, display_font
+        from gui.widgets.chip import Chip
+
+        self._tokens = _active_tokens()
 
         main_layout = QtWidgets.QVBoxLayout(self)
-        main_layout.setContentsMargins(16, 12, 16, 12)
-        main_layout.setSpacing(10)
+        main_layout.setContentsMargins(0, 0, 0, 0)
+        main_layout.setSpacing(0)
 
-        # Title row: display title + conflict chip left, actions right.
-        title_row = QtWidgets.QHBoxLayout()
-        title_row.setSpacing(12)
+        # -- Action strip (38px): conflict chip left, accent CTA right --
+        strip = QtWidgets.QWidget()
+        strip.setFixedHeight(38)
+        strip_row = QtWidgets.QHBoxLayout(strip)
+        strip_row.setContentsMargins(16, 0, 16, 0)
+        strip_row.setSpacing(12)
 
-        self.label = DisplayLabel("Fixtures", point_size=14,
-                                  weight=QFont.Weight.Bold)
-        title_row.addWidget(self.label)
-
-        from gui.widgets.chip import Chip
         self.conflict_label = Chip("", variant="warning")
         self.conflict_label.hide()
-        title_row.addWidget(self.conflict_label)
+        strip_row.addWidget(self.conflict_label)
+        strip_row.addStretch()
 
-        title_row.addStretch()
-
-        # The -/duplicate icon buttons share styling with
-        # ConfigurationTab via TOOLBAR_BTN_WIDTH. Default theme
-        # padding (no compact-density) so the icon buttons render
-        # with the same proportions as default text buttons elsewhere.
-        from gui.tabs.configuration_tab import TOOLBAR_BTN_WIDTH
-
-        self.remove_btn = QtWidgets.QPushButton("-")
-        self.remove_btn.setFixedWidth(TOOLBAR_BTN_WIDTH)
-        self.remove_btn.setToolTip("Remove Fixture")
-        title_row.addWidget(self.remove_btn)
-
-        self.duplicate_btn = QtWidgets.QPushButton("⎘")
-        self.duplicate_btn.setFixedWidth(TOOLBAR_BTN_WIDTH)
-        self.duplicate_btn.setToolTip("Duplicate Fixture")
-        title_row.addWidget(self.duplicate_btn)
-
-        # Add-fixture is the accent primary CTA (mockup: "+ IMPORT
-        # .QXF" top right); it opens the fixture browser dialog.
+        # Accent primary CTA (reference: "+ IMPORT .QXF" in the subnav
+        # row); opens the fixture browser dialog. The display family is
+        # pinned by the theme's QPushButton[role="primary"] rule.
         self.add_btn = QtWidgets.QPushButton("+ ADD FIXTURE")
         self.add_btn.setProperty("role", "primary")
         self.add_btn.setFont(display_font(11, QFont.Weight.Bold,
                                           tracking_em=0.08))
-        # Widget-local family pin (see NEEDED-QSS in the rework notes):
-        # the app-wide ``QWidget { font-family }`` rule wins the family
-        # during polishing while painting keeps the assigned font, and
-        # which of the two actually paints depends on polish order. The
-        # local rule makes font() and the painted text agree in every
-        # session; size/weight/tracking still come from setFont. Interim
-        # until a template rule pins the display family for
-        # [role="primary"] CTAs.
-        from gui.fonts import FONT_DISPLAY
-        self.add_btn.setStyleSheet(f'font-family: "{FONT_DISPLAY}";')
         self.add_btn.setToolTip("Add Fixture")
         self.add_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         # Pin the width from the button's own font metrics (plus the
         # theme's 28px padding + border and some slack) so the
         # glyph-clipping sweep can diff renders at stable geometry:
         # auto-width buttons re-layout when the harness blanks their
-        # text, which breaks the with/without-text diff. Metrics come
-        # from the same font engine that renders, so the width is
-        # always big enough on any platform (including the offscreen
-        # fallback-box font).
+        # text, which breaks the with/without-text diff.
         metrics = QtGui.QFontMetrics(self.add_btn.font())
         self.add_btn.setFixedWidth(
             metrics.horizontalAdvance(self.add_btn.text()) + 44)
-        title_row.addWidget(self.add_btn)
+        strip_row.addWidget(self.add_btn)
 
-        main_layout.addLayout(title_row)
+        main_layout.addWidget(strip)
 
+        # -- Body: groups panel | table column | inspector ---------------
         body = QtWidgets.QHBoxLayout()
-        body.setSpacing(16)
-
-        # -- Left: table + mono status footer ---------------------------
-        table_column = QtWidgets.QVBoxLayout()
-        table_column.setSpacing(6)
-
-        # Fixtures table — RowOutlineTableWidget paints a continuous
-        # selection outline around the entire row, including across cells
-        # that host widgets via setCellWidget (Universe spin, Address spin,
-        # Mode/Group/Role combos). See gui/widgets/row_outline_table.py and
-        # docs/qt-gotchas.md for why a per-cell delegate can't do this.
-        from gui.widgets.row_outline_table import RowOutlineTableWidget
-        self.table = RowOutlineTableWidget()
-
-        # Setup table structure
-        self._setup_table()
-
-        table_column.addWidget(self.table, 1)
-
-        # Status footer (mockup bottom strip): counts left, the
-        # auto-patch behaviour hint right.
-        footer_row = QtWidgets.QHBoxLayout()
-        footer_row.setSpacing(12)
-        self.summary_label = MicroLabel("", point_size=8, tracking_em=0.1)
-        footer_row.addWidget(self.summary_label)
-        footer_row.addStretch()
-        self.autopatch_label = MicroLabel(
-            "Auto-patch: new fixtures take the next free address range",
-            point_size=8, tracking_em=0.1)
-        footer_row.addWidget(self.autopatch_label)
-        table_column.addLayout(footer_row)
-
-        body.addLayout(table_column, 1)
-
-        # -- Right: inspector for the selected fixture -------------------
+        body.setContentsMargins(0, 0, 0, 0)
+        body.setSpacing(0)
+        body.addWidget(self._build_groups_panel())
+        body.addLayout(self._build_table_column(), 1)
         body.addWidget(self._build_inspector())
         main_layout.addLayout(body, 1)
+
+        # -- Status strip: counts + per-universe usage --------------------
+        status = QtWidgets.QWidget()
+        status.setFixedHeight(26)
+        status_row = QtWidgets.QHBoxLayout(status)
+        status_row.setContentsMargins(16, 0, 16, 0)
+        status_row.setSpacing(24)
+        self.summary_label = MicroLabel("", point_size=8, tracking_em=0.1)
+        status_row.addWidget(self.summary_label)
+        self.universe_usage_label = MicroLabel("", point_size=8,
+                                               tracking_em=0.1)
+        status_row.addWidget(self.universe_usage_label)
+        status_row.addStretch()
+        main_layout.addWidget(status)
 
         # Load initial data
         self.update_from_config()
 
-    def _build_inspector(self) -> QtWidgets.QWidget:
-        """The right-hand fixture inspector (mockup detail panel).
+    def _build_groups_panel(self) -> QtWidgets.QWidget:
+        """The 280px GROUPS panel (reference left column)."""
+        from gui.typography import MicroLabel
+        from gui.tabs.configuration_tab import TOOLBAR_BTN_WIDTH
 
-        Editors write through the table's cell widgets so the existing
-        handlers stay the single path into the config (group rebuild,
-        tints, DMX lint all keep working); the table pushes changes
-        back via _refresh_inspector.
+        panel = QtWidgets.QWidget()
+        panel.setObjectName("GroupsPanel")
+        panel.setProperty("role", "inspector")
+        panel.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
+        panel.setFixedWidth(280)
+        layout = QtWidgets.QVBoxLayout(panel)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
+
+        header = QtWidgets.QWidget()
+        header_row = QtWidgets.QHBoxLayout(header)
+        header_row.setContentsMargins(16, 8, 8, 8)
+        header_row.setSpacing(8)
+        header_row.addWidget(MicroLabel("Groups", point_size=8,
+                                        tracking_em=0.12))
+        header_row.addStretch()
+        self.group_add_btn = QtWidgets.QPushButton("+")
+        self.group_add_btn.setFixedWidth(TOOLBAR_BTN_WIDTH)
+        self.group_add_btn.setToolTip("Add Group")
+        header_row.addWidget(self.group_add_btn)
+        layout.addWidget(header)
+
+        self._groups_container = QtWidgets.QWidget()
+        self._groups_layout = QtWidgets.QVBoxLayout(self._groups_container)
+        self._groups_layout.setContentsMargins(0, 0, 0, 0)
+        self._groups_layout.setSpacing(0)
+        layout.addWidget(self._groups_container)
+        layout.addStretch(1)
+
+        # Dashed hint box (reference bottom of the groups column).
+        # Widget-local styling: the dashed-border label has no theme
+        # role yet (see NEEDED-QSS in the report); colors come from the
+        # active theme's tokens.
+        self.groups_hint = QtWidgets.QLabel(
+            "Groups are the unit the timeline, Autogen and Live Controls "
+            "address. Keep them role-based.")
+        self.groups_hint.setObjectName("GroupsHint")
+        self.groups_hint.setWordWrap(True)
+        hint_font = self.groups_hint.font()
+        hint_font.setPointSize(8)
+        self.groups_hint.setFont(hint_font)
+        self._style_groups_hint()
+        hint_wrap = QtWidgets.QVBoxLayout()
+        hint_wrap.setContentsMargins(16, 16, 16, 16)
+        hint_wrap.addWidget(self.groups_hint)
+        layout.addLayout(hint_wrap)
+        return panel
+
+    def _style_groups_hint(self):
+        # Theme-owned: QLabel[role="hint-box"] in the QSS template.
+        self.groups_hint.setProperty("role", "hint-box")
+
+    def _build_table_column(self) -> QtWidgets.QVBoxLayout:
+        """The patch table plus the AUTO-PATCH footer line."""
+        from gui.typography import MicroLabel
+        from gui.widgets.row_outline_table import RowOutlineTableWidget
+
+        column = QtWidgets.QVBoxLayout()
+        column.setContentsMargins(0, 0, 0, 0)
+        column.setSpacing(0)
+
+        # RowOutlineTableWidget paints a continuous selection outline
+        # around the row; GroupRowDelegate (below) strips the opaque
+        # selection fill so the group tint stays visible.
+        self.table = RowOutlineTableWidget()
+        self._setup_table()
+        column.addWidget(self.table, 1)
+
+        footer_row = QtWidgets.QHBoxLayout()
+        footer_row.setContentsMargins(16, 8, 16, 8)
+        self.autopatch_label = MicroLabel(
+            "Auto-patch: new fixtures take the next free address range",
+            point_size=8, tracking_em=0.1)
+        footer_row.addWidget(self.autopatch_label)
+        footer_row.addStretch()
+        column.addLayout(footer_row)
+        return column
+
+    def _setup_table(self):
+        """Initialize table structure and properties."""
+        from gui.typography import mono_font
+        from gui.widgets.modern_table import apply_modern_table_style
+        from gui.widgets.group_row_delegate import GroupRowDelegate
+
+        self.table.setColumnCount(len(TABLE_HEADERS))
+        self.table.setHorizontalHeaderLabels(list(TABLE_HEADERS))
+        self.table.horizontalHeader().setFont(mono_font(8, tracking_em=0.1))
+        self.table.setSizePolicy(
+            QtWidgets.QSizePolicy.Policy.Expanding,
+            QtWidgets.QSizePolicy.Policy.Expanding,
+        )
+
+        # Modern table behaviour (no grid, no vertical header, row
+        # selection); then widen to multi-row selection so a groups-panel
+        # click can select every fixture of the group.
+        apply_modern_table_style(self.table)
+        self.table.setSelectionMode(
+            QtWidgets.QAbstractItemView.SelectionMode.ExtendedSelection)
+        # Uniform row background (reference look): every row carries an
+        # explicit opaque background brush from _apply_row_visuals, so
+        # alternating colors would never show anyway.
+        self.table.setAlternatingRowColors(False)
+
+        # Display-only: all editing happens in the inspector.
+        self.table.setEditTriggers(
+            QtWidgets.QAbstractItemView.EditTrigger.NoEditTriggers)
+
+        # Keep row index == config.fixtures index (patch-list order).
+        self.table.setSortingEnabled(False)
+
+        self._group_row_delegate = GroupRowDelegate(self.table)
+        self.table.setItemDelegate(self._group_row_delegate)
+
+        header = self.table.horizontalHeader()
+        header.setStretchLastSection(False)
+        header.setSectionResizeMode(
+            QtWidgets.QHeaderView.ResizeMode.Interactive)
+        # Reference grid: 44px / 1.6fr / 1fr / 0.7fr / 0.6fr / 0.8fr / 1fr.
+        self.table.setColumnWidth(COL_NUM, 44)
+        self.table.setColumnWidth(COL_TYPE, 130)
+        self.table.setColumnWidth(COL_MODE, 80)
+        self.table.setColumnWidth(COL_UNI, 56)
+        self.table.setColumnWidth(COL_ADDRESS, 100)
+        self.table.setColumnWidth(COL_GROUP, 150)
+        header.setSectionResizeMode(
+            COL_FIXTURE, QtWidgets.QHeaderView.ResizeMode.Stretch)
+
+    def _build_inspector(self) -> QtWidgets.QWidget:
+        """The right-hand inspector (reference detail column).
+
+        Sections in reference order: header (display-caps name + mono
+        provenance), CAPABILITIES chips, CHANNEL MAP list, the editors,
+        position readout, Duplicate / Remove footer. Editors write
+        directly into the config.
         """
         from gui.typography import DisplayLabel, MicroLabel, mono_font
 
@@ -237,13 +638,12 @@ class FixturesTab(BaseTab):
         panel.setObjectName("FixtureInspector")
         panel.setProperty("role", "inspector")
         panel.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
-        panel.setFixedWidth(300)
+        panel.setFixedWidth(380)
         layout = QtWidgets.QVBoxLayout(panel)
         layout.setContentsMargins(16, 14, 16, 14)
         layout.setSpacing(8)
 
-        # Display-caps fixture name + mono provenance line underneath
-        # (mockup: "MHX-50 MOVING HEAD · L" / "mhx-50.qxf · QLC+ LIBRARY").
+        # Header: "MHX-50 MOVING HEAD · L" / "mhx-50.qxf · QLC+ LIBRARY".
         self.inspector_title = DisplayLabel("No fixture", point_size=13,
                                             weight=QFont.Weight.Bold)
         self.inspector_title.setWordWrap(True)
@@ -254,14 +654,49 @@ class FixturesTab(BaseTab):
         self.inspector_source.setWordWrap(True)
         layout.addWidget(self.inspector_source)
 
+        layout.addSpacing(6)
+
+        # CAPABILITIES chip row (from the fixture definition cache).
+        layout.addWidget(MicroLabel("Capabilities", point_size=8,
+                                    tracking_em=0.12))
+        self._caps_container = QtWidgets.QWidget()
+        self._caps_flow = _FlowLayout(self._caps_container)
+        layout.addWidget(self._caps_container)
+        self.caps_placeholder = MicroLabel("No definition found",
+                                           point_size=8, tracking_em=0.1)
+        self.caps_placeholder.hide()
+        layout.addWidget(self.caps_placeholder)
+
+        layout.addSpacing(6)
+
+        # CHANNEL MAP · MODE <N> CH (scrollable for big fixtures).
+        self.channel_map_header = MicroLabel("Channel map", point_size=8,
+                                             tracking_em=0.12)
+        layout.addWidget(self.channel_map_header)
+        self.channel_map_area = QtWidgets.QScrollArea()
+        self.channel_map_area.setWidgetResizable(True)
+        self.channel_map_area.setHorizontalScrollBarPolicy(
+            Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        map_inner = QtWidgets.QWidget()
+        self._map_layout = QtWidgets.QVBoxLayout(map_inner)
+        self._map_layout.setContentsMargins(0, 0, 0, 0)
+        self._map_layout.setSpacing(2)
+        self._map_layout.addStretch(1)
+        self.channel_map_area.setWidget(map_inner)
+        # The map area is the one vertically compressible section: it
+        # absorbs shortfall (scrolls) so the editors below keep their
+        # natural heights on short windows.
+        self.channel_map_area.setMinimumHeight(48)
+        layout.addWidget(self.channel_map_area, 1)
+
         layout.addSpacing(4)
 
+        # Editors: the single write path into the config.
         layout.addWidget(MicroLabel("Name", point_size=8, tracking_em=0.1))
         self.insp_name = QtWidgets.QLineEdit()
         self.insp_name.textEdited.connect(self._on_inspector_name)
         layout.addWidget(self.insp_name)
 
-        # Universe + Address side by side (both mirror the table spins).
         patch_row = QtWidgets.QHBoxLayout()
         patch_row.setSpacing(8)
         uni_col = QtWidgets.QVBoxLayout()
@@ -269,7 +704,7 @@ class FixturesTab(BaseTab):
         uni_col.addWidget(MicroLabel("Universe", point_size=8,
                                      tracking_em=0.1))
         self.insp_universe = QtWidgets.QSpinBox()
-        self.insp_universe.setRange(1, 16)
+        self.insp_universe.setRange(0, 16)
         self.insp_universe.valueChanged.connect(self._on_inspector_universe)
         uni_col.addWidget(self.insp_universe)
         patch_row.addLayout(uni_col)
@@ -289,10 +724,26 @@ class FixturesTab(BaseTab):
         self.insp_mode.currentIndexChanged.connect(self._on_inspector_mode)
         layout.addWidget(self.insp_mode)
 
-        layout.addWidget(MicroLabel("Group", point_size=8, tracking_em=0.1))
+        group_role_row = QtWidgets.QHBoxLayout()
+        group_role_row.setSpacing(8)
+        group_col = QtWidgets.QVBoxLayout()
+        group_col.setSpacing(4)
+        group_col.addWidget(MicroLabel("Group", point_size=8,
+                                       tracking_em=0.1))
         self.insp_group = QtWidgets.QComboBox()
         self.insp_group.currentTextChanged.connect(self._on_inspector_group)
-        layout.addWidget(self.insp_group)
+        group_col.addWidget(self.insp_group)
+        group_role_row.addLayout(group_col, 1)
+        role_col = QtWidgets.QVBoxLayout()
+        role_col.setSpacing(4)
+        role_col.addWidget(MicroLabel("Role", point_size=8,
+                                      tracking_em=0.1))
+        self.insp_role = QtWidgets.QComboBox()
+        self.insp_role.addItems(list(LIGHTING_ROLES))
+        self.insp_role.currentTextChanged.connect(self._on_inspector_role)
+        role_col.addWidget(self.insp_role)
+        group_role_row.addLayout(role_col, 1)
+        layout.addLayout(group_role_row)
 
         layout.addSpacing(4)
         layout.addWidget(MicroLabel("Position", point_size=8,
@@ -301,94 +752,70 @@ class FixturesTab(BaseTab):
         self.insp_position.setFont(mono_font(9))
         layout.addWidget(self.insp_position)
 
-        layout.addStretch(1)
+        # Footer action row: Duplicate / Remove (previously the title
+        # row's icon buttons).
+        footer = QtWidgets.QHBoxLayout()
+        footer.setSpacing(8)
+        self.duplicate_btn = QtWidgets.QPushButton("Duplicate")
+        self.duplicate_btn.setToolTip("Duplicate Fixture")
+        footer.addWidget(self.duplicate_btn, 1)
+        self.remove_btn = QtWidgets.QPushButton("Remove")
+        self.remove_btn.setProperty("role", "destructive")
+        self.remove_btn.setToolTip("Remove Fixture")
+        footer.addWidget(self.remove_btn, 1)
+        layout.addLayout(footer)
 
         self._inspector_editors = (self.insp_name, self.insp_universe,
                                    self.insp_address, self.insp_mode,
-                                   self.insp_group)
+                                   self.insp_group, self.insp_role)
+        # Editors must not collapse when the panel runs out of height
+        # (the channel-map scroll area is the compressible section).
+        for editor in self._inspector_editors:
+            editor.setMinimumHeight(26)
         return panel
 
-    def _setup_table(self):
-        """Initialize table structure and properties"""
-        # Column headers are tracked mono caps (mockup: "# FIXTURE TYPE
-        # MODE UNI ADDRESS GROUP"). Uppercase text + a mono header font;
-        # colors/padding stay with the QHeaderView QSS rules (don't
-        # fight the header painter, see docs/qt-gotchas.md).
-        headers = ['UNIVERSE', 'ADDRESS', 'MANUFACTURER', 'MODEL',
-                   'CHANNELS', 'MODE', 'NAME', 'GROUP', 'ROLE']
-        self.table.setColumnCount(len(headers))
-        self.table.setHorizontalHeaderLabels(headers)
-        from gui.typography import mono_font
-        self.table.horizontalHeader().setFont(mono_font(8, tracking_em=0.1))
-
-        # Make table stretch to fill available space
-        self.table.setSizePolicy(
-            QtWidgets.QSizePolicy.Policy.Expanding,
-            QtWidgets.QSizePolicy.Policy.Expanding
-        )
-        self.table.horizontalHeader().setStretchLastSection(True)
-        self.table.horizontalHeader().setSectionResizeMode(
-            QtWidgets.QHeaderView.ResizeMode.Interactive
-        )
-
-        # Set initial column widths (these are now resizable). Trimmed
-        # so Group/Role stay visible next to the 300px inspector on a
-        # 1280-1400px window.
-        self.table.setColumnWidth(0, 76)   # Universe
-        self.table.setColumnWidth(1, 76)   # Address
-        self.table.setColumnWidth(2, 130)  # Manufacturer
-        self.table.setColumnWidth(3, 130)  # Model
-        self.table.setColumnWidth(4, 78)   # Channels
-        self.table.setColumnWidth(5, 150)  # Mode (wider - values like "14-Channel" + dropdown arrow)
-        self.table.setColumnWidth(6, 110)  # Name
-        self.table.setColumnWidth(7, 150)  # Group (wider - editable combo + dropdown arrow + group name)
-
-        # Modern table styling — alternating rows, no grid, padded headers.
-        # Visuals come from the active theme stylesheet.
-        from gui.widgets.modern_table import apply_modern_table_style
-        apply_modern_table_style(self.table)
-        # Selection delegate — strips State_Selected before super().paint
-        # so Qt doesn't fill the cell with the opaque selection brush and
-        # cover the per-row group tint. The visible selection outline is
-        # drawn by RowOutlineTableWidget at the table (overlay) level.
-        from gui.widgets.group_row_delegate import GroupRowDelegate
-        self._group_row_delegate = GroupRowDelegate(self.table)
-        self.table.setItemDelegate(self._group_row_delegate)
-        self.table.setSortingEnabled(True)
-        # Header alignment now comes from apply_modern_table_style so
-        # every table in the app reads the same.
-
     def connect_signals(self):
-        """Connect widget signals to handlers"""
+        """Connect widget signals to handlers."""
         self.add_btn.clicked.connect(self._add_fixture)
         self.remove_btn.clicked.connect(self._remove_fixture)
         self.duplicate_btn.clicked.connect(self._duplicate_fixture)
-        self.table.itemChanged.connect(self.save_to_config)
+        self.group_add_btn.clicked.connect(self._add_group)
         self.table.itemSelectionChanged.connect(self._refresh_inspector)
 
+    # ------------------------------------------------------------------
+    # Config sync
+    # ------------------------------------------------------------------
     def _get_fixture_fingerprint(self) -> str:
-        """Generate fingerprint of fixtures and groups for change detection."""
+        """Fingerprint of fixtures and groups for change detection."""
         parts = []
         for f in self.config.fixtures:
-            parts.append(f"{f.name}:{f.universe}:{f.address}:{f.manufacturer}:{f.model}:{f.current_mode}:{f.group}")
-        # Also include groups in fingerprint
-        parts.append(f"groups:{','.join(sorted(self.config.groups.keys()))}")
+            parts.append(f"{f.name}:{f.universe}:{f.address}:"
+                         f"{f.manufacturer}:{f.model}:{f.current_mode}:"
+                         f"{f.group}")
+        parts.append("groups:" + ",".join(
+            f"{name}:{group.color}:{group.lighting_role}"
+            for name, group in sorted(self.config.groups.items())))
         return "|".join(parts)
 
+    def _sync_fingerprint(self):
+        self._last_fixture_fingerprint = self._get_fixture_fingerprint()
+
+    def _notify_main_window(self):
+        main_window = self.window()
+        if main_window and hasattr(main_window, 'on_groups_changed'):
+            main_window.on_groups_changed()
+
     def update_from_config(self, force: bool = False):
-        """Refresh fixture table from configuration.
+        """Refresh the tab from the configuration.
 
         Args:
             force: If True, rebuild even if no changes detected
         """
         if self._is_rebuilding:
             return
-
-        # Check if rebuild is needed
         current_fingerprint = self._get_fixture_fingerprint()
         if not force and current_fingerprint == self._last_fixture_fingerprint:
             return  # No changes, skip expensive rebuild
-
         self._is_rebuilding = True
         try:
             self._update_from_config_inner(current_fingerprint)
@@ -398,260 +825,388 @@ class FixturesTab(BaseTab):
     def _update_from_config_inner(self, current_fingerprint):
         """Inner implementation of update_from_config."""
         self._last_fixture_fingerprint = current_fingerprint
-
-        # Block signals during population
-        self.table.blockSignals(True)
-        self.table.setRowCount(0)
-
-        # Process events periodically to avoid Qt stack overflow with large configs
-        from PyQt6.QtWidgets import QApplication
-
-        # Update existing groups set
+        self._tokens = _active_tokens()
+        self._style_groups_hint()
         self.existing_groups = set(self.config.groups.keys())
 
-        for idx, fixture in enumerate(self.config.fixtures):
-            row = self.table.rowCount()
-            self.table.insertRow(row)
-
-            # Process events every 3 rows to prevent Qt stack overflow
-            if idx > 0 and idx % 3 == 0:
-                QApplication.processEvents()
-
-            # Universe spinbox
-            universe_spin = QtWidgets.QSpinBox()
-            universe_spin.setRange(1, 16)
-            universe_spin.setValue(fixture.universe)
-            universe_spin.valueChanged.connect(self.save_to_config)
-            self.table.setCellWidget(row, 0, universe_spin)
-
-            # Address spinbox
-            address_spin = QtWidgets.QSpinBox()
-            address_spin.setRange(1, 512)
-            address_spin.setValue(fixture.address)
-            address_spin.valueChanged.connect(self.save_to_config)
-            self.table.setCellWidget(row, 1, address_spin)
-
-            # Manufacturer and Model — no inline background; theme + the
-            # group-tint logic in _update_row_colors set it.
-            manufacturer_item = QtWidgets.QTableWidgetItem(fixture.manufacturer)
-            self.table.setItem(row, 2, manufacturer_item)
-
-            model_item = QtWidgets.QTableWidgetItem(fixture.model)
-            self.table.setItem(row, 3, model_item)
-
-            # Mode combo box
-            mode_combo = QtWidgets.QComboBox()
-            if fixture.available_modes:
-                for mode in fixture.available_modes:
-                    mode_combo.addItem(f"{mode.name} ({mode.channels}ch)")
-
-                # Set current mode
-                current_mode_text = next(
-                    (f"{mode.name} ({mode.channels}ch)"
-                     for mode in fixture.available_modes
-                     if mode.name == fixture.current_mode),
-                    fixture.current_mode
-                )
-                index = mode_combo.findText(current_mode_text)
-                if index >= 0:
-                    mode_combo.setCurrentIndex(index)
-                    channels = fixture.available_modes[index].channels
-                else:
-                    # current_mode doesn't exactly match any available_modes
-                    # entry — fall back to the first mode rather than leaving
-                    # the cell empty. This path triggered the "channels lost
-                    # on duplicate" bug whenever stored current_mode drifted
-                    # out of sync with available_modes (e.g. saved + reloaded
-                    # configs, or any path that mutates one without the other).
-                    channels = fixture.available_modes[0].channels
-                # Always set the channels item; never leave it empty when the
-                # fixture has any modes at all.
-                channels_item = QtWidgets.QTableWidgetItem(str(channels))
-                self.table.setItem(row, 4, channels_item)
-
-                # Create closure for mode change handler
-                def create_mode_handler(current_row, modes):
-                    def handle_mode_change(index):
-                        if 0 <= index < len(modes):
-                            channels = modes[index].channels
-                            channels_item = QtWidgets.QTableWidgetItem(str(channels))
-                            self.table.setItem(current_row, 4, channels_item)
-                            self.config.fixtures[current_row].current_mode = modes[index].name
-                            self._update_row_colors()
-                            # Notify main window of changes
-                            main_window = self.window()
-                            if main_window and hasattr(main_window, 'on_groups_changed'):
-                                main_window.on_groups_changed()
-                    return handle_mode_change
-
-                mode_combo.currentIndexChanged.connect(
-                    create_mode_handler(row, fixture.available_modes)
-                )
-            else:
-                mode_combo.addItem(fixture.current_mode)
-                channels_item = QtWidgets.QTableWidgetItem("0")
-                self.table.setItem(row, 4, channels_item)
-
-            self.table.setCellWidget(row, 5, mode_combo)
-
-            # Name — theme + group-tint handle background.
-            name_item = QtWidgets.QTableWidgetItem(fixture.name)
-            self.table.setItem(row, 6, name_item)
-
-            # Group combo box
-            group_combo = QtWidgets.QComboBox()
-            group_combo.setEditable(True)
-            group_combo.addItem("")
-            for group in sorted(self.config.groups.keys()):
-                group_combo.addItem(group)
-            group_combo.addItem("Add New...")
-            group_combo.setCurrentText(fixture.group)
-
-            # Create closure for group change handler
-            def create_group_handler(current_row, combo):
-                def handle_group_change(text):
-                    if text == "Add New...":
-                        self._handle_new_group(combo)
-                    elif text:
-                        self.config.fixtures[current_row].group = text
-                        self._update_groups()
-                        # If this is a new group, add it to all other comboboxes
-                        self._add_group_to_all_combos(text, combo)
-                    else:
-                        self.config.fixtures[current_row].group = ""
-                        self._update_groups()
-                    self._update_row_colors()
-                    # Notify main window of changes
-                    main_window = self.window()
-                    if main_window and hasattr(main_window, 'on_groups_changed'):
-                        main_window.on_groups_changed()
-                return handle_group_change
-
-            group_combo.currentTextChanged.connect(create_group_handler(row, group_combo))
-            self.table.setCellWidget(row, 7, group_combo)
-
-            # Role combo box (per group — all fixtures in the same group share a role)
-            role_combo = QComboBox()
-            role_combo.addItems(["", "wash", "key", "texture", "accent"])
-            # Read current role from group if fixture has one
-            if fixture.group and fixture.group in self.config.groups:
-                current_role = self.config.groups[fixture.group].lighting_role or ""
-                idx = role_combo.findText(current_role)
-                if idx >= 0:
-                    role_combo.setCurrentIndex(idx)
-
-            def create_role_handler(current_row):
-                def handle_role_change(text):
-                    if self._is_rebuilding:
-                        return
-                    fix = self.config.fixtures[current_row]
-                    if fix.group and fix.group in self.config.groups:
-                        self.config.groups[fix.group].lighting_role = text
-                        # Update all other rows in the same group
-                        self._sync_role_combos(fix.group, text)
-                return handle_role_change
-
-            role_combo.currentTextChanged.connect(create_role_handler(row))
-            self.table.setCellWidget(row, 8, role_combo)
-
-        # Re-enable signals and update colors
+        self.table.blockSignals(True)
+        self.table.setRowCount(0)
+        self.table.setRowCount(len(self.config.fixtures))
+        for row, fixture in enumerate(self.config.fixtures):
+            self._populate_row(row, fixture)
         self.table.blockSignals(False)
-        self._update_row_colors()
 
-        # Keep a row selected so the inspector always shows something
-        # when fixtures exist (mockup: row 05 selected, detail right).
+        self._refresh_all_row_visuals()
+        self._update_conflict_indicators()
+
+        if self._selected_group not in self.config.groups:
+            self._selected_group = None
+        self._refresh_groups_panel()
+
+        # Keep a row selected so the inspector always shows something.
         if self.table.rowCount() and not self.table.selectedItems():
             self.table.selectRow(0)
         self._refresh_inspector()
-        self._update_summary()
+        self._update_status_strip()
 
     def save_to_config(self, item=None):
-        """Update configuration from table values"""
+        """Sync derived config state (groups, universes).
+
+        The inspector already wrote fixture fields directly; this keeps
+        the group table and the auto-created universes in step and is
+        what MainWindow calls before saving/exporting.
+        """
         if self._is_rebuilding:
             return
-        # Update all fixtures from table
-        for row in range(self.table.rowCount()):
-            if row >= len(self.config.fixtures):
-                continue
-
-            fixture = self.config.fixtures[row]
-
-            # Update universe and address
-            universe_spin = self.table.cellWidget(row, 0)
-            if universe_spin and isinstance(universe_spin, QtWidgets.QSpinBox):
-                fixture.universe = universe_spin.value()
-
-            address_spin = self.table.cellWidget(row, 1)
-            if address_spin and isinstance(address_spin, QtWidgets.QSpinBox):
-                fixture.address = address_spin.value()
-
-            # Update manufacturer
-            manufacturer_item = self.table.item(row, 2)
-            if manufacturer_item and manufacturer_item.text():
-                fixture.manufacturer = manufacturer_item.text()
-
-            # Update model
-            model_item = self.table.item(row, 3)
-            if model_item and model_item.text():
-                fixture.model = model_item.text()
-
-            # Update mode
-            mode_combo = self.table.cellWidget(row, 5)
-            if mode_combo and isinstance(mode_combo, QtWidgets.QComboBox):
-                mode_text = mode_combo.currentText()
-                if " (" in mode_text:
-                    mode_name = mode_text.split(" (")[0]
-                    fixture.current_mode = mode_name
-
-            # Update name
-            name_item = self.table.item(row, 6)
-            if name_item and name_item.text():
-                fixture.name = name_item.text()
-
-            # Update group
-            group_combo = self.table.cellWidget(row, 7)
-            if group_combo and isinstance(group_combo, QtWidgets.QComboBox):
-                group_name = group_combo.currentText()
-                if group_name and group_name != "Add New...":
-                    fixture.group = group_name
-                else:
-                    fixture.group = ""
-
         self._update_groups()
-
-        # Ensure universes exist for all fixtures (auto-create if fixture uses new universe)
         self.config.ensure_universes_for_fixtures()
-
-        # Update fingerprint to reflect saved changes
-        self._last_fixture_fingerprint = self._get_fixture_fingerprint()
-
-        # Universe / address spins route here without a row-color pass,
-        # so re-lint now to flag or clear conflicts as the user types.
+        self._sync_fingerprint()
         self._update_conflict_indicators()
-
-        # Mirror table edits into the inspector and refresh the counts.
-        self._refresh_inspector()
-        self._update_summary()
-
-        # Notify main window of group changes if needed
-        main_window = self.window()
-        if main_window and hasattr(main_window, 'on_groups_changed'):
-            main_window.on_groups_changed()
+        self._update_status_strip()
 
     # ------------------------------------------------------------------
-    # Inspector (North Star 1c detail panel)
+    # Table population + visuals
+    # ------------------------------------------------------------------
+    def _populate_row(self, row: int, fixture: Fixture):
+        """Create the 7 read-only display items of one table row."""
+        from gui.typography import mono_font
+
+        mono = mono_font(8)
+        channels = fixture_channel_count(fixture)
+
+        def make(col, text, font=None):
+            item = QtWidgets.QTableWidgetItem(text)
+            item.setFlags(item.flags() & ~Qt.ItemFlag.ItemIsEditable)
+            if font is not None:
+                item.setFont(font)
+            self.table.setItem(row, col, item)
+
+        name_font = self.table.font()
+        name_font.setWeight(QFont.Weight.Medium)
+        group_font = self.table.font()
+        group_font.setWeight(QFont.Weight.DemiBold)
+
+        make(COL_NUM, f"{row + 1:02d}", mono)
+        make(COL_FIXTURE, fixture.name, name_font)
+        make(COL_TYPE, type_label(fixture.type))
+        make(COL_MODE, f"{channels} CH", mono)
+        make(COL_UNI, f"U{fixture.universe}", mono)
+        make(COL_ADDRESS, format_address_range(fixture.address, channels),
+             mono)
+        make(COL_GROUP, (fixture.group or "").upper(), group_font)
+
+    def _refresh_all_row_visuals(self):
+        for row in range(min(self.table.rowCount(),
+                             len(self.config.fixtures))):
+            self._apply_row_visuals(row)
+
+    def _apply_row_visuals(self, row: int):
+        """Group tint + per-column foregrounds for one row (reference:
+        rgba(group, 0.17) row background, dim mono #, bright fixture
+        name, secondary data cells, group name in the group color)."""
+        if row >= len(self.config.fixtures):
+            return
+        fixture = self.config.fixtures[row]
+        tokens = self._tokens or _active_tokens()
+
+        base = QtGui.QColor(tokens["panel"])
+        group_color = None
+        if fixture.group:
+            group_color = QtGui.QColor(self._ensure_group_color(fixture.group))
+        if group_color is not None:
+            background = QtGui.QBrush(group_tint_color(group_color, base))
+        else:
+            # Opaque panel color, not a default brush: see
+            # group_tint_color for why translucency/no-brush lets the
+            # selection fill bleed through.
+            background = QtGui.QBrush(base)
+
+        foreground_by_col = {
+            COL_NUM: tokens["text_disabled"],
+            COL_FIXTURE: tokens["text"],
+            COL_TYPE: tokens["text_secondary"],
+            COL_MODE: tokens["text_secondary"],
+            COL_UNI: tokens["text_secondary"],
+            COL_ADDRESS: tokens["text_secondary"],
+            COL_GROUP: (group_color.name() if group_color is not None
+                        else tokens["text_disabled"]),
+        }
+        for col in range(self.table.columnCount()):
+            table_item = self.table.item(row, col)
+            if table_item is None:
+                continue
+            table_item.setBackground(background)
+            table_item.setForeground(
+                QtGui.QBrush(QtGui.QColor(foreground_by_col[col])))
+            if col in (COL_UNI, COL_ADDRESS):
+                table_item.setToolTip("")
+
+    def _ensure_group_color(self, group_name: str) -> str:
+        """The group's data color as '#rrggbb', assigning one if new.
+
+        Saved config colors win (unless the '#808080' default); new
+        groups take the next unused palette color. The chosen color is
+        written back to the config group so every tab agrees.
+        """
+        color = self.group_colors.get(group_name)
+        if color is None:
+            group = self.config.groups.get(group_name)
+            saved = getattr(group, "color", None) if group else None
+            if saved and saved != "#808080" and QtGui.QColor(saved).isValid():
+                color = QtGui.QColor(saved)
+            else:
+                used = {c.name() for c in self.group_colors.values()}
+                for _ in range(len(self.predefined_colors)):
+                    candidate = self.predefined_colors[
+                        self.color_index % len(self.predefined_colors)]
+                    self.color_index += 1
+                    if candidate.name() not in used:
+                        color = candidate
+                        break
+                else:
+                    color = self.predefined_colors[
+                        self.color_index % len(self.predefined_colors)]
+                    self.color_index += 1
+            self.group_colors[group_name] = color
+        group = self.config.groups.get(group_name)
+        if group is not None:
+            group.color = color.name()
+        return color.name()
+
+    # ------------------------------------------------------------------
+    # DMX conflict indicators
+    # ------------------------------------------------------------------
+    def _describe_dmx_finding(self, row, finding, fixtures) -> str:
+        if isinstance(finding, AddressConflict):
+            other_idx = finding.index_b if finding.index_a == row else finding.index_a
+            other = fixtures[other_idx]
+            return (
+                f"Overlaps '{other.name}' on universe {finding.universe}, "
+                f"channels {finding.overlap_start}-{finding.overlap_end}"
+            )
+        return (
+            f"Runs past the end of universe {finding.universe} "
+            f"(ends at channel {finding.end_address}, max {DMX_MAX_ADDRESS})"
+        )
+
+    def _update_conflict_indicators(self):
+        """Flag DMX overlaps/overflow on the UNI + ADDRESS cells.
+
+        Conflicting cells get the fixed red background + white text and
+        a tooltip naming the clash; clean rows get their group visuals
+        restored. The warning chip in the action strip carries the
+        issue count.
+        """
+        fixtures = self.config.fixtures
+        lint = lint_dmx_addresses(fixtures)
+        findings_by_fixture = lint.by_fixture()
+
+        conflict_bg = QtGui.QBrush(QtGui.QColor(CONFLICT_BG))
+        conflict_fg = QtGui.QBrush(QtGui.QColor(CONFLICT_FG))
+        for row in range(min(self.table.rowCount(), len(fixtures))):
+            findings = findings_by_fixture.get(row)
+            if findings:
+                tooltip = "\n".join(
+                    self._describe_dmx_finding(row, f, fixtures)
+                    for f in findings)
+                for col in (COL_UNI, COL_ADDRESS):
+                    table_item = self.table.item(row, col)
+                    if table_item is not None:
+                        table_item.setBackground(conflict_bg)
+                        table_item.setForeground(conflict_fg)
+                        table_item.setToolTip(tooltip)
+            else:
+                # Restores group tint/foregrounds and clears tooltips.
+                self._apply_row_visuals(row)
+
+        issue_count = len(lint.conflicts) + len(lint.overflows)
+        if issue_count:
+            noun = "issue" if issue_count == 1 else "issues"
+            # No warning glyph: the chip's warning variant carries the
+            # signal, and the character is missing from Barlow.
+            self.conflict_label.setText(f"{issue_count} DMX addressing {noun}")
+            self.conflict_label.show()
+        else:
+            self.conflict_label.hide()
+
+    # ------------------------------------------------------------------
+    # Groups panel
+    # ------------------------------------------------------------------
+    def _refresh_groups_panel(self):
+        """Rebuild the group rows from config.groups."""
+        while self._groups_layout.count():
+            entry = self._groups_layout.takeAt(0)
+            widget = entry.widget()
+            if widget is not None:
+                widget.deleteLater()
+        for name, group in self.config.groups.items():
+            self._groups_layout.addWidget(self._make_group_row(name, group))
+
+    def _make_group_row(self, name: str, group: FixtureGroup) -> QtWidgets.QWidget:
+        from gui.typography import MicroLabel
+        from gui.fonts import FONT_UI
+
+        tokens = self._tokens or _active_tokens()
+        color = self._ensure_group_color(name)
+        selected = (name == self._selected_group)
+
+        row = _GroupRow(name)
+        # Only the DATA color is widget-local; hairline + selected
+        # background come from the theme's #GroupRow rules.
+        row.setStyleSheet(
+            f"#GroupRow {{ border-left: 3px solid {color}; }}")
+        row.setProperty("selected", "true" if selected else "false")
+
+        layout = QtWidgets.QVBoxLayout(row)
+        layout.setContentsMargins(13, 10, 16, 10)
+        layout.setSpacing(3)
+
+        top = QtWidgets.QHBoxLayout()
+        top.setSpacing(8)
+        name_label = QtWidgets.QLabel(name.upper())
+        name_font = QFont(FONT_UI, 10)
+        name_font.setWeight(QFont.Weight.DemiBold)
+        name_label.setFont(name_font)
+        top.addWidget(name_label)
+        top.addStretch()
+        count = len(getattr(group, "fixtures", None) or [])
+        top.addWidget(MicroLabel(f"{count} FIX", point_size=8,
+                                 tracking_em=0.08))
+        layout.addLayout(top)
+
+        role_text = group_role_line(group)
+        if role_text:
+            role_label = QtWidgets.QLabel(role_text)
+            role_label.setProperty("role", "card-readout")
+            role_font = QFont(FONT_UI, 8)
+            role_label.setFont(role_font)
+            layout.addWidget(role_label)
+
+        row.clicked.connect(self._on_group_row_clicked)
+        return row
+
+    def _on_group_row_clicked(self, name: str):
+        """Highlight the group row and select its fixtures in the table."""
+        self._selected_group = name
+        self._refresh_groups_panel()
+
+        model = self.table.model()
+        selection_model = self.table.selectionModel()
+        if model is None or selection_model is None:
+            return
+        selection = QtCore.QItemSelection()
+        last_col = self.table.columnCount() - 1
+        for row, fixture in enumerate(self.config.fixtures):
+            if fixture.group == name and row < self.table.rowCount():
+                selection.select(model.index(row, 0),
+                                 model.index(row, last_col))
+        selection_model.select(
+            selection,
+            QtCore.QItemSelectionModel.SelectionFlag.ClearAndSelect)
+
+    def _add_group(self):
+        """The groups panel '+' flow: name + lighting role dialog."""
+        dialog = QDialog(self)
+        dialog.setWindowTitle("Add New Group")
+        layout = QFormLayout()
+        new_group_input = QLineEdit()
+        layout.addRow("Group Name:", new_group_input)
+
+        role_combo = QComboBox()
+        role_combo.addItems(list(LIGHTING_ROLES))
+        layout.addRow("Lighting Role:", role_combo)
+
+        button_box = QDialogButtonBox(
+            QDialogButtonBox.StandardButton.Ok |
+            QDialogButtonBox.StandardButton.Cancel
+        )
+        button_box.accepted.connect(dialog.accept)
+        button_box.rejected.connect(dialog.reject)
+        layout.addWidget(button_box)
+        dialog.setLayout(layout)
+
+        if dialog.exec() == QDialog.DialogCode.Accepted:
+            name = new_group_input.text().strip()
+            if name:
+                self._create_group(name, role_combo.currentText())
+
+    def _create_group(self, name: str, role: str = ""):
+        """Create (or re-role) a group; empty groups persist until used."""
+        if name not in self.config.groups:
+            self.config.groups[name] = FixtureGroup(
+                name, [], lighting_role=role)
+            self._manual_groups.add(name)
+            self._ensure_group_color(name)
+        elif role:
+            self.config.groups[name].lighting_role = role
+        self._selected_group = name
+        self._refresh_groups_panel()
+        self._refresh_inspector()
+        self._update_status_strip()
+        self._sync_fingerprint()
+        self._notify_main_window()
+
+    def _update_groups(self):
+        """Rebuild groups from fixtures, preserving colors, orientation
+        defaults and lighting roles. Panel-created empty groups survive
+        until a fixture joins them."""
+        existing_props = {
+            name: {
+                'color': getattr(group, 'color', '#808080'),
+                'default_mounting': getattr(group, 'default_mounting', 'hanging'),
+                'default_yaw': getattr(group, 'default_yaw', 0.0),
+                'default_pitch': getattr(group, 'default_pitch', 0.0),
+                'default_roll': getattr(group, 'default_roll', 0.0),
+                'default_z_height': getattr(group, 'default_z_height', 3.0),
+                'lighting_role': getattr(group, 'lighting_role', ''),
+            }
+            for name, group in self.config.groups.items()
+        }
+
+        def build_group(name):
+            props = existing_props.get(name, {})
+            return FixtureGroup(
+                name,
+                [],
+                color=props.get('color', '#808080'),
+                default_mounting=props.get('default_mounting', 'hanging'),
+                default_yaw=props.get('default_yaw', 0.0),
+                default_pitch=props.get('default_pitch', 0.0),
+                default_roll=props.get('default_roll', 0.0),
+                default_z_height=props.get('default_z_height', 3.0),
+                lighting_role=props.get('lighting_role', ''),
+            )
+
+        self.config.groups = {}
+        for fixture in self.config.fixtures:
+            if fixture.group:
+                if fixture.group not in self.config.groups:
+                    self.config.groups[fixture.group] = build_group(fixture.group)
+                self.config.groups[fixture.group].fixtures.append(fixture)
+
+        for name in list(self._manual_groups):
+            if name in self.config.groups:
+                if self.config.groups[name].fixtures:
+                    self._manual_groups.discard(name)
+            else:
+                self.config.groups[name] = build_group(name)
+
+        self.existing_groups = set(self.config.groups.keys())
+
+    # ------------------------------------------------------------------
+    # Inspector
     # ------------------------------------------------------------------
     def _selected_fixture_row(self) -> int:
-        """The config.fixtures index of the selected table row, or -1."""
+        """The config.fixtures index of the first selected row, or -1."""
         model = self.table.selectionModel()
         rows = model.selectedRows() if model else []
-        if not rows:
+        if rows:
+            row = min(index.row() for index in rows)
+        else:
             items = self.table.selectedItems()
             if not items:
                 return -1
-            row = items[0].row()
-        else:
-            row = rows[0].row()
+            row = min(item.row() for item in items)
         if 0 <= row < len(self.config.fixtures):
             return row
         return -1
@@ -660,8 +1215,7 @@ class FixturesTab(BaseTab):
         """Load the selected fixture into the inspector.
 
         Signals stay blocked during population; widgets the user is
-        typing into (focus) are skipped so the write-back loop
-        (inspector -> table -> save_to_config -> here) never fights the
+        typing into (focus) are skipped so a refresh never fights the
         caret or a half-typed value.
         """
         row = self._selected_fixture_row()
@@ -670,6 +1224,8 @@ class FixturesTab(BaseTab):
         enabled = fixture is not None
         for editor in self._inspector_editors:
             editor.setEnabled(enabled)
+        self.duplicate_btn.setEnabled(enabled)
+        self.remove_btn.setEnabled(enabled)
 
         if fixture is None:
             self.inspector_title.setText("No fixture")
@@ -680,8 +1236,10 @@ class FixturesTab(BaseTab):
             self.insp_name.setText("")
             self.insp_mode.clear()
             self.insp_group.clear()
+            self.insp_role.setCurrentIndex(0)
             for editor in self._inspector_editors:
                 editor.blockSignals(False)
+            self._refresh_capabilities_and_map(None)
             return
 
         self.inspector_title.setText(fixture.name or fixture.model)
@@ -724,13 +1282,213 @@ class FixturesTab(BaseTab):
             self.insp_group.setCurrentText(fixture.group)
             self.insp_group.blockSignals(False)
 
+        if not self.insp_role.hasFocus():
+            group = self.config.groups.get(fixture.group)
+            role = getattr(group, "lighting_role", "") if group else ""
+            self.insp_role.blockSignals(True)
+            index = self.insp_role.findText(role or "")
+            self.insp_role.setCurrentIndex(index if index >= 0 else 0)
+            self.insp_role.blockSignals(False)
+            self.insp_role.setEnabled(bool(fixture.group))
+
         group = self.config.groups.get(fixture.group)
         z = fixture.get_effective_z(group)
         self.insp_position.setText(
             f"X {fixture.x:.2f}   Y {fixture.y:.2f}   Z {z:.2f} m")
 
-    def _update_summary(self):
-        """The mono counts footer under the table (mockup status bar)."""
+        self._refresh_capabilities_and_map(fixture)
+
+    # -- capabilities + channel map ------------------------------------
+    def _resolve_definition(self, fixture):
+        """The legacy definition dict for (manufacturer, model), or None
+        (synthetic test fixtures, unknown models). Memoised per tab."""
+        key = (fixture.manufacturer, fixture.model)
+        if key in self._definition_memo:
+            return self._definition_memo[key]
+        definitions = get_cached_fixture_definitions({key})
+        result = None
+        for cache_key in (f"{key[0]}_{key[1]}",
+                          f"{key[0]}_{key[1].replace(' ', '_')}"):
+            if definitions.get(cache_key):
+                result = definitions[cache_key]
+                break
+        self._definition_memo[key] = result
+        return result
+
+    def _clear_layout_widgets(self, layout, keep_stretch: bool = False):
+        index = layout.count() - 1
+        while index >= 0:
+            entry = layout.itemAt(index)
+            if keep_stretch and entry.widget() is None:
+                index -= 1
+                continue
+            entry = layout.takeAt(index)
+            widget = entry.widget()
+            if widget is not None:
+                widget.deleteLater()
+            index -= 1
+
+    def _refresh_capabilities_and_map(self, fixture):
+        """Rebuild the CAPABILITIES chips + CHANNEL MAP list from the
+        fixture definition cache for the fixture's current mode."""
+        from gui.typography import MicroLabel
+        from gui.widgets.chip import Chip
+
+        self._clear_layout_widgets(self._caps_flow)
+        self._clear_layout_widgets(self._map_layout, keep_stretch=True)
+
+        if fixture is None:
+            self.channel_map_header.setText("Channel map")
+            self.caps_placeholder.hide()
+            return
+
+        channels_count = fixture_channel_count(fixture)
+        self.channel_map_header.setText(
+            f"Channel map · mode {channels_count} CH")
+
+        definition = self._resolve_definition(fixture)
+        mode_channels = mode_channel_dicts(definition, fixture.current_mode,
+                                           channels_count)
+        if not mode_channels:
+            self.caps_placeholder.show()
+            return
+        self.caps_placeholder.hide()
+
+        for chip_text in derive_capability_chips(mode_channels):
+            self._caps_flow.addWidget(Chip(chip_text, variant="neutral"))
+
+        insert_at = self._map_layout.count() - 1  # before the stretch
+        for label_text, qualifier in channel_map_rows(mode_channels):
+            row_widget = QtWidgets.QWidget()
+            row_layout = QtWidgets.QHBoxLayout(row_widget)
+            row_layout.setContentsMargins(0, 0, 0, 0)
+            row_layout.setSpacing(8)
+            row_layout.addWidget(MicroLabel(label_text, point_size=8,
+                                            tracking_em=0.0))
+            row_layout.addStretch()
+            if qualifier:
+                row_layout.addWidget(MicroLabel(qualifier, point_size=8,
+                                                tracking_em=0.0))
+            self._map_layout.insertWidget(insert_at, row_widget)
+            insert_at += 1
+
+    # -- inspector edit handlers (direct config writes) ------------------
+    def _on_inspector_name(self, text: str):
+        row = self._selected_fixture_row()
+        if row < 0 or self._is_rebuilding:
+            return
+        fixture = self.config.fixtures[row]
+        fixture.name = text
+        item = self.table.item(row, COL_FIXTURE)
+        if item is not None:
+            item.setText(text)
+        self.inspector_title.setText(text or fixture.model)
+        self._sync_fingerprint()
+
+    def _on_inspector_universe(self, value: int):
+        row = self._selected_fixture_row()
+        if row < 0 or self._is_rebuilding:
+            return
+        fixture = self.config.fixtures[row]
+        if fixture.universe == value:
+            return
+        fixture.universe = value
+        self.config.ensure_universes_for_fixtures()
+        item = self.table.item(row, COL_UNI)
+        if item is not None:
+            item.setText(f"U{value}")
+        self._update_conflict_indicators()
+        self._update_status_strip()
+        self._sync_fingerprint()
+        self._notify_main_window()
+
+    def _on_inspector_address(self, value: int):
+        row = self._selected_fixture_row()
+        if row < 0 or self._is_rebuilding:
+            return
+        fixture = self.config.fixtures[row]
+        if fixture.address == value:
+            return
+        fixture.address = value
+        item = self.table.item(row, COL_ADDRESS)
+        if item is not None:
+            item.setText(format_address_range(
+                value, fixture_channel_count(fixture)))
+        self._update_conflict_indicators()
+        self._sync_fingerprint()
+
+    def _on_inspector_mode(self, index: int):
+        row = self._selected_fixture_row()
+        if row < 0 or self._is_rebuilding or index < 0:
+            return
+        fixture = self.config.fixtures[row]
+        if not (0 <= index < len(fixture.available_modes)):
+            return
+        mode = fixture.available_modes[index]
+        if fixture.current_mode == mode.name:
+            return
+        fixture.current_mode = mode.name
+        mode_item = self.table.item(row, COL_MODE)
+        if mode_item is not None:
+            mode_item.setText(f"{mode.channels} CH")
+        address_item = self.table.item(row, COL_ADDRESS)
+        if address_item is not None:
+            address_item.setText(
+                format_address_range(fixture.address, mode.channels))
+        self._update_conflict_indicators()
+        self._refresh_capabilities_and_map(fixture)
+        self._update_status_strip()
+        self._sync_fingerprint()
+        self._notify_main_window()
+
+    def _on_inspector_group(self, text: str):
+        row = self._selected_fixture_row()
+        if row < 0 or self._is_rebuilding:
+            return
+        fixture = self.config.fixtures[row]
+        if fixture.group == text:
+            return
+        fixture.group = text
+        self._update_groups()
+        item = self.table.item(row, COL_GROUP)
+        if item is not None:
+            item.setText(text.upper())
+        self._refresh_all_row_visuals()
+        self._update_conflict_indicators()
+        if self._selected_group not in self.config.groups:
+            self._selected_group = None
+        self._refresh_groups_panel()
+        self._update_status_strip()
+        # Role editor follows the (possibly new) group.
+        group = self.config.groups.get(fixture.group)
+        role = getattr(group, "lighting_role", "") if group else ""
+        self.insp_role.blockSignals(True)
+        index = self.insp_role.findText(role or "")
+        self.insp_role.setCurrentIndex(index if index >= 0 else 0)
+        self.insp_role.blockSignals(False)
+        self.insp_role.setEnabled(bool(fixture.group))
+        self._sync_fingerprint()
+        self._notify_main_window()
+
+    def _on_inspector_role(self, text: str):
+        row = self._selected_fixture_row()
+        if row < 0 or self._is_rebuilding:
+            return
+        fixture = self.config.fixtures[row]
+        group = self.config.groups.get(fixture.group)
+        if group is None or group.lighting_role == text:
+            return
+        group.lighting_role = text
+        self._refresh_groups_panel()
+        self._sync_fingerprint()
+
+    # ------------------------------------------------------------------
+    # Status strip
+    # ------------------------------------------------------------------
+    def _update_status_strip(self):
+        """Counts + per-universe usage (reference bottom strip)."""
+        from gui.tabs.configuration_tab import channels_used
+
         n_fixtures = len(self.config.fixtures)
         n_groups = len(self.config.groups)
         fixture_noun = "fixture" if n_fixtures == 1 else "fixtures"
@@ -738,345 +1496,16 @@ class FixturesTab(BaseTab):
         self.summary_label.setText(
             f"{n_fixtures} {fixture_noun} · {n_groups} {group_noun}")
 
-    def _on_inspector_name(self, text: str):
-        row = self._selected_fixture_row()
-        if row < 0 or self._is_rebuilding:
-            return
-        item = self.table.item(row, 6)
-        if item is not None and item.text() != text:
-            # itemChanged routes through save_to_config, which writes
-            # the config and refreshes the fingerprint.
-            item.setText(text)
-        self.inspector_title.setText(text or self.config.fixtures[row].model)
+        universe_ids = sorted(
+            {f.universe for f in self.config.fixtures}
+            | set((self.config.universes or {}).keys()))
+        self.universe_usage_label.setText(" · ".join(
+            f"U{uid} {channels_used(self.config, uid)}/512"
+            for uid in universe_ids))
 
-    def _on_inspector_universe(self, value: int):
-        row = self._selected_fixture_row()
-        if row < 0 or self._is_rebuilding:
-            return
-        spin = self.table.cellWidget(row, 0)
-        if isinstance(spin, QtWidgets.QSpinBox) and spin.value() != value:
-            spin.setValue(value)
-
-    def _on_inspector_address(self, value: int):
-        row = self._selected_fixture_row()
-        if row < 0 or self._is_rebuilding:
-            return
-        spin = self.table.cellWidget(row, 1)
-        if isinstance(spin, QtWidgets.QSpinBox) and spin.value() != value:
-            spin.setValue(value)
-
-    def _on_inspector_mode(self, index: int):
-        row = self._selected_fixture_row()
-        if row < 0 or self._is_rebuilding or index < 0:
-            return
-        combo = self.table.cellWidget(row, 5)
-        if (isinstance(combo, QtWidgets.QComboBox)
-                and 0 <= index < combo.count()
-                and combo.currentIndex() != index):
-            combo.setCurrentIndex(index)
-
-    def _on_inspector_group(self, text: str):
-        row = self._selected_fixture_row()
-        if row < 0 or self._is_rebuilding:
-            return
-        combo = self.table.cellWidget(row, 7)
-        if (isinstance(combo, QtWidgets.QComboBox)
-                and combo.currentText() != text):
-            combo.setCurrentText(text)
-
-    def _update_groups(self):
-        """Rebuild groups from fixtures, preserving colors, orientation defaults, and lighting roles"""
-        # Apply any pending role from new group creation
-        pending_role = getattr(self, '_pending_group_role', None)
-
-        # Store existing group properties (colors and orientation defaults)
-        existing_props = {
-            name: {
-                'color': getattr(group, 'color', '#808080'),
-                'default_mounting': getattr(group, 'default_mounting', 'hanging'),
-                'default_yaw': getattr(group, 'default_yaw', 0.0),
-                'default_pitch': getattr(group, 'default_pitch', 0.0),
-                'default_roll': getattr(group, 'default_roll', 0.0),
-                'default_z_height': getattr(group, 'default_z_height', 3.0),
-                'lighting_role': getattr(group, 'lighting_role', ''),
-            }
-            for name, group in self.config.groups.items()
-        }
-
-        # Clear and rebuild groups
-        self.config.groups = {}
-
-        for fixture in self.config.fixtures:
-            if fixture.group:
-                if fixture.group not in self.config.groups:
-                    props = existing_props.get(fixture.group, {})
-                    self.config.groups[fixture.group] = FixtureGroup(
-                        fixture.group,
-                        [],
-                        color=props.get('color', '#808080'),
-                        default_mounting=props.get('default_mounting', 'hanging'),
-                        default_yaw=props.get('default_yaw', 0.0),
-                        default_pitch=props.get('default_pitch', 0.0),
-                        default_roll=props.get('default_roll', 0.0),
-                        default_z_height=props.get('default_z_height', 3.0),
-                        lighting_role=props.get('lighting_role', ''),
-                    )
-                self.config.groups[fixture.group].fixtures.append(fixture)
-
-        # Apply pending lighting role from new group creation
-        if pending_role:
-            group_name, role = pending_role
-            if group_name in self.config.groups:
-                self.config.groups[group_name].lighting_role = role
-            self._pending_group_role = None
-
-        # Update existing groups set
-        self.existing_groups = set(self.config.groups.keys())
-
-    def _handle_new_group(self, group_combo):
-        """Show dialog to create new group with optional lighting role"""
-        dialog = QDialog(self)
-        dialog.setWindowTitle("Add New Group")
-        layout = QFormLayout()
-        new_group_input = QLineEdit()
-        layout.addRow("Group Name:", new_group_input)
-
-        role_combo = QComboBox()
-        role_combo.addItems(["", "wash", "key", "texture", "accent"])
-        layout.addRow("Lighting Role:", role_combo)
-
-        button_box = QDialogButtonBox(
-            QDialogButtonBox.StandardButton.Ok |
-            QDialogButtonBox.StandardButton.Cancel
-        )
-        button_box.accepted.connect(dialog.accept)
-        button_box.rejected.connect(dialog.reject)
-        layout.addWidget(button_box)
-
-        dialog.setLayout(layout)
-
-        if dialog.exec() == QDialog.DialogCode.Accepted:
-            new_group = new_group_input.text().strip()
-            if new_group:
-                # Store the role for when the group gets created in _update_groups
-                self._pending_group_role = (new_group, role_combo.currentText())
-
-                # Update the current fixture's group combobox
-                current_index = group_combo.findText("Add New...")
-                group_combo.removeItem(current_index)
-                group_combo.addItem(new_group)
-                group_combo.addItem("Add New...")
-                group_combo.setCurrentText(new_group)
-
-                # Update all other fixtures' group comboboxes with the new group
-                self._add_group_to_all_combos(new_group, group_combo)
-
-    def _add_group_to_all_combos(self, group_name, exclude_combo=None):
-        """Add a group name to all group comboboxes if it doesn't exist
-
-        Args:
-            group_name: The group name to add
-            exclude_combo: Optional combobox to exclude from update
-        """
-        for row in range(self.table.rowCount()):
-            combo = self.table.cellWidget(row, 7)
-            if combo and combo != exclude_combo:
-                # Check if group already exists in this combo
-                if combo.findText(group_name) == -1:
-                    # Find "Add New..." item and insert new group before it
-                    add_new_index = combo.findText("Add New...")
-                    if add_new_index != -1:
-                        combo.insertItem(add_new_index, group_name)
-
-    def _sync_role_combos(self, group_name: str, role: str):
-        """Sync all role combos for fixtures in the same group."""
-        for row in range(self.table.rowCount()):
-            if row >= len(self.config.fixtures):
-                continue
-            if self.config.fixtures[row].group == group_name:
-                combo = self.table.cellWidget(row, 8)
-                if combo and isinstance(combo, QComboBox):
-                    combo.blockSignals(True)
-                    idx = combo.findText(role)
-                    if idx >= 0:
-                        combo.setCurrentIndex(idx)
-                    combo.blockSignals(False)
-
-    def _update_row_colors(self):
-        """Apply group colors to table rows"""
-        # Note: setUpdatesEnabled removed to avoid Qt stack overflow with large configs
-        try:
-            # Track which colors are already in use to avoid duplicates
-            used_colors = set()
-            for existing_color in self.group_colors.values():
-                used_colors.add(existing_color.name())
-
-            for row in range(self.table.rowCount()):
-                group_combo = self.table.cellWidget(row, 7)
-                if group_combo:
-                    group_name = group_combo.currentText()
-                    if group_name and group_name != "Add New...":
-                        # Get or create color for group
-                        if group_name not in self.group_colors:
-                            # First, check if group has a saved color in config
-                            if group_name in self.config.groups and self.config.groups[group_name].color:
-                                saved_color = self.config.groups[group_name].color
-                                # Only use saved color if it's not the default gray
-                                if saved_color != '#808080':
-                                    self.group_colors[group_name] = QtGui.QColor(saved_color)
-                                    used_colors.add(saved_color)
-
-                            # If still no color, assign a new unique color
-                            if group_name not in self.group_colors:
-                                # Find a color that's not already in use
-                                for _ in range(len(self.predefined_colors)):
-                                    candidate_color = self.predefined_colors[
-                                        self.color_index % len(self.predefined_colors)]
-                                    self.color_index += 1
-                                    if candidate_color.name() not in used_colors:
-                                        self.group_colors[group_name] = candidate_color
-                                        used_colors.add(candidate_color.name())
-                                        break
-                                else:
-                                    # All colors used, cycle back (shouldn't happen with 8 colors)
-                                    self.group_colors[group_name] = self.predefined_colors[
-                                        self.color_index % len(self.predefined_colors)]
-                                    self.color_index += 1
-
-                        color = self.group_colors[group_name]
-                        # Pick text foreground from background luminance so
-                        # readability survives any group color (predefined
-                        # pastels resolve to black; a dark custom color
-                        # would automatically flip to white).
-                        luminance = (
-                            0.299 * color.red()
-                            + 0.587 * color.green()
-                            + 0.114 * color.blue()
-                        ) / 255.0
-                        fg = QtGui.QColor(0, 0, 0) if luminance > 0.5 else QtGui.QColor(255, 255, 255)
-                        fg_hex = fg.name()
-
-                        # Iterate every column once; text cells get
-                        # item.setBackground / setForeground (Qt paints those
-                        # via the delegate now that the QTableView::item rule
-                        # is gone), widget cells get a per-widget stylesheet
-                        # that overrides only background-color + color while
-                        # the global theme still supplies border / padding.
-                        widget_qss = (
-                            f"background-color: {color.name()}; color: {fg_hex};"
-                        )
-                        for col in range(self.table.columnCount()):
-                            item = self.table.item(row, col)
-                            if item is not None:
-                                item.setBackground(color)
-                                item.setForeground(fg)
-                            cell_widget = self.table.cellWidget(row, col)
-                            if cell_widget is not None:
-                                cell_widget.setStyleSheet(widget_qss)
-
-                        if group_name in self.config.groups:
-                            self.config.groups[group_name].color = color.name()
-                    else:
-                        # Ungrouped — clear every per-cell override so theme
-                        # defaults apply on both items and cell widgets.
-                        empty_brush = QtGui.QBrush()
-                        for col in range(self.table.columnCount()):
-                            item = self.table.item(row, col)
-                            if item is not None:
-                                item.setBackground(empty_brush)
-                                item.setForeground(empty_brush)
-                            cell_widget = self.table.cellWidget(row, col)
-                            if cell_widget is not None:
-                                cell_widget.setStyleSheet("")
-            # Conflict warnings paint over the fresh group tint on the
-            # Universe/Address cells, so they must re-apply last.
-            self._update_conflict_indicators()
-            # Mode/Group/Role table edits route through here (not
-            # save_to_config), so mirror them into the inspector too.
-            self._refresh_inspector()
-        finally:
-            # Force a viewport repaint. Cell widgets repaint themselves
-            # synchronously when their stylesheet changes, but
-            # QTableWidgetItem.setBackground / setForeground only mark
-            # cells dirty — Qt batches the actual repaint, which can lag
-            # a frame behind interactive events like typing in a combo.
-            # Without this, text cells would only catch up once another
-            # event triggered the next paint cycle.
-            self.table.viewport().update()
-
-    def _group_widget_qss(self, row) -> str:
-        """The group-tint stylesheet a row's cell widgets carry ('' if ungrouped).
-
-        Mirrors what _update_row_colors applies, so clearing a conflict
-        restores the exact tint instead of a blank cell.
-        """
-        group_combo = self.table.cellWidget(row, 7)
-        if not group_combo:
-            return ""
-        group_name = group_combo.currentText()
-        if not group_name or group_name == "Add New..." or group_name not in self.group_colors:
-            return ""
-        color = self.group_colors[group_name]
-        luminance = (
-            0.299 * color.red()
-            + 0.587 * color.green()
-            + 0.114 * color.blue()
-        ) / 255.0
-        fg_hex = "#000000" if luminance > 0.5 else "#ffffff"
-        return f"background-color: {color.name()}; color: {fg_hex};"
-
-    def _describe_dmx_finding(self, row, finding, fixtures) -> str:
-        if isinstance(finding, AddressConflict):
-            other_idx = finding.index_b if finding.index_a == row else finding.index_a
-            other = fixtures[other_idx]
-            return (
-                f"Overlaps '{other.name}' on universe {finding.universe}, "
-                f"channels {finding.overlap_start}-{finding.overlap_end}"
-            )
-        return (
-            f"Runs past the end of universe {finding.universe} "
-            f"(ends at channel {finding.end_address}, max {DMX_MAX_ADDRESS})"
-        )
-
-    def _update_conflict_indicators(self):
-        """Flag DMX address overlaps / overflow on the Universe + Address cells.
-
-        Only touches cell *widgets* (the spinboxes) and the summary label —
-        never table items — so it can run from save_to_config without
-        re-triggering itemChanged.
-        """
-        fixtures = self.config.fixtures
-        lint = lint_dmx_addresses(fixtures)
-        findings_by_fixture = lint.by_fixture()
-
-        for row in range(self.table.rowCount()):
-            if row >= len(fixtures):
-                continue
-            findings = findings_by_fixture.get(row)
-            if findings:
-                qss = CONFLICT_CELL_QSS
-                tooltip = "\n".join(
-                    self._describe_dmx_finding(row, f, fixtures) for f in findings
-                )
-            else:
-                qss = self._group_widget_qss(row)
-                tooltip = ""
-            for col in (0, 1):  # Universe, Address
-                widget = self.table.cellWidget(row, col)
-                if widget is not None:
-                    widget.setStyleSheet(qss)
-                    widget.setToolTip(tooltip)
-
-        issue_count = len(lint.conflicts) + len(lint.overflows)
-        if issue_count:
-            noun = "issue" if issue_count == 1 else "issues"
-            # No ⚠ glyph: the chip's warning variant carries the signal,
-            # and the character is missing from Barlow (fallback box).
-            self.conflict_label.setText(f"{issue_count} DMX addressing {noun}")
-            self.conflict_label.show()
-        else:
-            self.conflict_label.hide()
-
+    # ------------------------------------------------------------------
+    # Fixture CRUD
+    # ------------------------------------------------------------------
     def _scan_fixture_files(self) -> list:
         """Every .qxf reachable in the bundled + platform QLC+ fixture
         directories, as dicts the browser dialog consumes. The bundled
@@ -1163,7 +1592,7 @@ class FixturesTab(BaseTab):
     def _add_fixtures_from_qxf(self, fixture_path: str, quantity: int = 1):
         """Parse a .qxf and add ``quantity`` fixtures to the config.
 
-        Each copy is patched at the next free (universe, address) slot —
+        Each copy is patched at the next free (universe, address) slot -
         the free-slot search re-runs after every append, so multi-adds
         come out at consecutive non-overlapping addresses.
         """
@@ -1263,52 +1692,26 @@ class FixturesTab(BaseTab):
             # Already cached, no need for loading dialog
             get_cached_fixture_definitions({(manufacturer, model)})
 
+        # A fresh parse may now resolve models that missed earlier.
+        self._definition_memo.pop((manufacturer, model), None)
+
         # Refresh table
         self.update_from_config()
 
         # Notify main window of changes
-        main_window = self.window()
-        if main_window and hasattr(main_window, 'on_groups_changed'):
-            main_window.on_groups_changed()
+        self._notify_main_window()
 
         print(f"Added {quantity}x fixture: {manufacturer} {model}")
 
     def _remove_fixture(self):
-        """Remove selected fixture from configuration"""
-        selected_rows = self.table.selectedItems()
-        if selected_rows:
-            row = selected_rows[0].row()
-
-            if row < len(self.config.fixtures):
-                fixture = self.config.fixtures[row]
-
-                # Remove from group
-                if fixture.group and fixture.group in self.config.groups:
-                    group = self.config.groups[fixture.group]
-                    group.fixtures = [f for f in group.fixtures if f != fixture]
-
-                    # Remove empty group
-                    if not group.fixtures:
-                        del self.config.groups[fixture.group]
-
-                # Remove fixture
-                self.config.fixtures.pop(row)
-
-            # Remove table row
-            self.table.removeRow(row)
-
-            # Clean up fixture paths
-            if row < len(self.fixture_paths):
-                self.fixture_paths.pop(row)
-
-            self._update_groups()
-            self._update_row_colors()
-            self._update_summary()
-
-            # Notify main window
-            main_window = self.window()
-            if main_window and hasattr(main_window, 'on_groups_changed'):
-                main_window.on_groups_changed()
+        """Remove the selected fixture from the configuration."""
+        row = self._selected_fixture_row()
+        if row < 0:
+            return
+        self.config.fixtures.pop(row)
+        self._update_groups()
+        self.update_from_config(force=True)
+        self._notify_main_window()
 
     def _find_next_free_address(self, universe: int, channel_count: int, exclude_fixture=None) -> tuple:
         """Find the next free DMX address in a universe.
@@ -1376,20 +1779,15 @@ class FixturesTab(BaseTab):
             copy_num += 1
 
     def _duplicate_fixture(self):
-        """Duplicate selected fixture with next available address"""
-        selected_rows = self.table.selectedItems()
-        if not selected_rows:
+        """Duplicate the selected fixture at the next available address."""
+        row = self._selected_fixture_row()
+        if row < 0:
             QtWidgets.QMessageBox.warning(
                 self,
                 "No Selection",
                 "Please select a fixture to duplicate.",
                 QtWidgets.QMessageBox.StandardButton.Ok
             )
-            return
-
-        row = selected_rows[0].row()
-
-        if row >= len(self.config.fixtures):
             return
 
         # Get original fixture
@@ -1429,7 +1827,9 @@ class FixturesTab(BaseTab):
             pitch=original_fixture.pitch,
             roll=original_fixture.roll,
             orientation_uses_group_default=original_fixture.orientation_uses_group_default,
-            z_uses_group_default=original_fixture.z_uses_group_default
+            z_uses_group_default=original_fixture.z_uses_group_default,
+            definition_source=original_fixture.definition_source,
+            gdtf_fixture_type_id=original_fixture.gdtf_fixture_type_id,
         )
 
         # Add to configuration
@@ -1440,11 +1840,9 @@ class FixturesTab(BaseTab):
             self.config.groups[new_fixture.group].fixtures.append(new_fixture)
 
         # Refresh table
-        self.update_from_config()
+        self.update_from_config(force=True)
 
         # Notify main window of changes
-        main_window = self.window()
-        if main_window and hasattr(main_window, 'on_groups_changed'):
-            main_window.on_groups_changed()
+        self._notify_main_window()
 
         print(f"Duplicated fixture: {original_fixture.manufacturer} {original_fixture.model}")

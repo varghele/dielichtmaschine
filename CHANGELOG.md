@@ -25,6 +25,18 @@ verbatim as the GitHub Release notes (see [docs/releasing.md](docs/releasing.md)
 
 ### Added
 
+- **Fixtures screen rebuilt against the original design reference.**
+  The patch table is now calm, read-only display (row number, fixture
+  name, type, "8 CH" mode, "U1", zero-padded address ranges, group
+  name in its group color, low-alpha group tints, accent outline on
+  the selected row) - all editing happens in the inspector, which
+  gained the reference's CAPABILITIES chips and the full CHANNEL MAP
+  resolved from the fixture definition, plus Duplicate/Remove
+  actions. New GROUPS side panel: color-bar rows with fixture counts
+  and role summaries, click to select a group's fixtures, "+" to
+  create a group. Status strip shows counts and per-universe channel
+  usage (U1 226/512). DMX-conflict red cells, tooltips, and the
+  warning chip carry over unchanged.
 - **Home screen rebuilt against the original design reference.** The
   starting window now matches screen 01 of the design handoff: the
   brand lockup (rotor beside the two-line wordmark) with the accent

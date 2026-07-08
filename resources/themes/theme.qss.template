@@ -535,6 +535,23 @@ QPushButton[role="add-tile"]:hover {
 /* Mono readout lines inside cards (bars/signature/BPM etc.). */
 QLabel[role="card-readout"] { color: $text_secondary$; }
 
+/* Group-panel rows (Fixtures screen): bottom hairline, raised when
+   selected; the 3px group-color left border stays widget-local (data
+   color). */
+#GroupRow {
+    background-color: transparent;
+    border-bottom: 1px solid $border$;
+}
+#GroupRow[selected="true"] { background-color: $raised$; }
+
+/* Dashed hint boxes (reference: "keep them role-based" etc.). */
+QLabel[role="hint-box"] {
+    border: 1px dashed $border$;
+    color: $text_disabled$;
+    padding: 10px 12px;
+    background: transparent;
+}
+
 /* Generic card role for all 1x-card screens (universes, fixtures,
    structure parts, ...). Selected = accent border. */
 QWidget[role="card"],
