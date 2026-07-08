@@ -13,6 +13,10 @@ verbatim as the GitHub Release notes (see [docs/releasing.md](docs/releasing.md)
 
 ### Fixed
 
+- **Fixtures could be placed with a stale stage size.** Loading a
+  config applied the fixture positions before the stage view knew the
+  new stage dimensions, so fixtures on a non-default stage landed at
+  the wrong metre coordinates (and could be written back that way).
 - **Theme choice no longer resets to light.** Running the test suite
   (or anything else calling the theme engine) could overwrite the
   saved theme, so the app kept opening in light mode regardless of
@@ -25,6 +29,21 @@ verbatim as the GitHub Release notes (see [docs/releasing.md](docs/releasing.md)
 
 ### Added
 
+- **Stage, Structure, and Auto screens rebuilt against the original
+  design references.** Stage: the layer picker moved into the action
+  strip as accent-filled segmented chips beside EXPORT RIDER PDF, the
+  left rail became a library (fixture-group rows, click-to-place stage
+  element and truss tiles) with every previous control preserved in a
+  collapsible STAGE SETTINGS section, the plan gained its draughting
+  overlays (top-view caption, active-layer badge, legend, title
+  block), and the right pane became a SELECTION inspector with X/Y/Z
+  stat tiles and a layer field. Structure: song parts render as cards
+  with color top bars, tints, and transition chips, over the master
+  grid, with a 2x2 stat-tile inspector (BPM / time signature / bars /
+  duration). Auto: per-group AUTO / CURATED / LOCKED segmented chips
+  with group-colored intensity bars, a centered engine stage (large
+  live BPM readout, tap tempo, RMS / contrast / vocals meters, FILL
+  NOW), colour override, and a 3D preview pane with an engine log.
 - **Fixtures screen rebuilt against the original design reference.**
   The patch table is now calm, read-only display (row number, fixture
   name, type, "8 CH" mode, "U1", zero-padded address ranges, group
