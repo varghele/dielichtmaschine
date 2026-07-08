@@ -99,7 +99,6 @@ DARK = {
     "stage_fill": "#252526",
     "stage_outline": "#8D9299",
     # Auto tab status frame + phase colors
-    "auto_status_bg": "#1E1E1E",
     "phase_stopped": "#ff6b6b",
     "phase_running": "#4CAF50",
     "phase_fill": "#FF9800",
@@ -144,7 +143,6 @@ LIGHT = {
     "stage_fill": "#ECE9E2",
     "stage_outline": "#141416",
     # Auto tab status frame + phase colors
-    "auto_status_bg": "#F4F1EA",
     "phase_stopped": "#c62828",
     "phase_running": "#2E7D32",
     "phase_fill": "#ef6c00",

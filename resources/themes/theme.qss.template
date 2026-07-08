@@ -372,8 +372,60 @@ QPushButton[role="status-pill"][status="ready"]  { background-color: $info$; bor
 
 /* Micro-caps labels (gui/typography.py MicroLabel) read as secondary
    captions by default; later rules (chips, objectName-specific labels)
-   override where needed. */
-QLabel[role="micro"] { color: $text_secondary$; }
+   override where needed. The mono family is restated here because the
+   app-wide QWidget font-family rule beats setFont on polish order
+   (docs/qt-gotchas.md) - MicroLabel is mono by definition. */
+QLabel[role="micro"] {
+    color: $text_secondary$;
+    font-family: $font_mono$;
+}
+
+/* Flat pane icons (collapse chevrons): the base QPushButton:checked
+   rule would otherwise paint an accent border on an always-checked
+   toggle. */
+QPushButton[role="pane-icon"],
+QToolButton[role="pane-icon"] {
+    background-color: transparent;
+    border: none;
+    padding: 2px;
+    min-height: 0;
+}
+QPushButton[role="pane-icon"]:hover,
+QToolButton[role="pane-icon"]:hover { background-color: $accent_tint$; }
+
+/* Surfaces that repeat the engineering-grid motif inside the window
+   (the Auto engine stage). */
+QWidget[role="grid-surface"] {
+    background-color: $window$;
+    background-image: url("$grid_tile$");
+    background-repeat: repeat-xy;
+}
+
+/* Mode/bias chip rows (Auto per-group AUTO/CURATED/LOCKED). The
+   locked state fills with warm text color instead of the accent. */
+QPushButton[role="mode-chip"],
+QPushButton[role="bias-chip"] {
+    background-color: transparent;
+    border: 1px solid $border$;
+    color: $text_secondary$;
+    font-family: $font_mono$;
+    padding: 6px 14px;
+    min-height: 0;
+}
+QPushButton[role="mode-chip"]:hover,
+QPushButton[role="bias-chip"]:hover { color: $text$; }
+QPushButton[role="mode-chip"]:checked,
+QPushButton[role="bias-chip"]:checked {
+    background-color: $accent$;
+    color: $on_accent$;
+    border-color: $accent$;
+    font-weight: bold;
+}
+QPushButton[role="mode-chip"][state="locked"]:checked {
+    background-color: $text$;
+    color: $window$;
+    border-color: $text$;
+}
 
 /* -- Shell chrome: topbar, subnav, chips (North Star anatomy) ----------- */
 #TopBar {
@@ -552,6 +604,83 @@ QLabel[role="hint-box"] {
     background: transparent;
 }
 
+/* Stat tiles: bordered readout cells (X/Y/Z, BPM/BARS/DURATION...). */
+QWidget[role="stat-tile"] {
+    background-color: $raised$;
+    border: 1px solid $border$;
+}
+QLabel[role="stat-caption"] { color: $text_disabled$; background: transparent; }
+QLabel[role="stat-value"] { color: $text$; background: transparent; }
+
+/* Outlined display-caps CTA (secondary to the accent primary). The
+   display family is restated here for the same polish-order reason as
+   [role="primary"]: the app-wide QWidget font-family beats setFont. */
+QPushButton[role="cta-outline"] {
+    background-color: transparent;
+    border: 1px solid $border$;
+    color: $text_secondary$;
+    font-family: $font_display$;
+}
+QPushButton[role="cta-outline"]:hover {
+    border-color: $accent$;
+    color: $accent_line$;
+}
+
+/* Segmented chip groups (layer picker, mode selectors): the ACTIVE
+   segment is accent-FILLED with on-accent text (output-select only
+   gives an accent outline). [divider="true"] adds a left hairline
+   between logical segment groups. */
+QPushButton[role="segment"] {
+    background-color: transparent;
+    border: none;
+    color: $text_secondary$;
+    padding: 4px 12px;
+    min-height: 0;
+}
+QPushButton[role="segment"]:hover { color: $text$; }
+QPushButton[role="segment"]:checked {
+    background-color: $accent$;
+    color: $on_accent$;
+    font-weight: bold;
+}
+QPushButton[role="segment"][divider="true"] {
+    border-left: 1px solid $border$;
+}
+
+/* Accent-bordered field (the reference's active LAYER combo). */
+QComboBox[role="accent-field"] {
+    border: 1px solid $accent$;
+    color: $accent_line$;
+}
+
+/* Explainer with an accent left bar (as opposed to the dashed hint). */
+QLabel[role="hint-accent"] {
+    background-color: $raised$;
+    border-left: 3px solid $accent$;
+    color: $text_secondary$;
+    padding: 9px 12px;
+}
+
+/* Section caption strip with top/bottom hairlines (library panels). */
+QWidget[role="section-caption"] {
+    border-top: 1px solid $border$;
+    border-bottom: 1px solid $border$;
+    background: transparent;
+}
+
+/* Palette tiles: icon over a mono caps caption. */
+QToolButton[role="element-tile"] {
+    background-color: transparent;
+    border: 1px solid $border$;
+    color: $text_secondary$;
+    font-family: $font_mono$;
+    font-size: 9px;
+}
+QToolButton[role="element-tile"]:hover {
+    border-color: $accent$;
+    color: $accent_line$;
+}
+
 /* Generic card role for all 1x-card screens (universes, fixtures,
    structure parts, ...). Selected = accent border. */
 QWidget[role="card"],
@@ -712,25 +841,12 @@ QLabel#LightLaneTargets {
 }
 
 /* -- Auto tab (real-time audio-reactive auto-generation) ----------------- */
-/* Status frame at the top of the centre panel - readable bold riff name
-   + secondary bar counter + state-coloured phase label. Phase color is
-   driven by a `phase` dynamic property the tab re-polishes on
-   transition. */
-QFrame#AutoStatusFrame {
-    background-color: $auto_status_bg$;
-    border: 1px solid $border$;
-    padding: 8px;
-}
-QLabel#AutoStatusRiff {
-    color: $text$;
-    font-size: 14px;
-    font-weight: bold;
-}
-QLabel#AutoStatusBarCounter {
-    color: $text_secondary$;
-    font-size: 12px;
-}
+/* Engine-state caption on the centre stage. The colour is driven by a
+   `phase` dynamic property the tab re-polishes on transition. (The old
+   AutoStatusFrame / Riff / BarCounter rules died with the reference
+   rebuild: the engine stage owns those readouts now.) */
 QLabel#AutoStatusPhase {
+    font-family: $font_mono$;
     font-size: 12px;
     font-weight: bold;
 }
