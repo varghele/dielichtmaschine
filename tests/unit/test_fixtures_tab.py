@@ -55,14 +55,23 @@ def test_toolbar_buttons_match_default_button_styling(qapp, sample_configuration
 
 
 def test_table_headers_are_mono_caps(qapp, sample_configuration):
-    """Column headers read as tracked mono micro-labels (card 1c)."""
+    """Column headers read as tracked mono micro-labels (card 1c).
+
+    The mono family is pinned by the theme's QHeaderView::section rule,
+    NOT asserted via header.font(): what font() reports depends on
+    stylesheet polish order (setFont families race the app-wide QSS
+    font rule), which made this test order-dependent.
+    """
     from gui.fonts import FONT_MONO
     from gui.tabs.fixtures_tab import FixturesTab
+    from gui.theme_tokens import render_theme
+
+    qss = render_theme("dark")
+    header_rule = qss.split("QHeaderView::section {", 1)[1].split("}", 1)[0]
+    assert FONT_MONO in header_rule
 
     tab = FixturesTab(sample_configuration, parent=None)
     try:
-        header = tab.table.horizontalHeader()
-        assert header.font().family() == FONT_MONO
         for col in range(tab.table.columnCount()):
             text = tab.table.horizontalHeaderItem(col).text()
             assert text == text.upper()

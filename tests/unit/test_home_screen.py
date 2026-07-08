@@ -67,16 +67,22 @@ class TestHomeScreenWidget:
         finally:
             home.deleteLater()
 
-    def test_recent_list_populates_and_emits(self, qapp, tmp_path):
+    def test_recent_rows_populate_and_emit(self, qapp, tmp_path):
+        from PyQt6.QtCore import Qt
+        from PyQt6.QtTest import QTest
         from gui.widgets.home_screen import HomeScreen
         home = HomeScreen()
         try:
-            paths = [str(tmp_path / "one.yaml"), str(tmp_path / "two.yaml")]
+            paths = []
+            for name in ("one.yaml", "two.yaml"):
+                p = tmp_path / name
+                p.write_text("x")
+                paths.append(str(p))
             home.refresh(paths)
             assert home.recent_paths() == paths
             picked = []
             home.recent_requested.connect(picked.append)
-            home._recent_buttons[1].click()
+            QTest.mouseClick(home._recent_rows[1], Qt.MouseButton.LeftButton)
             assert picked == [paths[1]]
             # Refresh replaces, never accumulates
             home.refresh([paths[0]])
@@ -90,6 +96,75 @@ class TestHomeScreenWidget:
         try:
             home.refresh([])
             assert not home.recent_title.isVisibleTo(home)
+        finally:
+            home.deleteLater()
+
+    def test_relative_age_buckets(self, tmp_path):
+        import time
+        from gui.widgets.home_screen import relative_age
+        p = tmp_path / "f.yaml"
+        p.write_text("x")
+        now = os.path.getmtime(str(p))
+        assert relative_age(str(p), now=now + 3600) == "today"
+        assert relative_age(str(p), now=now + 90000) == "yesterday"
+        assert "3" in relative_age(str(p), now=now + 3 * 86400 + 60)
+        assert relative_age(str(tmp_path / "missing.yaml")) == ""
+
+
+class TestChecklist:
+    def _home(self):
+        from gui.widgets.home_screen import HomeScreen
+        return HomeScreen()
+
+    def test_fresh_config_first_step_current(self, qapp):
+        from config.models import Configuration
+        home = self._home()
+        try:
+            home.refresh_checklist(Configuration())
+            states = [r.property("state") for r in home.checklist_rows]
+            assert states == ["current", "upcoming", "upcoming",
+                              "upcoming", "upcoming"]
+            assert home.progress_label.text().startswith("0 / 5")
+        finally:
+            home.deleteLater()
+
+    def test_progress_reflects_config(self, qapp, sample_configuration):
+        home = self._home()
+        try:
+            # sample_configuration has a universe + fixtures; the fixture
+            # sits at (1.0, 2.0) so placement counts as done too.
+            home.refresh_checklist(sample_configuration)
+            states = [r.property("state") for r in home.checklist_rows]
+            assert states[:3] == ["done", "done", "done"]
+            assert states[3] == "current"
+            assert home.progress_label.text().startswith("3 / 5")
+            # Done rows: check marker; the strikethrough is QSS-driven
+            # (text-decoration on the done state - font-flag strikeout
+            # raced the stylesheet repolish), so pin the theme rule.
+            assert home.checklist_rows[0].marker.text() == "✓"
+            from gui.theme_tokens import render_theme
+            assert "text-decoration: line-through" in render_theme("dark")
+        finally:
+            home.deleteLater()
+
+    def test_rows_emit_their_tab_index(self, qapp):
+        from PyQt6.QtCore import Qt
+        from PyQt6.QtTest import QTest
+        home = self._home()
+        try:
+            hits = []
+            home.go_to_screen.connect(hits.append)
+            QTest.mouseClick(home.checklist_rows[2],
+                             Qt.MouseButton.LeftButton)
+            assert hits == [2]  # SETUP · STAGE
+        finally:
+            home.deleteLater()
+
+    def test_none_config_is_safe(self, qapp):
+        home = self._home()
+        try:
+            home.refresh_checklist(None)
+            assert home.progress_label.text().startswith("0 / 5")
         finally:
             home.deleteLater()
 

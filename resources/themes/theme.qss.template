@@ -224,6 +224,10 @@ QHeaderView::section {
     border-right: 1px solid $border$;
     border-bottom: 1px solid $border$;
     font-weight: bold;
+    /* Tracked-mono column headers (North Star tables). Pinned in QSS
+       because setFont families race the app-wide font rule on polish
+       order. */
+    font-family: $font_mono$;
 }
 QHeaderView::section:hover {
     background-color: $accent_tint$;
@@ -463,16 +467,43 @@ QStatusBar QLabel { color: $text_secondary$; background: transparent; }
 }
 #HomeWordmark { color: $text$; background: transparent; }
 #HomeSlogan { color: $text_secondary$; background: transparent; }
+#HomeAccentRule { background-color: $accent$; }
 #HomeRecentTitle { color: $text_secondary$; background: transparent; }
 #HomeGlyph { background: transparent; }
-QPushButton[role="recent-config"] {
-    background-color: transparent;
-    border: none;
-    color: $text_secondary$;
-    padding: 4px 10px;
-    min-height: 0;
+
+/* Recent rows: bordered cards, filename left, mono age right. */
+#RecentRow {
+    background-color: $panel$;
+    border: 1px solid $border$;
 }
-QPushButton[role="recent-config"]:hover { color: $accent_line$; }
+#RecentRow:hover { border-color: $accent$; }
+#RecentAge { color: $text_disabled$; background: transparent; }
+
+/* FROM ZERO TO SHOW checklist card (reference screen 01). */
+#ChecklistHeader { border-bottom: 1px solid $border$; background: transparent; }
+#ChecklistTitle { color: $text$; background: transparent; }
+#ChecklistProgress { color: $text_disabled$; background: transparent; }
+#ChecklistRow {
+    background-color: transparent;
+    border-bottom: 1px solid $border$;
+    border-left: 3px solid transparent;
+}
+#ChecklistRow[state="current"] {
+    background-color: $raised$;
+    border-left: 3px solid $accent$;
+}
+#ChecklistMarker { color: $text_secondary$; background: transparent; }
+#ChecklistRow[state="done"] #ChecklistMarker { color: $accent_line$; }
+#ChecklistStepTitle { color: $text$; background: transparent; }
+#ChecklistRow[state="done"] #ChecklistStepTitle {
+    color: $text_secondary$;
+    /* line-through via QSS, not QFont.strikeOut: repolishing re-applies
+       the stylesheet font and silently wiped a code-set strikeout. */
+    text-decoration: line-through;
+}
+#ChecklistDescription { color: $text_secondary$; background: transparent; }
+#ChecklistTag { color: $text_disabled$; background: transparent; }
+#ChecklistRow[state="current"] #ChecklistTag { color: $accent_line$; }
 
 /* Tab pages: themed background (bare QWidget pages otherwise fall
    back to the platform's light-gray palette - the "tabs look light in

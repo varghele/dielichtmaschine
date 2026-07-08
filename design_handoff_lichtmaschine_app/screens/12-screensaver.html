@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="de"><head><meta charset="utf-8"><title>Die Lichtmaschine · Screensaver</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700;800;900&family=Barlow:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>*,*::before,*::after{box-sizing:border-box}html{background:#0e0e10}body{margin:0;font-family:Barlow,system-ui,sans-serif;display:flex;justify-content:center;align-items:flex-start;min-height:100vh}
+@keyframes lm-spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}@keyframes lm-pulse{0%,100%{opacity:0.35}50%{opacity:1}}</style>
+</head><body>
+<div data-screen-label="Screensaver" style="width:1920px;height:1080px;background:#0e0e10;position:relative;overflow:hidden;background-image:linear-gradient(rgba(141,146,153,0.04) 1px,transparent 1px),linear-gradient(90deg,rgba(141,146,153,0.04) 1px,transparent 1px);background-size:48px 48px">
+    <svg width="15" height="15" viewBox="0 0 13 13" style="position:absolute;top:24px;left:24px"><path d="M6.5 0V13M0 6.5H13" stroke="#3a3a3a" stroke-width="1"></path></svg>
+    <svg width="15" height="15" viewBox="0 0 13 13" style="position:absolute;top:24px;right:24px"><path d="M6.5 0V13M0 6.5H13" stroke="#3a3a3a" stroke-width="1"></path></svg>
+    <svg width="15" height="15" viewBox="0 0 13 13" style="position:absolute;bottom:24px;left:24px"><path d="M6.5 0V13M0 6.5H13" stroke="#3a3a3a" stroke-width="1"></path></svg>
+    <svg width="15" height="15" viewBox="0 0 13 13" style="position:absolute;bottom:24px;right:24px"><path d="M6.5 0V13M0 6.5H13" stroke="#3a3a3a" stroke-width="1"></path></svg>
+    <div style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:36px">
+      <svg width="220" height="220" viewBox="0 0 64 64">
+        <g style="transform-origin:32px 32px;animation:lm-spin 40s linear infinite reverse"><circle cx="32" cy="32" r="30" fill="none" stroke="#3f4348" stroke-width="1.2" stroke-dasharray="7.85 3.93"></circle></g>
+        <g style="transform-origin:32px 32px;animation:lm-spin 16s linear infinite"><circle cx="32" cy="32" r="21" fill="none" stroke="#c9cdd2" stroke-width="8" stroke-dasharray="8.24 8.24"></circle></g>
+        <circle cx="32" cy="32" r="6" fill="#f0562e" style="animation:lm-pulse 4s ease-in-out infinite"></circle>
+      </svg>
+      <div style="text-align:center">
+        <div style="font-family:'Barlow Condensed',sans-serif;font-weight:800;font-size:44px;letter-spacing:0.06em;color:#f4f1ea">DIE LICHTMASCHINE</div>
+        <div style="margin-top:8px;font-family:'IBM Plex Mono',monospace;font-size:12px;letter-spacing:0.2em;color:#5c6068">ES WERDE LICHT</div>
+      </div>
+      <div style="text-align:center">
+        <div style="font-family:'IBM Plex Mono',monospace;font-size:13px;letter-spacing:0.2em;color:#8d9299">PAUSE</div>
+        <div style="font-family:'IBM Plex Mono',monospace;font-size:72px;color:#f4f1ea;line-height:1.2">21:17</div>
+      </div>
+    </div>
+    <div style="position:absolute;left:0;right:0;bottom:0;height:34px;display:flex;align-items:center;justify-content:center;gap:28px;font-family:'IBM Plex Mono',monospace;font-size:10px;color:#5c6068">
+      <span>RIG: PAUSENLICHT · WARMWEISS 20%</span><span>·</span><span>ARTNET AKTIV · 44 Hz</span><span>·</span><span>BELIEBIGE TASTE BEENDET</span><span>·</span><span>AKTIVIEREN: LIVE ▸ PAUSE-TASTE ODER AUTO NACH 5 MIN IDLE</span>
+    </div>
+  </div>
+</body></html>

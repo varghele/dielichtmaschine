@@ -91,11 +91,18 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         1 s tick.
         """
         if hasattr(self, 'topbar'):
-            name = (os.path.basename(self.config_path)
-                    if getattr(self, 'config_path', None) else "unsaved")
-            if self.windowTitle().endswith(" *"):
-                name += " *"
+            if getattr(self, 'config_path', None):
+                name = os.path.basename(self.config_path)
+                if self.windowTitle().endswith(" *"):
+                    name += " *"
+            else:
+                # Reference screen 01: the filename slot reads
+                # "no project loaded" until a project exists.
+                name = "no project loaded"
             self.topbar.set_filename(name)
+            # Keep the Home checklist live while the user works.
+            if hasattr(self, 'home_screen') and self.home_screen.isVisible():
+                self.home_screen.refresh_checklist(self.config)
         # ArtNet
         artnet_controller = getattr(self.shows_tab, 'artnet_controller', None)
         artnet_enabled = getattr(self.shows_tab, 'artnet_enabled', False)
@@ -476,12 +483,14 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.actionOpenLogFolder.triggered.connect(self.open_log_folder)
         self.actionAbout.triggered.connect(self.show_about)
 
-        # Home screen quick actions + recents
+        # Home screen quick actions + recents + checklist
         self.home_screen.new_from_template_requested.connect(self.new_from_template)
         self.home_screen.open_requested.connect(self.load_configuration)
         self.home_screen.recent_requested.connect(self.open_recent_config)
+        self.home_screen.go_to_screen.connect(self.tabWidget.setCurrentIndex)
         from utils.app_settings import recent_configs
         self.home_screen.refresh(recent_configs())
+        self.home_screen.refresh_checklist(self.config)
 
     def _on_tab_changed(self, index):
         """Handle tab change - notify tabs of activation/deactivation."""
@@ -668,12 +677,14 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             traceback.print_exc()
 
     def _record_recent_config(self, path: str) -> None:
-        """Track a config for the Home screen recents and refresh it."""
+        """Track a config for the Home screen recents and refresh it
+        (including the FROM ZERO TO SHOW checklist states)."""
         from utils.app_settings import recent_configs, record_recent_config
         try:
             record_recent_config(path)
             if hasattr(self, "home_screen"):
                 self.home_screen.refresh(recent_configs())
+                self.home_screen.refresh_checklist(self.config)
         except Exception as e:
             print(f"recent configs: {e}")
 

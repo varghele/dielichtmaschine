@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="de"><head><meta charset="utf-8"><title>Die Lichtmaschine · Setup Universes</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700;800;900&family=Barlow:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>*,*::before,*::after{box-sizing:border-box}html{background:#0e0e10}body{margin:0;font-family:Barlow,system-ui,sans-serif;display:flex;justify-content:center;align-items:flex-start;min-height:100vh}
+@keyframes lm-spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}@keyframes lm-pulse{0%,100%{opacity:0.35}50%{opacity:1}}</style>
+</head><body>
+<div data-screen-label="Setup Universes" style="width:1920px;height:1080px;background:#141416;display:flex;flex-direction:column;overflow:hidden">
+    <div style="height:48px;background:#1e1e1e;border-bottom:1px solid #3a3a3a;display:flex;align-items:center;padding:0 20px;gap:20px;flex:none">
+      <div style="display:flex;align-items:center;gap:10px">
+        <svg width="20" height="20" viewBox="0 0 64 64"><circle cx="32" cy="32" r="23" fill="none" stroke="#f4f1ea" stroke-width="11" stroke-dasharray="9.03 9.03" transform="rotate(-11.25 32 32)"></circle><circle cx="32" cy="32" r="8" fill="#f0562e"></circle></svg>
+        <span style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:15px;letter-spacing:0.09em;color:#f4f1ea">DIE LICHTMASCHINE</span>
+      </div>
+      <div style="width:1px;height:20px;background:#3a3a3a"></div>
+      <div style="display:flex;gap:2px;height:48px;align-items:stretch">
+        <div style="display:flex;align-items:center;padding:0 16px;font-family:'Barlow Condensed',sans-serif;font-weight:600;font-size:15px;letter-spacing:0.12em;color:#f4f1ea;border-bottom:2px solid #f0562e">SETUP</div>
+        <div style="display:flex;align-items:center;padding:0 16px;font-family:'Barlow Condensed',sans-serif;font-weight:600;font-size:15px;letter-spacing:0.12em;color:#8d9299">SHOW</div>
+        <div style="display:flex;align-items:center;padding:0 16px;font-family:'Barlow Condensed',sans-serif;font-weight:600;font-size:15px;letter-spacing:0.12em;color:#8d9299">AUTO</div>
+        <div style="display:flex;align-items:center;padding:0 16px;font-family:'Barlow Condensed',sans-serif;font-weight:600;font-size:15px;letter-spacing:0.12em;color:#8d9299">LIVE</div>
+      </div>
+      <div style="flex:1"></div>
+      <div style="display:flex;gap:6px;align-items:center">
+        <span title="Speichern" style="width:30px;height:30px;display:flex;align-items:center;justify-content:center;border:1px solid #3a3a3a;color:#c9cdd2;font-size:14px"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M8 2.5v7M5.5 7L8 9.5L10.5 7M3 11.5v2h10v-2"></path></svg></span>
+        <span title="Export (.qxw u. a.)" style="width:30px;height:30px;display:flex;align-items:center;justify-content:center;border:1px solid #3a3a3a;color:#c9cdd2;font-size:14px"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6.5 4H3v9h9V9.5M9 3h4v4M13 3L7.5 8.5"></path></svg></span>
+        <span title="Show morphen" style="width:30px;height:30px;display:flex;align-items:center;justify-content:center;border:1px solid #3a3a3a;color:#c9cdd2;font-size:14px"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 5.5h11M10.5 3L13 5.5L10.5 8M14 10.5H3M5.5 8L3 10.5L5.5 13"></path></svg></span>
+        <span title="Audio: Geräte &amp; Analyse" style="width:30px;height:30px;display:flex;align-items:center;justify-content:center;border:1px solid #3a3a3a;color:#c9cdd2;font-size:14px"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M2 6.5v3M5 4v8M8 2.5v11M11 5v6M14 6.5v3"></path></svg></span>
+        <span title="Einstellungen: Universen, Output, Theme" style="width:30px;height:30px;display:flex;align-items:center;justify-content:center;border:1px solid #3a3a3a;color:#c9cdd2;font-size:14px"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M2 4h12M2 8h12M2 12h12"></path><circle cx="10.5" cy="4" r="1.8"></circle><circle cx="5" cy="8" r="1.8"></circle><circle cx="11.5" cy="12" r="1.8"></circle></svg></span>
+        <span title="Menü: alles Weitere" style="width:30px;height:30px;display:flex;align-items:center;justify-content:center;border:1px solid #3a3a3a;color:#c9cdd2;font-size:13px"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M3 4.5h10M3 8h10M3 11.5h6"></path></svg></span>
+      </div>
+      <div style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:#8d9299">neon_ruinen.lms</div>
+      <div style="display:flex;align-items:center;gap:6px;padding:4px 10px;background:#252526;border:1px solid #3a3a3a"><span style="width:7px;height:7px;border-radius:50%;background:#4caf50"></span><span style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:#c9cdd2">ARTNET OUT · 44 Hz</span></div>
+    </div>
+    <div style="height:38px;background:#18181a;border-bottom:1px solid #2d2d2d;display:flex;align-items:center;padding:0 20px;gap:4px;flex:none">
+      <div style="padding:5px 14px;font-size:13px;font-weight:600;color:#141416;background:#f0562e">Universes</div>
+      <div style="padding:5px 14px;font-size:13px;font-weight:600;color:#8d9299">Fixtures</div>
+      <div style="padding:5px 14px;font-size:13px;font-weight:600;color:#8d9299">Stage</div>
+      <div style="padding:5px 14px;font-size:13px;font-weight:600;color:#8d9299">Live Controls</div>
+      <div style="flex:1"></div>
+      <div style="padding:6px 16px;background:#f0562e;color:#141416;font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:14px;letter-spacing:0.08em">+ ADD UNIVERSE</div>
+    </div>
+    <div style="flex:1;display:flex;min-height:0">
+      <div style="flex:1;padding:24px;min-width:0">
+        <div style="display:grid;grid-template-columns:60px 1fr 160px 1.2fr 200px 120px;padding:0 16px 10px;font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.1em;color:#5c6068">
+          <span>UNI</span><span>NAME</span><span>OUTPUT</span><span>DESTINATION</span><span>CHANNELS USED</span><span>STATUS</span>
+        </div>
+        <div style="display:grid;grid-template-columns:60px 1fr 160px 1.2fr 200px 120px;padding:16px;background:#1e1e1e;border:1px solid #3a3a3a;align-items:center;outline:1px solid #f0562e;outline-offset:-1px">
+          <span style="font-family:'IBM Plex Mono',monospace;font-size:15px;color:#f4f1ea">U1</span>
+          <span style="font-size:14px;font-weight:600;color:#f4f1ea">Main rig</span>
+          <span><span style="padding:4px 10px;background:#252526;border:1px solid #f0562e;font-family:'IBM Plex Mono',monospace;font-size:11px;color:#f0562e">ARTNET</span></span>
+          <span style="font-family:'IBM Plex Mono',monospace;font-size:12px;color:#c9cdd2">192.168.1.50 · net 0 · uni 0 <span style="color:#5c6068">(0-based)</span></span>
+          <span style="display:flex;align-items:center;gap:8px"><span style="width:110px;height:6px;background:#2d2d2d"><span style="display:block;width:20px;height:6px;background:#f0562e"></span></span><span style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:#8d9299">92/512</span></span>
+          <span style="display:flex;align-items:center;gap:6px"><span style="width:7px;height:7px;border-radius:50%;background:#4caf50"></span><span style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:#c9cdd2">44 Hz</span></span>
+        </div>
+        <div style="display:grid;grid-template-columns:60px 1fr 160px 1.2fr 200px 120px;padding:16px;background:#1e1e1e;border:1px solid #3a3a3a;border-top:none;align-items:center">
+          <span style="font-family:'IBM Plex Mono',monospace;font-size:15px;color:#f4f1ea">U2</span>
+          <span style="font-size:14px;font-weight:600;color:#f4f1ea">Pixel + strips</span>
+          <span><span style="padding:4px 10px;background:#252526;border:1px solid #3a3a3a;font-family:'IBM Plex Mono',monospace;font-size:11px;color:#c9cdd2">E1.31</span></span>
+          <span style="font-family:'IBM Plex Mono',monospace;font-size:12px;color:#c9cdd2">multicast · uni 2</span>
+          <span style="display:flex;align-items:center;gap:8px"><span style="width:110px;height:6px;background:#2d2d2d"><span style="display:block;width:13px;height:6px;background:#8d9299"></span></span><span style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:#8d9299">58/512</span></span>
+          <span style="display:flex;align-items:center;gap:6px"><span style="width:7px;height:7px;border-radius:50%;background:#4caf50"></span><span style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:#c9cdd2">44 Hz</span></span>
+        </div>
+        <div style="display:grid;grid-template-columns:60px 1fr 160px 1.2fr 200px 120px;padding:16px;background:#1e1e1e;border:1px solid #3a3a3a;border-top:none;align-items:center">
+          <span style="font-family:'IBM Plex Mono',monospace;font-size:15px;color:#f4f1ea">U3</span>
+          <span style="font-size:14px;font-weight:600;color:#f4f1ea">FOH backup</span>
+          <span><span style="padding:4px 10px;background:#252526;border:1px solid #3a3a3a;font-family:'IBM Plex Mono',monospace;font-size:11px;color:#c9cdd2">DMX USB</span></span>
+          <span style="font-family:'IBM Plex Mono',monospace;font-size:12px;color:#c9cdd2">Enttec Open DMX · FT232R</span>
+          <span style="display:flex;align-items:center;gap:8px"><span style="width:110px;height:6px;background:#2d2d2d"></span><span style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:#8d9299">0/512</span></span>
+          <span style="display:flex;align-items:center;gap:6px"><span style="width:7px;height:7px;border-radius:50%;background:#ff9800"></span><span style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:#c9cdd2">IDLE</span></span>
+        </div>
+        <div style="margin-top:20px;padding:14px 16px;border:1px dashed #3a3a3a;font-size:12px;color:#5c6068;max-width:720px;line-height:1.5">Headless mode: a Raspberry Pi build runs U1–U3 output only · same project file, no UI, no visualizer. Configure once here, run anywhere.</div>
+      </div>
+      <div style="width:420px;background:#1e1e1e;border-left:1px solid #2d2d2d;padding:20px;flex:none">
+        <div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:18px;letter-spacing:0.05em;color:#f4f1ea;margin-bottom:16px">U1 · MAIN RIG</div>
+        <div style="display:flex;flex-direction:column;gap:10px">
+          <div><div style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:#5c6068;margin-bottom:5px">OUTPUT TYPE</div>
+            <div style="display:flex;gap:6px">
+              <span style="flex:1;padding:8px;text-align:center;background:#252526;border:1px solid #f0562e;font-family:'IBM Plex Mono',monospace;font-size:11px;color:#f0562e">ARTNET</span>
+              <span style="flex:1;padding:8px;text-align:center;background:#252526;border:1px solid #3a3a3a;font-family:'IBM Plex Mono',monospace;font-size:11px;color:#8d9299">E1.31</span>
+              <span style="flex:1;padding:8px;text-align:center;background:#252526;border:1px solid #3a3a3a;font-family:'IBM Plex Mono',monospace;font-size:11px;color:#8d9299">DMX USB</span>
+            </div>
+          </div>
+          <div><div style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:#5c6068;margin-bottom:5px">TARGET IP</div><div style="padding:9px 12px;background:#252526;border:1px solid #3a3a3a;font-family:'IBM Plex Mono',monospace;font-size:13px;color:#f4f1ea">192.168.1.50</div></div>
+          <div style="display:flex;gap:10px">
+            <div style="flex:1"><div style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:#5c6068;margin-bottom:5px">NET</div><div style="padding:9px 12px;background:#252526;border:1px solid #3a3a3a;font-family:'IBM Plex Mono',monospace;font-size:13px;color:#f4f1ea">0</div></div>
+            <div style="flex:1"><div style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:#5c6068;margin-bottom:5px">UNIVERSE</div><div style="padding:9px 12px;background:#252526;border:1px solid #3a3a3a;font-family:'IBM Plex Mono',monospace;font-size:13px;color:#f4f1ea">0</div></div>
+            <div style="flex:1"><div style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:#5c6068;margin-bottom:5px">RATE</div><div style="padding:9px 12px;background:#252526;border:1px solid #3a3a3a;font-family:'IBM Plex Mono',monospace;font-size:13px;color:#f4f1ea">44 Hz</div></div>
+          </div>
+          <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 12px;background:#252526;border:1px solid #3a3a3a"><span style="font-size:13px;color:#c9cdd2">Broadcast</span><span style="width:34px;height:18px;background:#2d2d2d;border-radius:9px;position:relative"><span style="position:absolute;left:2px;top:2px;width:14px;height:14px;border-radius:50%;background:#5c6068"></span></span></div>
+          <div style="margin-top:8px;padding:12px;background:#252526;border-left:3px solid #2196f3;font-size:12px;color:#8d9299;line-height:1.5">ArtNet universe numbering is 0-based to match the wire protocol. QLC+ shows this universe as "1".</div>
+        </div>
+      </div>
+    </div>
+    <div style="height:26px;background:#1e1e1e;border-top:1px solid #3a3a3a;display:flex;align-items:center;padding:0 20px;gap:24px;font-family:'IBM Plex Mono',monospace;font-size:10px;color:#5c6068;flex:none">
+      <span>3 UNIVERSES · 2 ACTIVE</span><span style="flex:1"></span><span>SAVED 12:04</span>
+    </div>
+  </div>
+</body></html>

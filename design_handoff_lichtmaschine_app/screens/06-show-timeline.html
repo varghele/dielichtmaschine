@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="de"><head><meta charset="utf-8"><title>Die Lichtmaschine · Timeline v2</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700;800;900&family=Barlow:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>*,*::before,*::after{box-sizing:border-box}html{background:#0e0e10}body{margin:0;font-family:Barlow,system-ui,sans-serif;display:flex;justify-content:center;align-items:flex-start;min-height:100vh}
+@keyframes lm-spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}@keyframes lm-pulse{0%,100%{opacity:0.35}50%{opacity:1}}</style>
+</head><body>
+<div data-screen-label="Timeline v2" style="width:1920px;height:1080px;background:#141416;display:flex;flex-direction:column;overflow:hidden">
+    <div style="height:48px;background:#1e1e1e;border-bottom:1px solid #3a3a3a;display:flex;align-items:center;padding:0 20px;gap:20px;flex:none">
+      <div style="display:flex;align-items:center;gap:10px">
+        <svg width="20" height="20" viewBox="0 0 64 64"><circle cx="32" cy="32" r="23" fill="none" stroke="#f4f1ea" stroke-width="11" stroke-dasharray="9.03 9.03" transform="rotate(-11.25 32 32)"></circle><circle cx="32" cy="32" r="8" fill="#f0562e"></circle></svg>
+        <span style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:15px;letter-spacing:0.09em;color:#f4f1ea">DIE LICHTMASCHINE</span>
+      </div>
+      <div style="width:1px;height:20px;background:#3a3a3a"></div>
+      <div style="display:flex;gap:2px;height:48px;align-items:stretch">
+        <div style="display:flex;align-items:center;padding:0 16px;font-family:'Barlow Condensed',sans-serif;font-weight:600;font-size:15px;letter-spacing:0.12em;color:#8d9299">SETUP</div>
+        <div style="display:flex;align-items:center;padding:0 16px;font-family:'Barlow Condensed',sans-serif;font-weight:600;font-size:15px;letter-spacing:0.12em;color:#f4f1ea;border-bottom:2px solid #f0562e">SHOW</div>
+        <div style="display:flex;align-items:center;padding:0 16px;font-family:'Barlow Condensed',sans-serif;font-weight:600;font-size:15px;letter-spacing:0.12em;color:#8d9299">AUTO</div>
+        <div style="display:flex;align-items:center;padding:0 16px;font-family:'Barlow Condensed',sans-serif;font-weight:600;font-size:15px;letter-spacing:0.12em;color:#8d9299">LIVE</div>
+      </div>
+      <div style="flex:1"></div>
+      <div style="display:flex;gap:6px;align-items:center">
+        <span title="Speichern" style="width:30px;height:30px;display:flex;align-items:center;justify-content:center;border:1px solid #3a3a3a;color:#c9cdd2;font-size:14px"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M8 2.5v7M5.5 7L8 9.5L10.5 7M3 11.5v2h10v-2"></path></svg></span>
+        <span title="Export (.qxw u. a.)" style="width:30px;height:30px;display:flex;align-items:center;justify-content:center;border:1px solid #3a3a3a;color:#c9cdd2;font-size:14px"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6.5 4H3v9h9V9.5M9 3h4v4M13 3L7.5 8.5"></path></svg></span>
+        <span title="Show morphen" style="width:30px;height:30px;display:flex;align-items:center;justify-content:center;border:1px solid #3a3a3a;color:#c9cdd2;font-size:14px"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 5.5h11M10.5 3L13 5.5L10.5 8M14 10.5H3M5.5 8L3 10.5L5.5 13"></path></svg></span>
+        <span title="Audio: Geräte &amp; Analyse" style="width:30px;height:30px;display:flex;align-items:center;justify-content:center;border:1px solid #3a3a3a;color:#c9cdd2;font-size:14px"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M2 6.5v3M5 4v8M8 2.5v11M11 5v6M14 6.5v3"></path></svg></span>
+        <span title="Einstellungen: Universen, Output, Theme" style="width:30px;height:30px;display:flex;align-items:center;justify-content:center;border:1px solid #3a3a3a;color:#c9cdd2;font-size:14px"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M2 4h12M2 8h12M2 12h12"></path><circle cx="10.5" cy="4" r="1.8"></circle><circle cx="5" cy="8" r="1.8"></circle><circle cx="11.5" cy="12" r="1.8"></circle></svg></span>
+        <span title="Menü: alles Weitere" style="width:30px;height:30px;display:flex;align-items:center;justify-content:center;border:1px solid #3a3a3a;color:#c9cdd2;font-size:13px"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M3 4.5h10M3 8h10M3 11.5h6"></path></svg></span>
+      </div>
+      <div style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:#8d9299">neon_ruinen.lms</div>
+      <div style="display:flex;align-items:center;gap:6px;padding:4px 10px;background:#252526;border:1px solid #3a3a3a"><span style="width:7px;height:7px;border-radius:50%;background:#4caf50"></span><span style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:#c9cdd2">ARTNET OUT · 44 Hz</span></div>
+    </div>
+    <!-- toolbar: transport + grid -->
+    <div style="height:40px;background:#18181a;border-bottom:1px solid #2d2d2d;display:flex;align-items:center;padding:0 16px;gap:10px;flex:none">
+      <div style="padding:4px 12px;font-size:12px;font-weight:600;color:#8d9299">Structure</div>
+      <div style="padding:4px 12px;font-size:12px;font-weight:600;color:#141416;background:#f0562e">Timeline</div>
+      <div style="width:1px;height:18px;background:#3a3a3a"></div>
+      <span style="font-family:'IBM Plex Mono',monospace;font-size:13px;color:#8d9299">⏮</span>
+      <span style="width:28px;height:22px;background:#f0562e;color:#141416;display:flex;align-items:center;justify-content:center;font-size:12px">▶</span>
+      <span style="font-family:'IBM Plex Mono',monospace;font-size:13px;color:#8d9299">⏹</span>
+      <span style="font-family:'IBM Plex Mono',monospace;font-size:12px;color:#f4f1ea;background:#252526;border:1px solid #3a3a3a;padding:3px 10px">BAR 28.3 · 01:52.6</span>
+      <div style="width:1px;height:18px;background:#3a3a3a"></div>
+      <span style="font-family:'IBM Plex Mono',monospace;font-size:9px;letter-spacing:0.1em;color:#5c6068">GRID</span>
+      <div style="display:flex;border:1px solid #3a3a3a">
+        <span style="padding:4px 10px;font-family:'IBM Plex Mono',monospace;font-size:10px;color:#8d9299">1/8</span>
+        <span style="padding:4px 10px;background:#f0562e;color:#141416;font-family:'IBM Plex Mono',monospace;font-size:10px;font-weight:600">1/4</span>
+        <span style="padding:4px 10px;font-family:'IBM Plex Mono',monospace;font-size:10px;color:#8d9299">1/2</span>
+        <span style="padding:4px 10px;font-family:'IBM Plex Mono',monospace;font-size:10px;color:#8d9299">1</span>
+        <span style="padding:4px 10px;font-family:'IBM Plex Mono',monospace;font-size:10px;color:#8d9299">1 BAR</span>
+        <span style="padding:4px 10px;font-family:'IBM Plex Mono',monospace;font-size:10px;color:#8d9299">2 BARS</span>
+      </div>
+      <span style="padding:4px 10px;background:rgba(240,86,46,0.12);border:1px solid #f0562e;font-family:'IBM Plex Mono',monospace;font-size:10px;color:#f0562e">SWING 56% ▾</span>
+      <span style="padding:4px 10px;border:1px solid #3a3a3a;font-family:'IBM Plex Mono',monospace;font-size:10px;color:#c9cdd2">SNAP ✓</span>
+      <span style="padding:4px 10px;border:1px solid #3a3a3a;font-family:'IBM Plex Mono',monospace;font-size:10px;color:#8d9299">TRIPLET</span>
+      <div style="flex:1"></div>
+      <span style="padding:5px 14px;background:#f0562e;color:#141416;font-family:'IBM Plex Mono',monospace;font-size:10px;font-weight:600">⚡ SHOW AUS AUDIO GENERIEREN</span>
+      <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:#8d9299">H-ZOOM ▁▃▆ · V-ZOOM ▁▃</span>
+    </div>
+    <div style="flex:1;display:flex;min-height:0">
+      <div style="flex:1;display:flex;flex-direction:column;min-width:0;position:relative">
+        <!-- regions strip (song parts) -->
+        <div style="height:30px;display:flex;flex:none;position:relative;border-bottom:1px solid #2d2d2d">
+          <div style="position:absolute;left:0;top:0;bottom:0;width:260px;border-right:1px solid #2d2d2d;background:#1e1e1e;display:flex;align-items:center;padding:0 12px"><span style="font-family:'IBM Plex Mono',monospace;font-size:9px;color:#5c6068">REGIONS = SONG PARTS</span></div>
+          <div style="position:absolute;left:260px;top:0;bottom:0;width:320px;background:#3d4045;display:flex;align-items:center;padding:0 10px;border-right:2px solid #141416"><span style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:14px;letter-spacing:0.06em;color:#f4f1ea">INTRO</span><span style="font-family:'IBM Plex Mono',monospace;font-size:9px;color:#c9cdd2;margin-left:8px">8 · 120</span></div>
+          <div style="position:absolute;left:580px;top:0;bottom:0;width:640px;background:#2a4a50;display:flex;align-items:center;padding:0 10px;border-right:2px solid #141416"><span style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:14px;letter-spacing:0.06em;color:#f4f1ea">VERSE 1</span><span style="font-family:'IBM Plex Mono',monospace;font-size:9px;color:#c9cdd2;margin-left:8px">16 · 126</span></div>
+          <div style="position:absolute;left:1220px;top:0;bottom:0;width:340px;background:#6b2318;display:flex;align-items:center;padding:0 10px"><span style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:14px;letter-spacing:0.06em;color:#f0562e">CHORUS 1</span><span style="font-family:'IBM Plex Mono',monospace;font-size:9px;color:#f2c4b8;margin-left:8px">8 · 128</span></div>
+        </div>
+        <!-- ruler -->
+        <div style="height:22px;flex:none;border-bottom:1px solid #2d2d2d;position:relative">
+          <div style="position:absolute;left:0;top:0;bottom:0;width:260px;border-right:1px solid #2d2d2d;background:#1e1e1e"></div>
+          <div style="position:absolute;left:260px;right:0;top:0;bottom:0;background-image:repeating-linear-gradient(90deg,#3a3a3a 0 1px,transparent 1px 160px),repeating-linear-gradient(90deg,#2d2d2d 0 1px,transparent 1px 40px)"></div>
+          <div style="position:absolute;left:264px;top:4px;font-family:'IBM Plex Mono',monospace;font-size:9px;color:#8d9299">1</div>
+          <div style="position:absolute;left:424px;top:4px;font-family:'IBM Plex Mono',monospace;font-size:9px;color:#8d9299">5</div>
+          <div style="position:absolute;left:584px;top:4px;font-family:'IBM Plex Mono',monospace;font-size:9px;color:#8d9299">9</div>
+          <div style="position:absolute;left:744px;top:4px;font-family:'IBM Plex Mono',monospace;font-size:9px;color:#8d9299">13</div>
+          <div style="position:absolute;left:904px;top:4px;font-family:'IBM Plex Mono',monospace;font-size:9px;color:#8d9299">17</div>
+          <div style="position:absolute;left:1064px;top:4px;font-family:'IBM Plex Mono',monospace;font-size:9px;color:#8d9299">21</div>
+          <div style="position:absolute;left:1224px;top:4px;font-family:'IBM Plex Mono',monospace;font-size:9px;color:#f0562e">25</div>
+          <div style="position:absolute;left:1384px;top:4px;font-family:'IBM Plex Mono',monospace;font-size:9px;color:#8d9299">29</div>
+        </div>
+        <!-- waveform -->
+        <div style="height:38px;flex:none;border-bottom:1px solid #2d2d2d;display:flex">
+          <div style="width:260px;flex:none;background:#1e1e1e;border-right:1px solid #2d2d2d;display:flex;align-items:center;padding:0 12px"><span style="font-family:'IBM Plex Mono',monospace;font-size:9px;color:#5c6068">AUDIO · neon_ruinen.wav</span></div>
+          <div style="flex:1;background:repeating-linear-gradient(90deg,#26262a 0 2px,#1a1a1c 2px 5px);display:flex;align-items:center;justify-content:center"><span style="font-family:'IBM Plex Mono',monospace;font-size:9px;color:#5c6068">[ waveform ]</span></div>
+        </div>
+        <!-- lanes with full grid -->
+        <div style="flex:1;position:relative;overflow:hidden;background-image:linear-gradient(90deg,transparent 260px,rgba(0,0,0,0) 260px)">
+          <!-- grid layer -->
+          <div style="position:absolute;left:260px;right:0;top:0;bottom:0;background-image:repeating-linear-gradient(90deg,rgba(141,146,153,0.22) 0 1px,transparent 1px 160px),repeating-linear-gradient(90deg,rgba(141,146,153,0.12) 0 1px,transparent 1px 40px),repeating-linear-gradient(90deg,rgba(141,146,153,0.05) 0 1px,transparent 1px 10px)"></div>
+          <!-- region tints through lanes -->
+          <div style="position:absolute;left:1220px;width:340px;top:0;bottom:0;background:rgba(240,86,46,0.03)"></div>
+          <div style="position:absolute;left:580px;width:640px;top:0;bottom:0;background:rgba(78,203,212,0.025)"></div>
+          <!-- LANE 1: FRONT PARS -->
+          <div style="position:relative;height:128px;border-bottom:1px solid #2d2d2d;display:flex">
+            <div style="position:relative;width:260px;flex:none;background:#1e1e1e;border-right:1px solid #2d2d2d;border-left:3px solid #d9a441;padding:8px 12px;z-index:2">
+              <div style="display:flex;justify-content:space-between;align-items:baseline"><span style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:15px;letter-spacing:0.05em;color:#f4f1ea">FRONT PARS</span><span style="font-family:'IBM Plex Mono',monospace;font-size:9px;color:#5c6068">4 FIX</span></div>
+              <div style="position:absolute;left:12px;top:22px;font-family:'IBM Plex Mono',monospace;font-size:8px;color:#5c6068;line-height:24px">DIM<br>COL<br>MOV<br>SPC</div>
+            </div>
+            <div style="flex:1;position:relative">
+              <!-- effect block A: verse -->
+              <div style="position:absolute;left:320px;width:720px;top:4px;bottom:4px;border:1px solid #d9a441;background:rgba(217,164,65,0.06)">
+                <div style="height:18px;background:rgba(217,164,65,0.25);display:flex;align-items:center;justify-content:space-between;padding:0 6px"><span style="font-family:'IBM Plex Mono',monospace;font-size:9px;color:#f4f1ea;font-weight:600">VERSE WASH · BARS 9–26</span><span style="font-family:'IBM Plex Mono',monospace;font-size:8px;color:#e8d5a0">4 SUB</span></div>
+                <div style="height:24px;border-bottom:1px solid rgba(217,164,65,0.25);position:relative"><div style="position:absolute;left:0;top:2px;bottom:2px;width:438px;background:rgba(217,164,65,0.22);border:1px solid #d9a441;display:flex;align-items:center;padding:0 6px"><span style="font-family:'IBM Plex Mono',monospace;font-size:9px;color:#e8d5a0">DIM · PULSE 1/2</span></div><div style="position:absolute;left:442px;top:2px;bottom:2px;width:278px;background:rgba(217,164,65,0.22);border:1px dashed #d9a441;display:flex;align-items:center;padding:0 6px"><span style="font-family:'IBM Plex Mono',monospace;font-size:9px;color:#e8d5a0">DIM · FADE ↘</span></div></div>
+                <div style="height:24px;border-bottom:1px solid rgba(217,164,65,0.25);display:flex;align-items:center;padding:0 6px;background:linear-gradient(90deg,rgba(255,180,60,0.3),rgba(255,120,40,0.3))"><span style="font-family:'IBM Plex Mono',monospace;font-size:9px;color:#f4f1ea">COL · WARM WHITE</span></div>
+                <div style="height:24px;border-bottom:1px solid rgba(217,164,65,0.25);display:flex;align-items:center;padding:0 6px"><span style="font-family:'IBM Plex Mono',monospace;font-size:9px;color:#5c6068">MOV · -</span></div>
+                <div style="height:24px;display:flex;align-items:center;padding:0 6px"><span style="font-family:'IBM Plex Mono',monospace;font-size:9px;color:#5c6068">SPC · -</span></div>
+              </div>
+              <!-- effect block B: chorus, overlapping -->
+              <div style="position:absolute;left:960px;width:440px;top:4px;bottom:4px;border:1.5px solid #f0562e;background:rgba(240,86,46,0.05);z-index:3">
+                <div style="height:18px;background:rgba(240,86,46,0.3);display:flex;align-items:center;justify-content:space-between;padding:0 6px"><span style="font-family:'IBM Plex Mono',monospace;font-size:9px;color:#f4f1ea;font-weight:600">CHORUS HIT · BARS 23–33 ▶ SELECTED</span><span style="font-family:'IBM Plex Mono',monospace;font-size:8px;color:#f0562e">4 SUB</span></div>
+                <div style="height:24px;border-bottom:1px solid rgba(240,86,46,0.2);display:flex;align-items:center;padding:0 6px;background:rgba(240,86,46,0.08)"><span style="font-family:'IBM Plex Mono',monospace;font-size:9px;color:#f4f1ea">DIM · CHASE 1/4</span></div>
+                <div style="height:24px;border-bottom:1px solid rgba(240,86,46,0.2);display:flex;align-items:center;padding:0 6px;background:linear-gradient(90deg,rgba(255,40,80,0.35),rgba(200,60,220,0.35))"><span style="font-family:'IBM Plex Mono',monospace;font-size:9px;color:#f4f1ea">COL · RED→MAGENTA</span></div>
+                <div style="height:24px;border-bottom:1px solid rgba(240,86,46,0.2);display:flex;align-items:center;padding:0 6px"><span style="font-family:'IBM Plex Mono',monospace;font-size:9px;color:#5c6068">MOV · -</span></div>
+                <div style="height:24px;display:flex;align-items:center;padding:0 6px"><span style="font-family:'IBM Plex Mono',monospace;font-size:9px;color:#f4f1ea">SPC · IRIS PULSE</span></div>
+              </div>
+              <!-- overlap zone -->
+              <div style="position:absolute;left:960px;width:80px;top:4px;bottom:4px;z-index:4;background:repeating-linear-gradient(45deg,rgba(240,86,46,0.14) 0 5px,transparent 5px 10px);border-left:1px dashed #f0562e;border-right:1px dashed #d9a441">
+                <svg width="80" height="18" viewBox="0 0 80 18" style="position:absolute;bottom:0;left:0"><path d="M0 2 L80 16 M0 16 L80 2" stroke="#f0562e" stroke-width="1.5" fill="none"></path></svg>
+              </div>
+              <div style="position:absolute;left:952px;top:-2px;z-index:5;background:#f0562e;color:#141416;font-family:'IBM Plex Mono',monospace;font-size:8px;font-weight:600;padding:2px 6px">OVERLAP: XFADE · 2 BARS ▾</div>
+            </div>
+          </div>
+          <!-- LANE 2: REAR WASH -->
+          <div style="position:relative;height:128px;border-bottom:1px solid #2d2d2d;display:flex">
+            <div style="position:relative;width:260px;flex:none;background:#1e1e1e;border-right:1px solid #2d2d2d;border-left:3px solid #4ecbd4;padding:8px 12px;z-index:2">
+              <div style="display:flex;justify-content:space-between;align-items:baseline"><span style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:15px;letter-spacing:0.05em;color:#f4f1ea">REAR WASH</span><span style="font-family:'IBM Plex Mono',monospace;font-size:9px;color:#5c6068">2 FIX</span></div>
+              <div style="position:absolute;left:12px;top:22px;font-family:'IBM Plex Mono',monospace;font-size:8px;color:#5c6068;line-height:24px">DIM<br>COL<br>MOV<br>SPC</div>
+            </div>
+            <div style="flex:1;position:relative">
+              <div style="position:absolute;left:320px;width:640px;top:4px;bottom:4px;border:1px solid #4ecbd4;background:rgba(78,203,212,0.05)">
+                <div style="height:18px;background:rgba(78,203,212,0.22);display:flex;align-items:center;padding:0 6px"><span style="font-family:'IBM Plex Mono',monospace;font-size:9px;color:#f4f1ea;font-weight:600">VERSE TEXTURE · BARS 9–24</span></div>
+                <div style="height:24px;border-bottom:1px solid rgba(78,203,212,0.2);display:flex;align-items:center;padding:0 6px;background:rgba(78,203,212,0.08)"><span style="font-family:'IBM Plex Mono',monospace;font-size:9px;color:#a8dfe4">DIM · WAVE 1 BAR</span></div>
+                <div style="height:24px;border-bottom:1px solid rgba(78,203,212,0.2);display:flex;align-items:center;padding:0 6px;background:linear-gradient(90deg,rgba(60,200,220,0.3),rgba(60,120,255,0.3))"><span style="font-family:'IBM Plex Mono',monospace;font-size:9px;color:#f4f1ea">COL · CYAN→BLUE</span></div>
+                <div style="height:24px;border-bottom:1px solid rgba(78,203,212,0.2);display:flex;align-items:center;padding:0 6px"><span style="font-family:'IBM Plex Mono',monospace;font-size:9px;color:#5c6068">MOV · -</span></div>
+                <div style="height:24px;display:flex;align-items:center;padding:0 6px"><span style="font-family:'IBM Plex Mono',monospace;font-size:9px;color:#5c6068">SPC · -</span></div>
+              </div>
+              <div style="position:absolute;left:920px;width:480px;top:4px;bottom:4px;border:1px solid #4ecbd4;background:rgba(78,203,212,0.05)">
+                <div style="height:18px;background:rgba(78,203,212,0.22);display:flex;align-items:center;justify-content:space-between;padding:0 6px"><span style="font-family:'IBM Plex Mono',monospace;font-size:9px;color:#f4f1ea;font-weight:600">CHORUS THROB · 23–33</span></div>
+                <div style="height:24px;border-bottom:1px solid rgba(78,203,212,0.2);display:flex;align-items:center;padding:0 6px;background:rgba(78,203,212,0.08)"><span style="font-family:'IBM Plex Mono',monospace;font-size:9px;color:#a8dfe4">DIM · THROB 1/1</span></div>
+                <div style="height:24px;border-bottom:1px solid rgba(78,203,212,0.2);display:flex;align-items:center;padding:0 6px;background:linear-gradient(90deg,rgba(60,200,220,0.3),rgba(200,60,220,0.3))"><span style="font-family:'IBM Plex Mono',monospace;font-size:9px;color:#f4f1ea">COL · CYAN→MAGENTA</span></div>
+                <div style="height:24px;border-bottom:1px solid rgba(78,203,212,0.2);display:flex;align-items:center;padding:0 6px"><span style="font-family:'IBM Plex Mono',monospace;font-size:9px;color:#a8dfe4">MOV · SWEEP FAN</span></div>
+                <div style="height:24px;display:flex;align-items:center;padding:0 6px"><span style="font-family:'IBM Plex Mono',monospace;font-size:9px;color:#5c6068">SPC · -</span></div>
+              </div>
+              <div style="position:absolute;left:920px;width:40px;top:4px;bottom:4px;z-index:4;background:repeating-linear-gradient(45deg,rgba(78,203,212,0.16) 0 5px,transparent 5px 10px);border-left:1px dashed #4ecbd4"></div>
+              <div style="position:absolute;left:912px;top:-2px;z-index:5;background:#252526;border:1px solid #4ecbd4;color:#a8dfe4;font-family:'IBM Plex Mono',monospace;font-size:8px;padding:2px 6px">OVERLAP: LTP ▾</div>
+            </div>
+          </div>
+          <!-- LANE 3: MOVERS -->
+          <div style="position:relative;height:128px;border-bottom:1px solid #2d2d2d;display:flex">
+            <div style="position:relative;width:260px;flex:none;background:#1e1e1e;border-right:1px solid #2d2d2d;border-left:3px solid #c95fd0;padding:8px 12px;z-index:2">
+              <div style="display:flex;justify-content:space-between;align-items:baseline"><span style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:15px;letter-spacing:0.05em;color:#f4f1ea">MOVERS <span style="font-size:11px;color:#8d9299">L+R</span></span><span style="font-family:'IBM Plex Mono',monospace;font-size:9px;color:#5c6068">MULTI</span></div>
+              <div style="position:absolute;left:12px;top:22px;font-family:'IBM Plex Mono',monospace;font-size:8px;color:#5c6068;line-height:24px">DIM<br>COL<br>MOV<br>SPC</div>
+            </div>
+            <div style="flex:1;position:relative">
+              <div style="position:absolute;left:320px;width:640px;top:4px;bottom:4px;border:1px solid #c95fd0;background:rgba(201,95,208,0.05)">
+                <div style="height:18px;background:rgba(201,95,208,0.22);display:flex;align-items:center;padding:0 6px"><span style="font-family:'IBM Plex Mono',monospace;font-size:9px;color:#f4f1ea;font-weight:600">VERSE ORBIT · BARS 9–24</span></div>
+                <div style="height:24px;border-bottom:1px solid rgba(201,95,208,0.2);display:flex;align-items:center;padding:0 6px;background:rgba(201,95,208,0.08)"><span style="font-family:'IBM Plex Mono',monospace;font-size:9px;color:#e5c9ea">DIM · PING-PONG · MIRROR</span></div>
+                <div style="height:24px;border-bottom:1px solid rgba(201,95,208,0.2);display:flex;align-items:center;padding:0 6px;background:linear-gradient(90deg,rgba(200,60,220,0.3),rgba(255,60,120,0.3))"><span style="font-family:'IBM Plex Mono',monospace;font-size:9px;color:#f4f1ea">COL · MAGENTA→PINK</span></div>
+                <div style="height:24px;border-bottom:1px solid rgba(201,95,208,0.2);display:flex;align-items:center;padding:0 6px;background:rgba(78,203,212,0.08)"><span style="font-family:'IBM Plex Mono',monospace;font-size:9px;color:#a8dfe4">MOV · CIRCLE SLOW</span></div>
+                <div style="height:24px;display:flex;align-items:center;padding:0 6px"><span style="font-family:'IBM Plex Mono',monospace;font-size:9px;color:#5c6068">SPC · -</span></div>
+              </div>
+              <div style="position:absolute;left:960px;width:440px;top:4px;bottom:4px;border:1px solid #c95fd0;background:rgba(201,95,208,0.05)">
+                <div style="height:18px;background:rgba(201,95,208,0.22);display:flex;align-items:center;padding:0 6px"><span style="font-family:'IBM Plex Mono',monospace;font-size:9px;color:#f4f1ea;font-weight:600">CHORUS FIG-8 · 25–33</span></div>
+                <div style="height:24px;border-bottom:1px solid rgba(201,95,208,0.2);display:flex;align-items:center;padding:0 6px;background:rgba(201,95,208,0.08)"><span style="font-family:'IBM Plex Mono',monospace;font-size:9px;color:#e5c9ea">DIM · STATIC FULL</span></div>
+                <div style="height:24px;border-bottom:1px solid rgba(201,95,208,0.2);display:flex;align-items:center;padding:0 6px;background:linear-gradient(90deg,rgba(200,60,220,0.3),rgba(255,60,120,0.3))"><span style="font-family:'IBM Plex Mono',monospace;font-size:9px;color:#f4f1ea">COL · MAGENTA→PINK</span></div>
+                <div style="height:24px;border-bottom:1px solid rgba(201,95,208,0.2);position:relative"><div style="position:absolute;left:0;top:2px;bottom:2px;width:276px;background:rgba(78,203,212,0.16);border:1px solid #4ecbd4;display:flex;align-items:center;padding:0 6px"><span style="font-family:'IBM Plex Mono',monospace;font-size:9px;color:#a8dfe4">MOV · FIG-8 · 2 BAR</span></div><div style="position:absolute;left:280px;top:2px;bottom:2px;width:158px;background:rgba(78,203,212,0.16);border:1px solid #4ecbd4;display:flex;align-items:center;padding:0 6px"><span style="font-family:'IBM Plex Mono',monospace;font-size:9px;color:#a8dfe4">MOV · SWEEP</span></div></div>
+                <div style="height:24px;display:flex;align-items:center;padding:0 6px"><span style="font-family:'IBM Plex Mono',monospace;font-size:9px;color:#e5c9ea">SPC · GOBO 3 + PRISM</span></div>
+              </div>
+            </div>
+          </div>
+          <!-- LANE 4: PIXEL BAR -->
+          <div style="position:relative;height:128px;border-bottom:1px solid #2d2d2d;display:flex">
+            <div style="position:relative;width:260px;flex:none;background:#1e1e1e;border-right:1px solid #2d2d2d;border-left:3px solid #6f9e4c;padding:8px 12px;z-index:2">
+              <div style="display:flex;justify-content:space-between;align-items:baseline"><span style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:15px;letter-spacing:0.05em;color:#f4f1ea">PIXEL BAR</span><span style="font-family:'IBM Plex Mono',monospace;font-size:9px;color:#5c6068">12-CELL</span></div>
+              <div style="position:absolute;left:12px;top:22px;font-family:'IBM Plex Mono',monospace;font-size:8px;color:#5c6068;line-height:24px">DIM<br>COL<br>MOV<br>SPC</div>
+            </div>
+            <div style="flex:1;position:relative">
+              <div style="position:absolute;left:960px;width:440px;top:4px;bottom:4px;border:1px solid #6f9e4c;background:rgba(111,158,76,0.05)">
+                <div style="height:18px;background:rgba(111,158,76,0.22);display:flex;align-items:center;padding:0 6px"><span style="font-family:'IBM Plex Mono',monospace;font-size:9px;color:#f4f1ea;font-weight:600">CHORUS SPARKLE · 25–33</span></div>
+                <div style="height:24px;border-bottom:1px solid rgba(111,158,76,0.2);display:flex;align-items:center;padding:0 6px;background:rgba(111,158,76,0.08)"><span style="font-family:'IBM Plex Mono',monospace;font-size:9px;color:#c9e0b8">DIM · SPARKLE</span></div>
+                <div style="height:24px;border-bottom:1px solid rgba(111,158,76,0.2);display:flex;align-items:center;padding:0 6px;background:linear-gradient(90deg,rgba(255,120,40,0.3),rgba(255,40,80,0.3),rgba(200,60,220,0.3))"><span style="font-family:'IBM Plex Mono',monospace;font-size:9px;color:#f4f1ea">COL · SECTION PALETTE</span></div>
+                <div style="height:24px;border-bottom:1px solid rgba(111,158,76,0.2);display:flex;align-items:center;padding:0 6px"><span style="font-family:'IBM Plex Mono',monospace;font-size:9px;color:#5c6068">MOV · -</span></div>
+                <div style="height:24px;display:flex;align-items:center;padding:0 6px"><span style="font-family:'IBM Plex Mono',monospace;font-size:9px;color:#5c6068">SPC · -</span></div>
+              </div>
+              <div style="position:absolute;left:660px;width:120px;top:30px;height:26px;border:1px dashed #6f9e4c;background:rgba(111,158,76,0.04);display:flex;align-items:center;padding:0 6px"><span style="font-family:'IBM Plex Mono',monospace;font-size:8px;color:#6f9e4c">DIM-ONLY BLOCK · FILL</span></div>
+            </div>
+          </div>
+          <div style="display:flex;align-items:center;justify-content:center;padding:6px"><span style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:#5c6068">▼ SUNSTRIP · scroll · V-ZOOM to fit all lanes</span></div>
+          <!-- playhead -->
+          <div style="position:absolute;top:0;bottom:0;left:1370px;width:2px;background:#f0562e;z-index:6"></div>
+          <div style="position:absolute;top:0;left:1372px;background:#f0562e;color:#141416;font-family:'IBM Plex Mono',monospace;font-size:8px;padding:1px 5px;z-index:6">28.3</div>
+        </div>
+      </div>
+      <!-- right pane -->
+      <div style="width:360px;background:#1e1e1e;border-left:1px solid #2d2d2d;display:flex;flex-direction:column;flex:none">
+        <div style="height:28px;display:flex;align-items:center;justify-content:space-between;padding:0 14px;border-bottom:1px solid #2d2d2d;flex:none"><span style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.12em;color:#5c6068">3D PREVIEW</span><span style="display:flex;gap:12px"><span style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:#8d9299" title="Pop-out auf 2. Monitor">⧉ POP-OUT</span><span style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:#8d9299">⟩⟩</span></span></div>
+        <div style="height:190px;background:repeating-linear-gradient(45deg,#161618 0 12px,#1a1a1c 12px 24px);display:flex;align-items:center;justify-content:center;border-bottom:1px solid #2d2d2d;flex:none"><span style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:#5c6068">[ live render ]</span></div>
+        <!-- effect block inspector -->
+        <div style="padding:12px 14px;flex:1;overflow:hidden">
+          <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:10px"><span style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:16px;letter-spacing:0.05em;color:#f0562e">EFFECT BLOCK · CHORUS HIT</span></div>
+          <div style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:#8d9299;margin-bottom:10px">FRONT PARS · BARS 23–33 · SNAPS TO 1/4 GRID</div>
+          <div style="display:flex;flex-direction:column;gap:5px;margin-bottom:12px">
+            <div style="display:flex;justify-content:space-between;padding:7px 10px;background:#252526;border:1px solid #3a3a3a;border-left:3px solid #d9a441"><span style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:#f4f1ea">DIM · CHASE</span><span style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:#8d9299">1/4 · L→R ▾</span></div>
+            <div style="display:flex;justify-content:space-between;padding:7px 10px;background:#252526;border:1px solid #3a3a3a;border-left:3px solid #c95fd0"><span style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:#f4f1ea">COL · RED→MAGENTA</span><span style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:#8d9299">RAMP ▾</span></div>
+            <div style="display:flex;justify-content:space-between;padding:7px 10px;background:#252526;border:1px solid #3a3a3a;border-left:3px solid #3a3a3a"><span style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:#5c6068">MOV · EMPTY</span><span style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:#5c6068">＋</span></div>
+            <div style="display:flex;justify-content:space-between;padding:7px 10px;background:#252526;border:1px solid #3a3a3a;border-left:3px solid #4ecbd4"><span style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:#f4f1ea">SPC · IRIS PULSE</span><span style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:#8d9299">1/1 ▾</span></div>
+          </div>
+          <div style="font-family:'IBM Plex Mono',monospace;font-size:9px;letter-spacing:0.12em;color:#5c6068;margin-bottom:6px">OVERLAP WITH "VERSE WASH" · 2 BARS</div>
+          <div style="display:flex;gap:5px;margin-bottom:8px">
+            <span style="flex:1;padding:7px 0;text-align:center;background:rgba(240,86,46,0.12);border:1px solid #f0562e;font-family:'IBM Plex Mono',monospace;font-size:10px;color:#f0562e">XFADE</span>
+            <span style="flex:1;padding:7px 0;text-align:center;background:#252526;border:1px solid #3a3a3a;font-family:'IBM Plex Mono',monospace;font-size:10px;color:#8d9299">HTP</span>
+            <span style="flex:1;padding:7px 0;text-align:center;background:#252526;border:1px solid #3a3a3a;font-family:'IBM Plex Mono',monospace;font-size:10px;color:#8d9299">LTP</span>
+            <span style="flex:1;padding:7px 0;text-align:center;background:#252526;border:1px solid #3a3a3a;font-family:'IBM Plex Mono',monospace;font-size:10px;color:#8d9299">ADD</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:8px"><span style="font-family:'IBM Plex Mono',monospace;font-size:9px;color:#5c6068">XFADE CURVE</span><span style="padding:4px 10px;background:#252526;border:1px solid #3a3a3a;font-family:'IBM Plex Mono',monospace;font-size:10px;color:#c9cdd2">EQUAL POWER ▾</span><span style="font-family:'IBM Plex Mono',monospace;font-size:9px;color:#5c6068">LEN</span><span style="padding:4px 10px;background:#252526;border:1px solid #3a3a3a;font-family:'IBM Plex Mono',monospace;font-size:10px;color:#c9cdd2">2 BARS ▾</span></div>
+        </div>
+        <div style="padding:10px 14px;border-top:1px solid #2d2d2d;font-family:'IBM Plex Mono',monospace;font-size:9px;color:#5c6068;line-height:1.6">QT6: lanes = QGraphicsView scene; blocks = QGraphicsRectItem tree (header + 4 sub-items); grid painted in drawBackground(); region strip + ruler = custom QWidget paintEvent. No effects beyond flat fills + 1px lines.</div>
+      </div>
+    </div>
+    <div style="height:26px;background:#1e1e1e;border-top:1px solid #3a3a3a;display:flex;align-items:center;padding:0 20px;gap:24px;font-family:'IBM Plex Mono',monospace;font-size:10px;color:#5c6068;flex:none">
+      <span>DOUBLE-CLICK EMPTY LANE = NEW EFFECT BLOCK (4 SUBLANES) · DRAG EDGE = RESIZE, SNAPS TO GRID · DRAG ONTO NEIGHBOUR = OVERLAP</span><span style="flex:1"></span><span>EXPORT .QXW READY</span>
+    </div>
+  </div>
+</body></html>

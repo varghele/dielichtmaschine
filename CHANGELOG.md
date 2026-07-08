@@ -25,6 +25,18 @@ verbatim as the GitHub Release notes (see [docs/releasing.md](docs/releasing.md)
 
 ### Added
 
+- **Home screen rebuilt against the original design reference.** The
+  starting window now matches screen 01 of the design handoff: the
+  brand lockup (rotor beside the two-line wordmark) with the accent
+  rule and slogan, NEW PROJECT / OPEN actions, recent projects as
+  bordered rows with relative age (today / yesterday / N days ago),
+  and the new FROM ZERO TO SHOW checklist - five onboarding steps
+  whose done-state is computed live from the project (universes
+  patched, fixtures imported, placed on stage, structure defined,
+  timeline filled), with the current step highlighted and every row
+  jumping straight to its screen. The topbar reads "no project
+  loaded" until a project exists, and the status bar carries
+  dielichtmaschine.de.
 - **Truss docking: a truss is its own layer.** Placing a truss on the
   stage plan now auto-creates a stage layer for it (Truss 1, Truss 2,
   ... at a 4 m default hang height). Drop a fixture onto the truss to

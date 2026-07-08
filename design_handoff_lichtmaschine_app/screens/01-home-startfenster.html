@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="de"><head><meta charset="utf-8"><title>Die Lichtmaschine · Home</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700;800;900&family=Barlow:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>*,*::before,*::after{box-sizing:border-box}html{background:#0e0e10}body{margin:0;font-family:Barlow,system-ui,sans-serif;display:flex;justify-content:center;align-items:flex-start;min-height:100vh}
+@keyframes lm-spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}@keyframes lm-pulse{0%,100%{opacity:0.35}50%{opacity:1}}</style>
+</head><body>
+<div data-screen-label="Home" style="width:1920px;height:1080px;background:#141416;display:flex;flex-direction:column;overflow:hidden">
+    <!-- top bar -->
+    <div style="height:48px;background:#1e1e1e;border-bottom:1px solid #3a3a3a;display:flex;align-items:center;padding:0 20px;gap:20px;flex:none">
+      <div style="display:flex;align-items:center;gap:10px">
+        <svg width="20" height="20" viewBox="0 0 64 64"><circle cx="32" cy="32" r="23" fill="none" stroke="#f4f1ea" stroke-width="11" stroke-dasharray="9.03 9.03" transform="rotate(-11.25 32 32)"></circle><circle cx="32" cy="32" r="8" fill="#f0562e"></circle></svg>
+        <span style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:15px;letter-spacing:0.09em;color:#f4f1ea">DIE LICHTMASCHINE</span>
+      </div>
+      <div style="width:1px;height:20px;background:#3a3a3a"></div>
+      <div style="display:flex;gap:2px;height:48px;align-items:stretch">
+        <div style="display:flex;align-items:center;padding:0 16px;font-family:'Barlow Condensed',sans-serif;font-weight:600;font-size:15px;letter-spacing:0.12em;color:#8d9299">SETUP</div>
+        <div style="display:flex;align-items:center;padding:0 16px;font-family:'Barlow Condensed',sans-serif;font-weight:600;font-size:15px;letter-spacing:0.12em;color:#8d9299">SHOW</div>
+        <div style="display:flex;align-items:center;padding:0 16px;font-family:'Barlow Condensed',sans-serif;font-weight:600;font-size:15px;letter-spacing:0.12em;color:#8d9299">AUTO</div>
+        <div style="display:flex;align-items:center;padding:0 16px;font-family:'Barlow Condensed',sans-serif;font-weight:600;font-size:15px;letter-spacing:0.12em;color:#8d9299">LIVE</div>
+      </div>
+      <div style="flex:1"></div>
+      <div style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:#5c6068">no project loaded</div>
+    </div>
+    <!-- body -->
+    <div style="flex:1;display:flex;align-items:center;justify-content:center;gap:80px;background-image:linear-gradient(rgba(141,146,153,0.05) 1px,transparent 1px),linear-gradient(90deg,rgba(141,146,153,0.05) 1px,transparent 1px);background-size:32px 32px">
+      <div style="display:flex;flex-direction:column;align-items:flex-start;gap:20px;width:460px">
+        <div style="display:flex;align-items:center;gap:18px">
+        <svg width="64" height="64" viewBox="0 0 64 64" style="flex:none"><circle cx="32" cy="32" r="30" fill="none" stroke="#5c6068" stroke-width="1.5"></circle><circle cx="32" cy="32" r="21" fill="none" stroke="#f4f1ea" stroke-width="8" stroke-dasharray="8.24 8.24" transform="rotate(-11.25 32 32)"></circle><circle cx="32" cy="32" r="6" fill="#f0562e"></circle></svg>
+        <div>
+          <div style="font-family:'Barlow Condensed',sans-serif;font-weight:800;font-size:52px;line-height:0.95;letter-spacing:0.03em;color:#f4f1ea">DIE LICHTMASCHINE</div>
+          <div style="margin-top:10px;display:flex;align-items:center;gap:12px"><div style="height:3px;width:80px;background:#f0562e"></div><span style="font-family:'IBM Plex Mono',monospace;font-size:12px;letter-spacing:0.14em;color:#8d9299">LET THERE BE LIGHT</span></div>
+        </div>
+        </div>
+        <div style="display:flex;gap:12px;margin-top:12px">
+          <div style="padding:12px 24px;background:#f0562e;color:#141416;font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:17px;letter-spacing:0.08em">NEW PROJECT</div>
+          <div style="padding:12px 24px;border:1px solid #3a3a3a;color:#c9cdd2;font-family:'Barlow Condensed',sans-serif;font-weight:600;font-size:17px;letter-spacing:0.08em">OPEN…</div>
+        </div>
+        <div style="margin-top:8px;width:100%">
+          <div style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.12em;color:#5c6068;margin-bottom:8px">RECENT</div>
+          <div style="display:flex;flex-direction:column">
+            <div style="display:flex;justify-content:space-between;padding:9px 12px;background:#1e1e1e;border:1px solid #2d2d2d"><span style="font-size:14px;color:#c9cdd2">neon_ruinen.lms</span><span style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:#5c6068">yesterday</span></div>
+            <div style="display:flex;justify-content:space-between;padding:9px 12px;background:#1e1e1e;border:1px solid #2d2d2d;border-top:none"><span style="font-size:14px;color:#c9cdd2">proberaum_rig.lms</span><span style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:#5c6068">3 days ago</span></div>
+          </div>
+        </div>
+      </div>
+      <!-- checklist -->
+      <div style="width:560px;background:#1e1e1e;border:1px solid #3a3a3a">
+        <div style="padding:14px 20px;border-bottom:1px solid #2d2d2d;display:flex;justify-content:space-between;align-items:baseline">
+          <span style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:18px;letter-spacing:0.08em;color:#f4f1ea">FROM ZERO TO SHOW</span>
+          <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:#5c6068">2 / 5 DONE</span>
+        </div>
+        <div style="display:flex;gap:14px;padding:14px 20px;border-bottom:1px solid #2d2d2d;align-items:center">
+          <span style="font-family:'IBM Plex Mono',monospace;font-size:12px;color:#f0562e;width:20px">✓</span>
+          <div style="flex:1"><div style="font-size:14px;font-weight:600;color:#8d9299;text-decoration:line-through">Add a universe, pick DMX output</div></div>
+          <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:#5c6068">SETUP · UNIVERSES</span>
+        </div>
+        <div style="display:flex;gap:14px;padding:14px 20px;border-bottom:1px solid #2d2d2d;align-items:center">
+          <span style="font-family:'IBM Plex Mono',monospace;font-size:12px;color:#f0562e;width:20px">✓</span>
+          <div style="flex:1"><div style="font-size:14px;font-weight:600;color:#8d9299;text-decoration:line-through">Import fixtures, group them by role</div></div>
+          <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:#5c6068">SETUP · FIXTURES</span>
+        </div>
+        <div style="display:flex;gap:14px;padding:14px 20px;border-bottom:1px solid #2d2d2d;align-items:center;background:#252526;border-left:3px solid #f0562e">
+          <span style="font-family:'IBM Plex Mono',monospace;font-size:12px;color:#8d9299;width:20px">03</span>
+          <div style="flex:1"><div style="font-size:14px;font-weight:600;color:#f4f1ea">Place fixtures on the stage plot</div><div style="font-size:12px;color:#8d9299;margin-top:2px">Drag into position · the 3D pane shows what you're placing.</div></div>
+          <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:#f0562e">SETUP · STAGE →</span>
+        </div>
+        <div style="display:flex;gap:14px;padding:14px 20px;border-bottom:1px solid #2d2d2d;align-items:center">
+          <span style="font-family:'IBM Plex Mono',monospace;font-size:12px;color:#8d9299;width:20px">04</span>
+          <div style="flex:1"><div style="font-size:14px;font-weight:600;color:#c9cdd2">Define the song structure</div><div style="font-size:12px;color:#8d9299;margin-top:2px">Parts, BPM, time signature · the grid everything snaps to.</div></div>
+          <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:#5c6068">SHOW · STRUCTURE</span>
+        </div>
+        <div style="display:flex;gap:14px;padding:14px 20px;align-items:center">
+          <span style="font-family:'IBM Plex Mono',monospace;font-size:12px;color:#8d9299;width:20px">05</span>
+          <div style="flex:1"><div style="font-size:14px;font-weight:600;color:#c9cdd2">Build the show · or let the machine generate one</div><div style="font-size:12px;color:#8d9299;margin-top:2px">Paint blocks on the timeline, drop riffs, or run Autogenerate.</div></div>
+          <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:#5c6068">SHOW · TIMELINE</span>
+        </div>
+      </div>
+    </div>
+    <!-- status bar -->
+    <div style="height:26px;background:#1e1e1e;border-top:1px solid #3a3a3a;display:flex;align-items:center;padding:0 20px;gap:24px;font-family:'IBM Plex Mono',monospace;font-size:10px;color:#5c6068;flex:none">
+      <span>v1.0.0</span><span>ARTNET OFF</span><span style="flex:1"></span><span>dielichtmaschine.de</span>
+    </div>
+  </div>
+</body></html>

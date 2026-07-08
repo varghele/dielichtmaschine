@@ -139,8 +139,9 @@ class Ui_MainWindow(object):
             point_size=8, tracking_em=0.1)
         self.status_hint.setObjectName("StatusHint")
         self.statusbar.addWidget(self.status_hint)
-        version_label = MicroLabel(f"v{APP_VERSION}", point_size=8,
-                                   tracking_em=0.1)
+        from utils.app_identity import APP_DOMAIN
+        version_label = MicroLabel(f"v{APP_VERSION} · {APP_DOMAIN}",
+                                   point_size=8, tracking_em=0.1)
         version_label.setObjectName("StatusVersion")
         self.statusbar.addPermanentWidget(version_label)
         MainWindow.setStatusBar(self.statusbar)

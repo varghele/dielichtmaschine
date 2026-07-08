@@ -138,20 +138,40 @@ def test_subnav_golden(qapp, theme):
 
 
 def test_home_screen_golden(qapp, tmp_path):
-    """The Home landing page (North Star 1a): glyph, wordmark hero,
-    slogan, quick actions, recent list."""
+    """The Home landing page (reference screen 01): brand lockup with
+    accent rule + slogan, NEW PROJECT / OPEN CTAs, recent rows with
+    relative age, and the FROM ZERO TO SHOW checklist card."""
     from gui.theme_manager import ThemeManager
     from gui.widgets.home_screen import HomeScreen
 
     ThemeManager().apply(qapp, "dark")
     home = HomeScreen()
     try:
-        home.refresh([str(tmp_path / "festival_mainstage.yaml"),
-                      str(tmp_path / "club_band.yaml")])
-        home.setFixedSize(1000, 640)
+        paths = []
+        for name in ("festival_mainstage.yaml", "club_band.yaml"):
+            p = tmp_path / name
+            p.write_text("x")  # real files so the age column renders
+            paths.append(str(p))
+        home.refresh(paths)
+        home.refresh_checklist(scene_config_for_home())
+        # Reference is a 1920 layout: 460 + 80 + 560 columns need width.
+        home.setFixedSize(1440, 810)
         compare_to_golden(home.grab().toImage(), "home_dark")
     finally:
         home.deleteLater()
+
+
+def scene_config_for_home():
+    """A config two steps in: universes + fixtures done, placement not
+    (all fixtures at origin), so the checklist shows 2/5 with step 03
+    current, like the reference."""
+    fixtures = [make_fixture("PAR 1", "Front", 1),
+                make_fixture("PAR 2", "Front", 11)]
+    return Configuration(
+        fixtures=fixtures,
+        groups={"Front": FixtureGroup("Front", fixtures, color="#cc6666")},
+        universes={1: Universe(id=1, name="U1", output={})},
+    )
 
 
 def test_timeline_block_golden(qapp, scene_config):

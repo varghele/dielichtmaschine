@@ -1,13 +1,20 @@
-"""Home screen (North Star card 1a).
+"""Home screen, built against the design reference
+design_handoff_lichtmaschine_app/screens/01-home-startfenster.html.
 
-The landing page: rotor glyph, wordmark hero, slogan, quick actions,
-and the recent-configurations list. Self-contained: emits signals, the
-MainWindow wires them to its existing handlers. Hosted in the shell's
-QStackedWidget above the tab pages (Ui_MainWindow), so it never touches
-tab indices.
+Anatomy: two centered columns on the engineering grid.
+Left (460px): horizontal brand lockup (64px rotor glyph beside the
+52px condensed-caps wordmark), a 3px x 80px accent rule with the
+slogan, NEW PROJECT / OPEN... CTAs, and the recent-files rows
+(filename left, relative age right). Right (560px): the FROM ZERO TO
+SHOW checklist card - five steps whose done-state is computed from the
+live Configuration; the current step is highlighted with the accent
+left border and its screen tag; clicking a step jumps to that screen.
+
+Self-contained: emits signals, MainWindow wires them.
 """
 
 import os
+import time
 
 from PyQt6.QtCore import QCoreApplication, Qt, pyqtSignal
 from PyQt6.QtGui import QFont, QPixmap
@@ -15,122 +22,371 @@ from PyQt6.QtWidgets import (
     QHBoxLayout, QLabel, QPushButton, QVBoxLayout, QWidget,
 )
 
-from gui.typography import DisplayLabel, MicroLabel, display_font, mono_font
-from utils.app_identity import APP_WORDMARK, SLOGAN_DE, SLOGAN_EN, app_icon_path
+from gui.typography import MicroLabel, display_font, mono_font
+from utils.app_identity import APP_WORDMARK, SLOGAN_EN, app_icon_path
 
 
-class RecentConfigButton(QPushButton):
-    """One recent entry: filename prominent, full path as tooltip."""
+# NOTE: all user-visible strings below use LITERAL
+# QCoreApplication.translate("Shell", "...") calls - pylupdate6 cannot
+# extract literals hidden behind wrapper functions (documented gotcha).
+
+def relative_age(path: str, now: float = None) -> str:
+    """'today' / 'yesterday' / 'N days ago' from the file's mtime."""
+    try:
+        mtime = os.path.getmtime(path)
+    except OSError:
+        return ""
+    now = time.time() if now is None else now
+    days = max(0, int((now - mtime) / 86400.0))
+    if days == 0:
+        return QCoreApplication.translate("Shell", "today")
+    if days == 1:
+        return QCoreApplication.translate("Shell", "yesterday")
+    return f"{days} " + QCoreApplication.translate("Shell", "days ago")
+
+
+# ── Checklist model ────────────────────────────────────────────────────
+# (title, description, screen tag, tab index, done-predicate)
+
+def _has_universes(config):
+    return bool(getattr(config, "universes", None))
+
+
+def _has_fixtures(config):
+    return bool(getattr(config, "fixtures", None))
+
+
+def _has_placed_fixtures(config):
+    return any((f.x, f.y) != (0.0, 0.0)
+               for f in getattr(config, "fixtures", []) or []) or \
+        bool(getattr(config, "stage_elements", None))
+
+
+def _has_structure(config):
+    shows = getattr(config, "shows", {}) or {}
+    return any(getattr(s, "parts", None) for s in shows.values())
+
+
+def _has_timeline_content(config):
+    shows = (getattr(config, "shows", {}) or {}).values()
+    for show in shows:
+        timeline = getattr(show, "timeline_data", None)
+        for lane in getattr(timeline, "light_lanes", []) or []:
+            if getattr(lane, "light_blocks", None):
+                return True
+    return False
+
+
+def checklist_steps():
+    return [
+        (QCoreApplication.translate("Shell", "Add a universe, pick DMX output"),
+         QCoreApplication.translate("Shell", "E1.31, ArtNet or USB DMX - where the light goes."),
+         "SETUP · UNIVERSES", 0, _has_universes),
+        (QCoreApplication.translate("Shell", "Import fixtures, group them by role"),
+         QCoreApplication.translate("Shell", "GDTF or QLC+ definitions, grouped the way you busk."),
+         "SETUP · FIXTURES", 1, _has_fixtures),
+        (QCoreApplication.translate("Shell", "Place fixtures on the stage plot"),
+         QCoreApplication.translate("Shell", "Drag into position - the 3D pane shows what you're placing."),
+         "SETUP · STAGE", 2, _has_placed_fixtures),
+        (QCoreApplication.translate("Shell", "Define the song structure"),
+         QCoreApplication.translate("Shell", "Parts, BPM, time signature - the grid everything snaps to."),
+         "SHOW · STRUCTURE", 3, _has_structure),
+        (QCoreApplication.translate("Shell", "Build the show - or let the machine generate one"),
+         QCoreApplication.translate("Shell", "Paint blocks on the timeline, drop riffs, or run Autogenerate."),
+         "SHOW · TIMELINE", 4, _has_timeline_content),
+    ]
+
+
+class ChecklistRow(QWidget):
+    """One FROM ZERO TO SHOW step. States: done / current / upcoming."""
+
+    clicked = pyqtSignal(int)  # tab index
+
+    def __init__(self, number, title, description, tag, tab_index,
+                 parent=None):
+        super().__init__(parent)
+        self.tab_index = tab_index
+        self.setObjectName("ChecklistRow")
+        self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
+        self.setCursor(Qt.CursorShape.PointingHandCursor)
+
+        layout = QHBoxLayout(self)
+        layout.setContentsMargins(20, 12, 20, 12)
+        layout.setSpacing(14)
+
+        self.marker = QLabel(f"{number:02d}")
+        self.marker.setObjectName("ChecklistMarker")
+        self.marker.setFont(mono_font(9))
+        self.marker.setFixedWidth(20)
+        layout.addWidget(self.marker)
+
+        text_col = QVBoxLayout()
+        text_col.setSpacing(2)
+        self.title_label = QLabel(title)
+        self.title_label.setObjectName("ChecklistStepTitle")
+        title_font = self.title_label.font()
+        title_font.setBold(True)
+        self.title_label.setFont(title_font)
+        text_col.addWidget(self.title_label)
+        self.description_label = QLabel(description)
+        self.description_label.setObjectName("ChecklistDescription")
+        text_col.addWidget(self.description_label)
+        layout.addLayout(text_col, 1)
+
+        self.tag_label = QLabel(tag)
+        self.tag_label.setObjectName("ChecklistTag")
+        self.tag_label.setFont(mono_font(8, tracking_em=0.08))
+        layout.addWidget(self.tag_label)
+
+        self._number = number
+        self.set_state("upcoming")
+
+    def set_state(self, state: str) -> None:
+        """done | current | upcoming - drives QSS + the marker/tag.
+
+        The done strikethrough comes from the theme QSS
+        (text-decoration on #ChecklistStepTitle), NOT QFont.strikeOut:
+        the repolish below re-applies the stylesheet font, which wiped
+        a code-set strikeout depending on theme state.
+        """
+        self.setProperty("state", state)
+        if state == "done":
+            self.marker.setText("✓")  # check, exists in Plex Mono
+            self.description_label.setVisible(False)
+        else:
+            self.marker.setText(f"{self._number:02d}")
+            self.description_label.setVisible(True)
+        style = self.style()
+        if style:
+            style.unpolish(self)
+            style.polish(self)
+            for child in (self.marker, self.title_label,
+                          self.description_label, self.tag_label):
+                style.unpolish(child)
+                style.polish(child)
+
+    def mousePressEvent(self, event):
+        self.clicked.emit(self.tab_index)
+        event.accept()
+
+
+class RecentRow(QWidget):
+    """One recent-config row: filename left, relative age right."""
+
+    clicked = pyqtSignal(str)
 
     def __init__(self, path: str, parent=None):
-        super().__init__(os.path.basename(path), parent)
+        super().__init__(parent)
         self.path = path
-        self.setProperty("role", "recent-config")
-        self.setToolTip(path)
+        self.setObjectName("RecentRow")
+        self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
         self.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.setFont(mono_font(9))
+        self.setToolTip(path)
+
+        layout = QHBoxLayout(self)
+        layout.setContentsMargins(12, 9, 12, 9)
+        self.name_label = QLabel(os.path.basename(path))
+        layout.addWidget(self.name_label)
+        layout.addStretch(1)
+        self.age_label = QLabel(relative_age(path))
+        self.age_label.setFont(mono_font(9))
+        self.age_label.setObjectName("RecentAge")
+        layout.addWidget(self.age_label)
+
+    def mousePressEvent(self, event):
+        self.clicked.emit(self.path)
+        event.accept()
 
 
 class HomeScreen(QWidget):
-    """Hero + quick actions + recent list."""
+    """Reference-faithful Home: hero column + checklist card."""
 
     new_from_template_requested = pyqtSignal()
     open_requested = pyqtSignal()
     recent_requested = pyqtSignal(str)
+    go_to_screen = pyqtSignal(int)  # tab index from the checklist
 
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setObjectName("HomeScreen")
-        # Needed so the QSS #HomeScreen background (window + grid tile)
-        # paints on a plain QWidget.
         self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
+        self._config = None
 
-        outer = QVBoxLayout(self)
-        outer.addStretch(3)
+        outer = QHBoxLayout(self)
+        outer.addStretch(1)
 
-        # Hero: glyph, wordmark, slogan
+        # ── Left column: brand lockup, slogan, CTAs, recents ──────────
+        left = QVBoxLayout()
+        left.setSpacing(20)
+        left_host = QWidget()
+        # Minimum per the reference column; the wordmark's natural width
+        # may push it wider (QLabel clips at fixed widths where the
+        # reference CSS just overflows).
+        left_host.setMinimumWidth(460)
+        left_host.setMaximumWidth(560)
+        left_host.setLayout(left)
+
+        lockup = QHBoxLayout()
+        lockup.setSpacing(18)
         glyph = QLabel()
         glyph.setObjectName("HomeGlyph")
         pixmap = QPixmap(app_icon_path())
         if not pixmap.isNull():
             glyph.setPixmap(pixmap.scaled(
-                112, 112, Qt.AspectRatioMode.KeepAspectRatio,
+                64, 64, Qt.AspectRatioMode.KeepAspectRatio,
                 Qt.TransformationMode.SmoothTransformation))
-        glyph.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        outer.addWidget(glyph)
-        outer.addSpacing(16)
+        lockup.addWidget(glyph, 0, Qt.AlignmentFlag.AlignTop)
 
-        wordmark = QLabel(APP_WORDMARK)
+        title_col = QVBoxLayout()
+        title_col.setSpacing(10)
+        # Two-line hero lockup like the reference (52px over two lines
+        # in a 460 column); explicit break instead of QLabel word wrap
+        # so the size hint is exact and nothing clips.
+        wordmark = QLabel(APP_WORDMARK.replace(" ", "\n", 1))
         wordmark.setObjectName("HomeWordmark")
-        wordmark.setFont(display_font(40, QFont.Weight.ExtraBold,
-                                      tracking_em=0.08))
-        wordmark.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        outer.addWidget(wordmark)
+        wordmark.setFont(display_font(38, QFont.Weight.ExtraBold,
+                                      tracking_em=0.03))
+        title_col.addWidget(wordmark)
 
-        slogan = MicroLabel(f"{SLOGAN_EN} · {SLOGAN_DE}", point_size=10,
-                            tracking_em=0.2)
+        slogan_row = QHBoxLayout()
+        slogan_row.setSpacing(12)
+        rule = QWidget()
+        rule.setObjectName("HomeAccentRule")
+        rule.setFixedSize(80, 3)
+        slogan_row.addWidget(rule)
+        slogan = MicroLabel(SLOGAN_EN, point_size=9, tracking_em=0.14)
         slogan.setObjectName("HomeSlogan")
-        slogan.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        outer.addWidget(slogan)
-        outer.addSpacing(28)
+        slogan_row.addWidget(slogan)
+        slogan_row.addStretch(1)
+        title_col.addLayout(slogan_row)
+        lockup.addLayout(title_col, 1)
+        left.addLayout(lockup)
 
-        # Quick actions
-        actions = QHBoxLayout()
-        actions.addStretch(1)
-        self.template_btn = QPushButton(QCoreApplication.translate(
-            "Shell", "New from Template"))
+        ctas = QHBoxLayout()
+        ctas.setSpacing(12)
+        self.template_btn = QPushButton(
+            QCoreApplication.translate("Shell", "New Project").upper())
         self.template_btn.setProperty("role", "primary")
+        self.template_btn.setFont(display_font(13, QFont.Weight.Bold,
+                                               tracking_em=0.08))
         self.template_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self.template_btn.clicked.connect(self.new_from_template_requested)
-        actions.addWidget(self.template_btn)
+        ctas.addWidget(self.template_btn)
 
-        self.open_btn = QPushButton(QCoreApplication.translate(
-            "Shell", "Open Configuration"))
+        self.open_btn = QPushButton(
+            QCoreApplication.translate("Shell", "Open...").upper())
+        self.open_btn.setFont(display_font(13, QFont.Weight.DemiBold,
+                                           tracking_em=0.08))
         self.open_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self.open_btn.clicked.connect(self.open_requested)
-        actions.addWidget(self.open_btn)
-        actions.addStretch(1)
-        outer.addLayout(actions)
-        outer.addSpacing(32)
+        ctas.addWidget(self.open_btn)
+        ctas.addStretch(1)
+        left.addLayout(ctas)
 
-        # Recent configurations
-        self.recent_title = DisplayLabel(
+        self.recent_title = MicroLabel(
             QCoreApplication.translate("Shell", "Recent"),
-            point_size=12, weight=QFont.Weight.Bold, tracking_em=0.1)
+            point_size=8, tracking_em=0.12)
         self.recent_title.setObjectName("HomeRecentTitle")
-        self.recent_title.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        outer.addWidget(self.recent_title)
-        outer.addSpacing(6)
+        left.addWidget(self.recent_title)
 
         self._recent_box = QVBoxLayout()
-        self._recent_box.setSpacing(2)
-        recent_row = QHBoxLayout()
-        recent_row.addStretch(1)
-        recent_row.addLayout(self._recent_box)
-        recent_row.addStretch(1)
-        outer.addLayout(recent_row)
-        self._recent_buttons = []
+        self._recent_box.setSpacing(-1)  # collapse adjacent row borders
+        left.addLayout(self._recent_box)
+        self._recent_rows = []
 
-        outer.addStretch(4)
+        # Center both columns as one unit (reference: align-items:center).
+        left_wrap = QVBoxLayout()
+        left_wrap.addStretch(1)
+        left_wrap.addWidget(left_host)
+        left_wrap.addStretch(1)
+        outer.addLayout(left_wrap)
+        outer.addSpacing(80)
+
+        # ── Right column: FROM ZERO TO SHOW checklist ─────────────────
+        self.checklist_card = QWidget()
+        self.checklist_card.setObjectName("ChecklistCard")
+        self.checklist_card.setProperty("role", "card")
+        self.checklist_card.setAttribute(
+            Qt.WidgetAttribute.WA_StyledBackground, True)
+        self.checklist_card.setFixedWidth(560)
+        card = QVBoxLayout(self.checklist_card)
+        card.setContentsMargins(0, 0, 0, 0)
+        card.setSpacing(0)
+
+        header = QWidget()
+        header.setObjectName("ChecklistHeader")
+        header.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
+        header_row = QHBoxLayout(header)
+        header_row.setContentsMargins(20, 14, 20, 14)
+        header_title = QLabel(QCoreApplication.translate(
+            "Shell", "From zero to show").upper())
+        header_title.setFont(display_font(14, QFont.Weight.Bold,
+                                          tracking_em=0.08))
+        header_title.setObjectName("ChecklistTitle")
+        header_row.addWidget(header_title)
+        header_row.addStretch(1)
+        self.progress_label = QLabel("")
+        self.progress_label.setFont(mono_font(8))
+        self.progress_label.setObjectName("ChecklistProgress")
+        header_row.addWidget(self.progress_label)
+        card.addWidget(header)
+
+        self.checklist_rows = []
+        for number, (title, description, tag, tab_index, _predicate) in \
+                enumerate(checklist_steps(), start=1):
+            row = ChecklistRow(number, title, description, tag, tab_index)
+            row.clicked.connect(self.go_to_screen)
+            card.addWidget(row)
+            self.checklist_rows.append(row)
+
+        column_wrap = QVBoxLayout()
+        column_wrap.addStretch(1)
+        column_wrap.addWidget(self.checklist_card)
+        column_wrap.addStretch(1)
+        outer.addLayout(column_wrap)
+        outer.addStretch(1)
+
         self.refresh([])
+        self.refresh_checklist(None)
 
+    # ── Data refresh ──────────────────────────────────────────────────
     def refresh(self, recent_paths) -> None:
-        """Rebuild the recent list (most recent first)."""
-        for button in self._recent_buttons:
-            self._recent_box.removeWidget(button)
-            button.hide()
-            button.setParent(None)
-            button.deleteLater()
-        self._recent_buttons = []
-
+        for row in self._recent_rows:
+            self._recent_box.removeWidget(row)
+            row.hide()
+            row.setParent(None)
+            row.deleteLater()
+        self._recent_rows = []
         visible = bool(recent_paths)
         self.recent_title.setVisible(visible)
-        for path in list(recent_paths)[:8]:
-            button = RecentConfigButton(path)
-            button.clicked.connect(
-                lambda _=False, p=path: self.recent_requested.emit(p))
-            self._recent_box.addWidget(button)
-            self._recent_buttons.append(button)
+        for path in list(recent_paths)[:5]:
+            row = RecentRow(path)
+            row.clicked.connect(self.recent_requested)
+            self._recent_box.addWidget(row)
+            self._recent_rows.append(row)
+
+    def refresh_checklist(self, config) -> None:
+        """Recompute step states from the configuration (None = fresh)."""
+        self._config = config
+        done_flags = []
+        for (_t, _d, _tag, _i, predicate) in checklist_steps():
+            try:
+                done_flags.append(bool(config is not None
+                                       and predicate(config)))
+            except Exception:
+                done_flags.append(False)
+        current = next((i for i, done in enumerate(done_flags) if not done),
+                       None)
+        for i, row in enumerate(self.checklist_rows):
+            if done_flags[i]:
+                row.set_state("done")
+            elif i == current:
+                row.set_state("current")
+            else:
+                row.set_state("upcoming")
+        self.progress_label.setText(
+            f"{sum(done_flags)} / {len(done_flags)} "
+            + QCoreApplication.translate("Shell", "done").upper())
 
     def recent_paths(self):
-        return [b.path for b in self._recent_buttons]
+        return [row.path for row in self._recent_rows]
