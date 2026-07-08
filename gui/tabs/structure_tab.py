@@ -1,5 +1,32 @@
 # gui/tabs/structure_tab.py
-# Show structure editing tab with visual timeline
+"""Show > Structure, rebuilt to the reference screen
+design_handoff_lichtmaschine_app/screens/05-show-structure.html.
+
+Anatomy (top to bottom):
+
+- a slim 38px action strip: no tab title (the shell subnav names the
+  screen); the mono audio readout ("neon_ruinen.wav . 03:42 ANALYZED",
+  the status word in green) and a bordered display-caps
+  "AUTOGENERATE SHOW..." button on the right.
+- the main column (28px padding, 28px gaps): the show-management row,
+  the "PARTS" caption over the horizontal strip of 190px part cards
+  (3px top bar + tint in the part color, transition chips between the
+  cards, a dashed 44x44 add tile at the end), then the
+  "MASTER GRID . N BARS . mm:ss" caption over the master timeline grid
+  and the mono snap-hint row.
+- a 400px inspector: the part name in display caps *in the part color*,
+  a 2x2 grid of bordered stat tiles (BPM / TIME SIG / BARS / DURATION),
+  the editors (name, BPM, time signature, bars, color, reorder), the
+  TRANSITION OUT combo, the AUDIO ANALYSIS read-out rows, and a
+  destructive Delete Part footer.
+- transport + Pause Show rows (features with no home in the reference
+  screen; kept reachable directly above the status strip).
+- a mono status strip: "N PARTS . N BARS . mm:ss".
+
+The part cards are display-only; every edit goes through the inspector,
+writes straight into the ShowPart model, and refreshes the cards, the
+stat tiles, the grid caption, the timelines and the status strip.
+"""
 
 import os
 import csv
@@ -11,14 +38,151 @@ from PyQt6.QtWidgets import (QVBoxLayout, QHBoxLayout, QWidget, QLabel,
                              QSizePolicy, QMenu, QFileDialog, QProgressDialog,
                              QGroupBox, QCheckBox)
 from PyQt6.QtCore import Qt, QTimer, pyqtSignal, QRectF, QPointF
-from PyQt6.QtGui import QPainter, QColor, QPen, QBrush, QFont, QAction
+from PyQt6.QtGui import (QPainter, QColor, QPen, QBrush, QFont, QAction,
+                         QFontMetrics)
 import shutil
 from config.models import Configuration, Show, ShowPart, TimelineData, MidiInputDevice, PauseShowConfig
-from gui.typography import DisplayLabel, MicroLabel, mono_font
+from gui.typography import DisplayLabel, MicroLabel, display_font, mono_font
 from gui.widgets.chip import Chip
 from timeline.song_structure import SongStructure
 from timeline_ui import AudioLaneWidget, MasterTimelineContainer, TimelineGrid
 from .base_tab import BaseTab
+
+
+def _active_tokens() -> dict:
+    """The token dict of the theme currently applied to the app.
+
+    The applied stylesheet is the only reliable record of the active
+    theme (ThemeManager.apply deliberately doesn't persist), so sniff
+    it: the light theme's window color is unique to light. Falls back
+    to dark. Same trick as gui/tabs/fixtures_tab.py.
+    """
+    from PyQt6.QtWidgets import QApplication
+    from gui.theme_tokens import THEMES
+
+    app = QApplication.instance()
+    qss = app.styleSheet() if app is not None else ""
+    light = THEMES.get("light")
+    if light is not None and light["window"] in qss:
+        return light
+    return THEMES["dark"]
+
+
+def format_clock(seconds: float) -> str:
+    """Seconds as mm:ss (the reference's '03:42' readouts)."""
+    total = max(0, int(seconds))
+    return f"{total // 60:02d}:{total % 60:02d}"
+
+
+def energy_words(relative_energy: float) -> str:
+    """'0.82 HIGH' - the reference's Energy read-out."""
+    band = ("HIGH" if relative_energy >= 0.66
+            else "MID" if relative_energy >= 0.33 else "LOW")
+    return f"{relative_energy:.2f} {band}"
+
+
+def contrast_words(spectral_contrast: float) -> str:
+    """'0.64 RICH' - the reference's Contrast read-out."""
+    band = "RICH" if spectral_contrast >= 0.5 else "FLAT"
+    return f"{spectral_contrast:.2f} {band}"
+
+
+def vocal_words(vocal_presence: float) -> str:
+    """'PRESENT' / 'ABSENT' - the reference's Vocals read-out."""
+    return "PRESENT" if vocal_presence >= 0.5 else "ABSENT"
+
+
+class StatTile(QFrame):
+    """A bordered read-out tile of the inspector's 2x2 grid: mono micro
+    caption over a big mono value (reference: BPM / TIME SIG / BARS /
+    DURATION).
+
+    Chrome is theme-owned: ``QWidget[role="stat-tile"]`` plus the
+    stat-caption / stat-value label roles in the QSS template.
+    """
+
+    def __init__(self, caption: str, parent=None):
+        super().__init__(parent)
+        self.setObjectName("StatTile")
+        self.setProperty("role", "stat-tile")
+        self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
+
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(12, 10, 12, 10)
+        layout.setSpacing(2)
+
+        self.caption_label = MicroLabel(caption, point_size=7,
+                                        tracking_em=0.1)
+        self.caption_label.setProperty("role", "stat-caption")
+        layout.addWidget(self.caption_label)
+
+        self.value_label = QLabel("-")
+        self.value_label.setObjectName("StatTileValue")
+        self.value_label.setProperty("role", "stat-value")
+        self.value_label.setFont(mono_font(16))
+        layout.addWidget(self.value_label)
+
+    def apply_tokens(self, tokens: dict) -> None:
+        """Kept for callers that re-apply on theme switch; chrome now
+        comes from the QSS template, so this only repolishes."""
+        style = self.style()
+        if style:
+            style.unpolish(self)
+            style.polish(self)
+
+    def set_value(self, text: str) -> None:
+        self.value_label.setText(text)
+
+
+class AnalysisRow(QWidget):
+    """One mono row of the inspector's AUDIO ANALYSIS block: label left,
+    value right. The value is a dim "-" until a generation report with
+    per-section audio features exists."""
+
+    PLACEHOLDER = "-"
+    PLACEHOLDER_TOOLTIP = "Available after Autogenerate analysis"
+
+    def __init__(self, caption: str, parent=None):
+        super().__init__(parent)
+        layout = QHBoxLayout(self)
+        layout.setContentsMargins(0, 5, 0, 5)
+        layout.setSpacing(8)
+
+        self.name_label = QLabel(caption)
+        self.name_label.setFont(mono_font(9))
+        self.name_label.setProperty("role", "micro")
+        layout.addWidget(self.name_label)
+        layout.addStretch()
+
+        self.value_label = QLabel(self.PLACEHOLDER)
+        self.value_label.setObjectName("AnalysisValue")
+        self.value_label.setFont(mono_font(9))
+        layout.addWidget(self.value_label)
+
+        self._tokens = _active_tokens()
+        self.set_value(None)
+
+    def apply_tokens(self, tokens: dict) -> None:
+        self._tokens = tokens
+        self.set_value(self._value)
+
+    def set_value(self, text) -> None:
+        """``None`` renders the dim placeholder with the explanatory
+        tooltip; a string renders in the theme's primary text color."""
+        self._value = text
+        tokens = self._tokens
+        if text is None:
+            self.value_label.setText(self.PLACEHOLDER)
+            self.value_label.setToolTip(self.PLACEHOLDER_TOOLTIP)
+            self.setToolTip(self.PLACEHOLDER_TOOLTIP)
+            color = tokens["text_disabled"]
+        else:
+            self.value_label.setText(text)
+            self.value_label.setToolTip("")
+            self.setToolTip("")
+            color = tokens["text"]
+        self.value_label.setStyleSheet(
+            f"color: {color}; background: transparent;")
 
 
 class TimeSignatureWidget(QWidget):
@@ -147,10 +311,14 @@ class ColorButton(QPushButton):
 
 
 class PartCard(QWidget):
-    """One song part as a North Star 1e card: 3px top bar + tint in the
-    part's data color, condensed-caps name, mono bars/signature and BPM
-    readouts. Display-only; editing happens in the part inspector.
-    Emits ``clicked(index)`` on press."""
+    """One song part as a reference card: 190px wide, 14px/16px padding,
+    a 3px top bar and a low-alpha tint in the part's data color, the
+    name in condensed caps, then the mono "8 BARS . 4/4" line and a
+    "<bpm> BPM" line whose number is bright and whose unit is secondary.
+
+    Display-only; editing happens in the part inspector. Emits
+    ``clicked(index)`` on press.
+    """
 
     clicked = pyqtSignal(int)
 
@@ -169,35 +337,49 @@ class PartCard(QWidget):
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(16, 14, 16, 12)
-        layout.setSpacing(6)
+        layout.setSpacing(0)
 
-        self.name_label = DisplayLabel("", point_size=14,
+        self.name_label = DisplayLabel("", point_size=15,
                                        weight=QFont.Weight.Bold,
                                        tracking_em=0.06)
         self.name_label.setObjectName("PartCardName")
         layout.addWidget(self.name_label)
+
+        layout.addSpacing(8)
 
         self.meta_label = QLabel("")
         self.meta_label.setObjectName("PartCardMeta")
         self.meta_label.setFont(mono_font(9))
         layout.addWidget(self.meta_label)
 
+        # "<value> BPM": value in $text$, unit in $text_secondary$ (the
+        # reference splits the line into two colors).
+        bpm_row = QHBoxLayout()
+        bpm_row.setContentsMargins(0, 4, 0, 0)
+        bpm_row.setSpacing(5)
         self.bpm_label = QLabel("")
         self.bpm_label.setObjectName("PartCardBpm")
         self.bpm_label.setFont(mono_font(9))
-        layout.addWidget(self.bpm_label)
+        bpm_row.addWidget(self.bpm_label)
+        self.bpm_unit_label = QLabel("BPM")
+        self.bpm_unit_label.setObjectName("PartCardBpmUnit")
+        self.bpm_unit_label.setFont(mono_font(9))
+        bpm_row.addWidget(self.bpm_unit_label)
+        bpm_row.addStretch()
+        layout.addLayout(bpm_row)
 
         layout.addStretch(1)
 
     def update_data(self, part: ShowPart, selected: bool,
-                    playing: bool = False) -> None:
+                    playing: bool = False, tokens: dict = None) -> None:
         self.name_label.setText(part.name)
         self.meta_label.setText(f"{part.num_bars} BARS · {part.signature}")
-        self.bpm_label.setText(f"{part.bpm:.1f} BPM")
-        self._apply_part_style(part.color, selected, playing)
+        self.bpm_label.setText(f"{part.bpm:.1f}")
+        self._apply_part_style(part.color, selected, playing,
+                               tokens or _active_tokens())
 
     def _apply_part_style(self, color: str, selected: bool,
-                          playing: bool) -> None:
+                          playing: bool, tokens: dict) -> None:
         """Part colors are data colors, so tint + 3px top bar are a
         widget-local stylesheet (the sanctioned pattern, see
         light_lane_widget._apply_group_border). The 1px chrome border and
@@ -205,19 +387,27 @@ class PartCard(QWidget):
         rules; only background and border-top are overridden here."""
         tint = QColor(color)
         if not tint.isValid():
-            tint = QColor("#8D9299")
-        alpha = "24%" if playing else ("18%" if selected else "12%")
+            tint = QColor(tokens["text_secondary"])
+        # Reference alphas: 0.12 idle, 0.14 selected. The playing tint is
+        # ours (no playhead in a static mockup).
+        alpha = "24%" if playing else ("14%" if selected else "12%")
         rgb = f"{tint.red()}, {tint.green()}, {tint.blue()}"
         rules = [
             f"QWidget#PartCard {{"
             f" background-color: rgba({rgb}, {alpha});"
             f" border-top: 3px solid {tint.name()}; }}",
-            "QLabel#PartCardMeta, QLabel#PartCardBpm"
-            " { color: #8D9299; background: transparent; }",
+            "QLabel#PartCardMeta, QLabel#PartCardBpmUnit"
+            f" {{ color: {tokens['text_secondary']};"
+            " background: transparent; }",
+            f"QLabel#PartCardBpm {{ color: {tokens['text']};"
+            " background: transparent; }",
         ]
-        if selected:
-            # Mockup: the selected card's name renders in the part color.
-            rules.append(f"QLabel#PartCardName {{ color: {tint.name()}; }}")
+        # Selection reads as accent everywhere in the design system: the
+        # theme paints the 1px accent border via [selected="true"], the
+        # title follows it.
+        title_color = tokens["accent_line"] if selected else tokens["text"]
+        rules.append(f"QLabel#PartCardName {{ color: {title_color};"
+                     " background: transparent; }")
         self.setStyleSheet("\n".join(rules))
         self.setProperty("selected", "true" if selected else "false")
         style = self.style()
@@ -231,17 +421,26 @@ class PartCard(QWidget):
 
 
 class StructureTab(BaseTab):
-    """Tab for editing show structure (North Star card 1e).
+    """Tab for editing show structure (reference screen 05).
 
     Features:
     - Song parts as colored cards (3px top bar + tint in the part color)
-      with transition chips between them
+      with transition chips between them and a dashed add tile
     - Master grid (master timeline + audio waveform) below the strip
-    - Part inspector on the right for all editing (name, BPM, signature,
-      bars, duration readout, transition, color, reorder, delete)
-    - CSV import/export
-    - Audio playback
+    - Part inspector on the right: stat tiles, all editing (name, BPM,
+      signature, bars, transition, color, reorder, delete) and the
+      AUDIO ANALYSIS read-outs
+    - Action-strip audio readout + "AUTOGENERATE SHOW..." entry point
+    - CSV import/export, MIDI triggers, Pause Show, audio playback
     """
+
+    #: Emitted with the current show name when the action strip's
+    #: AUTOGENERATE button is pressed. A shell that wants to own the
+    #: flow (e.g. so generated lanes land in the Timeline tab's lane
+    #: widgets) can connect this; when nothing is connected and no
+    #: sibling Shows tab is reachable, the tab runs the same
+    #: AutogenDialog flow itself and writes the lanes into the show.
+    autogenerate_requested = pyqtSignal(str)
 
     def __init__(self, config: Configuration, parent=None):
         self.current_show_name = ""
@@ -252,6 +451,10 @@ class StructureTab(BaseTab):
         self._playing_index = -1
         self._cards = []
         self._chips = []
+
+        # Generation report from this tab's own autogen run (the sibling
+        # Shows tab's report is used when we have none of our own).
+        self._autogen_report = None
 
         # Playback state
         self.is_playing = False
@@ -271,53 +474,63 @@ class StructureTab(BaseTab):
         # Flag to prevent recursive activation
         self._is_activating = False
 
+        # Active theme tokens; refreshed on every update_from_config so a
+        # theme switch re-colors the data-colored bits.
+        self._tokens = None
+
         super().__init__(config, parent)
 
     def setup_ui(self):
-        """Set up the structure tab UI (North Star 1e: song-part cards
-        with transition chips over the master grid, part inspector on
-        the right)."""
-        main_layout = QVBoxLayout(self)
-        main_layout.setContentsMargins(10, 10, 10, 10)
-        main_layout.setSpacing(8)
+        """Build the reference screen: action strip, main column (show
+        row, parts strip, master grid + hint), 400px part inspector,
+        transport + Pause Show rows, mono status strip."""
+        self._tokens = _active_tokens()
 
-        # Toolbar
-        toolbar = self._create_toolbar()
-        main_layout.addLayout(toolbar)
+        main_layout = QVBoxLayout(self)
+        main_layout.setContentsMargins(0, 0, 0, 0)
+        main_layout.setSpacing(0)
+
+        main_layout.addWidget(self._create_action_strip())
 
         # Keep reference to song structure for duration calculations
         self.song_structure = None
 
-        # Build order matters: the parts strip refreshes the inspector
-        # and the grid caption while it populates, so both must exist
-        # before _create_parts_strip runs.
+        # Build order matters: the parts strip refreshes the inspector,
+        # the grid caption and the status strip while it populates, so
+        # all three must exist before _create_parts_strip runs.
         inspector = self._build_inspector()
         self.grid_caption = MicroLabel("Master grid", point_size=8,
                                        tracking_em=0.12)
+        status_strip = self._create_status_strip()
 
         body = QHBoxLayout()
-        body.setSpacing(12)
+        body.setContentsMargins(0, 0, 0, 0)
+        body.setSpacing(0)
 
-        left_column = QVBoxLayout()
-        left_column.setSpacing(8)
+        left_host = QWidget()
+        left_column = QVBoxLayout(left_host)
+        left_column.setContentsMargins(28, 28, 28, 28)
+        left_column.setSpacing(28)
 
-        # Parts strip: micro caption row + horizontal card row
-        caption_row = QHBoxLayout()
+        # Show management + trigger assignment (no home in the reference
+        # screen, which only shows one song; kept as a compact row).
+        left_column.addLayout(self._create_show_row())
+
+        # Parts strip: micro caption + horizontal card row.
+        parts_section = QVBoxLayout()
+        parts_section.setSpacing(12)
         self.parts_caption = MicroLabel("Parts · Select to edit",
                                         point_size=8, tracking_em=0.12)
-        caption_row.addWidget(self.parts_caption)
-        caption_row.addStretch()
-        self.add_part_btn = QPushButton("+ Add Part")
-        self.add_part_btn.setProperty("role", "success")
-        caption_row.addWidget(self.add_part_btn)
-        left_column.addLayout(caption_row)
-
-        left_column.addWidget(self._create_parts_strip())
+        parts_section.addWidget(self.parts_caption)
+        parts_section.addWidget(self._create_parts_strip())
+        left_column.addLayout(parts_section)
 
         # Master grid: micro caption + shared master/audio grid.
         # Master + audio share a single horizontal scrollbar inside
         # TimelineGrid. Lane references stay so signal/method dispatch works.
-        left_column.addWidget(self.grid_caption)
+        grid_section = QVBoxLayout()
+        grid_section.setSpacing(12)
+        grid_section.addWidget(self.grid_caption)
         self.master_timeline = MasterTimelineContainer()
         self.audio_lane = AudioLaneWidget()
         self.timeline_grid = TimelineGrid()
@@ -341,20 +554,131 @@ class StructureTab(BaseTab):
         # builds, with belt-and-braces headroom in case row metrics shift.
         self.timeline_grid.setMinimumHeight(200)
         self.timeline_grid.setMaximumHeight(240)
-        left_column.addWidget(self.timeline_grid)
+        grid_section.addWidget(self.timeline_grid)
+        grid_section.addLayout(self._create_grid_hint_row())
+        left_column.addLayout(grid_section)
         left_column.addStretch(1)
 
-        body.addLayout(left_column, 1)
+        body.addWidget(left_host, 1)
         body.addWidget(inspector)
         main_layout.addLayout(body, 1)
 
-        # Pause Show section
-        pause_section = self._create_pause_show_section()
-        main_layout.addWidget(pause_section)
+        # Transport + Pause Show: no home in the reference screen, kept
+        # reachable in a footer block above the status strip.
+        footer = QWidget()
+        footer_column = QVBoxLayout(footer)
+        footer_column.setContentsMargins(28, 0, 28, 10)
+        footer_column.setSpacing(8)
+        footer_column.addWidget(self._create_pause_show_section())
+        footer_column.addLayout(self._create_playback_controls())
+        main_layout.addWidget(footer)
 
-        # Playback controls
-        playback_bar = self._create_playback_controls()
-        main_layout.addLayout(playback_bar)
+        main_layout.addWidget(status_strip)
+
+    def _create_action_strip(self) -> QWidget:
+        """38px strip: mono audio readout + AUTOGENERATE SHOW button.
+
+        No tab title - the shell subnav already names the screen.
+        """
+        strip = QWidget()
+        strip.setObjectName("StructureActionStrip")
+        strip.setFixedHeight(38)
+        row = QHBoxLayout(strip)
+        row.setContentsMargins(16, 0, 16, 0)
+        row.setSpacing(10)
+        row.addStretch()
+
+        # "neon_ruinen.wav · 03:42 · " + green "ANALYZED". Two labels
+        # because a QLabel cannot carry two colors without rich text.
+        self.audio_readout = QLabel("no audio loaded")
+        self.audio_readout.setObjectName("AudioReadout")
+        self.audio_readout.setFont(mono_font(8))
+        row.addWidget(self.audio_readout)
+
+        self.audio_status = QLabel("ANALYZED")
+        self.audio_status.setObjectName("AudioReadoutStatus")
+        self.audio_status.setFont(mono_font(8))
+        self.audio_status.hide()
+        row.addWidget(self.audio_status)
+
+        # Bordered display-caps CTA (the reference's outlined button:
+        # transparent fill, 1px $border$, Barlow Condensed caps).
+        self.autogen_btn = QPushButton("AUTOGENERATE SHOW...")
+        self.autogen_btn.setObjectName("AutogenButton")
+        self._autogen_font = display_font(11, QFont.Weight.DemiBold,
+                                          tracking_em=0.08)
+        self.autogen_btn.setFont(self._autogen_font)
+        self.autogen_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.autogen_btn.setToolTip(
+            "Analyze the audio and generate a light show for this song")
+        # Pin the width from the display font's own metrics (theme's
+        # 14px horizontal padding + border + slack) so the glyph never
+        # clips inside the content rect and the geometry stays stable
+        # for pixel diffs.
+        metrics = QFontMetrics(self._autogen_font)
+        self.autogen_btn.setFixedWidth(
+            metrics.horizontalAdvance(self.autogen_btn.text()) + 40)
+        row.addSpacing(6)
+        row.addWidget(self.autogen_btn)
+
+        self._style_action_strip()
+        return strip
+
+    def _style_action_strip(self):
+        """The audio readout's dim/green states (data-ish states, kept
+        widget-local). The CTA's chrome is theme-owned via
+        ``QPushButton[role="cta-outline"]``.
+        """
+        tokens = self._tokens or _active_tokens()
+        has_audio = self.audio_readout.text() != "no audio loaded"
+        color = tokens["text_secondary"] if has_audio else tokens["text_disabled"]
+        self.audio_readout.setStyleSheet(
+            f"color: {color}; background: transparent;")
+        self.audio_status.setStyleSheet(
+            f"color: {tokens['success']}; background: transparent;")
+        self.autogen_btn.setProperty("role", "cta-outline")
+        style = self.autogen_btn.style()
+        if style:
+            style.unpolish(self.autogen_btn)
+            style.polish(self.autogen_btn)
+
+    def _create_grid_hint_row(self) -> QHBoxLayout:
+        """The mono line under the master grid: snap resolutions, a
+        separator dot, and what the grid governs."""
+        row = QHBoxLayout()
+        row.setContentsMargins(0, 0, 0, 0)
+        row.setSpacing(10)
+        row.addWidget(MicroLabel("Snap: bar · 1/2 beat · 1/4 beat",
+                                 point_size=8, tracking_em=0.12))
+        dot = QLabel("·")
+        dot.setFont(mono_font(8))
+        dot.setProperty("role", "micro")
+        row.addWidget(dot)
+        # Plain QLabel (not MicroLabel): sentence case must survive, and
+        # role="micro" still hands it the secondary color from the theme.
+        self.grid_hint = QLabel(
+            "Every downstream feature snaps to this grid: timeline "
+            "blocks, riffs, autogen phrases.")
+        self.grid_hint.setObjectName("GridHint")
+        self.grid_hint.setFont(mono_font(8))
+        self.grid_hint.setProperty("role", "micro")
+        row.addWidget(self.grid_hint)
+        row.addStretch()
+        return row
+
+    def _create_status_strip(self) -> QWidget:
+        """26px mono footer: "N PARTS · N BARS · mm:ss"."""
+        strip = QWidget()
+        strip.setObjectName("StructureStatusStrip")
+        strip.setFixedHeight(26)
+        row = QHBoxLayout(strip)
+        row.setContentsMargins(16, 0, 16, 0)
+        row.setSpacing(24)
+        self.status_summary = MicroLabel("0 parts", point_size=8,
+                                         tracking_em=0.1)
+        row.addWidget(self.status_summary)
+        row.addStretch()
+        return strip
 
     PARTS_STRIP_HEIGHT = 128
 
@@ -371,19 +695,13 @@ class StructureTab(BaseTab):
         self.parts_row.setSpacing(0)
 
         # Persistent add tile (re-attached on every strip rebuild).
-        # Dashed empty-slot chrome has no theme role yet (see NEEDED-QSS
-        # in the rework notes) - widget-local interim styling.
+        # Dashed chrome comes from the theme's role="add-tile".
         self.add_part_tile = QPushButton("+")
         self.add_part_tile.setObjectName("AddPartTile")
+        self.add_part_tile.setProperty("role", "add-tile")
         self.add_part_tile.setFixedSize(44, 44)
         self.add_part_tile.setCursor(Qt.CursorShape.PointingHandCursor)
         self.add_part_tile.setToolTip("Add Part")
-        self.add_part_tile.setStyleSheet(
-            "QPushButton#AddPartTile { border: 1px dashed #5C6068;"
-            " background: transparent; color: #8D9299; font-size: 18px;"
-            " padding: 0; }"
-            "QPushButton#AddPartTile:hover { border-color: #F0562E;"
-            " color: #F0562E; }")
 
         self.parts_scroll = QScrollArea()
         self.parts_scroll.setWidgetResizable(True)
@@ -396,25 +714,50 @@ class StructureTab(BaseTab):
         self._rebuild_parts_strip()
         return self.parts_scroll
 
+    INSPECTOR_WIDTH = 400
+
     def _build_inspector(self) -> QWidget:
-        """Right-hand part inspector: all editors the structure table
-        used to host as cell widgets (name, BPM, signature, bars,
-        duration readout, transition, color) plus reorder + delete."""
+        """The 400px part inspector (reference detail column).
+
+        Reference order: part name in display caps *in the part color*,
+        the 2x2 stat-tile grid, then (ours) the editors that used to be
+        table cell widgets, the TRANSITION OUT combo, the AUDIO ANALYSIS
+        rows and the destructive Delete Part footer.
+        """
         panel = QWidget()
         panel.setObjectName("PartInspector")
         panel.setProperty("role", "inspector")
         panel.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
-        panel.setFixedWidth(300)
+        panel.setFixedWidth(self.INSPECTOR_WIDTH)
         layout = QVBoxLayout(panel)
-        layout.setContentsMargins(16, 14, 16, 14)
-        layout.setSpacing(8)
+        layout.setContentsMargins(20, 20, 20, 20)
+        layout.setSpacing(10)
 
         self.inspector_title = DisplayLabel("No part selected",
-                                            point_size=14,
-                                            weight=QFont.Weight.Bold)
+                                            point_size=13,
+                                            weight=QFont.Weight.Bold,
+                                            tracking_em=0.05)
         self.inspector_title.setObjectName("PartInspectorTitle")
         layout.addWidget(self.inspector_title)
 
+        # 2x2 read-out tiles (BPM / TIME SIG / BARS / DURATION).
+        tiles = QGridLayout()
+        tiles.setHorizontalSpacing(10)
+        tiles.setVerticalSpacing(10)
+        self.stat_bpm = StatTile("BPM")
+        self.stat_signature = StatTile("Time sig")
+        self.stat_bars = StatTile("Bars")
+        self.stat_duration = StatTile("Duration")
+        tiles.addWidget(self.stat_bpm, 0, 0)
+        tiles.addWidget(self.stat_signature, 0, 1)
+        tiles.addWidget(self.stat_bars, 1, 0)
+        tiles.addWidget(self.stat_duration, 1, 1)
+        self._stat_tiles = (self.stat_bpm, self.stat_signature,
+                            self.stat_bars, self.stat_duration)
+        layout.addLayout(tiles)
+
+        # Editors: the write path. The tiles above are pure read-outs and
+        # refresh from these.
         layout.addWidget(MicroLabel("Name", point_size=8, tracking_em=0.1))
         self.part_name_edit = QLineEdit()
         layout.addWidget(self.part_name_edit)
@@ -435,26 +778,14 @@ class StructureTab(BaseTab):
         grid.addWidget(self.signature_widget, 1, 1)
         grid.addWidget(MicroLabel("Bars", point_size=8, tracking_em=0.1),
                        2, 0)
-        grid.addWidget(MicroLabel("Duration", point_size=8,
+        grid.addWidget(MicroLabel("Color", point_size=8,
                                   tracking_em=0.1), 2, 1)
         self.bars_spin = QSpinBox()
         self.bars_spin.setRange(1, 9999)
         grid.addWidget(self.bars_spin, 3, 0)
-        self.duration_label = QLabel("0.00 s")
-        self.duration_label.setObjectName("PartDurationReadout")
-        self.duration_label.setFont(mono_font(12))
-        grid.addWidget(self.duration_label, 3, 1)
-        layout.addLayout(grid)
-
-        layout.addWidget(MicroLabel("Transition out", point_size=8,
-                                    tracking_em=0.1))
-        self.transition_combo = QComboBox()
-        self.transition_combo.addItems(["instant", "gradual"])
-        layout.addWidget(self.transition_combo)
-
-        layout.addWidget(MicroLabel("Color", point_size=8, tracking_em=0.1))
         self.part_color_btn = ColorButton("#4CAF50")
-        layout.addWidget(self.part_color_btn)
+        grid.addWidget(self.part_color_btn, 3, 1)
+        layout.addLayout(grid)
 
         move_row = QHBoxLayout()
         move_row.setSpacing(6)
@@ -466,6 +797,23 @@ class StructureTab(BaseTab):
         move_row.addWidget(self.move_right_btn)
         layout.addLayout(move_row)
 
+        layout.addWidget(MicroLabel("Transition out", point_size=8,
+                                    tracking_em=0.1))
+        self.transition_combo = QComboBox()
+        self.transition_combo.addItems(["instant", "gradual"])
+        layout.addWidget(self.transition_combo)
+
+        layout.addSpacing(4)
+        layout.addWidget(MicroLabel("Audio analysis", point_size=8,
+                                    tracking_em=0.1))
+        self.analysis_energy = AnalysisRow("Energy")
+        self.analysis_vocals = AnalysisRow("Vocals")
+        self.analysis_contrast = AnalysisRow("Contrast")
+        self._analysis_rows = (self.analysis_energy, self.analysis_vocals,
+                               self.analysis_contrast)
+        for analysis_row in self._analysis_rows:
+            layout.addWidget(analysis_row)
+
         layout.addStretch(1)
 
         self.delete_part_btn = QPushButton("- Delete Part")
@@ -474,15 +822,14 @@ class StructureTab(BaseTab):
 
         return panel
 
-    def _create_toolbar(self):
-        """Create toolbar with buttons."""
+    def _create_show_row(self):
+        """Compact show-management row: selector, new/rename/delete, the
+        shows-directory hint button, and the MIDI trigger assignment."""
         toolbar = QHBoxLayout()
-        toolbar.setSpacing(10)
+        toolbar.setContentsMargins(0, 0, 0, 0)
+        toolbar.setSpacing(8)
 
-        # Show selector
-        show_label = QLabel("Show:")
-        show_label.setStyleSheet("font-weight: bold;")
-        toolbar.addWidget(show_label)
+        toolbar.addWidget(MicroLabel("Show", point_size=8, tracking_em=0.12))
 
         self.show_combo = QComboBox()
         self.show_combo.setMinimumWidth(200)
@@ -502,12 +849,11 @@ class StructureTab(BaseTab):
         self.delete_show_btn.setProperty("role", "destructive")
         toolbar.addWidget(self.delete_show_btn)
 
-        toolbar.addSpacing(20)
+        toolbar.addSpacing(16)
 
         # Trigger assignment
-        trigger_label = QLabel("Trigger:")
-        trigger_label.setStyleSheet("font-weight: bold;")
-        toolbar.addWidget(trigger_label)
+        toolbar.addWidget(MicroLabel("Trigger", point_size=8,
+                                     tracking_em=0.12))
 
         self.trigger_device_combo = QComboBox()
         self.trigger_device_combo.setMinimumWidth(160)
@@ -524,8 +870,7 @@ class StructureTab(BaseTab):
             pass
         toolbar.addWidget(self.trigger_device_combo)
 
-        ch_label = QLabel("Ch:")
-        toolbar.addWidget(ch_label)
+        toolbar.addWidget(MicroLabel("Ch", point_size=8, tracking_em=0.12))
 
         self.trigger_channel_spin = QSpinBox()
         self.trigger_channel_spin.setRange(1, 512)
@@ -534,7 +879,7 @@ class StructureTab(BaseTab):
         self.trigger_channel_spin.setFixedWidth(70)
         toolbar.addWidget(self.trigger_channel_spin)
 
-        toolbar.addSpacing(20)
+        toolbar.addSpacing(16)
 
         # Set directory button (primary action for the show toolbar)
         self.set_directory_btn = QPushButton("Set Show Directory")
@@ -724,8 +1069,10 @@ class StructureTab(BaseTab):
         self.trigger_device_combo.currentTextChanged.connect(self._on_trigger_device_changed)
         self.trigger_channel_spin.valueChanged.connect(self._on_trigger_channel_changed)
 
+        # Action strip
+        self.autogen_btn.clicked.connect(self._on_autogenerate)
+
         # Parts strip buttons
-        self.add_part_btn.clicked.connect(self._add_new_part)
         self.add_part_tile.clicked.connect(self._add_new_part)
         self.delete_part_btn.clicked.connect(self._delete_part)
 
@@ -826,27 +1173,216 @@ class StructureTab(BaseTab):
     def _refresh_cards(self):
         """Push part data into the existing cards and chips."""
         parts = self.current_show.parts if self.current_show else []
+        tokens = self._tokens or _active_tokens()
         for i, card in enumerate(self._cards):
             if i < len(parts):
                 card.update_data(parts[i], i == self._selected_index,
-                                 i == self._playing_index)
+                                 i == self._playing_index, tokens)
         for i, chip in enumerate(self._chips):
             if i < len(parts):
+                # The chip after card N carries part N's transition out.
+                # Literal model value, no invented crossfade lengths.
                 chip.setText(parts[i].transition)
         self._update_grid_caption()
+        self._update_status_strip()
 
-    def _update_grid_caption(self):
+    def _total_bars_and_duration(self):
         parts = self.current_show.parts if self.current_show else []
-        if not parts:
-            self.grid_caption.setText("Master grid")
-            return
         total_bars = sum(p.num_bars for p in parts)
         total = (self.song_structure.get_total_duration()
                  if self.song_structure else 0.0)
-        minutes = int(total // 60)
-        secs = int(total % 60)
+        return len(parts), total_bars, total
+
+    def _update_grid_caption(self):
+        count, total_bars, total = self._total_bars_and_duration()
+        if not count:
+            self.grid_caption.setText("Master grid")
+            return
         self.grid_caption.setText(
-            f"Master grid · {total_bars} bars · {minutes:02d}:{secs:02d}")
+            f"Master grid · {total_bars} bars · {format_clock(total)}")
+
+    def _update_status_strip(self):
+        count, total_bars, total = self._total_bars_and_duration()
+        noun = "part" if count == 1 else "parts"
+        self.status_summary.setText(
+            f"{count} {noun} · {total_bars} bars · {format_clock(total)}")
+
+    # ------------------------------------------------------------------
+    # Action strip: audio readout + autogenerate
+    # ------------------------------------------------------------------
+    def _generation_report(self):
+        """The most recent autogen GenerationReport, if a sibling Shows
+        tab holds one. Read-only lookup - nothing is stored on the model,
+        so the AUDIO ANALYSIS rows fall back to their placeholder."""
+        if getattr(self, "_autogen_report", None) is not None:
+            return self._autogen_report
+        window = self.window()
+        shows_tab = getattr(window, "shows_tab", None) if window else None
+        return getattr(shows_tab, "_generation_report", None)
+
+    def _section_report(self, part: ShowPart):
+        """The SectionReport for a part (matched by name, then by index)."""
+        report = self._generation_report()
+        sections = getattr(report, "sections", None) or []
+        if not sections:
+            return None
+        target = (part.name or "").strip().lower()
+        for section in sections:
+            if (getattr(section, "name", "") or "").strip().lower() == target:
+                return section
+        index = self._selected_index
+        if 0 <= index < len(sections):
+            return sections[index]
+        return None
+
+    def _update_audio_readout(self):
+        """Mono "<file>.wav · mm:ss" plus the green ANALYZED word once an
+        autogen analysis has run for this session."""
+        path = ""
+        if self.current_show and self.current_show.timeline_data:
+            path = self.current_show.timeline_data.audio_file_path or ""
+
+        if not path:
+            self.audio_readout.setText("no audio loaded")
+            self.audio_status.hide()
+            self._style_action_strip()
+            return
+
+        duration = 0.0
+        audio_file = self.audio_lane.get_audio_file()
+        if audio_file is not None:
+            duration = float(getattr(audio_file, "duration", 0.0) or 0.0)
+        if duration <= 0.0 and self.song_structure:
+            duration = self.song_structure.get_total_duration()
+
+        self.audio_readout.setText(
+            f"{os.path.basename(path)} · {format_clock(duration)} ·")
+        self.audio_status.setVisible(self._generation_report() is not None)
+        self._style_action_strip()
+
+    def _shows_tab_delegate(self):
+        """A sibling Shows/Timeline tab that owns the autogen flow (it is
+        where generated lanes become lane widgets)."""
+        window = self.window()
+        shows_tab = getattr(window, "shows_tab", None) if window else None
+        if shows_tab is not None and hasattr(shows_tab, "_on_autogenerate"):
+            return shows_tab
+        return None
+
+    def _on_autogenerate(self):
+        """Run the same AutogenDialog flow the Timeline tab exposes.
+
+        Preference order: hand off to the sibling Shows tab (its lane
+        widgets consume the result), else let a connected shell handle
+        ``autogenerate_requested``, else run the dialog + worker here and
+        write the lanes into the show's timeline data.
+        """
+        if not self.current_show:
+            QMessageBox.warning(self, "No Show Selected",
+                                "Please select a show first.")
+            return
+
+        delegate = self._shows_tab_delegate()
+        if delegate is not None:
+            delegate._on_autogenerate()
+            self._update_audio_readout()
+            return
+
+        if self.receivers(self.autogenerate_requested) > 0:
+            self.autogenerate_requested.emit(self.current_show_name)
+            return
+
+        self._open_autogen_dialog()
+
+    def _autogen_audio_path(self):
+        """Absolute path of the current show's audio file, or None."""
+        path = self.audio_lane.get_audio_file_path()
+        if not path:
+            return None
+        if not os.path.isabs(path):
+            bundle_dir = self.config.audio_bundle_dir()
+            if not bundle_dir:
+                return None
+            path = os.path.join(bundle_dir, path)
+        return path if os.path.exists(path) else None
+
+    def _open_autogen_dialog(self):
+        """Self-contained autogen path: same dialog + worker as the
+        Timeline tab, result written into ``show.timeline_data.lanes``
+        (the Timeline tab picks them up on its next refresh)."""
+        from PyQt6.QtWidgets import QDialog
+        from gui.dialogs.autogen_dialog import AutogenDialog, AutogenWorker
+
+        show = self.current_show
+        if not show.parts:
+            QMessageBox.warning(self, "No Song Structure",
+                                "Add song parts before generating a show.")
+            return
+        if not self.config.groups:
+            QMessageBox.warning(self, "No Fixture Groups",
+                                "Define fixture groups in the Fixtures tab "
+                                "first.")
+            return
+        audio_path = self._autogen_audio_path()
+        if not audio_path:
+            QMessageBox.warning(self, "No Audio File",
+                                "Load an audio file for this show first.")
+            return
+
+        dialog = AutogenDialog(self)
+        if dialog.exec() != QDialog.DialogCode.Accepted:
+            return
+
+        self._recalculate_structure()
+        song_structure = self.song_structure or SongStructure()
+
+        self.autogen_btn.setEnabled(False)
+        self.autogen_btn.setText("GENERATING...")
+        self._autogen_worker = AutogenWorker(
+            audio_path, song_structure, self.config, dialog.result_config,
+            dialog.result_key_signature, dialog.result_palette,
+        )
+        self._autogen_worker.finished.connect(self._on_autogen_finished)
+        self._autogen_worker.error.connect(self._on_autogen_error)
+        self._autogen_worker.start()
+
+    def _reset_autogen_button(self):
+        self.autogen_btn.setEnabled(True)
+        self.autogen_btn.setText("AUTOGENERATE SHOW...")
+
+    def _on_autogen_finished(self, lanes, report=None):
+        """Store generated lanes on the show (the Timeline tab renders
+        them) and keep the report for the AUDIO ANALYSIS rows."""
+        from config.models import LightLane
+
+        self._reset_autogen_button()
+        self._autogen_report = report
+        if not lanes:
+            QMessageBox.information(self, "Auto-Generate",
+                                    "No lanes were generated. Check fixture "
+                                    "groups and song structure.")
+            return
+        if self.current_show.timeline_data is None:
+            self.current_show.timeline_data = TimelineData()
+        new_lanes = []
+        for lane_data in lanes:
+            lane = LightLane(lane_data.name)
+            lane.fixture_targets = lane_data.fixture_targets
+            lane.light_blocks = lane_data.light_blocks
+            new_lanes.append(lane)
+        self.current_show.timeline_data.lanes = new_lanes
+        self._auto_save()
+        self._refresh_inspector()
+        self._update_audio_readout()
+        QMessageBox.information(
+            self, "Auto-Generate",
+            f"Generated {len(new_lanes)} lanes. Open the Timeline tab to "
+            "review them.")
+
+    def _on_autogen_error(self, error_msg):
+        self._reset_autogen_button()
+        QMessageBox.critical(self, "Auto-Generate Error",
+                             f"Generation failed:\n{error_msg}")
 
     def _selected_part(self):
         parts = self.current_show.parts if self.current_show else []
@@ -861,6 +1397,33 @@ class StructureTab(BaseTab):
         self._refresh_cards()
         self._refresh_inspector()
 
+    def _update_stat_tiles(self, part):
+        """Push the selected part's read-outs into the 2x2 tile grid."""
+        if part is None:
+            for tile in self._stat_tiles:
+                tile.set_value("-")
+            return
+        self.stat_bpm.set_value(f"{part.bpm:.1f}")
+        self.stat_signature.set_value(part.signature)
+        self.stat_bars.set_value(str(part.num_bars))
+        self.stat_duration.set_value(f"{part.duration:.1f} s")
+
+    def _update_analysis_rows(self, part):
+        """AUDIO ANALYSIS rows from the autogen section report when one
+        exists; otherwise the dim placeholder with its tooltip (the model
+        carries no per-part audio features)."""
+        section = self._section_report(part) if part is not None else None
+        if section is None:
+            for analysis_row in self._analysis_rows:
+                analysis_row.set_value(None)
+            return
+        self.analysis_energy.set_value(
+            energy_words(getattr(section, "relative_energy", 0.0)))
+        self.analysis_vocals.set_value(
+            vocal_words(getattr(section, "vocal_presence", 0.0)))
+        self.analysis_contrast.set_value(
+            contrast_words(getattr(section, "spectral_contrast", 0.0)))
+
     def _refresh_inspector(self):
         """Load the selected part into the inspector editors."""
         part = self._selected_part()
@@ -871,11 +1434,13 @@ class StructureTab(BaseTab):
         for widget in editors:
             widget.setEnabled(part is not None)
 
+        self._update_stat_tiles(part)
+        self._update_analysis_rows(part)
+
         if part is None:
             self.inspector_title.setStyleSheet("")
             self.inspector_title.setText("No part selected")
             self.part_name_edit.setText("")
-            self.duration_label.setText("0.00 s")
             return
 
         self.inspector_title.setText(part.name)
@@ -898,7 +1463,6 @@ class StructureTab(BaseTab):
         for widget in (self.bpm_spin, self.bars_spin, self.transition_combo):
             widget.blockSignals(False)
 
-        self.duration_label.setText(f"{part.duration:.2f} s")
         parts = self.current_show.parts
         self.move_left_btn.setEnabled(self._selected_index > 0)
         self.move_right_btn.setEnabled(
@@ -957,7 +1521,7 @@ class StructureTab(BaseTab):
         # Recalculate durations and update display
         self._recalculate_structure()
         self._refresh_selected_card()
-        self.duration_label.setText(f"{part.duration:.2f} s")
+        self._update_stat_tiles(part)
         self._update_timelines()
         self._auto_save()
 
@@ -971,7 +1535,7 @@ class StructureTab(BaseTab):
         # Recalculate durations and update display
         self._recalculate_structure()
         self._refresh_selected_card()
-        self.duration_label.setText(f"{part.duration:.2f} s")
+        self._update_stat_tiles(part)
         self._update_timelines()
         self._auto_save()
 
@@ -985,7 +1549,7 @@ class StructureTab(BaseTab):
         # Recalculate durations and update display
         self._recalculate_structure()
         self._refresh_selected_card()
-        self.duration_label.setText(f"{part.duration:.2f} s")
+        self._update_stat_tiles(part)
         self._update_timelines()
         self._auto_save()
 
@@ -1045,8 +1609,20 @@ class StructureTab(BaseTab):
             self._playing_index = playing
             self._refresh_cards()
 
+    def _apply_tokens(self):
+        """Re-read the active theme's tokens and push them into the
+        widget-local (data-colored) chrome."""
+        self._tokens = _active_tokens()
+        for tile in self._stat_tiles:
+            tile.apply_tokens(self._tokens)
+        for analysis_row in self._analysis_rows:
+            analysis_row.apply_tokens(self._tokens)
+        self._style_action_strip()
+
     def update_from_config(self):
         """Refresh from configuration."""
+        self._apply_tokens()
+
         # Update show combo
         current = self.show_combo.currentText()
         self.show_combo.blockSignals(True)
@@ -1384,6 +1960,7 @@ class StructureTab(BaseTab):
             self._rebuild_parts_strip()
             self.audio_lane.set_song_structure(None)
             self.master_timeline.timeline_widget.set_song_structure(None)
+            self._update_audio_readout()
             return
 
         self.current_show_name = show_name
@@ -1429,6 +2006,7 @@ class StructureTab(BaseTab):
             # No audio for this show, clear it
             self.audio_lane.clear_audio()
 
+        self._update_audio_readout()
 
     def _load_all_shows(self):
         """Load all shows from CSV files in the shows directory."""
@@ -1687,6 +2265,8 @@ class StructureTab(BaseTab):
         if self.song_structure:
             total_duration = self.song_structure.get_total_duration()
             self.total_time_label.setText(f"/ {self._format_time(total_duration)}")
+
+        self._update_audio_readout()
 
     def _toggle_playback(self):
         """Toggle play/pause."""
