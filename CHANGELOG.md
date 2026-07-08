@@ -31,6 +31,17 @@ verbatim as the GitHub Release notes (see [docs/releasing.md](docs/releasing.md)
 
 ### Added
 
+- **Autogenerate dialog rebuilt against the original design
+  reference.** A 420px setup column (audio file with LOADED / MISSING
+  chip, structure summary, song key, colour-palette source chips with
+  swatches, accent GENERATE) beside a generation panel showing the
+  real parameter knobs and a GENERATION INSPECTOR table of the last
+  run: one row per section with its envelope, the rudiment picked per
+  fixture group, and why (energy, flux, vocals), with the peak-energy
+  section highlighted. Reference controls with no backing in the
+  generator (intensity ceiling, overwrite toggle, seed and rerun) are
+  deliberately absent rather than faked, and in "from audio" mode the
+  palette swatches stay hidden until the analysis produces colours.
 - **Universes screen matched to the original design reference.** The
   tab title row is gone (the subnav names the screen), the inspector
   now leads with a "U1 · MAIN RIG" heading, labels its ArtNet fields
