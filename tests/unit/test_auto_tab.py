@@ -194,6 +194,7 @@ def test_auto_tab_embeds_visualizer(qapp, sample_configuration):
     from PyQt6.QtWidgets import QSplitter
     from gui.theme_manager import ThemeManager
     from gui.tabs import AutoTab
+    from gui.tabs.auto_tab import RIGHT_PANEL_WIDTH
     from gui.widgets.embedded_visualizer import EmbeddedVisualizer
 
     ThemeManager().apply(qapp, "dark")
@@ -207,10 +208,10 @@ def test_auto_tab_embeds_visualizer(qapp, sample_configuration):
         assert tab._right_splitter.orientation() == Qt.Orientation.Vertical
         assert tab._right_splitter.widget(0) is tab.embedded_visualizer
 
-        # Splitter is fixed at 520 px wide so the visualizer reads as
-        # ~16:9 at the default ~290-px height.
-        assert tab._right_splitter.minimumWidth() == 520
-        assert tab._right_splitter.maximumWidth() == 520
+        # The preview column is the reference's fixed 400px.
+        panel = tab._right_splitter.parentWidget()
+        assert panel.minimumWidth() == RIGHT_PANEL_WIDTH
+        assert panel.maximumWidth() == RIGHT_PANEL_WIDTH
     finally:
         tab.cleanup()
         tab.deleteLater()
