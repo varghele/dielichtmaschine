@@ -311,7 +311,7 @@ class TestMeterColumns:
 
 class TestActionRow:
     def test_fill_and_engine_toggle(self, auto_tab):
-        assert auto_tab._fill_btn.property("role") == "primary"
+        assert auto_tab._fill_btn.property("role") == "cta-accent"
         assert auto_tab._fill_btn.text() == "FILL NOW"
         # Stopped: START visible, STOP hidden + disabled.
         assert auto_tab._start_btn.isEnabled()

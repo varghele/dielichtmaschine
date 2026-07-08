@@ -105,12 +105,19 @@ QTabBar::tab:hover:!selected {
 }
 
 /* -- Buttons --------------------------------------------------------- */
+/* One typographic voice for every button: the UI family at 600, the
+   reference's secondary-button weight. Family and weight are pinned
+   here (not via setFont) because the app-wide QWidget font-family rule
+   races setFont() on polish order. Buttons that speak louder or in
+   another family override both below (cta-accent, cta-outline) or set
+   only a size/tracking via setFont (mono chips). */
 QPushButton {
     background-color: $raised$;
     color: $text$;
     border: 1px solid $border$;
     padding: 6px 14px;
     min-height: 22px;
+    font-weight: 600;
 }
 QPushButton:hover {
     background-color: $accent_tint$;
@@ -127,30 +134,41 @@ QPushButton:checked {
     border-color: $accent_line$;
 }
 
+/* Accent-filled button in the UI family, for sentence-case actions that
+   sit in a row next to plain buttons (Save, Auto-Generate). Loud caps
+   CTAs use [role="cta-accent"] instead: same fill, display family. */
 QPushButton[role="primary"] {
     background-color: $accent$;
     color: $on_accent$;
     border-color: $accent_pressed$;
-    font-weight: bold;
 }
 QPushButton[role="primary"]:hover { background-color: $accent_hover$; }
 QPushButton[role="primary"]:pressed { background-color: $accent_pressed$; }
-/* Primary CTAs use the display family. Pinned here because the
-   app-wide QWidget font-family rule otherwise races setFont() on
-   polish order (family painted vs reported could differ per session). */
-QPushButton[role="primary"] { font-family: $font_display$; }
 QPushButton[role="primary"]:disabled,
+QPushButton[role="cta-accent"]:disabled,
 QPushButton[role="destructive"]:disabled {
     background-color: transparent;
     color: $text_disabled$;
     border: 1px solid $border$;
 }
 
+/* The screen's loudest action: accent fill, display caps (the mockup's
+   "+ ADD FIXTURE", "PLOT STAGE", "GENERATE", "FILL NOW"). Only the
+   size and tracking come from setFont; family and weight are pinned. */
+QPushButton[role="cta-accent"] {
+    background-color: $accent$;
+    color: $on_accent$;
+    border-color: $accent_pressed$;
+    font-family: $font_display$;
+    font-weight: 800;
+}
+QPushButton[role="cta-accent"]:hover { background-color: $accent_hover$; }
+QPushButton[role="cta-accent"]:pressed { background-color: $accent_pressed$; }
+
 QPushButton[role="success"] {
     background-color: $success$;
     color: $on_function$;
     border-color: $success_border$;
-    font-weight: bold;
 }
 QPushButton[role="success"]:hover { background-color: $success_hover$; }
 
@@ -158,7 +176,6 @@ QPushButton[role="destructive"] {
     background-color: $destructive$;
     color: $on_function$;
     border-color: $destructive_border$;
-    font-weight: bold;
 }
 QPushButton[role="destructive"]:hover { background-color: $destructive_hover$; }
 
@@ -626,6 +643,7 @@ QPushButton[role="cta-outline"] {
     border: 1px solid $border$;
     color: $text_secondary$;
     font-family: $font_display$;
+    font-weight: 600;
 }
 QPushButton[role="cta-outline"]:hover {
     border-color: $accent$;

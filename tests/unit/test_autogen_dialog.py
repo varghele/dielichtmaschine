@@ -389,7 +389,7 @@ def test_inspector_status_counts_sections(dialog):
 # ──────────────────────────────────────────────
 
 def test_generate_is_the_accent_primary_and_cancel_the_outline(dialog):
-    assert dialog.generate_btn.property("role") == "primary"
+    assert dialog.generate_btn.property("role") == "cta-accent"
     assert dialog.generate_btn.isDefault()
     assert dialog.cancel_btn.property("role") == "cta-outline"
 
@@ -397,7 +397,7 @@ def test_generate_is_the_accent_primary_and_cancel_the_outline(dialog):
 def test_accent_primary_rule_paints_the_brand_orange():
     from gui.theme_tokens import render_theme
     qss = render_theme("dark")
-    assert 'QPushButton[role="primary"]' in qss
+    assert 'QPushButton[role="cta-accent"]' in qss
     assert "#F0562E" in qss
 
 

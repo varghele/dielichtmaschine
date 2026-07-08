@@ -448,7 +448,7 @@ class AutogenDialog(QDialog):
 
         self.generate_btn = QPushButton("GENERATE")
         self.generate_btn.setObjectName("AutogenGenerateButton")
-        self.generate_btn.setProperty("role", "primary")
+        self.generate_btn.setProperty("role", "cta-accent")
         self.generate_btn.setFixedHeight(44)
         self.generate_btn.setDefault(True)
         self.generate_btn.clicked.connect(self._on_accepted)

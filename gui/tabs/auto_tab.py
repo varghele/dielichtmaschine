@@ -749,7 +749,7 @@ class AutoTab(BaseTab):
         actions.setSpacing(14)
         actions.addStretch()
         self._fill_btn = QPushButton("FILL NOW")
-        self._fill_btn.setProperty("role", "primary")
+        self._fill_btn.setProperty("role", "cta-accent")
         self._fill_btn.setFont(display_font(20, QFont.Weight.ExtraBold,
                                             tracking_em=0.1))
         self._fill_btn.setFixedHeight(66)

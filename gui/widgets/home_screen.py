@@ -269,7 +269,7 @@ class HomeScreen(QWidget):
         ctas.setSpacing(12)
         self.template_btn = QPushButton(
             QCoreApplication.translate("Shell", "New Project").upper())
-        self.template_btn.setProperty("role", "primary")
+        self.template_btn.setProperty("role", "cta-accent")
         self.template_btn.setFont(display_font(13, QFont.Weight.Bold,
                                                tracking_em=0.08))
         self.template_btn.setCursor(Qt.CursorShape.PointingHandCursor)
@@ -278,6 +278,7 @@ class HomeScreen(QWidget):
 
         self.open_btn = QPushButton(
             QCoreApplication.translate("Shell", "Open...").upper())
+        self.open_btn.setProperty("role", "cta-outline")
         self.open_btn.setFont(display_font(13, QFont.Weight.DemiBold,
                                            tracking_em=0.08))
         self.open_btn.setCursor(Qt.CursorShape.PointingHandCursor)

@@ -48,7 +48,7 @@ def test_action_strip_cta_and_chip(qapp, sample_configuration):
     try:
         # Accent primary CTA on the right of the strip.
         assert tab.add_btn.text() == "+ ADD FIXTURE"
-        assert tab.add_btn.property("role") == "primary"
+        assert tab.add_btn.property("role") == "cta-accent"
 
         # Conflict chip hidden while the patch is clean.
         assert not tab.conflict_label.isVisibleTo(tab)

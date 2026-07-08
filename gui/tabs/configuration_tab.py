@@ -263,14 +263,14 @@ class ConfigurationTab(BaseTab):
         title_row = QtWidgets.QHBoxLayout()
         title_row.addStretch(1)
 
-        self.update_config_btn = QtWidgets.QPushButton("Update Config")
+        self.update_config_btn = QtWidgets.QPushButton("UPDATE CONFIG")
         self.update_config_btn.setProperty("role", "cta-outline")
         self.update_config_btn.setToolTip("Write the current settings "
                                           "into the configuration")
         title_row.addWidget(self.update_config_btn)
 
         self.add_universe_btn = QtWidgets.QPushButton("+ ADD UNIVERSE")
-        self.add_universe_btn.setProperty("role", "primary")
+        self.add_universe_btn.setProperty("role", "cta-accent")
         self.add_universe_btn.setFont(display_font(11, QFont.Weight.Bold,
                                                    tracking_em=0.08))
         self.add_universe_btn.setToolTip("Add Universe")

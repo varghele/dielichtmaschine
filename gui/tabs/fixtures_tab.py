@@ -447,9 +447,9 @@ class FixturesTab(BaseTab):
 
         # Accent primary CTA (reference: "+ IMPORT .QXF" in the subnav
         # row); opens the fixture browser dialog. The display family is
-        # pinned by the theme's QPushButton[role="primary"] rule.
+        # pinned by the theme's QPushButton[role="cta-accent"] rule.
         self.add_btn = QtWidgets.QPushButton("+ ADD FIXTURE")
-        self.add_btn.setProperty("role", "primary")
+        self.add_btn.setProperty("role", "cta-accent")
         self.add_btn.setFont(display_font(11, QFont.Weight.Bold,
                                           tracking_em=0.08))
         self.add_btn.setToolTip("Add Fixture")

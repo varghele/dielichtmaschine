@@ -465,7 +465,7 @@ class ShowsTab(BaseTab):
         header = self._caption_strip("3D Preview")
         row = header.layout()
 
-        self.pane_popout_btn = QPushButton("Pop Out")
+        self.pane_popout_btn = QPushButton("POP OUT")
         self.pane_popout_btn.setProperty("role", "cta-outline")
         self.pane_popout_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self.pane_popout_btn.setToolTip("Open the visualizer on a second monitor")
