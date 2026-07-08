@@ -13,6 +13,24 @@ verbatim as the GitHub Release notes (see [docs/releasing.md](docs/releasing.md)
 
 ### Fixed
 
+- **"+ New" did nothing on the Show Structure tab.** Creating a show was
+  gated on a shows directory, which v1.0 demoted to an optional
+  import/export hint, so the handler silently returned on every config
+  that never set one. Shows are created straight into the config again.
+- **A truss had no adjustable length.** Stage elements can now be
+  resized from their context menu: trusses ask for a length, other
+  elements for width and depth. The footprint is stored in the config
+  and survives a save/load round trip.
+- **Fixture orientation was unreachable.** "Set Orientation..." in the
+  stage plan's context menu only filled the inline panel under the 3D
+  preview; it now opens the orientation dialog as well, so yaw, pitch
+  and mounting can be set from the plan.
+- **Buttons mixed three typefaces in one toolbar.** The accent-button
+  style pinned the display family (Barlow Condensed) onto sentence-case
+  buttons, so Structure and Timeline showed condensed, bold and regular
+  labels side by side. Accent fill and display caps are now separate
+  roles: uppercase CTAs use the display family, every other button uses
+  the UI family at one weight.
 - **Pop Out was offered twice** on every tab with a 3D preview: once in
   the pane header and once inside the visualizer widget.
 - **Fixtures could be placed with a stale stage size.** Loading a

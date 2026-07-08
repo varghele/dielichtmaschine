@@ -689,6 +689,38 @@ class StageElementItem(QGraphicsItem):
             return
         super().mouseMoveEvent(event)
 
+    def set_size(self, width_m: float, depth_m: float) -> None:
+        """Resize the element's footprint in metres (length x depth for a
+        straight truss). Bounds change, so callers must be inside a
+        prepareGeometryChange or call it via the context-menu path."""
+        self.element.width = max(0.1, float(width_m))
+        self.element.depth = max(0.1, float(depth_m))
+
+    def _edit_size(self) -> bool:
+        """Prompt for the footprint. Straight trusses ask only for length
+        (their depth is the truss profile); everything else asks for both.
+        Returns False when the user cancels."""
+        from PyQt6.QtWidgets import QInputDialog
+        from utils.stage_element_catalog import is_truss
+
+        straight = self.element.kind == "truss-straight"
+        length, ok = QInputDialog.getDouble(
+            None,
+            "Truss Length" if is_truss(self.element.kind) else "Element Size",
+            "Length (m):" if straight else "Width (m):",
+            self.element.width, 0.1, 100.0, 2)
+        if not ok:
+            return False
+        depth = self.element.depth
+        if not straight:
+            depth, ok = QInputDialog.getDouble(
+                None, "Element Size", "Depth (m):",
+                self.element.depth, 0.1, 100.0, 2)
+            if not ok:
+                return False
+        self.set_size(length, depth)
+        return True
+
     def contextMenuEvent(self, event):
         if self.ghosted:
             event.ignore()
@@ -700,6 +732,9 @@ class StageElementItem(QGraphicsItem):
         rotate_left = menu.addAction("Rotate -45°")
         rotate_right = menu.addAction("Rotate +45°")
         rename = menu.addAction("Set Label...")
+        size_action = menu.addAction(
+            "Truss Length..." if is_truss(self.element.kind)
+            else "Element Size...")
         height_action = None
         if is_truss(self.element.kind):
             height_action = menu.addAction("Truss Height...")
@@ -717,6 +752,10 @@ class StageElementItem(QGraphicsItem):
             self.element.rotation = (self.element.rotation - 45) % 360
         elif chosen is rotate_right:
             self.element.rotation = (self.element.rotation + 45) % 360
+        elif chosen is size_action:
+            if not self._edit_size():
+                event.accept()
+                return
         elif height_action is not None and chosen is height_action:
             config = getattr(view, "config", None)
             layer = (config.get_stage_layer(self.element.layer)

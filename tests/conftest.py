@@ -196,3 +196,48 @@ def temp_dir():
     d = tempfile.mkdtemp()
     yield d
     shutil.rmtree(d, ignore_errors=True)
+
+
+@pytest.fixture(autouse=True)
+def _no_blocking_modals(monkeypatch):
+    """A modal dialog in a test hangs the whole suite, silently.
+
+    QDialog.exec() spins its own event loop and waits for a human. Under
+    the offscreen platform there is nobody to click it, so the process
+    sits there until someone notices - which cost hours once, when a
+    signal test reached a handler that had just learned to open the
+    orientation dialog.
+
+    Any test that legitimately drives a dialog patches it out; this turns
+    the ones that forget into an immediate, named failure.
+    """
+    from PyQt6 import QtWidgets
+
+    def _blocked(self, *args, **kwargs):
+        raise RuntimeError(
+            f"{type(self).__name__}.exec() would block the test suite. "
+            "Patch the dialog out, or call its accept/reject path directly.")
+
+    def _blocked_static(name):
+        def _raise(*args, **kwargs):
+            raise RuntimeError(
+                f"{name} would block the test suite. Patch it out.")
+        return _raise
+
+    monkeypatch.setattr(QtWidgets.QDialog, "exec", _blocked, raising=False)
+    for cls, methods in (
+        (QtWidgets.QInputDialog,
+         ("getText", "getInt", "getDouble", "getItem", "getMultiLineText")),
+        (QtWidgets.QFileDialog,
+         ("getOpenFileName", "getOpenFileNames", "getSaveFileName",
+          "getExistingDirectory")),
+        (QtWidgets.QColorDialog, ("getColor",)),
+        (QtWidgets.QFontDialog, ("getFont",)),
+        (QtWidgets.QMessageBox,
+         ("information", "warning", "critical", "question", "about")),
+    ):
+        for method in methods:
+            monkeypatch.setattr(cls, method,
+                                staticmethod(_blocked_static(
+                                    f"{cls.__name__}.{method}()")),
+                                raising=False)

@@ -1711,11 +1711,13 @@ class StructureTab(BaseTab):
         ensure_midi_device_in_config(self.config, profile_name, self._midi_profiles)
 
     def _create_new_show(self):
-        """Create a new show with a dialog."""
-        # Ensure shows directory is configured
-        if not self._ensure_shows_directory():
-            return
+        """Create a new show with a dialog.
 
+        No shows-directory gate: since v1.0 the config YAML is the single
+        source of truth for shows and ``shows_directory`` is only a
+        last-used import/export hint. The old gate silently returned when
+        that hint was unset (the normal case), so "+ New" did nothing.
+        """
         name, ok = QInputDialog.getText(
             self,
             "Create New Show",
