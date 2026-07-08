@@ -364,6 +364,45 @@ in-source landmark below has the master list.
 
 ---
 
+## 7. A modal dialog in a test hangs the whole suite, silently
+
+`QDialog.exec()` (and `QMenu.exec`, `QInputDialog.getText`,
+`QFileDialog.getSaveFileName`, `QMessageBox.warning`, and the other
+static convenience dialogs) spins its own event loop and blocks until a
+human answers. The offscreen platform does not change this: there is no
+human, so the loop runs forever. pytest shows no failure, no timeout,
+no output; the process just sits there. One such test cost hours before
+anyone looked at the process ages.
+
+The trap is easy to spring indirectly. A test that only wanted to check
+a signal connection:
+
+```python
+tab.stage_view.set_orientation_requested.emit([item])   # looks harmless
+```
+
+reaches the tab's real slot, which had just learned to open the
+orientation dialog. The emit now blocks. The test never mentions a
+dialog.
+
+### Fix
+
+An autouse fixture in `tests/conftest.py` (`_no_blocking_modals`)
+monkeypatches `QDialog.exec` and the blocking statics to raise a named
+`RuntimeError` instead of opening. A forgotten modal now fails in
+milliseconds with the offending class name. Tests that legitimately
+drive a dialog patch it out themselves (`patch.object(module,
+"OrientationDialog", FakeDialog)`) so their own accept/reject path still
+runs. The `tests/e2e/` harness has its own richer guard
+(`tests/e2e/conftest.py::modals`) that records a handler per dialog and
+answers it; the two coexist.
+
+Rule of thumb: never let a test drive a code path that can open a modal
+without either patching the dialog class or driving its
+accept/reject/get* directly.
+
+---
+
 ## In-source landmarks
 
 - `gui/widgets/group_row_delegate.py` — strips `State_Selected` so the row tint survives selection
