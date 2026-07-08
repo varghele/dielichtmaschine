@@ -1190,3 +1190,21 @@ class StageView(QtWidgets.QGraphicsView):
             if isinstance(item, FixtureItem)
         ]
 
+    def select_group_fixtures(self, group_name):
+        """Select every selectable fixture of a group (clears first).
+
+        Ghosted (off-active-layer) and hidden items are skipped: they
+        carry no ItemIsSelectable flag, so selecting them would be a
+        no-op that silently reports the wrong selection count.
+        """
+        self.scene.clearSelection()
+        selected = []
+        for fixture_item in self.fixtures.values():
+            if getattr(fixture_item, 'group', "") != group_name:
+                continue
+            if not fixture_item.isVisible() or fixture_item.ghosted:
+                continue
+            fixture_item.setSelected(True)
+            selected.append(fixture_item)
+        return selected
+

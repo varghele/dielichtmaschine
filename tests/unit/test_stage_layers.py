@@ -437,14 +437,15 @@ class TestInspectorLayerCombo:
         assert not tab.layer_combo.isEnabled()
 
     def test_combo_follows_selection(self, tab):
+        # The inspector header is a DisplayLabel: caps rendering.
         tab.stage_view.fixtures["Ground Par"].setSelected(True)
-        assert tab.selection_label.text() == "Ground Par"
+        assert tab.selection_label.text() == "GROUND PAR"
         assert tab.layer_combo.isEnabled()
         assert tab.layer_combo.currentData() == "Ground"
 
         tab.stage_view.fixtures["Floater"].setSelected(True)
         # Mixed layers -> no entry shown.
-        assert tab.selection_label.text() == "2 fixtures"
+        assert tab.selection_label.text() == "2 FIXTURES"
         assert tab.layer_combo.currentIndex() == -1
 
     def test_combo_assignment_snaps_z_like_context_menu(self, tab, layered_config):
@@ -469,5 +470,383 @@ class TestInspectorLayerCombo:
         item = tab.stage_view.fixtures["Ground Par"]
         item.setSelected(True)
         item.setSelected(False)
-        assert tab.selection_label.text() == "No fixture selected"
+        assert tab.selection_label.text() == "NO FIXTURE SELECTED"
         assert not tab.layer_combo.isEnabled()
+
+
+# ---------------------------------------------------------------------------
+# Reference-screen anatomy (design_handoff .../screens/04-setup-stage.html)
+# ---------------------------------------------------------------------------
+
+class TestPureHelpers:
+    """The library-row and palette helpers, unit-tested without Qt."""
+
+    def test_dominant_layer_picks_the_majority(self):
+        from gui.tabs.stage_tab import dominant_layer
+        fixtures = [make_fixture("a", layer="Flown"),
+                    make_fixture("b", layer="Flown"),
+                    make_fixture("c", layer="Ground")]
+        assert dominant_layer(fixtures) == "Flown"
+
+    def test_dominant_layer_without_assignment(self):
+        from gui.tabs.stage_tab import dominant_layer
+        assert dominant_layer([make_fixture("a")]) == "-"
+        assert dominant_layer([]) == "-"
+
+    def test_group_row_readout(self):
+        from gui.tabs.stage_tab import group_row_readout
+        fixtures = [make_fixture("a", layer="Flown"),
+                    make_fixture("b", layer="Flown")]
+        assert group_row_readout(fixtures) == "2x · FLOWN"
+        assert group_row_readout([make_fixture("c")]) == "1x · -"
+
+    def test_reference_element_order_comes_first(self):
+        from gui.tabs.stage_tab import (
+            REFERENCE_ELEMENT_ORDER, ordered_element_specs,
+        )
+        from utils.stage_element_catalog import (
+            CATEGORY_STAGE, specs_for_category,
+        )
+        specs = specs_for_category(CATEGORY_STAGE)
+        ordered = ordered_element_specs(specs)
+        assert [s.kind for s in ordered[:8]] == list(REFERENCE_ELEMENT_ORDER)
+        # Nothing dropped: the palette keeps every catalog kind.
+        assert {s.kind for s in ordered} == {s.kind for s in specs}
+
+
+class TestThemeRoles:
+    """The reference chrome comes from theme roles, not ad-hoc QSS.
+
+    Never assert font().family() (polish-order race) - assert the rules.
+    """
+
+    def test_roles_used_by_the_stage_tab_exist(self):
+        from gui.theme_tokens import render_theme
+        qss = render_theme("dark")
+        for rule in ('QLabel[role="hint-box"]', '#GroupRow',
+                     'QWidget[role="card"]', 'QWidget[role="inspector"]',
+                     'QPushButton[role="primary"]',
+                     'QToolButton[role="topbar-icon"]',
+                     'QPushButton[role="nav"]'):
+            assert rule in qss, f"missing theme rule: {rule}"
+
+
+@pytest.fixture
+def rig_config():
+    """Two groups on two layers, for the library panel."""
+    fixtures = [
+        make_fixture("Par 1", layer="Ground", group="Front pars"),
+        make_fixture("Par 2", layer="Ground", group="Front pars"),
+        make_fixture("MH 1", layer="Top truss", z=5.0, group="Movers"),
+    ]
+    return Configuration(
+        fixtures=fixtures,
+        groups={
+            "Front pars": FixtureGroup("Front pars", fixtures[:2],
+                                       color="#D9A441"),
+            "Movers": FixtureGroup("Movers", fixtures[2:], color="#C95FD0"),
+        },
+        universes={1: Universe(id=1, name="Universe 1", output={})},
+        stage_layers=[
+            StageLayer(name="Ground", z_height=0.0),
+            StageLayer(name="Top truss", z_height=5.0),
+        ],
+        stage_width=12.0,
+        stage_height=6.0,
+    )
+
+
+def _row_texts(row):
+    from PyQt6.QtWidgets import QLabel
+    return [child.text() for child in row.findChildren(QLabel)]
+
+
+class TestLibraryPanel:
+    """Left 260px panel: RIG · FIXTURES rows, element/truss tiles, the
+    dashed hint, and the collapsed STAGE SETTINGS section that holds
+    every control the old left rail used to show."""
+
+    @pytest.fixture
+    def tab(self, qapp, rig_config):
+        from gui.tabs.stage_tab import StageTab
+        tab = StageTab(rig_config, parent=None)
+        tab.update_from_config()
+        yield tab
+        tab.deleteLater()
+
+    def _group_rows(self, tab):
+        layout = tab._group_rows_layout
+        return [layout.itemAt(i).widget() for i in range(layout.count())]
+
+    def test_panel_width_matches_reference(self, tab):
+        from gui.tabs.stage_tab import LIBRARY_WIDTH
+        assert LIBRARY_WIDTH == 260
+        assert tab.control_panel.width() == 260
+
+    def test_group_rows_show_count_and_dominant_layer(self, tab):
+        rows = self._group_rows(tab)
+        assert len(rows) == 2
+        assert _row_texts(rows[0]) == ["FRONT PARS", "2X · GROUND"]
+        assert _row_texts(rows[1]) == ["MOVERS", "1X · TOP TRUSS"]
+
+    def test_group_row_carries_the_group_color(self, tab):
+        rows = self._group_rows(tab)
+        assert "border-left: 3px solid #D9A441" in rows[0].styleSheet()
+
+    def test_group_row_click_selects_the_groups_fixtures(self, tab):
+        tab._on_group_row_clicked("Front pars")
+        selected = {item.fixture_name
+                    for item in tab.stage_view.get_selected_fixtures()}
+        assert selected == {"Par 1", "Par 2"}
+
+    def test_palette_keeps_every_catalog_kind(self, tab):
+        from utils.stage_element_catalog import CATALOG
+        assert set(tab.element_buttons) == set(CATALOG)
+
+    def test_element_tile_places_an_element(self, tab, rig_config):
+        tab.element_buttons["drum-riser"].click()
+        assert [e.kind for e in rig_config.stage_elements] == ["drum-riser"]
+
+    def test_truss_tile_creates_its_layer_and_chip(self, tab, rig_config):
+        tab.element_buttons["truss-straight"].click()
+        assert rig_config.get_stage_layer("Truss 1") is not None
+        assert "Truss 1" in tab.layer_chips
+
+    def test_truss_hint_uses_the_theme_hint_box(self, tab):
+        assert tab.truss_hint.property("role") == "hint-box"
+
+    def test_settings_section_is_collapsed_but_keeps_the_old_controls(self, tab):
+        assert tab.settings_toggle.isChecked() is False
+        assert tab.settings_container.isVisibleTo(tab.control_panel) is False
+        for name in ("stage_width", "stage_height", "grid_size",
+                     "grid_toggle", "snap_to_grid", "fit_view_btn",
+                     "show_axes_checkbox", "add_spot_btn", "remove_item_btn",
+                     "plane_list", "plot_stage_btn", "launch_visualizer_btn",
+                     "layer_list", "add_layer_btn", "remove_layer_btn",
+                     "edit_layer_btn", "tcp_status_label", "layer_panel"):
+            widget = getattr(tab, name)
+            assert tab.settings_container.isAncestorOf(widget), (
+                f"{name} is not inside the STAGE SETTINGS section")
+
+    def test_settings_toggle_expands(self, tab):
+        tab.settings_toggle.setChecked(True)
+        assert tab.settings_container.isVisibleTo(tab.control_panel) is True
+
+
+class TestActionStrip:
+    """38px strip: chips right-aligned, MORPH disabled, EXPORT wired."""
+
+    @pytest.fixture
+    def tab(self, qapp, rig_config):
+        from gui.tabs.stage_tab import StageTab
+        tab = StageTab(rig_config, parent=None)
+        tab.update_from_config()
+        yield tab
+        tab.deleteLater()
+
+    def test_strip_height(self, tab):
+        from gui.tabs.stage_tab import STRIP_HEIGHT
+        assert STRIP_HEIGHT == 38
+
+    def test_active_chip_is_accent_filled_not_just_bordered(self, tab):
+        """The chip wears role="segment"; the theme's rule fills the
+        checked segment with the accent (widget-local CSS would race
+        the app-wide font/colour rules, see docs/qt-gotchas.md)."""
+        from gui.theme_tokens import THEMES, render_theme
+
+        assert tab.layer_chips["Ground"].property("role") == "segment"
+        rule = render_theme("dark").split(
+            'QPushButton[role="segment"]:checked {', 1)[1].split("}", 1)[0]
+        assert THEMES["dark"]["accent"] in rule
+        assert THEMES["dark"]["on_accent"] in rule
+
+    def test_morph_is_disabled_with_a_tooltip(self, tab):
+        assert not tab.morph_btn.isEnabled()
+        assert "morph milestone" in tab.morph_btn.toolTip()
+
+    def test_export_rider_runs_the_stage_plot_export(self, tab, monkeypatch):
+        calls = []
+        monkeypatch.setattr(tab, "_export_stage_plot",
+                            lambda: calls.append("export"))
+        # Rebind: the signal holds the original bound method.
+        tab.export_rider_btn.clicked.disconnect()
+        tab.export_rider_btn.clicked.connect(tab._export_stage_plot)
+        tab.export_rider_btn.click()
+        assert calls == ["export"]
+
+    def test_define_chip_edits_the_active_layer(self, tab, monkeypatch):
+        seen = {}
+
+        def fake_dialog(title, name="", z_height=3.0):
+            seen["name"] = name
+            return None
+
+        monkeypatch.setattr(tab, "_layer_dialog", fake_dialog)
+        tab._set_active_layer("Top truss")
+        tab.define_layer_chip.click()
+        assert seen["name"] == "Top truss"
+
+    def test_define_chip_disabled_without_layers(self, qapp):
+        from gui.tabs.stage_tab import StageTab
+        tab = StageTab(Configuration(), parent=None)
+        try:
+            assert not tab.define_layer_chip.isEnabled()
+        finally:
+            tab.deleteLater()
+
+
+class TestPlanOverlays:
+    """Overlay chrome on the plan: caption, badge, legend, title block."""
+
+    @pytest.fixture
+    def tab(self, qapp, rig_config):
+        from gui.tabs.stage_tab import StageTab
+        tab = StageTab(rig_config, parent=None)
+        tab.update_from_config()
+        yield tab
+        tab.deleteLater()
+
+    def test_overlays_are_children_of_the_view_and_click_through(self, tab):
+        from PyQt6.QtCore import Qt
+        for widget in (tab.plan_caption, tab.active_layer_badge,
+                       tab.plan_legend, tab.title_block):
+            assert widget.parent() is tab.stage_view
+            assert widget.testAttribute(
+                Qt.WidgetAttribute.WA_TransparentForMouseEvents)
+
+    def test_caption_names_the_real_grid_size(self, tab, rig_config):
+        assert tab.plan_caption.text() == \
+            "STAGE PLAN · TOP VIEW · 1 SQUARE = 0.5 M"
+        rig_config.grid_size = 1.0
+        tab.update_from_config()
+        assert "1 SQUARE = 1 M" in tab.plan_caption.text()
+
+    def test_badge_only_shows_while_a_layer_is_active(self, tab):
+        assert tab.active_layer_badge.isHidden()
+        tab._set_active_layer("Top truss")
+        assert not tab.active_layer_badge.isHidden()
+        assert tab.active_layer_badge.text() == \
+            "ACTIVE LAYER: TOP TRUSS 5 M · OTHERS DIMMED"
+        tab._set_active_layer(None)
+        assert tab.active_layer_badge.isHidden()
+
+    def test_legend_first_entry_follows_the_active_layer(self, tab):
+        assert tab.legend_active_label.text() == "ALL LAYERS"
+        tab._set_active_layer("Ground")
+        assert tab.legend_active_label.text() == "GROUND 0 m"
+
+    def test_title_block_is_honest_about_the_project(self, tab, rig_config):
+        import datetime
+        assert tab.title_name.text() == "STAGE PLAN · UNTITLED"
+        assert tab.title_sheet.text() == "SHEET 1/1"
+        assert tab.title_dims.text() == "12x6 m"
+        assert tab.title_date.text() == datetime.date.today().isoformat()
+
+        rig_config._loaded_from = "/tmp/neon_ruinen.yaml"
+        tab.update_from_config()
+        assert tab.title_name.text() == "STAGE PLAN · NEON_RUINEN"
+
+    def test_title_block_follows_stage_dimensions(self, tab):
+        tab.stage_width.setValue(8)
+        assert tab.title_dims.text() == "8x6 m"
+
+
+class TestSelectionCard:
+    """SELECTION card + LAYERS section + preview header."""
+
+    @pytest.fixture
+    def tab(self, qapp, rig_config):
+        from gui.tabs.stage_tab import StageTab
+        tab = StageTab(rig_config, parent=None)
+        tab.update_from_config()
+        yield tab
+        tab.deleteLater()
+
+    def test_stat_tiles_read_the_selected_fixture(self, tab, rig_config):
+        rig_config.fixtures[2].x = 2.5
+        rig_config.fixtures[2].y = -1.0
+        tab.update_from_config()
+        tab.stage_view.fixtures["MH 1"].setSelected(True)
+        assert tab.stat_x.text() == "2.50"
+        assert tab.stat_y.text() == "-1.00"
+        assert tab.stat_z.text() == "5.00"
+
+    def test_stat_tiles_survive_the_first_config_load(self, qapp, rig_config):
+        """update_from_config maps fixtures with the CONFIG's stage size.
+
+        StageView.meters_to_pixels reads stage_width_m / stage_depth_m,
+        which set_config does not refresh - so the items placed by the
+        first set_config used the view's default 10x6 m grid and every
+        readout (and the next save) was off. Pin the re-place.
+        """
+        from gui.tabs.stage_tab import StageTab
+        rig_config.fixtures[2].x = 4.0
+        tab = StageTab(rig_config, parent=None)   # 12 x 6 m stage
+        try:
+            tab.update_from_config()              # exactly one load
+            tab.stage_view.fixtures["MH 1"].setSelected(True)
+            assert tab.stat_x.text() == "4.00"
+        finally:
+            tab.deleteLater()
+
+    def test_group_name_uses_the_group_color(self, tab):
+        tab.stage_view.fixtures["MH 1"].setSelected(True)
+        assert tab.selection_group_label.text() == "MOVERS"
+        assert "#C95FD0" in tab.selection_group_label.styleSheet()
+
+    def test_multi_selection_blanks_the_stats(self, tab):
+        tab.stage_view.fixtures["Par 1"].setSelected(True)
+        tab.stage_view.fixtures["Par 2"].setSelected(True)
+        assert tab.stat_x.text() == "-"
+        assert tab.selection_group_label.text() == "FRONT PARS"
+
+    def test_layer_combo_is_accent_bordered(self, tab):
+        """Theme-owned via QComboBox[role="accent-field"]."""
+        from gui.theme_tokens import THEMES, render_theme
+
+        assert tab.layer_combo.property("role") == "accent-field"
+        rule = render_theme("dark").split(
+            'QComboBox[role="accent-field"] {', 1)[1].split("}", 1)[0]
+        assert THEMES["dark"]["accent"] in rule
+
+    def test_selection_hint_has_the_accent_left_border(self, tab):
+        """Theme-owned via QLabel[role="hint-accent"]."""
+        from gui.theme_tokens import THEMES, render_theme
+
+        assert tab.selection_hint.property("role") == "hint-accent"
+        rule = render_theme("dark").split(
+            'QLabel[role="hint-accent"] {', 1)[1].split("}", 1)[0]
+        assert "border-left: 3px solid" in rule
+        assert THEMES["dark"]["accent"] in rule
+
+    def test_layers_section_lists_every_layer(self, tab):
+        layout = tab._layer_rows_layout
+        rows = [layout.itemAt(i).widget() for i in range(layout.count())]
+        assert [_row_texts(row) for row in rows] == [
+            ["Ground", "H 0 m"], ["Top truss", "H 5 m"]]
+
+    def test_preview_collapse_hides_the_gl_pane(self, tab):
+        tab.preview_collapse_btn.setChecked(True)
+        assert tab.embedded_visualizer.isHidden()
+        tab.preview_collapse_btn.setChecked(False)
+        assert not tab.embedded_visualizer.isHidden()
+
+
+class TestStageViewGroupSelection:
+
+    def test_select_group_fixtures_skips_ghosted(self, qapp, rig_config):
+        from gui.StageView import StageView
+        view = StageView(None)
+        try:
+            view.set_config(rig_config)
+            assert {i.fixture_name
+                    for i in view.select_group_fixtures("Front pars")} == \
+                {"Par 1", "Par 2"}
+
+            # Ghosted (off active layer) fixtures are not selectable.
+            view.set_active_layer("Top truss")
+            assert view.select_group_fixtures("Front pars") == []
+            assert {i.fixture_name
+                    for i in view.select_group_fixtures("Movers")} == {"MH 1"}
+        finally:
+            view.deleteLater()

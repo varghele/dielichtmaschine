@@ -1,9 +1,14 @@
-"""Stage tab North Star 5a chrome goldens.
+"""Stage tab chrome goldens (reference screen 04-setup-stage.html).
 
-Pins the new Stage tab anatomy (layer chip row above the canvas, quiet
-left rail with micro captions, bottom action buttons) without touching
-the GL visualizer. Same rules as test_golden_screenshots.py: offscreen,
-fixed sizes, per-platform goldens, regenerate with QLC_REGEN_GOLDENS=1.
+Pins the rebuilt Stage tab anatomy without touching the GL visualizer:
+the 38px action strip (right-aligned segmented layer chips, MORPH,
+EXPORT RIDER PDF), the 260px library panel (group rows, element +
+truss tiles, dashed hint, collapsed STAGE SETTINGS) and the 380px
+inspector (SELECTION card, X/Y/Z stat tiles, accent LAYER field,
+LAYERS rows).
+
+Same rules as test_golden_screenshots.py: offscreen, fixed sizes,
+per-platform goldens, regenerate with QLC_REGEN_GOLDENS=1.
 """
 
 from __future__ import annotations
@@ -41,8 +46,8 @@ def scene_config():
                      layer="Flown"),
     ]
     groups = {
-        "Front": FixtureGroup("Front", fixtures[:2], color="#cc6666"),
-        "Movers": FixtureGroup("Movers", [fixtures[2]], color="#6688cc"),
+        "Front": FixtureGroup("Front", fixtures[:2], color="#D9A441"),
+        "Movers": FixtureGroup("Movers", [fixtures[2]], color="#C95FD0"),
     }
     return Configuration(
         fixtures=fixtures,
@@ -70,20 +75,49 @@ def stage_tab(qapp, scene_config):
     tab.deleteLater()
 
 
-def test_stage_layer_bar_golden(qapp, stage_tab):
-    """Chip row with an active layer: ALL, three layer chips (BUEHNE
-    accented), + LAYER, and the 25%/locked hint on the right."""
+def test_stage_action_strip_golden(qapp, stage_tab):
+    """Action strip with an active layer: right-aligned ACTIVE LAYER
+    caption, segmented chip group (ALL + three layers, BUEHNE accent-
+    FILLED, + LAYER, DEFINE...), the 25%/locked hint, disabled MORPH
+    and the EXPORT RIDER PDF CTA."""
     stage_tab._set_active_layer("Buehne")
-    bar = stage_tab.layer_bar
-    bar.setFixedSize(820, 44)
-    compare_to_golden(bar.grab().toImage(), "stage_layer_bar_dark")
+    strip = stage_tab.action_strip
+    strip.setFixedSize(1180, 38)
+    compare_to_golden(strip.grab().toImage(), "stage_action_strip_dark")
 
 
-def test_stage_control_panel_golden(qapp, stage_tab):
-    """Left rail: micro captions, mono dimension fields, layers card,
-    planes list, PLOT STAGE / LAUNCH VISUALIZER at the bottom."""
+def test_stage_library_panel_golden(qapp, stage_tab):
+    """Left library: RIG · FIXTURES rows in group colors, the stage
+    element and truss tile grids, the dashed truss hint and the
+    collapsed STAGE SETTINGS toggle."""
     panel = stage_tab.control_panel
-    # Tall enough for the element-palette sections added by the static
-    # stage elements slice; a squeezed grab overlaps section text.
-    panel.setFixedSize(250, 900)
-    compare_to_golden(panel.grab().toImage(), "stage_control_panel_dark")
+    panel.setFixedSize(260, 900)
+    compare_to_golden(panel.grab().toImage(), "stage_library_panel_dark")
+
+
+def test_stage_inspector_golden(qapp, stage_tab):
+    """Right inspector with a fixture selected: display-caps name, the
+    group name in the group color, the X/Y/Z stat tiles, the accent
+    LAYER field, the accent-left-border hint and the LAYERS rows."""
+    stage_tab.stage_view.fixtures["MH 1"].setSelected(True)
+    panel = stage_tab.inspector_panel
+    # Tall enough for SELECTION + ORIENTATION + LAYERS without the
+    # orientation scroll area squeezing the rows below it.
+    panel.setFixedSize(380, 900)
+    compare_to_golden(panel.grab().toImage(), "stage_inspector_dark")
+
+
+def test_stage_plan_overlays_golden(qapp, stage_tab):
+    """Plan overlay chrome: caption, active-layer badge, legend and the
+    title block, pinned to the StageView's corners."""
+    stage_tab._set_active_layer("Flown")
+    view = stage_tab.stage_view
+    view.setFixedSize(760, 460)
+    view.show()
+    qapp.processEvents()
+    stage_tab._position_plan_overlays()
+    qapp.processEvents()
+    try:
+        compare_to_golden(view.grab().toImage(), "stage_plan_overlays_dark")
+    finally:
+        view.hide()
