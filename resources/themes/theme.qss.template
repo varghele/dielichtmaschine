@@ -465,7 +465,15 @@ QStatusBar QLabel { color: $text_secondary$; background: transparent; }
     background-image: url("$grid_tile$");
     background-repeat: repeat-xy;
 }
-#HomeWordmark { color: $text$; background: transparent; }
+#HomeWordmark {
+    color: $text$;
+    background: transparent;
+    /* Family + hero weight pinned here: the app-wide QWidget
+       font-family rule races setFont on polish order and thinned the
+       lockup to regular Barlow. Size/tracking still come from code. */
+    font-family: $font_display$;
+    font-weight: 800;
+}
 #HomeSlogan { color: $text_secondary$; background: transparent; }
 #HomeAccentRule { background-color: $accent$; }
 #HomeRecentTitle { color: $text_secondary$; background: transparent; }

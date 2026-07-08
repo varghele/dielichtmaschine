@@ -50,3 +50,10 @@ def app_icon_path() -> str:
 def app_ico_path() -> str:
     """The multi-size Windows .ico used by PyInstaller."""
     return os.path.join(brand_dir(), "lichtmaschine.ico")
+
+
+def brand_glyph_ring_path() -> str:
+    """The hero rotor glyph WITH the thin outer registration ring
+    (reference screen 01); the icon PNGs/favicon are the ring-less
+    16px variant per the handoff."""
+    return os.path.join(brand_dir(), "glyph-ring.svg")

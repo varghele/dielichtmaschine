@@ -226,30 +226,35 @@ class HomeScreen(QWidget):
         left_host.setMaximumWidth(560)
         left_host.setLayout(left)
 
+        # Row 1: the ringed rotor glyph vertically centered on the
+        # wordmark (reference: 64px glyph, align-items center).
         lockup = QHBoxLayout()
         lockup.setSpacing(18)
         glyph = QLabel()
         glyph.setObjectName("HomeGlyph")
-        pixmap = QPixmap(app_icon_path())
-        if not pixmap.isNull():
-            glyph.setPixmap(pixmap.scaled(
-                64, 64, Qt.AspectRatioMode.KeepAspectRatio,
-                Qt.TransformationMode.SmoothTransformation))
-        lockup.addWidget(glyph, 0, Qt.AlignmentFlag.AlignTop)
+        from PyQt6.QtGui import QIcon
+        from utils.app_identity import brand_glyph_ring_path
+        glyph.setPixmap(QIcon(brand_glyph_ring_path()).pixmap(64, 64))
+        glyph.setFixedSize(64, 64)
+        lockup.addWidget(glyph, 0, Qt.AlignmentFlag.AlignVCenter)
 
-        title_col = QVBoxLayout()
-        title_col.setSpacing(10)
-        # Two-line hero lockup like the reference (52px over two lines
-        # in a 460 column); explicit break instead of QLabel word wrap
-        # so the size hint is exact and nothing clips.
+        # Two-line hero wordmark (explicit break instead of QLabel word
+        # wrap so the size hint is exact and nothing clips). Family +
+        # 800 weight are pinned by the #HomeWordmark QSS rule - the
+        # app-wide font-family rule otherwise races setFont and thinned
+        # the hero.
         wordmark = QLabel(APP_WORDMARK.replace(" ", "\n", 1))
         wordmark.setObjectName("HomeWordmark")
         wordmark.setFont(display_font(38, QFont.Weight.ExtraBold,
                                       tracking_em=0.03))
-        title_col.addWidget(wordmark)
+        lockup.addWidget(wordmark, 1, Qt.AlignmentFlag.AlignVCenter)
+        left.addLayout(lockup)
 
+        # Row 2: accent rule + slogan, indented to the text column
+        # (starts where the wordmark starts, like the reference).
         slogan_row = QHBoxLayout()
         slogan_row.setSpacing(12)
+        slogan_row.addSpacing(64 + 18)
         rule = QWidget()
         rule.setObjectName("HomeAccentRule")
         rule.setFixedSize(80, 3)
@@ -258,9 +263,7 @@ class HomeScreen(QWidget):
         slogan.setObjectName("HomeSlogan")
         slogan_row.addWidget(slogan)
         slogan_row.addStretch(1)
-        title_col.addLayout(slogan_row)
-        lockup.addLayout(title_col, 1)
-        left.addLayout(lockup)
+        left.addLayout(slogan_row)
 
         ctas = QHBoxLayout()
         ctas.setSpacing(12)
