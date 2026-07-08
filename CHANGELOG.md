@@ -13,6 +13,8 @@ verbatim as the GitHub Release notes (see [docs/releasing.md](docs/releasing.md)
 
 ### Fixed
 
+- **Pop Out was offered twice** on every tab with a 3D preview: once in
+  the pane header and once inside the visualizer widget.
 - **Fixtures could be placed with a stale stage size.** Loading a
   config applied the fixture positions before the stage view knew the
   new stage dimensions, so fixtures on a non-default stage landed at
@@ -29,6 +31,18 @@ verbatim as the GitHub Release notes (see [docs/releasing.md](docs/releasing.md)
 
 ### Added
 
+- **Timeline chrome rebuilt against the original design reference.**
+  The transport readout now shows the real musical position ("BAR
+  19.4 · 00:52.6"), derived from the song structure's parts, bars and
+  time signatures. A SNAP chip joins the grid-subdivision chips (both
+  synced with the master timeline), the 3D pane gained a proper
+  header (POP-OUT, collapse chevron) and the riff browser a caption,
+  and a new read-only EFFECT BLOCK inspector shows the selected
+  block's lane (in its group color), bar range, duration, and its
+  DIM / COL / MOV / SPC sub-lane block counts. A mono status footer
+  reads "4 LANES · 28 BLOCKS · GRID 1 · ZOOM 1.0X". Per-block overlap
+  functions (XFADE / HTP / LTP) remain future work, so they are not
+  shown.
 - **Stage, Structure, and Auto screens rebuilt against the original
   design references.** Stage: the layer picker moved into the action
   strip as accent-filled segmented chips beside EXPORT RIDER PDF, the

@@ -46,6 +46,25 @@ engine), fixtures GROUPS side panel + capability chips/channel map
 tab. NEEDED-QSS follow-ups: subnav-strip role (bottom-border-only
 bar), accent-filled checked chip variant.
 
+## Round 3 (2026-07-08): rebuilds against the ORIGINAL screen references
+
+`design_handoff_lichtmaschine_app/screens/*.html` arrived (the real
+per-screen design files). Rebuilt screen-by-screen against them, each
+verified by golden + a real-config render: Home (01), Fixtures (1c/02),
+Stage (04), Structure (05), Timeline (06), Auto (07). Ten shared QSS
+roles were extracted into the theme template along the way (segment
+chips, stat tiles, accent field/hint, section caption, element tile,
+mode/bias chips, pane icon, grid surface, outlined CTA).
+
+Deliberately NOT faked, because the data or engine does not exist:
+timeline SWING and per-block overlap functions (XFADE/HTP/LTP, v1.6),
+Auto's latency row and "MID" plane, Structure's per-part audio analysis
+values (rendered as dashes with a tooltip until a generation report
+exists), the reference's invented transition labels ("XFADE 2").
+
+Screens still to diff: 03 universes (already close), 10 autogen dialog,
+12 screensaver. 08/09 live and 11 morph belong to their milestones.
+
 ## Explicitly NOT in this pass
 
 Live 3a/3b (v1.8; variant decision open), Morph wizard / Venue check /
