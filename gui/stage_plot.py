@@ -15,7 +15,7 @@ scale bar. Labels avoid each other and the symbols via a greedy
 candidate-position search (choose_label_rect).
 
 Orientation matches the Stage tab's 2D view: negative stage-Y (the
-audience side) is the top edge of the plot.
+audience side) is the bottom edge of the plot.
 """
 
 from __future__ import annotations
@@ -208,7 +208,7 @@ class StagePlotRenderer:
                 if layer is not None and not layer.visible:
                     continue
             x = ox + element.x * ppm
-            y = oy + element.y * ppm
+            y = oy - element.y * ppm
             w = element.width * ppm
             d = element.depth * ppm
 
@@ -306,7 +306,7 @@ class StagePlotRenderer:
         m = 0.0
         while m <= stage_d / 2 + 0.01:
             for sign in ((1,) if m == 0 else (1, -1)):
-                y = oy + sign * m * ppm
+                y = oy - sign * m * ppm
                 painter.drawText(
                     QRectF(stage_rect.left() - 8.5 * mm, y - 1.75 * mm, 8 * mm, 3.5 * mm),
                     int(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter),
@@ -315,14 +315,24 @@ class StagePlotRenderer:
             m += label_step
 
         # Audience edge marker. Negative stage-Y is the front, which the
-        # Stage tab (and therefore this plot) draws at the top.
+        # Stage tab (and therefore this plot) draws at the bottom. It sits
+        # below the X meter labels along the bottom edge.
         painter.setFont(self._font(2.8, mm, bold=True))
         painter.setPen(QPen(QColor(120, 120, 120), 0.2 * mm))
         painter.drawText(
-            QRectF(stage_rect.left(), stage_rect.top() - 5 * mm, stage_rect.width(), 4 * mm),
+            self._audience_marker_rect(stage_rect, mm),
             int(Qt.AlignmentFlag.AlignCenter),
             "▼  AUDIENCE  ▼",
         )
+
+    @staticmethod
+    def _audience_marker_rect(stage_rect: QRectF, mm: float) -> QRectF:
+        """Rect for the AUDIENCE edge marker. Negative stage-Y is the
+        front, drawn at the BOTTOM of the plot (matching the Stage tab),
+        so the marker sits below the stage's bottom edge and clear of the
+        X meter labels."""
+        return QRectF(stage_rect.left(), stage_rect.bottom() + 4.5 * mm,
+                      stage_rect.width(), 4 * mm)
 
     def _layer_index(self) -> dict:
         """Layer name -> short marker ('L1', 'L2', ...)."""
@@ -345,7 +355,7 @@ class StagePlotRenderer:
             _, yaw, pitch, roll = fixture.get_effective_orientation(group)
 
             x = ox + fixture.x * ppm
-            y = oy + fixture.y * ppm
+            y = oy - fixture.y * ppm
 
             is_bar = fixture.type in _BAR_TYPES
             angle = (projected_bar_angle_2d(yaw, pitch, roll) if is_bar
@@ -410,7 +420,7 @@ class StagePlotRenderer:
         size = 1.6 * mm
         for name, spot in getattr(self.config, 'spots', {}).items():
             x = ox + spot.x * ppm
-            y = oy + spot.y * ppm
+            y = oy - spot.y * ppm
             painter.drawLine(int(x - size), int(y - size), int(x + size), int(y + size))
             painter.drawLine(int(x - size), int(y + size), int(x + size), int(y - size))
             anchor = QRectF(x - size, y - size, 2 * size, 2 * size)

@@ -156,6 +156,90 @@ class TestRenderPdf:
             StagePlotRenderer(plot_config).render(str(tmp_path / "plot.svg"))
 
 
+class TestAudienceAtBottom:
+    """The printable plot must match the interactive Stage plan: the
+    audience/front (negative stage-Y) sits at the BOTTOM of the page, so
+    a front fixture plots to a LARGER page-Y than a back fixture, and the
+    AUDIENCE marker lands in the lower band."""
+
+    def _render_calls(self, config):
+        """Render through a QPainter spy, capturing the y of every drawn
+        fixture symbol (via translate) and the AUDIENCE text position."""
+        from gui.stage_plot import StagePlotRenderer
+
+        translate_ys = []
+        audience_rects = []
+
+        renderer = StagePlotRenderer(config, title="probe")
+
+        # Wrap _draw_fixtures to record each fixture's page-Y. The renderer
+        # translates the painter to (x, y) before painting each symbol.
+        orig_draw_fixtures = renderer._draw_fixtures
+
+        def spy_fixtures(painter, ox, oy, ppm, mm, black):
+            for f in config.fixtures:
+                translate_ys.append(("fix", f.name, oy - f.y * ppm))
+            return orig_draw_fixtures(painter, ox, oy, ppm, mm, black)
+
+        renderer._draw_fixtures = spy_fixtures  # type: ignore[assignment]
+
+        orig_draw_stage = renderer._draw_stage
+
+        def spy_stage(painter, ox, oy, stage_w, stage_d, ppm, mm, black, gray):
+            hd = stage_d / 2 * ppm
+            audience_rects.append(("stage_bottom", oy + hd))
+            audience_rects.append(("stage_top", oy - hd))
+            audience_rects.append(("stage_center", oy))
+            return orig_draw_stage(painter, ox, oy, stage_w, stage_d, ppm, mm,
+                                   black, gray)
+
+        renderer._draw_stage = spy_stage  # type: ignore[assignment]
+
+        import tempfile
+        import os as _os
+        fd, path = tempfile.mkstemp(suffix=".png")
+        _os.close(fd)
+        try:
+            renderer.render(path, paper="A4", dpi=100)
+        finally:
+            if _os.path.exists(path):
+                _os.remove(path)
+        return dict(((n, y) for _, n, y in translate_ys)), dict(
+            ((n, y) for n, y in audience_rects))
+
+    def test_front_fixture_below_back_fixture(self, qapp):
+        fixtures = [
+            Fixture(universe=1, address=1, manufacturer="M", model="X",
+                    name="FRONT", group="", current_mode="Standard",
+                    available_modes=[FixtureMode(name="Standard", channels=1)],
+                    type="PAR", x=0.0, y=-2.0),
+            Fixture(universe=1, address=2, manufacturer="M", model="X",
+                    name="BACK", group="", current_mode="Standard",
+                    available_modes=[FixtureMode(name="Standard", channels=1)],
+                    type="PAR", x=0.0, y=2.0),
+        ]
+        config = Configuration(
+            fixtures=fixtures, groups={},
+            universes={1: Universe(id=1, name="U1", output={})},
+            stage_width=10.0, stage_height=6.0,
+        )
+        fys, stage = self._render_calls(config)
+        # Front (negative y) is lower on the page => larger page-Y.
+        assert fys["FRONT"] > fys["BACK"]
+        # Both inside the stage rectangle.
+        assert stage["stage_top"] < fys["BACK"] < fys["FRONT"] < stage["stage_bottom"]
+
+    def test_audience_marker_below_stage(self):
+        """The AUDIENCE marker rect sits below the stage's bottom edge,
+        i.e. in the lower (audience/front) band of the plot."""
+        from gui.stage_plot import StagePlotRenderer
+
+        stage_rect = QRectF(100, 100, 400, 300)  # top=100, bottom=400
+        marker = StagePlotRenderer._audience_marker_rect(stage_rect, mm=10.0)
+        assert marker.top() > stage_rect.bottom()
+        assert marker.center().x() == pytest.approx(stage_rect.center().x())
+
+
 class TestTitle:
 
     def test_title_from_loaded_config_path(self, plot_config):
