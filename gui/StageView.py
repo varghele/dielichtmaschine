@@ -213,13 +213,17 @@ class StageView(QtWidgets.QGraphicsView):
 
         Returns:
             Tuple of (x_px, y_px) pixel coordinates
+
+        The audience/front (negative Y) renders at the BOTTOM of the
+        plan: screen Y grows downward, so negative y_m must map to a
+        LARGER y_px. The X mapping is unchanged.
         """
         # Center of stage in pixels
         center_x_px = self.padding + (self.stage_width_m / 2) * self.pixels_per_meter
         center_y_px = self.padding + (self.stage_depth_m / 2) * self.pixels_per_meter
 
         x_px = center_x_px + x_m * self.pixels_per_meter
-        y_px = center_y_px + y_m * self.pixels_per_meter
+        y_px = center_y_px - y_m * self.pixels_per_meter
 
         return x_px, y_px
 
@@ -237,8 +241,10 @@ class StageView(QtWidgets.QGraphicsView):
         center_x_px = self.padding + (self.stage_width_m / 2) * self.pixels_per_meter
         center_y_px = self.padding + (self.stage_depth_m / 2) * self.pixels_per_meter
 
+        # Inverse of meters_to_pixels: the Y axis is flipped so that a
+        # LOW screen y (bottom = audience/front) maps to a negative y_m.
         x_m = (x_px - center_x_px) / self.pixels_per_meter
-        y_m = (y_px - center_y_px) / self.pixels_per_meter
+        y_m = -(y_px - center_y_px) / self.pixels_per_meter
 
         return x_m, y_m
 
@@ -858,8 +864,8 @@ class StageView(QtWidgets.QGraphicsView):
             painter.setPen(pen)
             painter.drawLine(int(center_x_px), self.padding, int(center_x_px), depth_px + self.padding)
 
-        # AUDIENCE marker at the front edge (negative Y = front), same
-        # convention as the printable stage plot.
+        # AUDIENCE marker at the front edge, drawn along the BOTTOM band
+        # of the plan (negative Y = front now maps to the bottom).
         try:
             from gui.typography import mono_font as _mono_font
             painter.setFont(_mono_font(8, tracking_em=0.2))
@@ -867,7 +873,8 @@ class StageView(QtWidgets.QGraphicsView):
             pass
         painter.setPen(QtGui.QPen(self._stage_label_color, 1))
         painter.drawText(
-            QtCore.QRect(self.padding, 0, width_px, self.padding - 4),
+            QtCore.QRect(self.padding, depth_px + self.padding + 4,
+                         width_px, self.padding - 4),
             QtCore.Qt.AlignmentFlag.AlignHCenter |
             QtCore.Qt.AlignmentFlag.AlignBottom,
             "A U D I E N C E")
@@ -927,11 +934,12 @@ class StageView(QtWidgets.QGraphicsView):
         # Draw Y-axis labels (left edge) - from center outward
         half_depth_m = self.stage_depth_m / 2
 
-        # Draw labels from center to the bottom (positive Y)
+        # Draw labels from center to the top (positive Y = back). The Y
+        # axis is flipped, so positive Y now maps toward the top edge.
         y_m = 0.0
         while y_m <= half_depth_m + 0.01:
-            y_px = center_y_px + y_m * self.pixels_per_meter
-            if y_px <= self.padding + depth_px + 1:
+            y_px = center_y_px - y_m * self.pixels_per_meter
+            if y_px >= self.padding - 1:
                 label = f"{y_m:.1f}" if y_m != int(y_m) else f"{int(y_m)}"
                 # Draw at left
                 painter.drawText(
@@ -943,11 +951,12 @@ class StageView(QtWidgets.QGraphicsView):
                 )
             y_m += label_interval_m
 
-        # Draw labels from center to the top (negative Y)
+        # Draw labels from center to the bottom (negative Y = front /
+        # audience). The Y axis is flipped, so negative Y maps downward.
         y_m = -label_interval_m
         while y_m >= -half_depth_m - 0.01:
-            y_px = center_y_px + y_m * self.pixels_per_meter
-            if y_px >= self.padding - 1:
+            y_px = center_y_px - y_m * self.pixels_per_meter
+            if y_px <= self.padding + depth_px + 1:
                 label = f"{y_m:.1f}" if y_m != int(y_m) else f"{int(y_m)}"
                 # Draw at left
                 painter.drawText(

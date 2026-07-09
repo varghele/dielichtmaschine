@@ -141,7 +141,9 @@ class TestTrussMoves:
 
         fixture = config.fixtures[0]
         assert fixture.x == pytest.approx(1.5, abs=0.02)
-        assert fixture.y == pytest.approx(-0.5, abs=0.02)
+        # Screen Y is flipped (front = bottom): the -0.5 m screen-pixel
+        # nudge upward maps to +0.5 m toward the back.
+        assert fixture.y == pytest.approx(0.5, abs=0.02)
         # Undocked fixture untouched
         assert config.fixtures[1].x == pytest.approx(3.0, abs=0.02)
 

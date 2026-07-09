@@ -11,8 +11,22 @@ verbatim as the GitHub Release notes (see [docs/releasing.md](docs/releasing.md)
 
 ## [Unreleased]
 
+### Added
+
+- **F7 opens the pause screen** (screensaver). F11 stays fullscreen; F
+  and L remain the Stage tab's own zoom/layer keys.
+
 ### Changed
 
+- **The 2D stage plan puts the audience at the bottom.** Front (the
+  audience side) now renders along the bottom edge of the top-view plan,
+  matching how stage plots are conventionally drawn; the AUDIENCE marker
+  and the depth labels moved with it. This is a display change only:
+  stored coordinates, the 3D view and exports are unchanged.
+- **Fit View moved into the Stage tab's action footer**, above the
+  exports, and the footer order is now Fit View, Launch Visualizer, Plot
+  Stage. Fit View is one click away with every section collapsed; the F
+  shortcut is unchanged.
 - **Stage tab left panel regrouped for use, not for the mockup.** Under
   STAGE SETTINGS the stage dimensions, grid and view controls are now one
   "Stage" section instead of three; Marks and Layers are their own
@@ -22,6 +36,11 @@ verbatim as the GitHub Release notes (see [docs/releasing.md](docs/releasing.md)
 
 ### Fixed
 
+- **"Apply to group default" now works in the Stage tab.** The inline
+  orientation editor's checkbox was wired to nothing, so ticking it did
+  nothing until some other value changed. It now re-applies to the group
+  the moment you click it (and stays silent on the programmatic toggles
+  that happen while switching selection).
 - **Stage tab polish.** The nested Stage / Marks / Layers sections are now
   indented under STAGE SETTINGS so the hierarchy reads at a glance; the
   orientation editor's 3D preview no longer touches its frame (a few
