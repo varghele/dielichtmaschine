@@ -9,8 +9,8 @@ Anatomy (top to bottom, left to right):
   layer + "+ LAYER" + "DEFINE..."), the "OTHERS: 25% · LOCKED" hint,
   a disabled "MORPH..." button and "EXPORT RIDER PDF".
 - a 260px LIBRARY panel on the left, top to bottom: an expanded
-  "STAGE SETTINGS" section (itself split into STAGE / GRID / VIEW /
-  MARKS / STAGE LAYERS / STAGE PLANES collapsibles - dimensions are
+  "STAGE SETTINGS" section (itself split into STAGE / MARKS / LAYERS
+  collapsibles - STAGE combines dimensions, grid and view, and it is
   what you set first), then "RIG · FIXTURES" group rows (3px left
   border in the group color, caps name, "4x · FLOWN" mono count +
   dominant layer; clicking selects that group's fixtures on the plan),
@@ -590,8 +590,9 @@ class StageTab(BaseTab):
     # -- stage settings (the old left-rail controls) ---------------------
 
     def _build_settings_section(self) -> QtWidgets.QWidget:
-        """STAGE SETTINGS: expanded by default, split into one
-        collapsible per concern. Attribute names unchanged."""
+        """STAGE SETTINGS: expanded by default, split into three sibling
+        collapsibles - STAGE (dimensions + grid + view, opened first),
+        MARKS, and LAYERS. Attribute names unchanged."""
         from gui.typography import MicroLabel, mono_font
 
         # The outer section keeps the historical settings_toggle /
@@ -609,7 +610,8 @@ class StageTab(BaseTab):
             outer.addWidget(section)
             return section
 
-        # -- STAGE: the dimensions, set first ---------------------------
+        # -- STAGE: dimensions (set first), then grid, then view, all in
+        # one section. The dimensions come first, so this stays open.
         stage_section = subsection("Stage", "stage_dims")
         dims_row = QtWidgets.QHBoxLayout()
         dims_row.setSpacing(6)
@@ -637,8 +639,10 @@ class StageTab(BaseTab):
             dims_row.addLayout(col)
         stage_section.addLayout(dims_row)
 
-        # -- GRID: 0.5 m default, snap on -------------------------------
-        grid_section = subsection("Grid", "grid")
+        # Grid: 0.5 m default, snap on. Kept in the same STAGE section as
+        # the dimensions (a "Grid" micro-caption separates it).
+        stage_section.addSpacing(4)
+        stage_section.addWidget(self._caption("Grid"))
 
         self.grid_size = QtWidgets.QDoubleSpinBox()
         self.grid_size.setRange(0.1, 50)
@@ -651,20 +655,22 @@ class StageTab(BaseTab):
         grid_size_row.addWidget(MicroLabel("Size / m", point_size=8,
                                            tracking_em=0.1))
         grid_size_row.addWidget(self.grid_size, 1)
-        grid_section.addLayout(grid_size_row)
+        stage_section.addLayout(grid_size_row)
 
         self.grid_toggle = QtWidgets.QCheckBox("Show grid")
         self.grid_toggle.setChecked(True)  # Grid visible by default
-        grid_section.addWidget(self.grid_toggle)
+        stage_section.addWidget(self.grid_toggle)
 
         self.snap_to_grid = QtWidgets.QCheckBox("Snap to grid")
         self.snap_to_grid.setChecked(True)  # Enable by default
-        grid_section.addWidget(self.snap_to_grid)
+        stage_section.addWidget(self.snap_to_grid)
 
-        # -- VIEW: fit-view + orientation axes. The 'F' shortcut (wired
-        # in connect_signals) duplicates the button so the user can reset
-        # without moving the mouse off the plot.
-        view_section = subsection("View", "view", expanded=False)
+        # View: fit-view + orientation axes, in the same STAGE section.
+        # The 'F' shortcut (wired in connect_signals) duplicates the
+        # button so the user can reset without moving the mouse off the
+        # plot.
+        stage_section.addSpacing(4)
+        stage_section.addWidget(self._caption("View"))
         self.fit_view_btn = QtWidgets.QPushButton("Fit View (F)")
         self.fit_view_btn.setToolTip(
             "Reset zoom and pan to fit the whole stage.\n\n"
@@ -673,7 +679,7 @@ class StageTab(BaseTab):
             "  • Space + left-drag — pan\n"
             "  • F — fit view"
         )
-        view_section.addWidget(self.fit_view_btn)
+        stage_section.addWidget(self.fit_view_btn)
 
         # Single checkbox - when on, every fixture draws its XYZ
         # axes. The previous two-checkbox UX (selected-only by
@@ -681,10 +687,10 @@ class StageTab(BaseTab):
         # discoverable and read as broken.
         self.show_axes_checkbox = QtWidgets.QCheckBox("Show orientation axes")
         self.show_axes_checkbox.setToolTip("Show XYZ axes on every fixture")
-        view_section.addWidget(self.show_axes_checkbox)
+        stage_section.addWidget(self.show_axes_checkbox)
 
         # -- MARKS ------------------------------------------------------
-        marks_section = subsection("Stage marks", "marks", expanded=False)
+        marks_section = subsection("Marks", "marks", expanded=False)
         self.add_spot_btn = QtWidgets.QPushButton("Add Mark")
         self.remove_item_btn = QtWidgets.QPushButton("Remove Selected")
         marks_section.addWidget(self.add_spot_btn)
@@ -695,7 +701,7 @@ class StageTab(BaseTab):
         # the 2D plot and every 3D preview. Fixtures are assigned via the
         # stage right-click menu ("Assign to Layer") or the inspector's
         # Layer combo.
-        layers_section = subsection("Stage layers", "layers", expanded=False)
+        layers_section = subsection("Layers", "layers", expanded=False)
         self.layer_panel = QtWidgets.QWidget()
         self.layer_panel.setProperty("role", "card")
         self.layer_panel.setAttribute(
@@ -749,29 +755,6 @@ class StageTab(BaseTab):
         layer_btn_row.addStretch()
         layer_layout.addLayout(layer_btn_row)
         layers_section.addWidget(self.layer_panel)
-
-        # -- PLANES: picker for the 6 faces of the stage bounding
-        # cuboid. Hovering an entry highlights that face in the
-        # embedded 3D preview; clicking selects it persistently; clicking
-        # the selected entry again clears. Display-only for now — plane
-        # *targeting* from movement blocks is v1.4a.
-        from visualizer.renderer.stage_planes import PLANE_NAMES
-        planes_section = subsection("Stage planes", "planes", expanded=False)
-
-        self.plane_list = QtWidgets.QListWidget()
-        self.plane_list.setMaximumHeight(120)
-        self.plane_list.setMouseTracking(True)
-        self.plane_list.setToolTip(
-            "The 6 faces of the stage bounding box.\n"
-            "Hover to preview, click to keep highlighted in the 3D view,\n"
-            "click again to clear."
-        )
-        for plane_name in PLANE_NAMES:
-            item = QtWidgets.QListWidgetItem(plane_name)
-            item.setData(Qt.ItemDataRole.UserRole, plane_name)
-            self.plane_list.addItem(item)
-        self._selected_plane = None
-        planes_section.addWidget(self.plane_list)
 
         return outer
 
@@ -1279,13 +1262,6 @@ class StageTab(BaseTab):
             Qt.ShortcutContext.WidgetWithChildrenShortcut)
         self._layer_cycle_shortcut.activated.connect(self._cycle_active_layer)
 
-        # Stage plane picker: hover previews, click toggles persistence.
-        # The event filter catches the mouse leaving the list so a pure
-        # hover (no click) reverts to the persistent selection.
-        self.plane_list.itemEntered.connect(self._on_plane_hovered)
-        self.plane_list.itemClicked.connect(self._on_plane_clicked)
-        self.plane_list.viewport().installEventFilter(self)
-
         # Stage plot export: strip CTA and the settings-section button
         # share one handler.
         self.plot_stage_btn.clicked.connect(self._export_stage_plot)
@@ -1724,48 +1700,15 @@ class StageTab(BaseTab):
             f"Stage plot exported as {fmt.upper()}:\n{file_path}"
         )
 
-    # ── Stage planes ──────────────────────────────────────────────────
+    # ── Plan overlay chrome ───────────────────────────────────────────
 
     def eventFilter(self, obj, event):
-        """Revert the plane highlight to the persistent selection when
-        the mouse leaves the plane list (ends a hover preview), and keep
-        the plan's overlay chrome pinned to the view's corners."""
-        if (hasattr(self, "plane_list") and obj is self.plane_list.viewport()
-                and event.type() == QEvent.Type.Leave):
-            self._apply_plane_highlight(self._selected_plane)
+        """Keep the plan's overlay chrome pinned to the view's corners as
+        the StageView resizes or is first shown."""
         if (hasattr(self, "stage_view") and obj is self.stage_view
                 and event.type() in (QEvent.Type.Resize, QEvent.Type.Show)):
             self._position_plan_overlays()
         return super().eventFilter(obj, event)
-
-    def _rig_height(self) -> float:
-        """Ceiling height of the stage cuboid: the tallest fixture's
-        effective Z, floored at 3 m — the same rule autogen's
-        compute_stage_planes uses, so the highlighted ceiling matches
-        where Auto Mode aims."""
-        max_z = 3.0
-        for fixture in self.config.fixtures:
-            group = self.config.groups.get(fixture.group) if fixture.group else None
-            z = fixture.get_effective_z(group)
-            if z > max_z:
-                max_z = z
-        return max_z
-
-    def _apply_plane_highlight(self, name):
-        if hasattr(self, "embedded_visualizer") and self.embedded_visualizer is not None:
-            self.embedded_visualizer.set_highlighted_plane(name, self._rig_height())
-
-    def _on_plane_hovered(self, item):
-        self._apply_plane_highlight(item.data(Qt.ItemDataRole.UserRole))
-
-    def _on_plane_clicked(self, item):
-        name = item.data(Qt.ItemDataRole.UserRole)
-        if self._selected_plane == name:
-            self._selected_plane = None
-            self.plane_list.clearSelection()
-        else:
-            self._selected_plane = name
-        self._apply_plane_highlight(self._selected_plane)
 
     # ── Library: fixture group rows ───────────────────────────────────
 

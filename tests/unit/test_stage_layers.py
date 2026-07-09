@@ -635,11 +635,33 @@ class TestLibraryPanel:
         for name in ("stage_width", "stage_height", "grid_size",
                      "grid_toggle", "snap_to_grid", "fit_view_btn",
                      "show_axes_checkbox", "add_spot_btn", "remove_item_btn",
-                     "plane_list", "layer_list", "add_layer_btn",
+                     "layer_list", "add_layer_btn",
                      "remove_layer_btn", "edit_layer_btn", "layer_panel"):
             widget = getattr(tab, name)
             assert tab.settings_container.isAncestorOf(widget), (
                 f"{name} is not inside the STAGE SETTINGS section")
+
+    def test_stage_section_combines_dimensions_grid_and_view(self, tab):
+        """The reorganized STAGE section holds the dimensions, the grid
+        controls AND the view controls in one collapsible (key
+        stage_dims); the old separate grid/view sections are gone."""
+        stage_section = tab.sections["stage_dims"]
+        for name in ("stage_width", "stage_height", "grid_size",
+                     "grid_toggle", "snap_to_grid", "fit_view_btn",
+                     "show_axes_checkbox"):
+            widget = getattr(tab, name)
+            assert stage_section.isAncestorOf(widget), (
+                f"{name} is not inside the combined STAGE section")
+
+    def test_dropped_sections_and_planes_picker_are_gone(self, tab):
+        """The Grid / View / Planes sections were folded away, and the
+        stage-planes picker UI no longer exists on the tab."""
+        for gone in ("grid", "view", "planes"):
+            assert gone not in tab.sections
+        assert not hasattr(tab, "plane_list")
+        # Marks and Layers survive as their own siblings.
+        assert "marks" in tab.sections
+        assert "layers" in tab.sections
 
     def test_export_actions_are_pinned_outside_the_collapsibles(self, tab):
         """PLOT STAGE / LAUNCH VISUALIZER / TCP status must stay reachable
@@ -670,13 +692,13 @@ class TestLibraryPanel:
     def test_every_library_section_is_collapsible(self, tab):
         """Elements and trusses collapse with the same affordance as the
         settings section (the user's report: they could not)."""
-        for key in ("settings", "stage_dims", "grid", "view", "marks",
-                    "layers", "planes", "fixtures", "elements", "trusses"):
+        for key in ("settings", "stage_dims", "marks",
+                    "layers", "fixtures", "elements", "trusses"):
             section = tab.sections[key]
             assert section.toggle.isCheckable()
             section.set_expanded(False)
-            # isVisibleTo(section), not the panel: STAGE / GRID / ... are
-            # nested inside the STAGE SETTINGS section.
+            # isVisibleTo(section), not the panel: STAGE / MARKS / LAYERS
+            # are nested inside the STAGE SETTINGS section.
             assert section.container.isVisibleTo(section) is False
             section.set_expanded(True)
             assert section.container.isVisibleTo(section) is True
@@ -684,8 +706,8 @@ class TestLibraryPanel:
     def test_default_expansion_state(self, tab):
         expanded = {key: s.is_expanded() for key, s in tab.sections.items()}
         assert expanded == {
-            "settings": True, "stage_dims": True, "grid": True,
-            "view": False, "marks": False, "layers": False, "planes": False,
+            "settings": True, "stage_dims": True,
+            "marks": False, "layers": False,
             "fixtures": True, "elements": True, "trusses": True,
         }
 

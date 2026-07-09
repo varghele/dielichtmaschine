@@ -7,8 +7,11 @@ Covers:
   lazy VBO rebuild writes the right vertices.
 - RenderEngine buffers set_highlighted_plane before initializeGL and
   flushes it afterwards (same contract as test_render_engine_pending).
-- StageTab's plane picker: 6 entries, hover previews, click toggles the
-  persistent highlight, rig height follows the tallest fixture.
+
+The Stage tab no longer carries a plane picker (the left-panel Stage
+planes section was removed); the renderer geometry + engine buffering
+below are still exercised because the Auto tab and the embedded
+visualizer drive highlighted planes.
 
 The actual GL draw is exercised by the visual harness like the other
 overlay components, not here.
@@ -157,49 +160,3 @@ class TestEnginePendingPlane:
         engine.doneCurrent = MagicMock()
         engine.set_stage_size(12.0, 8.0)
         engine.stage_planes.set_stage_size.assert_called_once_with(12.0, 8.0)
-
-
-class TestStageTabPicker:
-
-    @pytest.fixture
-    def tab(self, qapp, sample_configuration):
-        from gui.tabs.stage_tab import StageTab
-        tab = StageTab(sample_configuration, parent=None)
-        tab.embedded_visualizer = MagicMock()  # spy on the forwarding
-        yield tab
-        tab.embedded_visualizer = None
-        tab.deleteLater()
-
-    def test_picker_lists_all_six_planes(self, tab):
-        names = [tab.plane_list.item(i).text() for i in range(tab.plane_list.count())]
-        assert names == list(PLANE_NAMES)
-
-    def test_click_selects_then_toggles_off(self, tab):
-        item = tab.plane_list.item(0)  # Floor
-        tab._on_plane_clicked(item)
-        assert tab._selected_plane == "Floor"
-        tab.embedded_visualizer.set_highlighted_plane.assert_called_with(
-            "Floor", tab._rig_height()
-        )
-
-        tab._on_plane_clicked(item)
-        assert tab._selected_plane is None
-        tab.embedded_visualizer.set_highlighted_plane.assert_called_with(
-            None, tab._rig_height()
-        )
-
-    def test_hover_previews_without_selecting(self, tab):
-        item = tab.plane_list.item(1)  # Ceiling
-        tab._on_plane_hovered(item)
-        assert tab._selected_plane is None
-        tab.embedded_visualizer.set_highlighted_plane.assert_called_with(
-            "Ceiling", tab._rig_height()
-        )
-
-    def test_rig_height_follows_tallest_fixture(self, tab, sample_configuration):
-        # sample fixture uses the group default (3.0 m) -> floor of 3.0.
-        assert tab._rig_height() == 3.0
-        fixture = sample_configuration.fixtures[0]
-        fixture.z = 7.5
-        fixture.z_uses_group_default = False
-        assert tab._rig_height() == 7.5

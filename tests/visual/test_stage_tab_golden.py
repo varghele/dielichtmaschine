@@ -99,10 +99,11 @@ def test_stage_action_strip_golden(qapp, stage_tab):
 
 def test_stage_library_panel_golden(qapp, stage_tab):
     """Left library in its default state: the expanded STAGE SETTINGS
-    section first (STAGE + GRID open, VIEW / MARKS / LAYERS / PLANES
-    collapsed), then RIG · FIXTURES rows in group colors, the
-    stage element and truss tile grids, the dashed truss hint - with
-    PLOT STAGE / LAUNCH VISUALIZER pinned at the foot."""
+    section first (STAGE open - dimensions + grid + view combined -
+    MARKS / LAYERS collapsed, no PLANES), then RIG · FIXTURES rows in
+    group colors, the stage element and truss tile grids, the dashed
+    truss hint - with PLOT STAGE / LAUNCH VISUALIZER pinned at the
+    foot."""
     panel = stage_tab.control_panel
     panel.setFixedSize(260, 900)
     compare_to_golden(panel.grab().toImage(), "stage_library_panel_dark")

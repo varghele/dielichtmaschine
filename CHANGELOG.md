@@ -11,6 +11,15 @@ verbatim as the GitHub Release notes (see [docs/releasing.md](docs/releasing.md)
 
 ## [Unreleased]
 
+### Changed
+
+- **Stage tab left panel regrouped for use, not for the mockup.** Under
+  STAGE SETTINGS the stage dimensions, grid and view controls are now one
+  "Stage" section instead of three; Marks and Layers are their own
+  collapsible sections; and the Stage Planes picker (a display-only face
+  selector) was removed. Fewer sections to expand to reach what you set
+  first.
+
 ### Fixed
 
 - **The orientation editor no longer needs sideways scrolling.** In the
