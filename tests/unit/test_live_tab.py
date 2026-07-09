@@ -6,7 +6,11 @@ wiring across the three 3b regions (SELECT + FADE rows, the three-pool
 centre grid with a fully-built COLOUR pool and marked POSITION/INTENSITY
 placeholders, the right column of playbacks/strobe/kills, and the
 submaster bank whose first column is the GRAND master + DBO), plus that
-the tab refreshes when the config's groups change. They assert role
+the tab refreshes when the config's groups change. Round 2 adds the dual
+queue: the running-playbacks stack (mirroring the single staged
+effect/scene, PAUSE/RESUME + KILL per row, a pinned show row in SHOW
+mode) and the NEXT UP list (QUEUE latch arms touch-to-enqueue, GO fires
+the head) - all state-only, no output engine. They assert role
 properties and LiveState, never widget.styleSheet() or font().family()
 (per the brand-role convention).
 """
@@ -308,6 +312,17 @@ class TestRightColumnActions:
         assert live_tab.state.selected == set()
         assert "EMPTY" in live_tab._programmer_label.text()
 
+    def test_release_all_clears_running_and_staged_playbacks(self, live_tab):
+        live_tab.state.set_effect("custom/Riff A")
+        live_tab.state.set_scene("looks/Warm Wash")
+        live_tab.state.enqueue("effect", "custom/Riff B", "Riff B")
+        live_tab._release_all_btn.click()
+        assert live_tab.state.effect is None
+        assert live_tab.state.scene is None
+        assert live_tab.state.running == []
+        # The preloaded queue is deliberately kept (it is not output).
+        assert len(live_tab.state.next_up) == 1
+
 
 class TestTempoCluster:
     def test_tap_sets_bpm_and_readout(self, live_tab):
@@ -366,13 +381,28 @@ class TestModeToggle:
     def test_live_mode_active_playbacks_text(self, live_tab):
         live_tab.state.set_mode("live")
         assert live_tab._active_playbacks_label.text() == "NOTHING ELSE RUNNING"
+        assert not live_tab._active_playbacks_label.isHidden()
+        assert live_tab._pinned_show_label is None
 
-    def test_show_mode_changes_active_playbacks_text(self, live_tab):
+    def test_show_mode_pins_a_show_row(self, live_tab):
         live_tab.state.set_mode("show")
-        text = live_tab._active_playbacks_label.text()
-        assert "SHOW MODE" in text
+        # The single hint gives way to a pinned, non-killable show row
+        # naming the show that would run (no shows configured -> "SHOW").
+        assert live_tab._active_playbacks_label.isHidden()
+        assert live_tab._pinned_show_label is not None
+        assert live_tab._pinned_show_label.text() == "SHOW"
         # Honestly marked: there is no output engine yet.
-        assert "NO ENGINE YET" in text
+        marker = live_tab._pinned_show_marker.text()
+        assert "SHOW MODE" in marker
+        assert "NO ENGINE YET" in marker
+        # Pinned = not killable: no KILL button belongs to the show row.
+        assert live_tab._kill_buttons == []
+
+    def test_show_mode_pinned_row_names_first_show(self, live_tab):
+        live_tab.config.shows = {"Opening Night": object(),
+                                 "Encore": object()}
+        live_tab.state.set_mode("show")
+        assert live_tab._pinned_show_label.text() == "OPENING NIGHT"
 
     def test_mode_controls_use_output_select_role(self, live_tab):
         assert live_tab._show_mode_btn.property("role") == "output-select"
@@ -607,6 +637,204 @@ class TestLibraryStatePreserved:
         live_tab.update_from_config()
         assert live_tab.state.effect == "custom/Riff A"
         assert live_tab.state.scene == "looks/Warm Wash"
+
+    def test_running_and_next_up_survive_group_change(self, live_tab):
+        live_tab.state.set_effect("custom/Riff A")
+        live_tab.state.enqueue("scene", "looks/Warm Wash", "Warm Wash")
+        new_config = _config((("Spots", "#5F86C9", 1),))
+        live_tab.config = new_config
+        live_tab.update_from_config()
+        assert [r["key"] for r in live_tab.state.running] == ["custom/Riff A"]
+        assert [r["key"] for r in live_tab.state.next_up] == \
+            ["looks/Warm Wash"]
+
+
+class TestRunningStack:
+    def test_set_effect_creates_running_record(self, live_tab):
+        live_tab.state.set_effect("custom/Riff A")
+        assert live_tab.state.running == [{
+            "kind": "effect", "key": "custom/Riff A",
+            "label": "Riff A", "paused": False}]
+
+    def test_toggle_off_removes_record(self, live_tab):
+        live_tab.state.set_effect("custom/Riff A")
+        live_tab.state.set_effect("custom/Riff A")
+        assert live_tab.state.running == []
+
+    def test_replacing_effect_swaps_record(self, live_tab):
+        live_tab.state.set_effect("custom/Riff A")
+        live_tab.state.set_effect("loops/Riff B")
+        # At most one kind=="effect" record; the newest key wins.
+        assert [r["key"] for r in live_tab.state.running] == ["loops/Riff B"]
+
+    def test_scene_record_parallel_to_effect(self, live_tab):
+        live_tab.state.set_scene("looks/Warm Wash")
+        assert live_tab.state.running == [{
+            "kind": "scene", "key": "looks/Warm Wash",
+            "label": "Warm Wash", "paused": False}]
+        live_tab.state.set_scene("looks/Cold Snap")
+        assert [r["key"] for r in live_tab.state.running] == \
+            ["looks/Cold Snap"]
+        live_tab.state.set_scene("looks/Cold Snap")
+        assert live_tab.state.running == []
+
+    def test_at_most_one_record_per_kind(self, live_tab):
+        live_tab.state.set_effect("custom/Riff A")
+        live_tab.state.set_scene("looks/Warm Wash")
+        live_tab.state.set_effect("loops/Riff B")
+        live_tab.state.set_scene("looks/Cold Snap")
+        kinds = [r["kind"] for r in live_tab.state.running]
+        assert sorted(kinds) == ["effect", "scene"]
+
+    def test_running_records_render_rows_with_buttons(self, live_tab):
+        live_tab.state.set_effect("custom/Riff A")
+        live_tab.state.set_scene("looks/Warm Wash")
+        assert len(live_tab._pause_buttons) == 2
+        assert len(live_tab._kill_buttons) == 2
+        assert live_tab._active_playbacks_label.isHidden()
+        for btn in live_tab._kill_buttons:
+            assert btn.property("role") == "destructive"
+
+    def test_kill_removes_record_and_clears_effect(self, live_tab):
+        live_tab.state.set_effect("custom/Riff A")
+        live_tab._kill_buttons[0].click()
+        assert live_tab.state.running == []
+        assert live_tab.state.effect is None
+
+    def test_kill_scene_record_clears_scene(self, live_tab):
+        live_tab.state.set_effect("custom/Riff A")
+        live_tab.state.set_scene("looks/Warm Wash")
+        # Kill the scene row (index 1); the effect keeps running.
+        live_tab.state.kill_playback(1)
+        assert live_tab.state.scene is None
+        assert live_tab.state.effect == "custom/Riff A"
+        assert [r["kind"] for r in live_tab.state.running] == ["effect"]
+
+    def test_toggle_pause_flips_flag_and_row_shows_resume(self, live_tab):
+        live_tab.state.set_effect("custom/Riff A")
+        assert live_tab._pause_buttons[0].text() == "PAUSE"
+        live_tab._pause_buttons[0].click()
+        assert live_tab.state.running[0]["paused"] is True
+        assert live_tab._pause_buttons[0].text() == "RESUME"
+        live_tab._pause_buttons[0].click()
+        assert live_tab.state.running[0]["paused"] is False
+        assert live_tab._pause_buttons[0].text() == "PAUSE"
+
+
+class TestQueue:
+    def test_enqueue_appends_and_allows_repeats(self, live_tab):
+        live_tab.state.enqueue("effect", "custom/Riff A", "Riff A")
+        live_tab.state.enqueue("effect", "custom/Riff A", "Riff A")
+        live_tab.state.enqueue("scene", "looks/Warm Wash", "Warm Wash")
+        assert [r["key"] for r in live_tab.state.next_up] == [
+            "custom/Riff A", "custom/Riff A", "looks/Warm Wash"]
+        # Enqueueing never touches the live staged state.
+        assert live_tab.state.effect is None
+        assert live_tab.state.scene is None
+
+    def test_fire_next_pops_head_and_applies_effect(self, live_tab):
+        live_tab.state.enqueue("effect", "custom/Riff A", "Riff A")
+        live_tab.state.enqueue("scene", "looks/Warm Wash", "Warm Wash")
+        live_tab.state.fire_next()
+        assert live_tab.state.effect == "custom/Riff A"
+        assert [r["key"] for r in live_tab.state.running] == ["custom/Riff A"]
+        assert [r["key"] for r in live_tab.state.next_up] == \
+            ["looks/Warm Wash"]
+        live_tab.state.fire_next()
+        assert live_tab.state.scene == "looks/Warm Wash"
+        assert live_tab.state.next_up == []
+
+    def test_fire_next_never_toggles_a_running_key_off(self, live_tab):
+        live_tab.state.set_effect("custom/Riff A")
+        live_tab.state.enqueue("effect", "custom/Riff A", "Riff A")
+        live_tab.state.fire_next()
+        # GO applies; firing the already-running key keeps it running.
+        assert live_tab.state.effect == "custom/Riff A"
+        assert [r["key"] for r in live_tab.state.running] == ["custom/Riff A"]
+        assert live_tab.state.next_up == []
+
+    def test_fire_next_on_empty_queue_is_a_noop(self, live_tab):
+        hits = []
+        live_tab.state.state_changed.connect(lambda: hits.append(1))
+        live_tab.state.fire_next()
+        assert hits == []
+        assert live_tab.state.effect is None
+
+    def test_remove_queued_drops_by_index(self, live_tab):
+        live_tab.state.enqueue("effect", "custom/Riff A", "Riff A")
+        live_tab.state.enqueue("scene", "looks/Warm Wash", "Warm Wash")
+        live_tab.state.remove_queued(0)
+        assert [r["key"] for r in live_tab.state.next_up] == \
+            ["looks/Warm Wash"]
+
+    def test_queued_row_remove_button(self, live_tab):
+        live_tab.state.enqueue("effect", "custom/Riff A", "Riff A")
+        assert len(live_tab._queue_remove_buttons) == 1
+        live_tab._queue_remove_buttons[0].click()
+        assert live_tab.state.next_up == []
+
+    def test_go_disabled_when_empty_enabled_when_not(self, live_tab):
+        assert live_tab._go_btn.isEnabled() is False
+        assert not live_tab._queue_empty_hint.isHidden()
+        live_tab.state.enqueue("effect", "custom/Riff A", "Riff A")
+        assert live_tab._go_btn.isEnabled() is True
+        assert live_tab._queue_empty_hint.isHidden()
+
+    def test_go_button_fires_next(self, live_tab):
+        live_tab.state.enqueue("effect", "custom/Riff A", "Riff A")
+        live_tab._go_btn.click()
+        assert live_tab.state.effect == "custom/Riff A"
+        assert live_tab.state.next_up == []
+        assert live_tab._go_btn.isEnabled() is False
+
+    def test_go_uses_cta_accent_role(self, live_tab):
+        assert live_tab._go_btn.property("role") == "cta-accent"
+        assert live_tab._queue_latch_btn.property("role") == "output-select"
+
+    def test_latched_touch_enqueues_effect_without_firing(self, live_tab,
+                                                          tmp_path):
+        live_tab.set_effect_library(_riff_library(tmp_path,
+                                                  [("custom", "Riff A")]))
+        live_tab.state.toggle_group("Movers")
+        live_tab._queue_latch_btn.setChecked(True)
+        cell = live_tab._effect_cells["custom/Riff A"]
+        cell.clicked.emit("custom/Riff A")
+        assert live_tab.state.next_up == [{
+            "kind": "effect", "key": "custom/Riff A", "label": "Riff A"}]
+        # The cell did NOT fire live: no staged effect, cell not active.
+        assert live_tab.state.effect is None
+        assert not cell.is_active()
+
+    def test_latched_touch_enqueues_scene(self, live_tab, tmp_path):
+        live_tab.set_scene_library(_scene_library(
+            tmp_path, [("Warm Wash", "looks", "")]))
+        live_tab._queue_latch_btn.setChecked(True)
+        live_tab._scene_cells["looks/Warm Wash"].clicked.emit(
+            "looks/Warm Wash")
+        assert live_tab.state.next_up == [{
+            "kind": "scene", "key": "looks/Warm Wash",
+            "label": "Warm Wash"}]
+        assert live_tab.state.scene is None
+
+    def test_unlatched_touch_fires_live(self, live_tab, tmp_path):
+        live_tab.set_effect_library(_riff_library(tmp_path,
+                                                  [("custom", "Riff A")]))
+        live_tab.state.toggle_group("Movers")
+        assert live_tab._queue_latch_btn.isChecked() is False
+        live_tab._effect_cells["custom/Riff A"].clicked.emit("custom/Riff A")
+        assert live_tab.state.effect == "custom/Riff A"
+        assert live_tab.state.next_up == []
+
+    def test_state_changed_emitted_by_queue_mutators(self, live_tab):
+        hits = []
+        live_tab.state.state_changed.connect(lambda: hits.append(1))
+        live_tab.state.enqueue("effect", "custom/Riff A", "Riff A")
+        live_tab.state.fire_next()
+        live_tab.state.toggle_pause(0)
+        live_tab.state.kill_playback(0)
+        live_tab.state.enqueue("scene", "looks/Warm Wash", "Warm Wash")
+        live_tab.state.remove_queued(0)
+        assert len(hits) == 6
 
 
 class TestRoles:

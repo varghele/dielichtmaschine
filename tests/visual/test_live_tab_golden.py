@@ -8,14 +8,18 @@ then marked POSITION and INTENSITY placeholders, then the library-backed
 EFFECTS pool - riffs, selection-scoped, greyed with no selection - and
 SCENES pool - whole-rig looks, always on - each with the active item
 outlined in the accent), the PROGRAMMER state bar, the 330px RIGHT column
-(ACTIVE PLAYBACKS placeholder, STROBE, STROBE KILL / HOLD LOOK / RELEASE
+(the dual queue: an ACTIVE PLAYBACKS stack with one row per running
+effect/scene, each with PAUSE + KILL; the NEXT UP list with the QUEUE
+latch beside its caption, one row per queued item with a remove X, and
+the GO cta underneath; then STROBE, STROBE KILL / HOLD LOOK / RELEASE
 ALL) and the BOTTOM submaster bank: a GRAND master column (accent fader +
 DBO) first, a divider, then a bounded fader per group in the group
 colours, left-aligned.
 
 The render is deterministic: two groups selected, one colour active, one
-effect and one scene staged, a couple of submasters at different levels,
-no output engine (UI shell only).
+effect and one scene staged (so the running stack shows two rows), two
+items enqueued in NEXT UP (one effect, one scene, GO enabled), a couple
+of submasters at different levels, no output engine (UI shell only).
 
 Regenerate after intended changes:
 
@@ -123,6 +127,11 @@ def test_live_tab_golden(qapp, scene_config, tmp_path):
         tab.state.set_mode("live")
         tab.state.set_effect("loops/Four Floor")
         tab.state.set_scene("looks/Warm Wash")
+        # Dual queue: the staged effect+scene render as running rows;
+        # preload two NEXT UP items (one effect, one scene) so the queue
+        # rows, the remove X and the enabled GO all pin.
+        tab.state.enqueue("effect", "drops/Build Drop", "Build Drop")
+        tab.state.enqueue("scene", "looks/Cold Snap", "Cold Snap")
         tab.setFixedSize(1600, 900)
         compare_to_golden(tab.grab().toImage(), "live_tab_dark")
     finally:

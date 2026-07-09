@@ -21,19 +21,26 @@ Regions (North Star 3b):
   the shared RiffLibrary, selection-scoped: greyed with no selection) |
   SCENES (whole-rig looks from the SceneLibrary, always enabled). Below
   it a PROGRAMMER state bar names the current live look.
-- RIGHT (330px) - an ACTIVE PLAYBACKS area (display-only: "NOTHING
-  ELSE RUNNING"), a STROBE rate + toggle and STROBE KILL / HOLD LOOK /
-  RELEASE ALL.
+- RIGHT (330px) - the dual queue: an ACTIVE PLAYBACKS stack (in SHOW
+  mode a pinned non-killable show row marked "NO ENGINE YET", then one
+  row per running effect/scene with PAUSE/RESUME + KILL; "NOTHING ELSE
+  RUNNING" when empty in LIVE mode) and a NEXT UP list (the QUEUE latch
+  arms touch-to-enqueue on the EFFECTS/SCENES pools, each queued row has
+  a remove X, GO fires the head). Below: a STROBE rate + toggle and
+  STROBE KILL / HOLD LOOK / RELEASE ALL (the panic release also clears
+  the running stack + staged effect/scene). Paused/killed only mutate
+  state - nothing fakes playback.
 - BOTTOM (170px) - the submaster fader bank: a GRAND master column
   first (an accent vertical fader with the DBO dead-blackout button
   under it) set off by a thin divider, then one vertical fader per
   group in the group's data colour with a momentary FLASH button.
 
 Honest omissions vs. the reference (surfaces with no in-memory state to
-drive them yet): the cue stack, the live 3D render / DMX meters, the
-active-playbacks list, the FX-speed/size/white-wash bank slots and the
-transport clock are output-engine surfaces, so they are rendered as
-clearly-marked placeholders rather than faked. The colour PICKER, SONG
+drive them yet): the live 3D render / DMX meters, the
+FX-speed/size/white-wash bank slots and the transport clock are
+output-engine surfaces, so they are rendered as clearly-marked
+placeholders rather than faked. The dual queue is state-only: PAUSE and
+KILL mutate records, no output pauses or dies yet. The colour PICKER, SONG
 PALETTE link and "+ REC" capture, and the POSITION / MOVEMENT / INTENSITY
 pools, are staged for later passes and marked "arrives next".
 """
@@ -193,6 +200,16 @@ class LiveState(QObject):
         # them alone (like bpm / mode).
         self.effect: Optional[str] = None        # staged riff key
         self.scene: Optional[str] = None         # staged scene key
+        # Dual queue. ``running`` is the running-playbacks stack - plain
+        # dict records {"kind": "effect"|"scene", "key", "label",
+        # "paused"} mirroring the single active effect/scene (at most one
+        # record per kind, rendered as individual playback rows).
+        # ``next_up`` holds preloaded records (same shape, no "paused")
+        # staged via enqueue(); fire_next() (GO) pops the head and
+        # applies it. Both survive update_from_config (like bpm / mode).
+        # Paused/killed are state-only until the output engine lands.
+        self.running: List[dict] = []
+        self.next_up: List[dict] = []
 
     # -- config sync ----------------------------------------------------
     def update_from_config(self, names) -> None:
@@ -240,11 +257,16 @@ class LiveState(QObject):
         return {self.colours[g] for g in self.selected if g in self.colours}
 
     def release_all(self) -> None:
-        """Clear the programmer (applied colours + staged + selection)
-        back to nothing, releasing the rig to the show."""
+        """Panic release: clear the programmer (applied colours + staged
+        + selection) AND the running playbacks (staged effect/scene +
+        the running stack), releasing the rig to the show. The next_up
+        queue is deliberately kept - it is preloaded, not output."""
         self.colours.clear()
         self.staged_colour = None
         self.selected.clear()
+        self.effect = None
+        self.scene = None
+        self.running.clear()
         self.state_changed.emit()
 
     # -- masters / output scale -----------------------------------------
@@ -321,14 +343,84 @@ class LiveState(QObject):
     # -- library staging (effects / scenes) -----------------------------
     def set_effect(self, key: Optional[str]) -> None:
         """Toggle the staged effect (a riff, selection-scoped). Touching
-        the same key again clears it."""
+        the same key again clears it. Mirrors into the running stack."""
         self.effect = None if key == self.effect else key
+        self._sync_running("effect", self.effect)
         self.state_changed.emit()
 
     def set_scene(self, key: Optional[str]) -> None:
         """Toggle the staged scene (a whole-rig look, selection-agnostic).
-        Touching the same key again clears it."""
+        Touching the same key again clears it. Mirrors into the running
+        stack."""
         self.scene = None if key == self.scene else key
+        self._sync_running("scene", self.scene)
+        self.state_changed.emit()
+
+    def _sync_running(self, kind: str, key: Optional[str]) -> None:
+        """Mirror the single active effect/scene into the running stack:
+        at most one record per kind; staging replaces/creates it, clearing
+        removes it. Silent - the calling mutator emits."""
+        index = next((i for i, rec in enumerate(self.running)
+                      if rec["kind"] == kind), None)
+        if key is None:
+            if index is not None:
+                del self.running[index]
+            return
+        record = {"kind": kind, "key": key,
+                  "label": key.split("/")[-1], "paused": False}
+        if index is None:
+            self.running.append(record)
+        else:
+            self.running[index] = record
+
+    # -- dual queue (running stack + next-up list) ----------------------
+    def enqueue(self, kind: str, key: str, label: str) -> None:
+        """Stage a record in the next-up list (repeats allowed)."""
+        kind = "scene" if kind == "scene" else "effect"
+        self.next_up.append({"kind": kind, "key": key, "label": label})
+        self.state_changed.emit()
+
+    def remove_queued(self, index: int) -> None:
+        """Drop a next-up record by position."""
+        if 0 <= index < len(self.next_up):
+            del self.next_up[index]
+            self.state_changed.emit()
+
+    def fire_next(self) -> None:
+        """GO: pop the head of next_up and apply it live via
+        set_effect/set_scene. Applies, never toggles - firing a key that
+        is already running keeps it running."""
+        if not self.next_up:
+            return
+        record = self.next_up.pop(0)
+        if record["kind"] == "scene":
+            if record["key"] != self.scene:
+                self.set_scene(record["key"])
+                return
+        else:
+            if record["key"] != self.effect:
+                self.set_effect(record["key"])
+                return
+        self.state_changed.emit()
+
+    def kill_playback(self, index: int) -> None:
+        """Remove a running record and clear the matching staged
+        effect/scene (state-only - no output engine yet)."""
+        if not 0 <= index < len(self.running):
+            return
+        record = self.running.pop(index)
+        if record["kind"] == "scene":
+            self.scene = None
+        else:
+            self.effect = None
+        self.state_changed.emit()
+
+    def toggle_pause(self, index: int) -> None:
+        """Flip a running record's paused flag. Honest: state-only until
+        the output engine lands - nothing actually pauses."""
+        if not 0 <= index < len(self.running):
+            return
+        self.running[index]["paused"] = not self.running[index]["paused"]
         self.state_changed.emit()
 
     # -- fade -----------------------------------------------------------
@@ -747,6 +839,12 @@ class LiveTab(BaseTab):
         self._effect_cells: Dict[str, _LibraryCell] = {}
         self._scene_cells: Dict[str, _LibraryCell] = {}
         self._fade_buttons: List[Tuple[QPushButton, str, Optional[float]]] = []
+        # Dual-queue rows (rebuilt on every state sync).
+        self._pause_buttons: List[QPushButton] = []
+        self._kill_buttons: List[QPushButton] = []
+        self._queue_remove_buttons: List[QPushButton] = []
+        self._pinned_show_label: Optional[QLabel] = None
+        self._pinned_show_marker: Optional[QLabel] = None
         self._submaster_faders: Dict[str, _VerticalFader] = {}
         self._flash_buttons: Dict[str, QPushButton] = {}
         self._group_colors: Dict[str, str] = {}
@@ -1201,7 +1299,7 @@ class LiveTab(BaseTab):
         for i, riff in enumerate(riffs):
             key = f"{riff.category}/{riff.name}"
             cell = _LibraryCell(key, riff.name)
-            cell.clicked.connect(self.state.set_effect)
+            cell.clicked.connect(self._on_effect_touched)
             self._effect_cells[key] = cell
             self._effects_grid.addWidget(cell, i // columns, i % columns)
         for col in range(columns):
@@ -1222,7 +1320,7 @@ class LiveTab(BaseTab):
             key = f"{scene.category}/{scene.name}"
             chip = scene.color if scene.color else None
             cell = _LibraryCell(key, scene.name, chip_color=chip)
-            cell.clicked.connect(self.state.set_scene)
+            cell.clicked.connect(self._on_scene_touched)
             self._scene_cells[key] = cell
             self._scenes_grid.addWidget(cell, i // columns, i % columns)
         for col in range(columns):
@@ -1245,7 +1343,25 @@ class LiveTab(BaseTab):
         self._sync_from_state()
 
     def _on_colour_touched(self, colour_id: str) -> None:
+        # Colour swatches stay fire-only this pass: the QUEUE latch only
+        # covers EFFECTS and SCENES cells (queueing colours can come
+        # later once a queued colour has a defined target selection).
         self.state.stage_colour(colour_id)
+
+    def _on_effect_touched(self, key: str) -> None:
+        """Latched QUEUE stages the effect in next_up (cell stays
+        inactive); unlatched fires it live via the toggle."""
+        if self._queue_latch_btn.isChecked():
+            self.state.enqueue("effect", key, self._key_name(key))
+        else:
+            self.state.set_effect(key)
+
+    def _on_scene_touched(self, key: str) -> None:
+        """Latched QUEUE stages the scene in next_up; unlatched fires."""
+        if self._queue_latch_btn.isChecked():
+            self.state.enqueue("scene", key, self._key_name(key))
+        else:
+            self.state.set_scene(key)
 
     def _on_select_all(self) -> None:
         self.state.set_selection(self.config.groups.keys())
@@ -1279,18 +1395,71 @@ class LiveTab(BaseTab):
         layout.setContentsMargins(16, 14, 16, 14)
         layout.setSpacing(12)
 
-        # ACTIVE PLAYBACKS (display-only placeholder).
+        # ACTIVE PLAYBACKS: the running stack. In SHOW mode a pinned,
+        # non-killable show row sits on top (honestly marked - there is
+        # no output engine yet); then one row per running record with
+        # PAUSE/RESUME + KILL. Rows are rebuilt in _refresh_playback_rows.
         layout.addWidget(MicroLabel("Active playbacks", point_size=8,
                                     tracking_em=0.14))
+        self._playbacks_host = QWidget()
+        self._playbacks_box = QVBoxLayout(self._playbacks_host)
+        self._playbacks_box.setContentsMargins(0, 0, 0, 0)
+        self._playbacks_box.setSpacing(6)
+        layout.addWidget(self._playbacks_host)
+
         self._active_playbacks_label = QLabel("NOTHING ELSE RUNNING")
         self._active_playbacks_label.setProperty("role", "hint-box")
         self._active_playbacks_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._active_playbacks_label.setFont(mono_font(8, tracking_em=0.1))
         self._active_playbacks_label.setWordWrap(True)
         self._active_playbacks_label.setToolTip(
-            "The running show cue + busk stacks list here once the "
-            "output engine lands")
+            "Fired effects and scenes stack here; actual output arrives "
+            "with the engine pass")
         layout.addWidget(self._active_playbacks_label)
+
+        # NEXT UP: the preloaded queue + the QUEUE arm latch beside the
+        # caption. Latched, touching an EFFECTS or SCENES cell stages it
+        # here instead of firing it; GO pops the head and fires it live.
+        next_caption = QHBoxLayout()
+        next_caption.setSpacing(8)
+        next_caption.addWidget(MicroLabel("Next up", point_size=8,
+                                          tracking_em=0.14))
+        next_caption.addStretch(1)
+        self._queue_latch_btn = QPushButton("QUEUE")
+        self._queue_latch_btn.setCheckable(True)
+        self._queue_latch_btn.setProperty("role", "output-select")
+        self._queue_latch_btn.setFont(mono_font(8, QFont.Weight.DemiBold))
+        self._queue_latch_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._queue_latch_btn.setToolTip(
+            "Latch, then touch an EFFECTS or SCENES cell to stage it in "
+            "NEXT UP instead of firing it live · unlatch to fire live "
+            "again (colour swatches always fire live)")
+        next_caption.addWidget(self._queue_latch_btn)
+        layout.addLayout(next_caption)
+
+        self._next_up_host = QWidget()
+        self._next_up_box = QVBoxLayout(self._next_up_host)
+        self._next_up_box.setContentsMargins(0, 0, 0, 0)
+        self._next_up_box.setSpacing(6)
+        layout.addWidget(self._next_up_host)
+
+        self._queue_empty_hint = QLabel(
+            "QUEUE EMPTY · LATCH QUEUE THEN TOUCH A PALETTE")
+        self._queue_empty_hint.setProperty("role", "hint-box")
+        self._queue_empty_hint.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._queue_empty_hint.setFont(mono_font(8, tracking_em=0.1))
+        self._queue_empty_hint.setWordWrap(True)
+        layout.addWidget(self._queue_empty_hint)
+
+        self._go_btn = QPushButton("GO")
+        self._go_btn.setProperty("role", "cta-accent")
+        self._go_btn.setFont(display_font(14, QFont.Weight.Bold,
+                                          tracking_em=0.08))
+        self._go_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._go_btn.setToolTip("Fire the first NEXT UP item live")
+        self._go_btn.setEnabled(False)
+        self._go_btn.clicked.connect(self.state.fire_next)
+        layout.addWidget(self._go_btn)
 
         # STROBE.
         layout.addWidget(MicroLabel("Strobe", point_size=8, tracking_em=0.14))
@@ -1336,7 +1505,8 @@ class LiveTab(BaseTab):
                                                    tracking_em=0.06))
         self._release_all_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self._release_all_btn.setToolTip(
-            "Clear the programmer and release the rig to the show")
+            "Panic release: clear the programmer and the running "
+            "playbacks (the NEXT UP queue is kept)")
         self._release_all_btn.clicked.connect(self.state.release_all)
         kills_row.addWidget(self._release_all_btn, 1)
         layout.addLayout(kills_row)
@@ -1585,25 +1755,127 @@ class LiveTab(BaseTab):
         self._bpm_display.setText(f"{state.bpm:.1f} BPM")
         self._sync_toggle(self._show_mode_btn, state.mode == "show")
         self._sync_toggle(self._live_mode_btn, state.mode == "live")
-        self._refresh_active_playbacks()
+        self._refresh_playback_rows()
 
         self._refresh_programmer()
 
-    def _refresh_active_playbacks(self) -> None:
-        """Reflect the busk-on-top mode in the ACTIVE PLAYBACKS box.
+    # -- dual-queue rows (rebuilt on every state sync) --------------------
 
-        Honest placeholder: there is no output engine yet, so SHOW mode
-        does not actually run a show. In SHOW mode the box names the show
-        that WOULD run (the first configured show, if any) and marks it as
-        engine-pending; in LIVE mode it reads "NOTHING ELSE RUNNING"."""
-        if self.state.mode == "show":
-            shows = getattr(self.config, "shows", {}) or {}
-            name = next(iter(shows), None)
-            subject = name.upper() if name else "SHOW"
-            text = f"SHOW MODE · {subject} WOULD RUN HERE · NO ENGINE YET"
-        else:
-            text = "NOTHING ELSE RUNNING"
-        self._active_playbacks_label.setText(text)
+    @staticmethod
+    def _clear_box(box: QVBoxLayout) -> None:
+        while box.count():
+            item = box.takeAt(0)
+            widget = item.widget()
+            if widget is not None:
+                widget.deleteLater()
+
+    def _row_shell(self) -> Tuple[QWidget, QHBoxLayout]:
+        """A playback/queue row: a card with a compact horizontal layout."""
+        row = QWidget()
+        row.setProperty("role", "card")
+        row.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
+        hbox = QHBoxLayout(row)
+        hbox.setContentsMargins(8, 6, 8, 6)
+        hbox.setSpacing(6)
+        return row, hbox
+
+    def _row_text(self, hbox: QHBoxLayout, label: str,
+                  tag: str) -> Tuple[QLabel, QLabel]:
+        """Name + kind tag stacked in the row's stretching text column."""
+        text_col = QVBoxLayout()
+        text_col.setSpacing(1)
+        name = QLabel(label.upper())
+        name.setFont(mono_font(8, QFont.Weight.DemiBold))
+        name.setMinimumWidth(1)
+        name.setWordWrap(True)
+        text_col.addWidget(name)
+        tag_label = MicroLabel(tag, point_size=7, tracking_em=0.1)
+        tag_label.setMinimumWidth(1)
+        tag_label.setWordWrap(True)
+        text_col.addWidget(tag_label)
+        hbox.addLayout(text_col, 1)
+        return name, tag_label
+
+    def _row_button(self, text: str, role: str, tip: str) -> QPushButton:
+        # No fixed width: the theme's 14px QPushButton padding sizes the
+        # button from its text, so the glyph can never clip (CLAUDE.md).
+        btn = QPushButton(text)
+        btn.setProperty("role", role)
+        btn.setFont(mono_font(8, QFont.Weight.Medium))
+        btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        btn.setToolTip(tip)
+        return btn
+
+    def _make_pinned_show_row(self) -> QWidget:
+        """SHOW mode's pinned, non-killable show row. Honest: no output
+        engine yet, so the show named here does not actually run."""
+        shows = getattr(self.config, "shows", {}) or {}
+        name = next(iter(shows), None)
+        row, hbox = self._row_shell()
+        self._pinned_show_label, self._pinned_show_marker = self._row_text(
+            hbox, name if name else "SHOW",
+            "Show mode · pinned · no engine yet")
+        return row
+
+    def _make_running_row(self, index: int, record: dict) -> QWidget:
+        row, hbox = self._row_shell()
+        tag = "FX" if record["kind"] == "effect" else "SCENE"
+        self._row_text(hbox, record["label"],
+                       f"{tag} · PAUSED" if record["paused"] else tag)
+        pause = self._row_button(
+            "RESUME" if record["paused"] else "PAUSE", "output-select",
+            "Pause flag only - actual output pause arrives with the "
+            "engine pass")
+        pause.clicked.connect(
+            lambda _checked=False, i=index: self.state.toggle_pause(i))
+        hbox.addWidget(pause)
+        self._pause_buttons.append(pause)
+        kill = self._row_button(
+            "KILL", "destructive",
+            "Remove this playback and clear its staged state")
+        kill.clicked.connect(
+            lambda _checked=False, i=index: self.state.kill_playback(i))
+        hbox.addWidget(kill)
+        self._kill_buttons.append(kill)
+        return row
+
+    def _make_queued_row(self, index: int, record: dict) -> QWidget:
+        row, hbox = self._row_shell()
+        tag = "FX" if record["kind"] == "effect" else "SCENE"
+        self._row_text(hbox, record["label"], tag)
+        remove = self._row_button("X", "output-select",
+                                  "Remove this item from the queue")
+        remove.clicked.connect(
+            lambda _checked=False, i=index: self.state.remove_queued(i))
+        hbox.addWidget(remove)
+        self._queue_remove_buttons.append(remove)
+        return row
+
+    def _refresh_playback_rows(self) -> None:
+        """Rebuild the ACTIVE PLAYBACKS stack and the NEXT UP queue rows
+        from state. In SHOW mode a pinned show row leads the stack; the
+        empty hints show when nothing runs (LIVE mode) / nothing is
+        queued; GO is enabled only with a queue head to fire."""
+        state = self.state
+        self._clear_box(self._playbacks_box)
+        self._pause_buttons = []
+        self._kill_buttons = []
+        self._pinned_show_label = None
+        self._pinned_show_marker = None
+        if state.mode == "show":
+            self._playbacks_box.addWidget(self._make_pinned_show_row())
+        for index, record in enumerate(state.running):
+            self._playbacks_box.addWidget(
+                self._make_running_row(index, record))
+        self._active_playbacks_label.setVisible(
+            not state.running and state.mode != "show")
+
+        self._clear_box(self._next_up_box)
+        self._queue_remove_buttons = []
+        for index, record in enumerate(state.next_up):
+            self._next_up_box.addWidget(self._make_queued_row(index, record))
+        self._queue_empty_hint.setVisible(not state.next_up)
+        self._go_btn.setEnabled(bool(state.next_up))
 
     @staticmethod
     def _sync_toggle(button: QPushButton, on: bool) -> None:
