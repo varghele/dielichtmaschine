@@ -43,9 +43,10 @@ from PyQt6.QtGui import QColor, QFont, QPainter, QPolygon
 from PyQt6.QtCore import QPoint
 from PyQt6.QtWidgets import (
     QApplication, QWidget, QVBoxLayout, QHBoxLayout, QGridLayout, QScrollArea,
-    QFrame, QPushButton, QLabel,
+    QFrame, QPushButton, QLabel, QButtonGroup,
 )
 
+from auto.bpm_detector import TapBPM
 from config.models import Configuration
 from gui.typography import DisplayLabel, MicroLabel, display_font, mono_font
 
@@ -175,6 +176,14 @@ class LiveState(QObject):
         # Strobe.
         self.strobe_on: bool = False
         self.strobe_rate: int = 50               # 0-100
+        # Tempo reference for rate-based controls (strobe rate, rudiment
+        # "1/4" etc.). Free-busk drives it from the TAP cluster; a running
+        # show would later sync it. Clamped to the TapBPM range 30-300.
+        self.bpm: float = 120.0
+        # Busk-on-top mode: the surface is ALWAYS live; "mode" only says
+        # whether a predefined show also runs underneath ("show") or not
+        # ("live", the default). No engine merges them yet.
+        self.mode: str = "live"                  # "show" | "live"
 
     # -- config sync ----------------------------------------------------
     def update_from_config(self, names) -> None:
@@ -286,6 +295,18 @@ class LiveState(QObject):
 
     def set_strobe_rate(self, rate: int) -> None:
         self.strobe_rate = max(0, min(100, int(rate)))
+        self.state_changed.emit()
+
+    # -- tempo / mode ---------------------------------------------------
+    def set_bpm(self, value: float) -> None:
+        """Set the tempo reference, clamped to the TapBPM range 30-300."""
+        self.bpm = max(30.0, min(300.0, float(value)))
+        self.state_changed.emit()
+
+    def set_mode(self, mode: str) -> None:
+        """Set busk-on-top mode ("show" runs a predefined show underneath;
+        "live" has nothing else running). Anything but "show" reads live."""
+        self.mode = "show" if mode == "show" else "live"
         self.state_changed.emit()
 
     # -- fade -----------------------------------------------------------
@@ -600,6 +621,10 @@ class LiveTab(BaseTab):
     def __init__(self, config: Configuration, parent=None):
         # Non-UI state must exist before super().__init__ runs setup_ui().
         self.state = LiveState()
+        # Tap-tempo estimator (shared class with the Auto tab): tap()
+        # returns the running BPM estimate or None (< 3 taps), reset()
+        # clears the tap history.
+        self._tap_bpm = TapBPM()
         self._select_tiles: Dict[str, _SelectTile] = {}
         self._colour_swatches: Dict[str, _ColourSwatch] = {}
         self._colour_placeholders: Dict[str, QWidget] = {}
@@ -662,6 +687,22 @@ class LiveTab(BaseTab):
         hbox = QHBoxLayout(row)
         hbox.setContentsMargins(16, 8, 16, 8)
         hbox.setSpacing(8)
+
+        # SHOW / LIVE busk-on-top toggle (top-left, by SELECT). Exclusive
+        # segment; the surface is always live, the mode only says whether a
+        # predefined show also runs underneath. Default LIVE.
+        hbox.addWidget(MicroLabel("Mode", point_size=8, tracking_em=0.12))
+        self._mode_group = QButtonGroup(self)
+        self._mode_group.setExclusive(True)
+        self._show_mode_btn = self._mode_chip("SHOW", "show",
+            "Run a predefined show underneath the live surface (merge "
+            "arrives with the output engine)")
+        self._live_mode_btn = self._mode_chip("LIVE", "live",
+            "Free-busk: nothing else runs underneath the live surface")
+        hbox.addWidget(self._show_mode_btn)
+        hbox.addWidget(self._live_mode_btn)
+        hbox.addSpacing(8)
+
         hbox.addWidget(MicroLabel("Select", point_size=8, tracking_em=0.12))
 
         # The group tiles are rebuilt from the config here.
@@ -702,6 +743,17 @@ class LiveTab(BaseTab):
         btn.setToolTip(tip)
         return btn
 
+    def _mode_chip(self, text: str, mode: str, tip: str) -> QPushButton:
+        btn = QPushButton(text)
+        btn.setCheckable(True)
+        btn.setProperty("role", "output-select")
+        btn.setFont(mono_font(8, QFont.Weight.DemiBold))
+        btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        btn.setToolTip(tip)
+        self._mode_group.addButton(btn)
+        btn.clicked.connect(lambda _checked=False, m=mode: self.state.set_mode(m))
+        return btn
+
     def _build_fade_row(self) -> QWidget:
         row = QWidget()
         row.setProperty("role", "section-caption")
@@ -728,7 +780,48 @@ class LiveTab(BaseTab):
         hbox.addSpacing(6)
         hbox.addWidget(hint)
         hbox.addStretch(1)
+
+        # Tempo cluster (right end): a BPM readout + TAP + RESET. This is
+        # the reference tempo for the rate-based controls (strobe rate, the
+        # rudiment "1/4"); this pass only surfaces and stores it.
+        hbox.addWidget(MicroLabel("Tempo", point_size=8, tracking_em=0.12))
+        self._bpm_display = QLabel(f"{self.state.bpm:.1f} BPM")
+        self._bpm_display.setProperty("role", "micro")
+        self._bpm_display.setFont(mono_font(10, QFont.Weight.DemiBold))
+        self._bpm_display.setToolTip("Tempo reference for rate controls "
+                                     "(strobe rate, rudiments)")
+        hbox.addWidget(self._bpm_display)
+
+        self._tap_btn = QPushButton("TAP")
+        self._tap_btn.setProperty("role", "output-select")
+        self._tap_btn.setFont(mono_font(8, QFont.Weight.DemiBold))
+        self._tap_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._tap_btn.setToolTip("Tap in time to set the tempo")
+        self._tap_btn.clicked.connect(self._on_tap_tempo)
+        hbox.addWidget(self._tap_btn)
+
+        self._tap_reset_btn = QPushButton("RESET")
+        self._tap_reset_btn.setProperty("role", "output-select")
+        self._tap_reset_btn.setFont(mono_font(8, QFont.Weight.Medium))
+        self._tap_reset_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._tap_reset_btn.setToolTip("Clear the tap history (keeps the "
+                                       "current BPM)")
+        self._tap_reset_btn.clicked.connect(self._on_reset_tempo)
+        hbox.addWidget(self._tap_reset_btn)
         return row
+
+    def _on_tap_tempo(self) -> None:
+        """Register a tap; if the estimator has enough taps for a reading,
+        store it as the tempo reference (which re-syncs the readout)."""
+        bpm = self._tap_bpm.tap()
+        if bpm is not None:
+            self.state.set_bpm(bpm)
+
+    def _on_reset_tempo(self) -> None:
+        """Clear the tap history. The stored BPM is deliberately kept so a
+        reset does not blank the reference mid-show; the next tap builds a
+        fresh estimate."""
+        self._tap_bpm.reset()
 
     # -- pools -----------------------------------------------------------
 
@@ -923,6 +1016,7 @@ class LiveTab(BaseTab):
         self._active_playbacks_label.setProperty("role", "hint-box")
         self._active_playbacks_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._active_playbacks_label.setFont(mono_font(8, tracking_em=0.1))
+        self._active_playbacks_label.setWordWrap(True)
         self._active_playbacks_label.setToolTip(
             "The running show cue + busk stacks list here once the "
             "output engine lands")
@@ -1210,7 +1304,28 @@ class LiveTab(BaseTab):
         for btn, key, _seconds in self._fade_buttons:
             btn.setChecked(key == state.fade_key)
 
+        self._bpm_display.setText(f"{state.bpm:.1f} BPM")
+        self._sync_toggle(self._show_mode_btn, state.mode == "show")
+        self._sync_toggle(self._live_mode_btn, state.mode == "live")
+        self._refresh_active_playbacks()
+
         self._refresh_programmer()
+
+    def _refresh_active_playbacks(self) -> None:
+        """Reflect the busk-on-top mode in the ACTIVE PLAYBACKS box.
+
+        Honest placeholder: there is no output engine yet, so SHOW mode
+        does not actually run a show. In SHOW mode the box names the show
+        that WOULD run (the first configured show, if any) and marks it as
+        engine-pending; in LIVE mode it reads "NOTHING ELSE RUNNING"."""
+        if self.state.mode == "show":
+            shows = getattr(self.config, "shows", {}) or {}
+            name = next(iter(shows), None)
+            subject = name.upper() if name else "SHOW"
+            text = f"SHOW MODE · {subject} WOULD RUN HERE · NO ENGINE YET"
+        else:
+            text = "NOTHING ELSE RUNNING"
+        self._active_playbacks_label.setText(text)
 
     @staticmethod
     def _sync_toggle(button: QPushButton, on: bool) -> None:

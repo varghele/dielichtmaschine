@@ -92,6 +92,9 @@ def test_live_tab_golden(qapp, scene_config):
         tab.state.set_submaster("Front Pars", 80)
         tab.state.set_submaster("Movers", 55)
         tab.state.set_strobe_rate(40)
+        # Round-2 additions: a tapped tempo and the default LIVE mode.
+        tab.state.set_bpm(128)
+        tab.state.set_mode("live")
         tab.setFixedSize(1600, 900)
         compare_to_golden(tab.grab().toImage(), "live_tab_dark")
     finally:

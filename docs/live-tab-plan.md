@@ -143,12 +143,15 @@ New asks and their decided shape:
 
 - Top strip: the SHOW / LIVE mode toggle (segment) on the left near SELECT;
   the BPM readout + TAP on the right of the FADE row.
-- Centre pools: today COLOUR / POSITION / INTENSITY-FX sit side by side.
-  Adding EFFECTS (riffs) and SCENES would make five - too wide. Proposed: a
-  pool-selector segment row above the grid (COLOUR · POSITION · FX ·
-  EFFECTS · SCENES) that switches which pool fills the centre, so each pool
-  stays readable and the set scales. (Open for your call - alternative is a
-  5-column grid with narrower pools.)
+- Centre pools: FIVE narrower columns side by side (decided) - COLOUR ·
+  POSITION · INTENSITY-FX · EFFECTS · SCENES - each column thinner so all
+  are visible at once.
+- **Effects vs scenes scope (decided):** an EFFECT is a riff, applied to
+  the current selection / group (per-group pattern). A SCENE is a look
+  that spans MULTIPLE fixture groups - a full-rig snapshot across groups,
+  not tied to the current selection. So the effects pool respects the
+  SELECT state; the scenes pool fires a whole-rig look regardless of
+  selection.
 - Right column: ACTIVE PLAYBACKS becomes the running stack; a NEXT-UP
   section below it for the queued items, with the GO / add-to-queue wiring.
 

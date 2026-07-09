@@ -14,6 +14,7 @@ properties and LiveState, never widget.styleSheet() or font().family()
 from __future__ import annotations
 
 import os
+from unittest.mock import Mock
 
 import pytest
 
@@ -308,6 +309,76 @@ class TestRightColumnActions:
         assert "EMPTY" in live_tab._programmer_label.text()
 
 
+class TestTempoCluster:
+    def test_tap_sets_bpm_and_readout(self, live_tab):
+        # Deterministic: patch the estimator so a tap yields a fixed BPM
+        # (never rely on real tap timing).
+        live_tab._tap_bpm.tap = Mock(return_value=140.0)
+        live_tab._tap_btn.click()
+        live_tab._tap_bpm.tap.assert_called_once()
+        assert live_tab.state.bpm == 140.0
+        assert "140.0 BPM" in live_tab._bpm_display.text()
+
+    def test_tap_without_enough_taps_leaves_bpm(self, live_tab):
+        # tap() returns None until it has 3 taps; the reference must hold.
+        before = live_tab.state.bpm
+        live_tab._tap_bpm.tap = Mock(return_value=None)
+        live_tab._tap_btn.click()
+        assert live_tab.state.bpm == before
+
+    def test_reset_clears_tap_history_and_keeps_bpm(self, live_tab):
+        live_tab.state.set_bpm(150.0)
+        live_tab._tap_bpm.reset = Mock()
+        live_tab._tap_reset_btn.click()
+        live_tab._tap_bpm.reset.assert_called_once()
+        # RESET only clears tap history; the stored reference is kept.
+        assert live_tab.state.bpm == 150.0
+
+    def test_set_bpm_clamps_to_range(self, live_tab):
+        live_tab.state.set_bpm(9999)
+        assert live_tab.state.bpm == 300.0
+        live_tab.state.set_bpm(1)
+        assert live_tab.state.bpm == 30.0
+
+    def test_tempo_controls_use_output_select_role(self, live_tab):
+        assert live_tab._tap_btn.property("role") == "output-select"
+        assert live_tab._tap_reset_btn.property("role") == "output-select"
+
+
+class TestModeToggle:
+    def test_defaults_to_live(self, live_tab):
+        assert live_tab.state.mode == "live"
+        assert live_tab._live_mode_btn.isChecked()
+        assert not live_tab._show_mode_btn.isChecked()
+
+    def test_show_button_sets_show_mode(self, live_tab):
+        live_tab._show_mode_btn.click()
+        assert live_tab.state.mode == "show"
+        assert live_tab._show_mode_btn.isChecked()
+        assert not live_tab._live_mode_btn.isChecked()
+
+    def test_live_button_returns_to_live_mode(self, live_tab):
+        live_tab.state.set_mode("show")
+        live_tab._live_mode_btn.click()
+        assert live_tab.state.mode == "live"
+        assert live_tab._live_mode_btn.isChecked()
+
+    def test_live_mode_active_playbacks_text(self, live_tab):
+        live_tab.state.set_mode("live")
+        assert live_tab._active_playbacks_label.text() == "NOTHING ELSE RUNNING"
+
+    def test_show_mode_changes_active_playbacks_text(self, live_tab):
+        live_tab.state.set_mode("show")
+        text = live_tab._active_playbacks_label.text()
+        assert "SHOW MODE" in text
+        # Honestly marked: there is no output engine yet.
+        assert "NO ENGINE YET" in text
+
+    def test_mode_controls_use_output_select_role(self, live_tab):
+        assert live_tab._show_mode_btn.property("role") == "output-select"
+        assert live_tab._live_mode_btn.property("role") == "output-select"
+
+
 class TestStateSignal:
     def test_state_changed_emits_on_interactions(self, live_tab):
         hits = []
@@ -323,6 +394,13 @@ class TestStateSignal:
         live_tab.state.set_strobe_rate(20)
         live_tab.state.release_all()
         assert len(hits) == 10
+
+    def test_state_changed_emits_on_tempo_and_mode(self, live_tab):
+        hits = []
+        live_tab.state.state_changed.connect(lambda: hits.append(1))
+        live_tab.state.set_bpm(128)
+        live_tab.state.set_mode("show")
+        assert len(hits) == 2
 
 
 class TestUpdateFromConfig:
@@ -352,6 +430,15 @@ class TestUpdateFromConfig:
         assert "Movers" not in live_tab.state.selected
         assert "Movers" not in live_tab.state.colours
         assert "Movers" not in live_tab.state.submasters
+
+    def test_bpm_and_mode_survive_group_change(self, live_tab):
+        live_tab.state.set_bpm(133)
+        live_tab.state.set_mode("show")
+        new_config = _config((("Spots", "#5F86C9", 1),))
+        live_tab.config = new_config
+        live_tab.update_from_config()
+        assert live_tab.state.bpm == 133.0
+        assert live_tab.state.mode == "show"
 
 
 class TestRoles:
