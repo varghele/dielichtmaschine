@@ -160,3 +160,9 @@ class TestShortcutRegistration:
         shortcuts = [a.shortcut().toString() for a in window.actions()]
         assert "Ctrl+S" in shortcuts
         assert "F11" in shortcuts
+        # F7 opens the pause screen / screensaver.
+        assert "F7" in shortcuts
+
+    def test_screensaver_action_has_the_f7_shortcut(self, shell_window):
+        _, ui = shell_window
+        assert ui.actionScreensaver.shortcut().toString() == "F7"

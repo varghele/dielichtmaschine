@@ -191,6 +191,10 @@ class Ui_MainWindow(object):
         self.actionToggleFullscreen.setCheckable(True)
         self.menuView.addAction(self.actionToggleFullscreen)
         self.actionScreensaver = QAction("Screensaver", MainWindow)
+        # F7 opens the pause screen. Free key (F11 is fullscreen; F and L
+        # are widget-scoped in the Stage tab). register_menu_shortcuts
+        # re-adds it to the window so it fires without a menubar.
+        self.actionScreensaver.setShortcut("F7")
         self.menuView.addAction(self.actionScreensaver)
         self.menuView.addSeparator()
 
