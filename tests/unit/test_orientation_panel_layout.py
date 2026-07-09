@@ -106,11 +106,11 @@ class TestFitsTheColumn:
             assert right <= viewport_right, f"{name} button clipped at edge"
 
 
-class TestInlinePreviewHidden:
-    """The Stage tab shows a live 3D visualizer at the top of the same
-    column, so the panel's own mini preview is redundant inline and only
-    steals room from the controls. It must be hideable, and hiding it must
-    not affect the width fit."""
+class TestInlinePreviewCompact:
+    """The single-fixture 3D preview (gimbal rings) stays visible above the
+    two control panels so the selected fixture's orientation is always in
+    view; inline it is height-capped so the controls below stay reachable.
+    The pop-out modal shows it full size."""
 
     def test_panel_exposes_the_preview_group(self, qapp):
         panel = OrientationPanel([], None)
@@ -120,29 +120,39 @@ class TestInlinePreviewHidden:
             panel.cleanup()
             panel.deleteLater()
 
-    def test_hiding_preview_keeps_the_width_fit(self, qapp):
+    def test_preview_sits_above_the_two_control_panels(self, hosted):
+        _, panel = hosted
+        _, preview_bottom = _y_span(panel, panel.preview_group)
+        presets_top, _ = _y_span(panel, _group(panel, "Presets"))
+        adjust_top, _ = _y_span(panel, _group(panel, "Fine Adjustment"))
+        assert preview_bottom <= presets_top
+        assert preview_bottom <= adjust_top
+
+    def test_preview_visibility_does_not_change_the_width_fit(self, qapp):
         panel = OrientationPanel([], None)
         try:
-            panel.preview_group.setVisible(False)
-            assert panel.preview_group.isHidden()
             assert panel.minimumSizeHint().width() <= RIGHT_COLUMN_WIDTH
         finally:
             panel.cleanup()
             panel.deleteLater()
 
-    def test_stage_tab_hides_the_inline_preview(self, qapp):
+    def test_stage_tab_shows_a_compact_inline_preview(self, qapp):
         from config.models import Configuration
         from gui.tabs.stage_tab import StageTab
         tab = StageTab(Configuration(), parent=None)
         try:
-            assert tab.orientation_panel.preview_group.isHidden()
+            preview = tab.orientation_panel.preview_group
+            assert not preview.isHidden(), "the fixture preview must stay visible"
+            assert preview.maximumHeight() <= 200, "inline preview must be capped"
         finally:
             tab.deleteLater()
 
-    def test_modal_keeps_its_preview(self, qapp):
+    def test_modal_preview_is_not_height_capped(self, qapp):
         dialog = OrientationDialog([], None)
         try:
             assert not dialog.panel.preview_group.isHidden()
+            # Default max (no inline cap) is Qt's QWIDGETSIZE_MAX.
+            assert dialog.panel.preview_group.maximumHeight() > 1000
         finally:
             dialog.close()
             dialog.deleteLater()

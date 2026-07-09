@@ -17,11 +17,11 @@ verbatim as the GitHub Release notes (see [docs/releasing.md](docs/releasing.md)
   Stage tab the editor packed three group boxes side by side, wider than
   the inspector column, so the preset buttons ran off the edge behind a
   horizontal scrollbar. It now shows Presets and Fine Adjustment as two
-  columns with the apply-to-group control on a full-width row below, the
-  right column is a little wider to fit them, and the redundant inline 3D
-  preview is hidden (the column already has a live visualizer at the top)
-  so every control is visible at once. The pop-out dialog keeps its
-  preview.
+  columns with the apply-to-group control on a full-width row below, and
+  the right column is a little wider to fit them. The single-fixture 3D
+  preview stays above the two panels (height-capped so the controls below
+  stay reachable) so the fixture's orientation is always in view. The
+  pop-out dialog shows the preview full size.
 - **"+ New" did nothing on the Show Structure tab.** Creating a show was
   gated on a shows directory, which v1.0 demoted to an optional
   import/export hint, so the handler silently returned on every config

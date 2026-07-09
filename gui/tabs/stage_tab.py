@@ -1181,34 +1181,21 @@ class StageTab(BaseTab):
         # The SELECTION header above owns the selection readout; the
         # panel's internal info label would repeat it.
         self.orientation_panel.info_label.setVisible(False)
-        # The column already has a live 3D visualizer at the top that
-        # reflects orientation edits (see _broadcast_visualizer_refresh),
-        # so the panel's own mini 3D preview is redundant here and only
-        # squeezes the presets/fine-adjustment controls. Hide it inline;
-        # the pop-out modal keeps its preview.
-        self.orientation_panel.preview_group.setVisible(False)
+        # Keep the panel's single-fixture 3D preview (the gimbal-ring view
+        # of the selected fixture) visible above the presets and fine-
+        # adjustment controls, so the fixture's orientation is always in
+        # view while editing. Cap its height so it stays compact and the
+        # controls below remain reachable; the outer inspector scroll
+        # absorbs any overflow on short windows.
+        self.orientation_panel.preview_group.setMaximumHeight(190)
         inspector_layout.addWidget(self._caption("Orientation"))
-        # The orientation editor is two side-by-side group boxes (Presets,
-        # Fine Adjustment) with the apply-to-group row beneath. That fits
-        # this 448px column, but the editor is still tall, so it keeps its
-        # own vertical scroll area: a direct child would drag the
-        # inspector's minimumSizeHint past the column height and clip the
-        # SELECTION card above it. Horizontal scrolling stays AsNeeded as a
-        # safety net for very long group names.
-        orientation_scroll = QtWidgets.QScrollArea()
-        orientation_scroll.setWidgetResizable(True)
-        orientation_scroll.setFrameShape(QtWidgets.QFrame.Shape.NoFrame)
-        orientation_scroll.setHorizontalScrollBarPolicy(
-            Qt.ScrollBarPolicy.ScrollBarAsNeeded)
-        orientation_scroll.setVerticalScrollBarPolicy(
-            Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-        orientation_scroll.setWidget(self.orientation_panel)
-        # With the mini-preview hidden the editor is short, so let it take
-        # its natural height (no stretch) and sit directly above LAYERS.
-        # The whole inspector already lives in an outer vertical scroll
-        # (see _build_right_column), which absorbs overflow on short
-        # windows; this inner area only guards horizontal width.
-        inspector_layout.addWidget(orientation_scroll)
+        # Added directly, no inner scroll: the editor (preview + the two
+        # control panels + apply row) now fits the 448px column widthwise,
+        # and the whole inspector already lives in an outer vertical scroll
+        # (see _build_right_column) that absorbs vertical overflow on short
+        # windows. An inner vertical-scroll-off area used to clip the lower
+        # controls once the preview was restored above them.
+        inspector_layout.addWidget(self.orientation_panel)
 
         # -- LAYERS -----------------------------------------------------
         inspector_layout.addWidget(self._caption("Layers"))
