@@ -633,13 +633,15 @@ class TestLibraryPanel:
         assert tab.settings_toggle.isChecked() is True
         assert tab.settings_container.isVisibleTo(tab.control_panel) is True
         for name in ("stage_width", "stage_height", "grid_size",
-                     "grid_toggle", "snap_to_grid", "fit_view_btn",
+                     "grid_toggle", "snap_to_grid",
                      "show_axes_checkbox", "add_spot_btn", "remove_item_btn",
                      "layer_list", "add_layer_btn",
                      "remove_layer_btn", "edit_layer_btn", "layer_panel"):
             widget = getattr(tab, name)
             assert tab.settings_container.isAncestorOf(widget), (
                 f"{name} is not inside the STAGE SETTINGS section")
+        # Fit View moved out to the pinned footer (still one click away).
+        assert not tab.settings_container.isAncestorOf(tab.fit_view_btn)
 
     def test_stage_section_combines_dimensions_grid_and_view(self, tab):
         """The reorganized STAGE section holds the dimensions, the grid
@@ -647,11 +649,13 @@ class TestLibraryPanel:
         stage_dims); the old separate grid/view sections are gone."""
         stage_section = tab.sections["stage_dims"]
         for name in ("stage_width", "stage_height", "grid_size",
-                     "grid_toggle", "snap_to_grid", "fit_view_btn",
-                     "show_axes_checkbox"):
+                     "grid_toggle", "snap_to_grid", "show_axes_checkbox"):
             widget = getattr(tab, name)
             assert stage_section.isAncestorOf(widget), (
                 f"{name} is not inside the combined STAGE section")
+        # Fit View was relocated to the pinned action footer.
+        assert not stage_section.isAncestorOf(tab.fit_view_btn)
+        assert tab.action_footer.isAncestorOf(tab.fit_view_btn)
 
     def test_stage_subsections_are_indented_under_settings(self, tab):
         """The nested Stage / Marks / Layers sections must read as children
@@ -683,6 +687,15 @@ class TestLibraryPanel:
             widget = getattr(tab, name)
             assert tab.action_footer.isAncestorOf(widget)
             assert not tab.settings_container.isAncestorOf(widget)
+
+    def test_footer_button_order(self, tab):
+        """Fit View on top, then Launch Visualizer, then the accent Plot
+        Stage at the bottom (per user reorder)."""
+        layout = tab.action_footer.layout()
+        widgets = [layout.itemAt(i).widget() for i in range(layout.count())
+                   if layout.itemAt(i).widget() is not None]
+        assert widgets[:3] == [tab.fit_view_btn, tab.launch_visualizer_btn,
+                               tab.plot_stage_btn]
 
     def test_settings_toggle_collapses(self, tab):
         tab.settings_toggle.setChecked(False)

@@ -674,21 +674,11 @@ class StageTab(BaseTab):
         self.snap_to_grid.setChecked(True)  # Enable by default
         stage_section.addWidget(self.snap_to_grid)
 
-        # View: fit-view + orientation axes, in the same STAGE section.
-        # The 'F' shortcut (wired in connect_signals) duplicates the
-        # button so the user can reset without moving the mouse off the
-        # plot.
+        # View: orientation axes toggle. Fit View lives in the pinned
+        # action footer now (above the exports), so it stays one click away
+        # with every section collapsed.
         stage_section.addSpacing(4)
         stage_section.addWidget(self._caption("View"))
-        self.fit_view_btn = QtWidgets.QPushButton("Fit View (F)")
-        self.fit_view_btn.setToolTip(
-            "Reset zoom and pan to fit the whole stage.\n\n"
-            "Stage controls:\n"
-            "  • Mouse wheel — zoom (around cursor)\n"
-            "  • Space + left-drag — pan\n"
-            "  • F — fit view"
-        )
-        stage_section.addWidget(self.fit_view_btn)
 
         # Single checkbox - when on, every fixture draws its XYZ
         # axes. The previous two-checkbox UX (selected-only by
@@ -784,14 +774,19 @@ class StageTab(BaseTab):
         footer_layout.setContentsMargins(16, 10, 16, 12)
         footer_layout.setSpacing(6)
 
-        self.plot_stage_btn = QtWidgets.QPushButton("PLOT STAGE")
-        self.plot_stage_btn.setProperty("role", "cta-accent")
-        self.plot_stage_btn.setFont(display_font(11, QFont.Weight.Bold,
-                                                 tracking_em=0.08))
-        self.plot_stage_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.plot_stage_btn.setToolTip(
-            "Export the rig as a PDF or PNG stage plot")
-        footer_layout.addWidget(self.plot_stage_btn)
+        # Fit View sits at the top of the footer (relocated from the STAGE
+        # section) so a zoom/pan reset is always one click away. The 'F'
+        # shortcut (wired in connect_signals) duplicates it.
+        self.fit_view_btn = QtWidgets.QPushButton("Fit View (F)")
+        self.fit_view_btn.setToolTip(
+            "Reset zoom and pan to fit the whole stage.\n\n"
+            "Stage controls:\n"
+            "  - Mouse wheel: zoom (around cursor)\n"
+            "  - Space + left-drag: pan\n"
+            "  - F: fit view"
+        )
+        self.fit_view_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        footer_layout.addWidget(self.fit_view_btn)
 
         self.launch_visualizer_btn = QtWidgets.QPushButton("LAUNCH VISUALIZER")
         self.launch_visualizer_btn.setFont(
@@ -800,6 +795,15 @@ class StageTab(BaseTab):
         self.launch_visualizer_btn.setToolTip(
             "Start the 3D Visualizer application")
         footer_layout.addWidget(self.launch_visualizer_btn)
+
+        self.plot_stage_btn = QtWidgets.QPushButton("PLOT STAGE")
+        self.plot_stage_btn.setProperty("role", "cta-accent")
+        self.plot_stage_btn.setFont(display_font(11, QFont.Weight.Bold,
+                                                 tracking_em=0.08))
+        self.plot_stage_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.plot_stage_btn.setToolTip(
+            "Export the rig as a PDF or PNG stage plot")
+        footer_layout.addWidget(self.plot_stage_btn)
 
         # TCP status indicator
         tcp_status_layout = QtWidgets.QHBoxLayout()
