@@ -4,10 +4,11 @@ A UI shell over an in-memory ``LiveState`` with no DMX/ArtNet output.
 These tests pin the state contract and the tile/swatch/fader/control
 wiring across the three 3b regions (SELECT + FADE rows, the three-pool
 centre grid with a fully-built COLOUR pool and marked POSITION/INTENSITY
-placeholders, the GRAND/SUB/DBO right column, and the per-group submaster
-bank), plus that the tab refreshes when the config's groups change. They
-assert role properties and LiveState, never widget.styleSheet() or
-font().family() (per the brand-role convention).
+placeholders, the right column of playbacks/strobe/kills, and the
+submaster bank whose first column is the GRAND master + DBO), plus that
+the tab refreshes when the config's groups change. They assert role
+properties and LiveState, never widget.styleSheet() or font().family()
+(per the brand-role convention).
 """
 
 from __future__ import annotations
@@ -113,6 +114,12 @@ class TestColourPool:
         from gui.tabs.live_tab import COLOUR_SWATCHES
         assert set(live_tab._colour_swatches) == {c[0] for c in COLOUR_SWATCHES}
 
+    def test_swatches_are_square(self, live_tab):
+        from gui.tabs.live_tab import SWATCH_SIZE
+        for swatch in live_tab._colour_swatches.values():
+            # Fixed square cell so the pool reads as a grid of squares.
+            assert swatch.width() == swatch.height() == SWATCH_SIZE
+
     def test_touch_applies_colour_to_selection(self, live_tab):
         live_tab.state.toggle_group("Front Pars")
         live_tab.state.toggle_group("Movers")
@@ -214,13 +221,32 @@ class TestSubmastersAndMasters:
     def test_grandmaster_updates(self, live_tab):
         live_tab._grand_fader.value_changed.emit(60)
         assert live_tab.state.grandmaster == 60
-        assert live_tab._grand_value.text() == "60"
 
-    def test_sub_master_updates(self, live_tab):
-        live_tab._sub_fader.value_changed.emit(70)
-        assert live_tab.state.sub_master == 70
+    def test_grand_master_is_first_bank_column(self, live_tab):
+        # The GRAND master is the first column of the submaster bank, and
+        # its (accent) vertical fader drives the grandmaster.
+        first = live_tab._bank_layout.itemAt(0).widget()
+        assert first is live_tab._grand_column
+        assert live_tab._grand_fader.parentWidget() is live_tab._grand_column
+        live_tab._grand_fader.value_changed.emit(42)
+        assert live_tab.state.grandmaster == 42
 
-    def test_group_level_is_grand_times_sub(self, live_tab):
+    def test_dbo_lives_in_master_column(self, live_tab):
+        # DBO sits under the GRAND fader in the first bank column.
+        assert live_tab._dbo_btn.parentWidget() is live_tab._grand_column
+        live_tab._dbo_btn.setChecked(True)
+        assert live_tab.state.dbo is True
+        live_tab._dbo_btn.setChecked(False)
+        assert live_tab.state.dbo is False
+
+    def test_submaster_columns_have_bounded_width(self, live_tab):
+        from gui.tabs.live_tab import SUBMASTER_COLUMN_WIDTH
+        # Few groups must not stretch each fader column to a comical width.
+        column = live_tab._submaster_faders["Movers"].parentWidget()
+        assert column.maximumWidth() == SUBMASTER_COLUMN_WIDTH
+        assert live_tab._grand_column.maximumWidth() == SUBMASTER_COLUMN_WIDTH
+
+    def test_group_level_is_grand_times_submaster(self, live_tab):
         live_tab.state.set_grandmaster(80)
         live_tab.state.set_submaster("Movers", 50)
         assert live_tab.state.group_level("Movers") == pytest.approx(0.4)
@@ -256,12 +282,6 @@ class TestSubmastersAndMasters:
 
 
 class TestRightColumnActions:
-    def test_dbo_toggles_state(self, live_tab):
-        live_tab._dbo_btn.setChecked(True)
-        assert live_tab.state.dbo is True
-        live_tab._dbo_btn.setChecked(False)
-        assert live_tab.state.dbo is False
-
     def test_hold_look_latches(self, live_tab):
         live_tab._hold_look_btn.setChecked(True)
         assert live_tab.state.held_look is True
@@ -295,7 +315,6 @@ class TestStateSignal:
         live_tab.state.toggle_group("Movers")
         live_tab.state.stage_colour("red")
         live_tab.state.set_grandmaster(30)
-        live_tab.state.set_sub_master(50)
         live_tab.state.set_submaster("Movers", 40)
         live_tab.state.set_flash("Movers", True)
         live_tab.state.set_dbo(True)
@@ -303,7 +322,7 @@ class TestStateSignal:
         live_tab.state.set_strobe_on(True)
         live_tab.state.set_strobe_rate(20)
         live_tab.state.release_all()
-        assert len(hits) == 11
+        assert len(hits) == 10
 
 
 class TestUpdateFromConfig:

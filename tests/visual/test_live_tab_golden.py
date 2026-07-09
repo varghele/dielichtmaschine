@@ -3,11 +3,12 @@
 Pins the North Star 3b busking surface: the TOP SELECT row (one tile per
 group with a data-color accent bar + ALL / ODD-EVEN / CLEAR SEL) and FADE
 row, the CENTRE three-pool grid (COLOUR PALETTES painted in their actual
-colours with the active swatch outlined, plus marked POSITION and
-INTENSITY placeholders), the PROGRAMMER state bar, the 330px RIGHT column
-(GRAND / SUB faders, STROBE, STROBE KILL / HOLD LOOK / RELEASE ALL, the
-big DBO and the ACTIVE PLAYBACKS placeholder) and the BOTTOM submaster
-bank painted in the group colours.
+colours as square swatches with the active one outlined, plus marked
+POSITION and INTENSITY placeholders), the PROGRAMMER state bar, the 330px
+RIGHT column (ACTIVE PLAYBACKS placeholder, STROBE, STROBE KILL / HOLD
+LOOK / RELEASE ALL) and the BOTTOM submaster bank: a GRAND master column
+(accent fader + DBO) first, a divider, then a bounded fader per group in
+the group colours, left-aligned.
 
 The render is deterministic: two groups selected, one colour active, a
 couple of submasters at different levels, no output engine (UI shell
@@ -88,7 +89,6 @@ def test_live_tab_golden(qapp, scene_config):
         tab.state.toggle_group("Movers")
         tab.state.stage_colour("red")
         tab.state.set_grandmaster(85)
-        tab.state.set_sub_master(70)
         tab.state.set_submaster("Front Pars", 80)
         tab.state.set_submaster("Movers", 55)
         tab.state.set_strobe_rate(40)

@@ -19,10 +19,12 @@ Regions (North Star 3b):
   pass) | POSITION PALETTES + MOVEMENT SHAPES (placeholder, movers-only)
   | RUDIMENTS / INTENSITY FX (placeholder, cell-fixtures gated). Below
   it a PROGRAMMER state bar names the current live look.
-- RIGHT (330px) - GRAND + SUB faders, a STROBE rate + toggle,
-  STROBE KILL / HOLD LOOK / RELEASE ALL, a big DBO (dead blackout) and
-  an ACTIVE PLAYBACKS area (display-only: "NOTHING ELSE RUNNING").
-- BOTTOM (170px) - the submaster fader bank: one vertical fader per
+- RIGHT (330px) - an ACTIVE PLAYBACKS area (display-only: "NOTHING
+  ELSE RUNNING"), a STROBE rate + toggle and STROBE KILL / HOLD LOOK /
+  RELEASE ALL.
+- BOTTOM (170px) - the submaster fader bank: a GRAND master column
+  first (an accent vertical fader with the DBO dead-blackout button
+  under it) set off by a thin divider, then one vertical fader per
   group in the group's data colour with a momentary FLASH button.
 
 Honest omissions vs. the reference (surfaces with no in-memory state to
@@ -52,6 +54,12 @@ from .base_tab import BaseTab
 # Reference geometry.
 RIGHT_PANEL_WIDTH = 330
 BOTTOM_BANK_HEIGHT = 170
+# Each submaster / master column is capped so that with only a couple of
+# groups the bank stays readable and left-aligned instead of stretching
+# each fader to an absurd width.
+SUBMASTER_COLUMN_WIDTH = 120
+# Colour-pool swatches are square cells of this side length.
+SWATCH_SIZE = 92
 
 # Group fallback palette (mirrors the Auto / Stage screens) for groups
 # that carry the default gray or no color.
@@ -154,9 +162,9 @@ class LiveState(QObject):
         # Fade time used when a palette is applied (recorded, not animated).
         self.fade_key: str = DEFAULT_FADE_KEY
         self.fade_seconds: float = DEFAULT_FADE_SECONDS
-        # Masters / output scale.
+        # Masters / output scale. The grandmaster now lives as the first
+        # column of the submaster bank; there is no separate global sub.
         self.grandmaster: int = 100              # 0-100, all groups
-        self.sub_master: int = 100               # 0-100, global secondary
         self.submasters: Dict[str, int] = {}     # group name -> 0-100
         self.flash: set = set()                  # groups flashed to full
         # Blackout flags. dbo (dead blackout) is the stronger kill and
@@ -226,10 +234,6 @@ class LiveState(QObject):
         self.grandmaster = max(0, min(100, int(level)))
         self.state_changed.emit()
 
-    def set_sub_master(self, level: int) -> None:
-        self.sub_master = max(0, min(100, int(level)))
-        self.state_changed.emit()
-
     def set_submaster(self, group: str, level: int) -> None:
         self.submasters[group] = max(0, min(100, int(level)))
         self.state_changed.emit()
@@ -258,7 +262,7 @@ class LiveState(QObject):
 
         DBO (dead blackout) kills everything, overriding a held flash. A
         held flash forces full (1.0), overriding the softer blackout.
-        Otherwise the scale is grand x sub x per-group submaster (each
+        Otherwise the scale is grandmaster x per-group submaster (each
         0..1). Unknown groups resolve to 0.
         """
         if group not in self.submasters:
@@ -269,8 +273,7 @@ class LiveState(QObject):
             return 1.0
         if self.blackout:
             return 0.0
-        return ((self.grandmaster / 100.0) * (self.sub_master / 100.0)
-                * (self.submasters[group] / 100.0))
+        return (self.grandmaster / 100.0) * (self.submasters[group] / 100.0)
 
     # -- strobe ---------------------------------------------------------
     def set_strobe_on(self, on: bool) -> None:
@@ -296,61 +299,6 @@ class LiveState(QObject):
 # ---------------------------------------------------------------------------
 # Painted primitives
 # ---------------------------------------------------------------------------
-
-class _HFader(QWidget):
-    """A flat horizontal 0-100 fader: track + coloured fill + text handle.
-
-    ``set_value`` is silent (the tab drives it from LiveState); only user
-    drags emit ``value_changed`` so there is no sync feedback loop. The
-    fill token key selects the fill colour (accent for GRAND, secondary
-    for SUB).
-    """
-
-    value_changed = pyqtSignal(int)
-
-    def __init__(self, fill: str = "accent", parent=None):
-        super().__init__(parent)
-        self.setFixedHeight(18)
-        self.setMinimumWidth(80)
-        self.setCursor(Qt.CursorShape.SizeHorCursor)
-        self._value = 100
-        self._fill = fill
-
-    def value(self) -> int:
-        return self._value
-
-    def set_value(self, value: int) -> None:
-        self._value = max(0, min(100, int(value)))
-        self.update()
-
-    def _set_from_x(self, x: float) -> None:
-        value = int(round(max(0.0, min(1.0, x / max(1, self.width()))) * 100))
-        if value != self._value:
-            self._value = value
-            self.update()
-            self.value_changed.emit(value)
-
-    def mousePressEvent(self, event):
-        if event.button() == Qt.MouseButton.LeftButton:
-            self._set_from_x(event.position().x())
-
-    def mouseMoveEvent(self, event):
-        if event.buttons() & Qt.MouseButton.LeftButton:
-            self._set_from_x(event.position().x())
-
-    def paintEvent(self, event):
-        tokens = _active_tokens()
-        painter = QPainter(self)
-        track_top = (self.height() - 10) // 2
-        painter.fillRect(0, track_top, self.width(), 10,
-                         QColor(tokens["border"]))
-        filled = int(round(self.width() * self._value / 100.0))
-        if filled > 0:
-            painter.fillRect(0, track_top, filled, 10, QColor(tokens[self._fill]))
-        handle_x = min(self.width() - 5, max(0, filled - 2))
-        painter.fillRect(handle_x, 0, 5, self.height(), QColor(tokens["text"]))
-        painter.end()
-
 
 class _RateSlider(QWidget):
     """A flat 0-100 slider (strobe rate). Silent set, drag emits."""
@@ -528,6 +476,9 @@ class _ColourSwatch(QWidget):
     Solid or a two-colour diagonal split; a small mono name in contrast-
     picked text; an accent outline when the colour is active on the
     current selection. Touching emits ``clicked`` with the swatch id.
+
+    The cell is a fixed square (:data:`SWATCH_SIZE` on a side) so the pool
+    reads as a tidy grid of squares rather than stretched rectangles.
     """
 
     clicked = pyqtSignal(str)
@@ -540,7 +491,7 @@ class _ColourSwatch(QWidget):
         self._primary = primary
         self._secondary = secondary
         self._active = False
-        self.setMinimumSize(84, 84)
+        self.setFixedSize(SWATCH_SIZE, SWATCH_SIZE)
         self.setCursor(Qt.CursorShape.PointingHandCursor)
         self.setToolTip(f"{label} - touch to fade the selection to it")
 
@@ -863,8 +814,9 @@ class LiveTab(BaseTab):
         cells.extend((song, picker, rec))
         for i, cell in enumerate(cells):
             grid.addWidget(cell, i // columns, i % columns)
-        for col in range(columns):
-            grid.setColumnStretch(col, 1)
+        # Left-align the square block: a phantom trailing column soaks up
+        # the slack so the real columns stay at the swatch's fixed width.
+        grid.setColumnStretch(columns, 1)
         layout.addWidget(grid_host)
         layout.addStretch(1)
         return pool
@@ -952,7 +904,7 @@ class LiveTab(BaseTab):
         row.addWidget(self._programmer_label, 1)
         return bar
 
-    # -- RIGHT: masters, strobe, kills, DBO, playbacks -------------------
+    # -- RIGHT: playbacks, strobe, kills ---------------------------------
 
     def _build_right_panel(self) -> QWidget:
         panel = QWidget()
@@ -1026,46 +978,9 @@ class LiveTab(BaseTab):
         layout.addLayout(kills_row)
 
         layout.addStretch(1)
-
-        # GRAND + SUB.
-        grand_row = QHBoxLayout()
-        grand_row.setSpacing(8)
-        grand_row.addWidget(MicroLabel("Grand", point_size=8,
-                                       tracking_em=0.12))
-        self._grand_fader = _HFader(fill="accent")
-        self._grand_fader.value_changed.connect(self.state.set_grandmaster)
-        grand_row.addWidget(self._grand_fader, 1)
-        self._grand_value = MicroLabel("100", point_size=9, tracking_em=0.0)
-        self._grand_value.setFixedWidth(30)
-        self._grand_value.setAlignment(
-            Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
-        grand_row.addWidget(self._grand_value)
-        layout.addLayout(grand_row)
-
-        sub_row = QHBoxLayout()
-        sub_row.setSpacing(8)
-        sub_row.addWidget(MicroLabel("Sub", point_size=8, tracking_em=0.12))
-        self._sub_fader = _HFader(fill="text_secondary")
-        self._sub_fader.value_changed.connect(self.state.set_sub_master)
-        sub_row.addWidget(self._sub_fader, 1)
-        self._sub_value = MicroLabel("100", point_size=9, tracking_em=0.0)
-        self._sub_value.setFixedWidth(30)
-        self._sub_value.setAlignment(
-            Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
-        sub_row.addWidget(self._sub_value)
-        layout.addLayout(sub_row)
-
-        # DBO - dead blackout (destructive, latch).
-        self._dbo_btn = QPushButton("DBO")
-        self._dbo_btn.setCheckable(True)
-        self._dbo_btn.setProperty("role", "destructive")
-        self._dbo_btn.setFont(display_font(17, QFont.Weight.ExtraBold,
-                                           tracking_em=0.1))
-        self._dbo_btn.setFixedHeight(52)
-        self._dbo_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        self._dbo_btn.setToolTip("Dead blackout - zero all output")
-        self._dbo_btn.toggled.connect(self.state.set_dbo)
-        layout.addWidget(self._dbo_btn)
+        # GRAND + the DBO dead-blackout now live as the first column of
+        # the bottom submaster bank (see _make_master_column), so the
+        # right panel keeps only playbacks, strobe and the kills.
         return panel
 
     # -- BOTTOM: submaster bank ------------------------------------------
@@ -1087,8 +1002,8 @@ class LiveTab(BaseTab):
                                         point_size=8, tracking_em=0.12))
         header_row.addStretch(1)
         header_row.addWidget(MicroLabel(
-            "One fader per group · FLASH is momentary", point_size=7,
-            tracking_em=0.08))
+            "GRAND + one fader per group · FLASH is momentary",
+            point_size=7, tracking_em=0.08))
         layout.addWidget(header)
 
         self._bank_host = QWidget()
@@ -1104,11 +1019,73 @@ class LiveTab(BaseTab):
         layout.addWidget(self._bank_host, 1)
         return panel
 
+    def _make_master_column(self) -> QWidget:
+        """The GRAND master column: an accent vertical fader with the DBO
+        dead-blackout button under it. Always the first column of the
+        bank, set off from the per-group columns by a thin divider."""
+        accent = _active_tokens()["accent"]
+        column = QWidget()
+        column.setObjectName("LiveMasterColumn")
+        column.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
+        column.setMaximumWidth(SUBMASTER_COLUMN_WIDTH)
+        self._grand_column = column
+        col_layout = QVBoxLayout(column)
+        col_layout.setContentsMargins(6, 6, 6, 6)
+        col_layout.setSpacing(4)
+
+        name_label = MicroLabel("GRAND", point_size=8, tracking_em=0.06)
+        name_label.setMinimumWidth(1)
+        name_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        col_layout.addWidget(name_label)
+
+        fader = _VerticalFader(accent)
+        fader.value_changed.connect(self.state.set_grandmaster)
+        col_layout.addWidget(fader, 1, Qt.AlignmentFlag.AlignHCenter)
+        self._grand_fader = fader
+
+        dbo = QPushButton("DBO")
+        dbo.setCheckable(True)
+        dbo.setProperty("role", "destructive")
+        dbo.setFont(mono_font(8, QFont.Weight.DemiBold))
+        dbo.setCursor(Qt.CursorShape.PointingHandCursor)
+        dbo.setToolTip("Dead blackout - zero all output")
+        dbo.toggled.connect(self.state.set_dbo)
+        col_layout.addWidget(dbo)
+        self._dbo_btn = dbo
+
+        self._restyle_master_column(column, accent)
+        return column
+
+    def _make_bank_divider(self) -> QWidget:
+        """A 1px vertical rule separating the GRAND master column from the
+        per-group submaster columns."""
+        divider = QWidget()
+        divider.setObjectName("LiveBankDivider")
+        divider.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
+        divider.setFixedWidth(1)
+        self._bank_divider = divider
+        self._restyle_bank_divider(divider)
+        return divider
+
+    def _restyle_bank_divider(self, divider: QWidget) -> None:
+        tokens = _active_tokens()
+        divider.setStyleSheet(
+            f"#LiveBankDivider {{ background-color: {tokens['border']}; }}")
+
+    def _restyle_master_column(self, column: QWidget, accent: str) -> None:
+        tokens = _active_tokens()
+        column.setStyleSheet(
+            "#LiveMasterColumn {"
+            f" background-color: {tokens['panel']};"
+            f" border: 1px solid {tokens['border']};"
+            f" border-top: 3px solid {accent}; }}")
+
     def _make_submaster_column(self, name: str, color: str) -> QWidget:
         column = QWidget()
         column.setObjectName("LiveSubmasterColumn")
         column.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
         column.setProperty("_group_color", color)
+        column.setMaximumWidth(SUBMASTER_COLUMN_WIDTH)
         col_layout = QVBoxLayout(column)
         col_layout.setContentsMargins(6, 6, 6, 6)
         col_layout.setSpacing(4)
@@ -1197,10 +1174,15 @@ class LiveTab(BaseTab):
                 widget.deleteLater()
         self._submaster_faders = {}
         self._flash_buttons = {}
+        # GRAND + DBO master column first, then a divider, then one bounded
+        # column per group; a trailing stretch left-aligns the bank so few
+        # groups do not stretch the columns to a comical width.
+        self._bank_layout.addWidget(self._make_master_column())
+        self._bank_layout.addWidget(self._make_bank_divider())
         self._bank_layout.addWidget(self._bank_empty_hint)
         for name in group_names:
             self._bank_layout.addWidget(
-                self._make_submaster_column(name, self._group_colors[name]), 1)
+                self._make_submaster_column(name, self._group_colors[name]))
         self._bank_layout.addStretch(1)
         self._bank_empty_hint.setVisible(not group_names)
 
@@ -1219,9 +1201,6 @@ class LiveTab(BaseTab):
             fader.set_value(state.submasters.get(name, 100))
 
         self._grand_fader.set_value(state.grandmaster)
-        self._grand_value.setText(str(state.grandmaster))
-        self._sub_fader.set_value(state.sub_master)
-        self._sub_value.setText(str(state.sub_master))
         self._strobe_slider.set_value(state.strobe_rate)
 
         self._sync_toggle(self._strobe_btn, state.strobe_on)
@@ -1293,4 +1272,12 @@ class LiveTab(BaseTab):
                 if column is not None:
                     self._restyle_submaster_column(
                         column, self._group_colors.get(name, DEFAULT_GROUP_COLOR))
+            # Re-tint the GRAND master column + divider in the new accent.
+            accent = _active_tokens()["accent"]
+            if getattr(self, "_grand_column", None) is not None:
+                self._restyle_master_column(self._grand_column, accent)
+            if getattr(self, "_grand_fader", None) is not None:
+                self._grand_fader.set_color(accent)
+            if getattr(self, "_bank_divider", None) is not None:
+                self._restyle_bank_divider(self._bank_divider)
         super().changeEvent(event)
