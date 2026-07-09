@@ -23,7 +23,7 @@ Anatomy (top to bottom, left to right):
   chrome parented to the view: a top-left caption, a top-right accent
   badge naming the active layer, a bottom-left legend and a bottom-
   right title block.
-- a 380px right column: a 30px "3D PREVIEW" header with POP-OUT and a
+- a 448px right column: a 30px "3D PREVIEW" header with POP-OUT and a
   collapse chevron, the embedded 3D visualizer, a SELECTION card
   (name + group color, X/Y/Z stat tiles, accent LAYER combo, an
   accent-bordered hint, the orientation editor) and a LAYERS section.
@@ -52,7 +52,7 @@ from gui.widgets.embedded_visualizer import EmbeddedVisualizer
 
 # Reference column widths.
 LIBRARY_WIDTH = 260
-RIGHT_COLUMN_WIDTH = 380
+RIGHT_COLUMN_WIDTH = 448
 STRIP_HEIGHT = 38
 PREVIEW_HEADER_HEIGHT = 30
 
@@ -1181,12 +1181,20 @@ class StageTab(BaseTab):
         # The SELECTION header above owns the selection readout; the
         # panel's internal info label would repeat it.
         self.orientation_panel.info_label.setVisible(False)
+        # The column already has a live 3D visualizer at the top that
+        # reflects orientation edits (see _broadcast_visualizer_refresh),
+        # so the panel's own mini 3D preview is redundant here and only
+        # squeezes the presets/fine-adjustment controls. Hide it inline;
+        # the pop-out modal keeps its preview.
+        self.orientation_panel.preview_group.setVisible(False)
         inspector_layout.addWidget(self._caption("Orientation"))
-        # The orientation editor's three side-by-side group boxes have a
-        # minimum width wider than this 380px column. Left as a direct
-        # child it would drag the inspector's minimumSizeHint past the
-        # column and silently clip the SELECTION card above it; its own
-        # scroll area keeps the column honest.
+        # The orientation editor is two side-by-side group boxes (Presets,
+        # Fine Adjustment) with the apply-to-group row beneath. That fits
+        # this 448px column, but the editor is still tall, so it keeps its
+        # own vertical scroll area: a direct child would drag the
+        # inspector's minimumSizeHint past the column height and clip the
+        # SELECTION card above it. Horizontal scrolling stays AsNeeded as a
+        # safety net for very long group names.
         orientation_scroll = QtWidgets.QScrollArea()
         orientation_scroll.setWidgetResizable(True)
         orientation_scroll.setFrameShape(QtWidgets.QFrame.Shape.NoFrame)
@@ -1195,12 +1203,12 @@ class StageTab(BaseTab):
         orientation_scroll.setVerticalScrollBarPolicy(
             Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         orientation_scroll.setWidget(self.orientation_panel)
-        # A minimum equal to the panel's full sizeHint made the inspector
-        # taller than its column, so on short windows Qt overlapped the
-        # LAYERS rows on top of it. The scroll area exists precisely to
-        # absorb that: give it a modest floor and let it scroll.
-        orientation_scroll.setMinimumHeight(200)
-        inspector_layout.addWidget(orientation_scroll, 1)
+        # With the mini-preview hidden the editor is short, so let it take
+        # its natural height (no stretch) and sit directly above LAYERS.
+        # The whole inspector already lives in an outer vertical scroll
+        # (see _build_right_column), which absorbs overflow on short
+        # windows; this inner area only guards horizontal width.
+        inspector_layout.addWidget(orientation_scroll)
 
         # -- LAYERS -----------------------------------------------------
         inspector_layout.addWidget(self._caption("Layers"))

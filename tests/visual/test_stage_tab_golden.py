@@ -3,7 +3,7 @@
 Pins the rebuilt Stage tab anatomy without touching the GL visualizer:
 the 38px action strip (right-aligned segmented layer chips, MORPH,
 EXPORT RIDER PDF), the 260px library panel (group rows, element +
-truss tiles, dashed hint, collapsed STAGE SETTINGS) and the 380px
+truss tiles, dashed hint, collapsed STAGE SETTINGS) and the 448px
 inspector (SELECTION card, X/Y/Z stat tiles, accent LAYER field,
 LAYERS rows).
 
@@ -123,11 +123,13 @@ def test_stage_inspector_golden(qapp, stage_tab):
     """Right inspector with a fixture selected: display-caps name, the
     group name in the group color, the X/Y/Z stat tiles, the accent
     LAYER field, the accent-left-border hint and the LAYERS rows."""
+    from gui.tabs.stage_tab import RIGHT_COLUMN_WIDTH
     stage_tab.stage_view.fixtures["MH 1"].setSelected(True)
     panel = stage_tab.inspector_panel
-    # Tall enough for SELECTION + ORIENTATION + LAYERS without the
+    # Match the real inspector column width (RIGHT_COLUMN_WIDTH) and make
+    # it tall enough for SELECTION + ORIENTATION + LAYERS without the
     # orientation scroll area squeezing the rows below it.
-    panel.setFixedSize(380, 900)
+    panel.setFixedSize(RIGHT_COLUMN_WIDTH, 900)
     compare_to_golden(panel.grab().toImage(), "stage_inspector_dark")
 
 

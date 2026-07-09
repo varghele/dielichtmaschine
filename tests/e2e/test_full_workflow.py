@@ -13,7 +13,7 @@ to the suite):
 2. A straight truss had no way to set its length.  -> ``TestStep3Stage``
    (``test_truss_length_action_exists_and_resizes``)
 3. Right-click "Set Orientation..." only rebound an inline panel that is
-   unreachable in the 380 px inspector; it now also opens the modal
+   unreachable in the inline inspector; it now also opens the modal
    ``OrientationDialog``.  -> ``TestStep3Stage``
    (``test_set_orientation_context_action_opens_modal_and_writes_back``)
 4. The Shows/Timeline tab must genuinely author and play back a show.
@@ -531,7 +531,7 @@ class TestStep3Stage:
     def test_set_orientation_context_action_opens_modal_and_writes_back(
             self, main_window, dialogs, inputs, menus):
         """Regression: 'Set Orientation...' used to only rebind an inline
-        panel that is unreachable in the 380 px inspector, so nothing was
+        panel that is unreachable in the inline inspector, so nothing was
         written. The dialogs driver raises if the modal never opens, and the
         mounting assertion fails if it opens but never writes back."""
         step1_create_artnet_universe(main_window)

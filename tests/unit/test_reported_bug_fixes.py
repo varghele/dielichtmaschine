@@ -124,9 +124,9 @@ class TestTrussLength:
 
 
 class TestOrientationReachable:
-    """The inline orientation panel sits under the 3D preview in a 380px
-    column, so right-click 'Set Orientation...' has to open the modal too
-    or the user cannot set fixture rotation at all."""
+    """The inline orientation panel sits in the right inspector column,
+    so right-click 'Set Orientation...' has to open the modal too or the
+    user cannot set fixture rotation at all."""
 
     @pytest.fixture
     def tab(self, qapp):
