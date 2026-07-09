@@ -343,10 +343,13 @@ class _GroupRow(QtWidgets.QWidget):
     def mousePressEvent(self, event):
         if event.button() == Qt.MouseButton.LeftButton:
             self.clicked.emit(self._group_name)
-        elif event.button() == Qt.MouseButton.RightButton:
-            self.context_requested.emit(
-                self._group_name, event.globalPosition().toPoint())
         super().mousePressEvent(event)
+
+    def contextMenuEvent(self, event):
+        # Handle (and accept) the right-click here so it does not also bubble
+        # up to the groups panel's own "Add group" context menu.
+        self.context_requested.emit(self._group_name, event.globalPos())
+        event.accept()
 
 
 class FixturesTab(BaseTab):
@@ -505,6 +508,10 @@ class FixturesTab(BaseTab):
         panel.setProperty("role", "inspector")
         panel.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
         panel.setFixedWidth(280)
+        # Right-click empty space in the panel to add a group.
+        panel.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        panel.customContextMenuRequested.connect(
+            lambda pos: self._show_groups_panel_menu(panel, pos))
         layout = QtWidgets.QVBoxLayout(panel)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
@@ -1525,15 +1532,21 @@ class FixturesTab(BaseTab):
     # ------------------------------------------------------------------
     # Table context menu (Duplicate / Remove)
     # ------------------------------------------------------------------
-    def _build_table_context_menu(self) -> QtWidgets.QMenu:
-        """The Duplicate / Remove menu for the patch table.
+    def _build_table_context_menu(self, has_row: bool = True) -> QtWidgets.QMenu:
+        """The patch-table right-click menu.
 
-        Split out from :meth:`_show_table_context_menu` so the action
-        wiring is testable without popping the (blocking) menu. Labels
-        match the inspector footer buttons; both actions reuse the
-        existing CRUD methods, which operate on the current selection.
+        "Add fixture..." is always offered (so a right-click on empty space
+        adds one); Duplicate / Remove / Assign to group are added when a row
+        is under the cursor. Split out from :meth:`_show_table_context_menu`
+        so the wiring is testable without popping the (blocking) menu.
         """
         menu = QtWidgets.QMenu(self.table)
+        add_action = menu.addAction("Add fixture...")
+        add_action.triggered.connect(self._add_fixture)
+        if not has_row:
+            return menu
+        menu.addSeparator()
+
         duplicate_action = menu.addAction("Duplicate")
         duplicate_action.triggered.connect(self._duplicate_fixture)
         remove_action = menu.addAction("Remove")
@@ -1618,29 +1631,36 @@ class FixturesTab(BaseTab):
 
     def _show_group_context_menu(self, name: str, global_pos):
         menu = QtWidgets.QMenu(self)
+        add_action = menu.addAction("Add group...")
+        add_action.triggered.connect(self._add_group)
         duplicate_action = menu.addAction("Duplicate group")
         duplicate_action.triggered.connect(
             lambda: self._duplicate_group(name))
         menu.exec(global_pos)
 
-    def _show_table_context_menu(self, pos: QtCore.QPoint):
-        """Show the Duplicate / Remove menu at a right-click on the table.
+    def _show_groups_panel_menu(self, panel, pos):
+        """Right-click on empty groups-panel space: offer Add group."""
+        menu = QtWidgets.QMenu(self)
+        add_action = menu.addAction("Add group...")
+        add_action.triggered.connect(self._add_group)
+        menu.exec(panel.mapToGlobal(pos))
 
-        Selects the row under the cursor when it is not already part of
-        the selection, then defers to the existing CRUD methods (which
-        act on the first selected row). Shows nothing when the click
-        misses every row.
+    def _show_table_context_menu(self, pos: QtCore.QPoint):
+        """Right-click on the patch table.
+
+        On a row: select it (if not already) and offer Add / Duplicate /
+        Remove / Assign. On empty space: offer just Add fixture.
         """
         index = self.table.indexAt(pos)
-        if not index.isValid():
-            return
-        row = index.row()
-        selection_model = self.table.selectionModel()
-        selected_rows = ({i.row() for i in selection_model.selectedRows()}
-                         if selection_model is not None else set())
-        if row not in selected_rows:
-            self.table.selectRow(row)
-        menu = self._build_table_context_menu()
+        has_row = index.isValid()
+        if has_row:
+            row = index.row()
+            selection_model = self.table.selectionModel()
+            selected_rows = ({i.row() for i in selection_model.selectedRows()}
+                             if selection_model is not None else set())
+            if row not in selected_rows:
+                self.table.selectRow(row)
+        menu = self._build_table_context_menu(has_row=has_row)
         menu.exec(self.table.viewport().mapToGlobal(pos))
 
     def _add_fixture(self):

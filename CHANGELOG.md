@@ -59,6 +59,9 @@ verbatim as the GitHub Release notes (see [docs/releasing.md](docs/releasing.md)
 
 ### Added
 
+- **Right-click to add a fixture or a group.** The Fixtures table's
+  right-click menu now leads with "Add fixture..." (works on empty space
+  too), and right-clicking the groups panel offers "Add group...".
 - **Right-click a fixture row to Duplicate or Remove it** in the Fixtures
   tab, alongside the existing buttons.
 - **Assign several fixtures to a group at once**: select multiple rows and

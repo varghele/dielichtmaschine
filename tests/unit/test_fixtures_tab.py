@@ -617,7 +617,7 @@ def test_context_menu_selects_row_under_cursor(qapp, sample_configuration,
         monkeypatch.setattr(tab.table, "indexAt",
                             lambda pos: model.index(1, 0))
         monkeypatch.setattr(tab, "_build_table_context_menu",
-                            lambda: MagicMock())
+                            lambda has_row=True: MagicMock())
 
         tab.table.clearSelection()
         tab._show_table_context_menu(QtCore.QPoint(0, 0))
@@ -626,21 +626,84 @@ def test_context_menu_selects_row_under_cursor(qapp, sample_configuration,
         tab.deleteLater()
 
 
-def test_context_menu_absent_on_empty_click(qapp, sample_configuration,
-                                            monkeypatch):
-    """Right-clicking past the last row builds no menu (invalid index)."""
-    from PyQt6 import QtCore
-
+def test_empty_click_menu_only_offers_add(qapp, sample_configuration):
+    """Right-clicking past the last row offers just Add fixture (no row to
+    duplicate/remove/assign)."""
     tab = _make_tab(qapp, sample_configuration)
     try:
-        monkeypatch.setattr(tab.table, "indexAt",
-                            lambda pos: QtCore.QModelIndex())
-        built = []
-        monkeypatch.setattr(tab, "_build_table_context_menu",
-                            lambda: built.append(1))
-        tab._show_table_context_menu(QtCore.QPoint(0, 0))
-        assert built == []
+        menu = tab._build_table_context_menu(has_row=False)
+        labels = [a.text() for a in menu.actions() if a.text()]
+        assert labels == ["Add fixture..."]
     finally:
+        tab.deleteLater()
+
+
+def test_row_menu_offers_add_fixture(qapp, sample_configuration):
+    """On a row the menu still leads with Add fixture, plus the CRUD items."""
+    tab = _make_tab(qapp, sample_configuration)
+    try:
+        menu = tab._build_table_context_menu(has_row=True)
+        labels = [a.text() for a in menu.actions() if a.text()]
+        assert "Add fixture..." in labels
+        assert {"Duplicate", "Remove"} <= set(labels)
+    finally:
+        tab.deleteLater()
+
+
+def test_add_fixture_menu_action_calls_add(qapp, sample_configuration,
+                                           monkeypatch):
+    tab = _make_tab(qapp, sample_configuration)
+    try:
+        called = []
+        monkeypatch.setattr(tab, "_add_fixture", lambda: called.append(1))
+        menu = tab._build_table_context_menu(has_row=False)
+        add = next(a for a in menu.actions() if a.text() == "Add fixture...")
+        add.trigger()
+        assert called == [1]
+    finally:
+        tab.deleteLater()
+
+
+def test_groups_panel_menu_adds_a_group(qapp, sample_configuration,
+                                        monkeypatch):
+    from PyQt6 import QtCore
+    tab = _make_tab(qapp, sample_configuration)
+    try:
+        # Intercept the exec so no real popup blocks; capture the menu.
+        captured = {}
+        real_exec = QtWidgets.QMenu.exec
+
+        def fake_exec(self, *a):
+            captured["labels"] = [x.text() for x in self.actions() if x.text()]
+            return None
+        monkeypatch.setattr(QtWidgets.QMenu, "exec", fake_exec)
+        called = []
+        monkeypatch.setattr(tab, "_add_group", lambda: called.append(1))
+
+        panel = tab.findChild(QtWidgets.QWidget, "GroupsPanel")
+        tab._show_groups_panel_menu(panel, QtCore.QPoint(0, 0))
+        assert captured["labels"] == ["Add group..."]
+    finally:
+        monkeypatch.undo()
+        tab.deleteLater()
+
+
+def test_group_row_menu_offers_add_and_duplicate(qapp, sample_configuration,
+                                                 monkeypatch):
+    from PyQt6 import QtCore
+    tab = _make_tab(qapp, sample_configuration)
+    try:
+        captured = {}
+
+        def fake_exec(self, *a):
+            captured["labels"] = [x.text() for x in self.actions() if x.text()]
+            return None
+        monkeypatch.setattr(QtWidgets.QMenu, "exec", fake_exec)
+        tab._show_group_context_menu("TestGroup", QtCore.QPoint(0, 0))
+        assert "Add group..." in captured["labels"]
+        assert "Duplicate group" in captured["labels"]
+    finally:
+        monkeypatch.undo()
         tab.deleteLater()
 
 
