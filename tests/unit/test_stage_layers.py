@@ -653,6 +653,18 @@ class TestLibraryPanel:
             assert stage_section.isAncestorOf(widget), (
                 f"{name} is not inside the combined STAGE section")
 
+    def test_stage_subsections_are_indented_under_settings(self, tab):
+        """The nested Stage / Marks / Layers sections must read as children
+        of STAGE SETTINGS, not siblings: both the header (indent) and the
+        content (left margin) sit further right than the umbrella."""
+        outer = tab.sections["settings"]
+        outer_left = outer.content.contentsMargins().left()
+        for key in ("stage_dims", "marks", "layers"):
+            sub = tab.sections[key]
+            assert sub._indent > 0, f"{key} header is not indented"
+            assert sub.content.contentsMargins().left() > outer_left, (
+                f"{key} content is not indented past STAGE SETTINGS")
+
     def test_dropped_sections_and_planes_picker_are_gone(self, tab):
         """The Grid / View / Planes sections were folded away, and the
         stage-planes picker UI no longer exists on the tab."""
@@ -916,6 +928,21 @@ class TestSelectionCard:
             'QLabel[role="hint-accent"] {', 1)[1].split("}", 1)[0]
         assert "border-left: 3px solid" in rule
         assert THEMES["dark"]["accent"] in rule
+
+    def test_selection_hint_is_hidden_until_the_layer_field_is_hovered(self, tab):
+        """The active-layer rule hint stays out of the way and reveals only
+        while the pointer is over the LAYER field.
+
+        isHidden() (not isVisible()) is asserted: the tab is never shown, so
+        isVisible() is always False regardless of the explicit hide state."""
+        from PyQt6.QtCore import QEvent
+        from PyQt6.QtWidgets import QApplication
+
+        assert tab.selection_hint.isHidden()
+        QApplication.sendEvent(tab.layer_combo, QEvent(QEvent.Type.Enter))
+        assert not tab.selection_hint.isHidden()
+        QApplication.sendEvent(tab.layer_combo, QEvent(QEvent.Type.Leave))
+        assert tab.selection_hint.isHidden()
 
     def test_layers_section_lists_every_layer(self, tab):
         layout = tab._layer_rows_layout

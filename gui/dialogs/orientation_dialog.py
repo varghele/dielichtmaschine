@@ -1950,6 +1950,10 @@ class OrientationPanel(QWidget):
         # controls. The standalone modal keeps it visible.
         self.preview_group = QGroupBox("3D Preview")
         preview_layout = QVBoxLayout(self.preview_group)
+        # The theme's QGroupBox only reserves top padding for the title, so
+        # the GL widget would otherwise render flush against (and appear to
+        # overlap) the left/right/bottom border. Inset it a few pixels.
+        preview_layout.setContentsMargins(8, 6, 8, 8)
         self.preview_widget = OrientationPreviewWidget()
         preview_layout.addWidget(self.preview_widget)
         layout.addWidget(self.preview_group, stretch=1)

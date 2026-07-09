@@ -22,6 +22,12 @@ verbatim as the GitHub Release notes (see [docs/releasing.md](docs/releasing.md)
 
 ### Fixed
 
+- **Stage tab polish.** The nested Stage / Marks / Layers sections are now
+  indented under STAGE SETTINGS so the hierarchy reads at a glance; the
+  orientation editor's 3D preview no longer touches its frame (a few
+  pixels of inset); and the "only elements on the active layer are
+  selectable" hint is hidden until you hover the LAYER field, reclaiming
+  that space the rest of the time.
 - **The orientation editor no longer needs sideways scrolling.** In the
   Stage tab the editor packed three group boxes side by side, wider than
   the inspector column, so the preset buttons ran off the edge behind a

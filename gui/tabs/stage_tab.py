@@ -114,12 +114,13 @@ class _CollapsibleSection(QtWidgets.QWidget):
 
     def __init__(self, title: str, color: str, *, expanded: bool = True,
                  settings_key: str = "", margins=(16, 8, 16, 12),
-                 spacing: int = 6, parent=None):
+                 spacing: int = 6, indent: int = 0, parent=None):
         super().__init__(parent)
         from gui.fonts import FONT_MONO
 
         self._color = color
         self._settings_key = settings_key
+        self._indent = max(0, indent)
         if settings_key:
             stored = app_settings().value(
                 f"stage/section/{settings_key}", expanded, type=bool)
@@ -135,10 +136,14 @@ class _CollapsibleSection(QtWidgets.QWidget):
         self.toggle.setToolButtonStyle(
             Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
         self.toggle.setProperty("role", "topbar-icon")
+        # A nested subsection indents its header (and content, via the
+        # caller's left margin) so the hierarchy under STAGE SETTINGS reads
+        # at a glance instead of sitting flush with its parent.
+        left_pad = 16 + max(0, indent)
         self.toggle.setStyleSheet(
             "QToolButton {"
             f" font-family: \"{FONT_MONO}\"; font-size: 10px;"
-            " padding: 8px 16px; text-align: left; }")
+            f" padding: 8px 16px 8px {left_pad}px; text-align: left; }}")
         self.toggle.setSizePolicy(
             QtWidgets.QSizePolicy.Policy.Expanding,
             QtWidgets.QSizePolicy.Policy.Fixed)
@@ -441,11 +446,12 @@ class StageTab(BaseTab):
     # -- left library panel ---------------------------------------------
 
     def _make_section(self, title: str, key: str, *, expanded: bool = True,
-                      margins=(16, 8, 16, 12), spacing: int = 6):
+                      margins=(16, 8, 16, 12), spacing: int = 6,
+                      indent: int = 0):
         """A library collapsible, registered under ``self.sections[key]``."""
         section = _CollapsibleSection(
             title, self._tokens["text_secondary"], expanded=expanded,
-            settings_key=key, margins=margins, spacing=spacing)
+            settings_key=key, margins=margins, spacing=spacing, indent=indent)
         self.sections[key] = section
         return section
 
@@ -605,8 +611,11 @@ class StageTab(BaseTab):
         self.settings_container = outer.container
 
         def subsection(title, key, expanded=True):
+            # Indent nested subsections so they read as children of STAGE
+            # SETTINGS rather than siblings: the header shifts right (indent)
+            # and the content's left margin matches it.
             section = self._make_section(title, key, expanded=expanded,
-                                         margins=(16, 6, 16, 10))
+                                         margins=(28, 6, 16, 10), indent=12)
             outer.addWidget(section)
             return section
 
@@ -1154,7 +1163,13 @@ class StageTab(BaseTab):
         self.selection_hint.setFont(hint_font)
         # Theme-owned: QLabel[role="hint-accent"].
         self.selection_hint.setProperty("role", "hint-accent")
+        # Hidden until the user hovers the active-layer field: it explains
+        # the active-layer selection rule, which is only of interest while
+        # looking at the layer control. Kept out of the way otherwise.
+        # (_reveal_hint_on_hover installs the enter/leave filter.)
+        self.selection_hint.setVisible(False)
         inspector_layout.addWidget(self.selection_hint)
+        self._reveal_hint_on_hover(self.layer_combo, self.selection_hint)
 
         # Persistent inline orientation editor — re-bound by the
         # right-click "Set Orientation" flow and by plain selection.
@@ -1702,9 +1717,23 @@ class StageTab(BaseTab):
 
     # ── Plan overlay chrome ───────────────────────────────────────────
 
+    def _reveal_hint_on_hover(self, trigger, hint) -> None:
+        """Show ``hint`` only while the pointer is over ``trigger``."""
+        if not hasattr(self, "_hover_hints"):
+            self._hover_hints = {}
+        self._hover_hints[trigger] = hint
+        trigger.installEventFilter(self)
+
     def eventFilter(self, obj, event):
-        """Keep the plan's overlay chrome pinned to the view's corners as
-        the StageView resizes or is first shown."""
+        """Pin the plan's overlay chrome to the view's corners as the
+        StageView resizes or is first shown, and reveal any hover-gated
+        hint while its trigger is under the pointer."""
+        hover_hints = getattr(self, "_hover_hints", None)
+        if hover_hints and obj in hover_hints:
+            if event.type() == QEvent.Type.Enter:
+                hover_hints[obj].setVisible(True)
+            elif event.type() == QEvent.Type.Leave:
+                hover_hints[obj].setVisible(False)
         if (hasattr(self, "stage_view") and obj is self.stage_view
                 and event.type() in (QEvent.Type.Resize, QEvent.Type.Show)):
             self._position_plan_overlays()
