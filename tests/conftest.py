@@ -41,6 +41,13 @@ def _exclude_local_gdtf_library():
 # "app keeps opening in the light theme" bug happened.
 # ---------------------------------------------------------------------------
 @pytest.fixture(scope="session", autouse=True)
+def _hermetic_autosave_dir(tmp_path_factory):
+    """Keep autosave backups out of the real app-data dir during tests."""
+    os.environ["QLC_AUTOSAVE_DIR"] = str(tmp_path_factory.mktemp("autosave"))
+    yield
+
+
+@pytest.fixture(scope="session", autouse=True)
 def _hermetic_qsettings(tmp_path_factory):
     from PyQt6.QtCore import QSettings
     from utils import app_settings as mod

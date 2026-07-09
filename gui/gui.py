@@ -396,6 +396,38 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         # Connect clean state changed for save indicator (optional)
         self.undo_stack.cleanChanged.connect(self._on_undo_clean_changed)
 
+        self._init_autosave()
+
+    def _clear_autosave(self):
+        """Drop the crash-recovery backup after a real save."""
+        if hasattr(self, "_autosave"):
+            self._autosave.clear()
+
+    def _config_fingerprint(self):
+        """A value that changes when the config content changes, for the
+        autosave. Cheap enough at the autosave cadence."""
+        from dataclasses import asdict
+        try:
+            return hash(repr(asdict(self.config)))
+        except Exception:
+            return None
+
+    def _init_autosave(self):
+        """Crash-recovery autosave: every few seconds, unsaved changes are
+        written to a sidecar backup next to the project (Reaper-style).
+        Ctrl+S clears it; a crash leaves it for recovery on next launch
+        (see utils/autosave.py and _do_load_configuration)."""
+        from utils.autosave import AutosaveManager
+        self._autosave = AutosaveManager(
+            save_fn=lambda p: self.config.save(p),
+            fingerprint_fn=self._config_fingerprint,
+            current_path=lambda: self.config_path)
+        self._autosave.prime()
+        self._autosave_timer = QTimer(self)
+        self._autosave_timer.setInterval(15000)  # 15 seconds
+        self._autosave_timer.timeout.connect(self._autosave.maybe_backup)
+        self._autosave_timer.start()
+
     def _on_undo_clean_changed(self, clean: bool):
         """Handle undo stack clean state change.
 
@@ -658,6 +690,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
 
             # Save configuration
             self.config.save(self.config_path)
+            self._clear_autosave()
             self._record_recent_config(self.config_path)
             QMessageBox.information(
                 self,
@@ -733,6 +766,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
 
             # Save configuration
             self.config.save(self.config_path)
+            self._clear_autosave()
             self._record_recent_config(self.config_path)
             QMessageBox.information(
                 self,
@@ -890,10 +924,31 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         try:
             file_path = self._pending_config_path
 
-            # Step 1: Parse YAML
+            # Step 1: Parse YAML. If a crash left an autosave backup newer
+            # than this project, offer to recover it; either way the project
+            # path is what Ctrl+S writes to.
             self.progress_manager.update_modal(1, "Parsing configuration...")
-            self.config = Configuration.load(file_path)
+            load_from = file_path
+            recovered = False
+            from utils.autosave import autosave_dir, find_recoverable
+            backup = find_recoverable(file_path, autosave_dir())
+            if backup:
+                resp = QMessageBox.question(
+                    self, "Recover unsaved changes",
+                    "Autosaved changes newer than this project were found, "
+                    "from a session that did not save.\n\nRecover them?",
+                    QMessageBox.StandardButton.Yes
+                    | QMessageBox.StandardButton.No)
+                if resp == QMessageBox.StandardButton.Yes:
+                    load_from = backup
+                    recovered = True
+            self.config = Configuration.load(load_from)
             self.config_path = file_path
+            if hasattr(self, "_autosave") and not recovered:
+                # Freshly loaded, unchanged content is clean. When recovered
+                # we leave it dirty so it keeps backing up until the user
+                # saves the recovered work.
+                self._autosave.prime()
 
             # Step 2: Pre-cache fixture definitions
             self.progress_manager.update_modal(2, "Loading fixture definitions...")

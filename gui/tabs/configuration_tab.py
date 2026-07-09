@@ -269,12 +269,9 @@ class ConfigurationTab(BaseTab):
         strip_row.setSpacing(12)
         strip_row.addStretch(1)
 
-        self.update_config_btn = QtWidgets.QPushButton("UPDATE CONFIG")
-        self.update_config_btn.setProperty("role", "cta-outline")
-        self.update_config_btn.setToolTip("Write the current settings "
-                                          "into the configuration")
-        strip_row.addWidget(self.update_config_btn)
-
+        # No manual "UPDATE CONFIG" button: inspector edits write through
+        # live, and unsaved changes are autosaved for crash recovery, so
+        # there is nothing to push by hand. Ctrl+S writes the project file.
         self.add_universe_btn = QtWidgets.QPushButton("+ ADD UNIVERSE")
         self.add_universe_btn.setProperty("role", "cta-accent")
         self.add_universe_btn.setFont(display_font(11, QFont.Weight.Bold,
@@ -505,7 +502,6 @@ class ConfigurationTab(BaseTab):
         self.add_universe_btn.clicked.connect(self._add_universe)
         self.remove_universe_btn.clicked.connect(self._remove_universe)
         self.refresh_devices_btn.clicked.connect(self._refresh_devices)
-        self.update_config_btn.clicked.connect(self.save_to_config)
 
     # ------------------------------------------------------------------
     # Config <-> UI
