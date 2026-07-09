@@ -1598,6 +1598,15 @@ class FixturesTab(BaseTab):
     def _after_group_assignment(self, group_name: str):
         """Shared refresh after fixtures change group (mirrors the inspector
         group-change path but for a multi-row assignment)."""
+        # Sync the GROUP column text from the model: the assignment changed
+        # several fixtures' group, and _refresh_all_row_visuals only recolors
+        # cells - it does not rewrite their text (that is why the group name
+        # looked stale after a multi-select assign).
+        for row in range(min(self.table.rowCount(),
+                             len(self.config.fixtures))):
+            item = self.table.item(row, COL_GROUP)
+            if item is not None:
+                item.setText((self.config.fixtures[row].group or "").upper())
         self._update_groups()
         self._refresh_all_row_visuals()
         self._update_conflict_indicators()

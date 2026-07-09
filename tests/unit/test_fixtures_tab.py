@@ -746,6 +746,10 @@ def test_assign_multiple_fixtures_to_a_group(qapp):
         tab._assign_selected_to_group("Wash")
         groups = {f.name: f.group for f in tab.config.fixtures}
         assert groups == {"P1": "Wash", "P2": "Wash", "P3": "Wash"}
+        # The GROUP column text must update for the assigned rows, not just
+        # the model (regression: multi-assign left the old name in the cell).
+        assert tab.table.item(0, COL_GROUP).text() == "WASH"
+        assert tab.table.item(1, COL_GROUP).text() == "WASH"
     finally:
         tab.deleteLater()
 
