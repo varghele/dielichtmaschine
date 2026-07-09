@@ -20,10 +20,16 @@ verbatim as the GitHub Release notes (see [docs/releasing.md](docs/releasing.md)
 
 - **The stage plan puts the audience at the bottom.** Front (the audience
   side) now renders along the bottom edge, matching how stage plots are
-  conventionally drawn; the AUDIENCE marker and the depth labels moved
-  with it. This applies to both the interactive 2D plan and the printable
-  stage-plot export, so the two agree. Display change only: stored
-  coordinates and the 3D view are unchanged.
+  conventionally drawn; the AUDIENCE marker moved there, fixture beams now
+  point the right way for the flipped layout, and the horizontal position
+  numbers moved to the top edge. This applies to both the interactive 2D
+  plan and the printable stage-plot export, so the two agree. Display
+  change only: stored coordinates and the 3D view are unchanged.
+- **Stage tab side sections are flatter and the footer buttons match.**
+  The Marks and Layers sections dropped their redundant inner card and
+  repeated caption (the collapsible header already names them), and the
+  footer's Fit View / Launch Visualizer / Plot Stage buttons now share one
+  size, weight and casing instead of three different looks.
 - **Stage marks are managed like layers.** The Marks section is now a
   list with add, delete (the button, the Delete key, or right-click) and
   rename, in place of the old two bare buttons.
@@ -38,8 +44,15 @@ verbatim as the GitHub Release notes (see [docs/releasing.md](docs/releasing.md)
   selector) was removed. Fewer sections to expand to reach what you set
   first.
 
+### Added
+
+- **Right-click a fixture row to Duplicate or Remove it** in the Fixtures
+  tab, alongside the existing buttons.
+
 ### Fixed
 
+- **The Fixtures table no longer leaves a dotted focus rectangle** on the
+  cell after you select a row; only the row outline shows.
 - **"Apply to group default" now works in the Stage tab.** The inline
   orientation editor's checkbox was wired to nothing, so ticking it did
   nothing until some other value changed. It now re-applies to the group

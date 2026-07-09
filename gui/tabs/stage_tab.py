@@ -692,16 +692,9 @@ class StageTab(BaseTab):
         # LAYERS list below - select and press Delete or right-click to
         # remove, double-click or Rename to rename.
         from gui.tabs.configuration_tab import TOOLBAR_BTN_WIDTH
+        # No inner card or repeated caption: the collapsible section header
+        # already says MARKS, so the list and buttons sit straight in it.
         marks_section = subsection("Marks", "marks", expanded=False)
-        self.marks_panel = QtWidgets.QWidget()
-        self.marks_panel.setProperty("role", "card")
-        self.marks_panel.setAttribute(
-            Qt.WidgetAttribute.WA_StyledBackground, True)
-        marks_layout = QtWidgets.QVBoxLayout(self.marks_panel)
-        marks_layout.setContentsMargins(10, 8, 10, 8)
-        marks_layout.setSpacing(6)
-        marks_layout.addWidget(self._caption("Stage marks"))
-
         self.marks_list = QtWidgets.QListWidget()
         self.marks_list.setMaximumHeight(110)
         self.marks_list.setToolTip(
@@ -711,7 +704,7 @@ class StageTab(BaseTab):
         )
         self.marks_list.setContextMenuPolicy(
             Qt.ContextMenuPolicy.CustomContextMenu)
-        marks_layout.addWidget(self.marks_list)
+        marks_section.addWidget(self.marks_list)
 
         marks_btn_row = QtWidgets.QHBoxLayout()
         self.add_spot_btn = QtWidgets.QPushButton("+")
@@ -726,26 +719,16 @@ class StageTab(BaseTab):
         marks_btn_row.addWidget(self.remove_item_btn)
         marks_btn_row.addWidget(self.rename_mark_btn)
         marks_btn_row.addStretch()
-        marks_layout.addLayout(marks_btn_row)
-        marks_section.addWidget(self.marks_panel)
+        marks_section.addLayout(marks_btn_row)
 
         # -- LAYERS: named Z-planes (ground stack / mid-truss /
         # top-truss). Checkbox = visibility; hidden layers disappear from
         # the 2D plot and every 3D preview. Fixtures are assigned via the
         # stage right-click menu ("Assign to Layer") or the inspector's
         # Layer combo.
+        # Flat, like MARKS above: no inner card or repeated caption, the
+        # section header already says LAYERS.
         layers_section = subsection("Layers", "layers", expanded=False)
-        self.layer_panel = QtWidgets.QWidget()
-        self.layer_panel.setProperty("role", "card")
-        self.layer_panel.setAttribute(
-            Qt.WidgetAttribute.WA_StyledBackground, True)
-        layer_layout = QtWidgets.QVBoxLayout(self.layer_panel)
-        layer_layout.setContentsMargins(10, 8, 10, 8)
-        layer_layout.setSpacing(6)
-        # The card is grabbed standalone by the golden suite, so it keeps
-        # its own caption even though the section header repeats it.
-        layer_layout.addWidget(self._caption("Stage layers"))
-
         self.layer_list = QtWidgets.QListWidget()
         self.layer_list.setMaximumHeight(110)
         self.layer_list.setToolTip(
@@ -756,7 +739,7 @@ class StageTab(BaseTab):
             "that layer: its fixtures stay live, everything else ghosts\n"
             "to a faint locked reference."
         )
-        layer_layout.addWidget(self.layer_list)
+        layers_section.addWidget(self.layer_list)
 
         self.active_layer_label = QtWidgets.QLabel("Editing: all layers")
         self.active_layer_label.setFont(mono_font(8))
@@ -764,13 +747,8 @@ class StageTab(BaseTab):
             "Active-layer editing. Double-click a layer or press L to cycle;\n"
             "double-click the active layer again to return to all layers."
         )
-        layer_layout.addWidget(self.active_layer_label)
+        layers_section.addWidget(self.active_layer_label)
 
-        # TOOLBAR_BTN_WIDTH (40), not less: the theme's 14px horizontal
-        # button padding clips the glyph's content rect on anything
-        # narrower — a 32px "+" renders as a cut-off sliver. Same
-        # convention as FixturesTab's toolbar (see test_fixtures_tab.py).
-        from gui.tabs.configuration_tab import TOOLBAR_BTN_WIDTH
         layer_btn_row = QtWidgets.QHBoxLayout()
         self.add_layer_btn = QtWidgets.QPushButton("+")
         self.add_layer_btn.setFixedWidth(TOOLBAR_BTN_WIDTH)
@@ -786,8 +764,7 @@ class StageTab(BaseTab):
         layer_btn_row.addWidget(self.remove_layer_btn)
         layer_btn_row.addWidget(self.edit_layer_btn)
         layer_btn_row.addStretch()
-        layer_layout.addLayout(layer_btn_row)
-        layers_section.addWidget(self.layer_panel)
+        layers_section.addLayout(layer_btn_row)
 
         return outer
 
@@ -808,10 +785,19 @@ class StageTab(BaseTab):
         footer_layout.setContentsMargins(16, 10, 16, 12)
         footer_layout.setSpacing(6)
 
+        # The three footer actions share one look: display-caps, same size
+        # and tracking. The roles carry the only differences - PLOT STAGE is
+        # the accent-filled primary (cta-accent); Fit View and Launch
+        # Visualizer are outlined secondaries (cta-outline). No per-button
+        # font/colour drift.
+        footer_font = display_font(11, QFont.Weight.DemiBold, tracking_em=0.08)
+
         # Fit View sits at the top of the footer (relocated from the STAGE
         # section) so a zoom/pan reset is always one click away. The 'F'
         # shortcut (wired in connect_signals) duplicates it.
-        self.fit_view_btn = QtWidgets.QPushButton("Fit View (F)")
+        self.fit_view_btn = QtWidgets.QPushButton("FIT VIEW (F)")
+        self.fit_view_btn.setProperty("role", "cta-outline")
+        self.fit_view_btn.setFont(footer_font)
         self.fit_view_btn.setToolTip(
             "Reset zoom and pan to fit the whole stage.\n\n"
             "Stage controls:\n"
@@ -823,8 +809,8 @@ class StageTab(BaseTab):
         footer_layout.addWidget(self.fit_view_btn)
 
         self.launch_visualizer_btn = QtWidgets.QPushButton("LAUNCH VISUALIZER")
-        self.launch_visualizer_btn.setFont(
-            display_font(11, QFont.Weight.DemiBold, tracking_em=0.08))
+        self.launch_visualizer_btn.setProperty("role", "cta-outline")
+        self.launch_visualizer_btn.setFont(footer_font)
         self.launch_visualizer_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self.launch_visualizer_btn.setToolTip(
             "Start the 3D Visualizer application")
@@ -832,8 +818,7 @@ class StageTab(BaseTab):
 
         self.plot_stage_btn = QtWidgets.QPushButton("PLOT STAGE")
         self.plot_stage_btn.setProperty("role", "cta-accent")
-        self.plot_stage_btn.setFont(display_font(11, QFont.Weight.Bold,
-                                                 tracking_em=0.08))
+        self.plot_stage_btn.setFont(footer_font)
         self.plot_stage_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self.plot_stage_btn.setToolTip(
             "Export the rig as a PDF or PNG stage plot")

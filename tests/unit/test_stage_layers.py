@@ -636,9 +636,9 @@ class TestLibraryPanel:
         for name in ("stage_width", "stage_height", "grid_size",
                      "grid_toggle", "snap_to_grid",
                      "show_axes_checkbox", "add_spot_btn", "remove_item_btn",
-                     "rename_mark_btn", "marks_list", "marks_panel",
+                     "rename_mark_btn", "marks_list",
                      "layer_list", "add_layer_btn",
-                     "remove_layer_btn", "edit_layer_btn", "layer_panel"):
+                     "remove_layer_btn", "edit_layer_btn"):
             widget = getattr(tab, name)
             assert tab.settings_container.isAncestorOf(widget), (
                 f"{name} is not inside the STAGE SETTINGS section")
