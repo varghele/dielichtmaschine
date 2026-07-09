@@ -24,9 +24,13 @@ verbatim as the GitHub Release notes (see [docs/releasing.md](docs/releasing.md)
   with TAP and RESET) sets the rate reference, and a SHOW / LIVE mode
   toggle marks whether a predefined show runs underneath the busk (the
   surface stays live either way; the show engine is a later pass).
-  Position/movement and intensity-FX pools are laid in and marked as
-  arriving next. Drives an in-memory live state (with a grand x sub output
-  resolve); live DMX output is a later pass.
+  The centre is a five-pool grid: colour, position, intensity FX, plus an
+  EFFECTS pool listing the riff library (selection-scoped, greyed with no
+  selection) and a SCENES pool backed by a new scene library (whole-rig
+  looks spanning multiple groups, always live; predefined scenes arrive
+  later). Position/movement and intensity-FX pools are laid in and marked
+  as arriving next. Drives an in-memory live state (with a grand x sub
+  output resolve); live DMX output is a later pass.
 - **A fuller timeline grid and a swing toggle.** The grid snap now ranges
   from coarse to fine: 4, 2, 1, 1/2, 1/4, 1/8, 1/16 (4 and 2 place a line
   every 4 and every 2 beats; the fractions subdivide the beat). A new

@@ -680,6 +680,56 @@ class RiffSpecialBlock:
 
 
 @dataclass
+class Scene:
+    """A whole-rig look that spans multiple fixture groups.
+
+    Unlike a :class:`Riff` (a per-group, beat-based pattern applied to the
+    current selection), a Scene is a static full-rig snapshot across
+    several groups, not tied to any single selection. Scenes are
+    predefined and populated later; this is the data shell plus JSON
+    round-trip, no engine resolve yet.
+    """
+    name: str
+    category: str = "general"
+    description: str = ""
+    # Optional display swatch hex (e.g. "#F0562E"); empty means no chip.
+    color: str = ""
+    # The fixture groups this look spans.
+    groups: List[str] = field(default_factory=list)
+    # Metadata.
+    tags: List[str] = field(default_factory=list)
+    author: str = ""
+    version: str = "1.0"
+
+    def to_dict(self) -> Dict:
+        """Serialize to dictionary for JSON storage."""
+        return {
+            "name": self.name,
+            "category": self.category,
+            "description": self.description,
+            "color": self.color,
+            "groups": self.groups,
+            "tags": self.tags,
+            "author": self.author,
+            "version": self.version,
+        }
+
+    @classmethod
+    def from_dict(cls, data: Dict) -> 'Scene':
+        """Deserialize from dictionary."""
+        return cls(
+            name=data.get("name", ""),
+            category=data.get("category", "general"),
+            description=data.get("description", ""),
+            color=data.get("color", ""),
+            groups=data.get("groups", []),
+            tags=data.get("tags", []),
+            author=data.get("author", ""),
+            version=data.get("version", "1.0"),
+        )
+
+
+@dataclass
 class Riff:
     """A reusable pattern of sublane blocks measured in beats."""
     name: str

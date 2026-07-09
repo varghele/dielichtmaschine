@@ -441,6 +441,174 @@ class TestUpdateFromConfig:
         assert live_tab.state.mode == "show"
 
 
+def _riff_library(tmp_path, riffs):
+    """An empty RiffLibrary (no disk scan) populated with the given
+    (category, name) riffs directly in .riffs."""
+    from riffs.riff_library import RiffLibrary
+    from config.models import Riff
+    lib = RiffLibrary(riffs_directory=str(tmp_path))
+    lib.riffs = {}
+    lib.by_category = {}
+    for category, name in riffs:
+        lib.riffs[f"{category}/{name}"] = Riff(name=name, category=category)
+    return lib
+
+
+def _scene_library(tmp_path, scenes):
+    """A SceneLibrary populated with the given Scene objects via add_scene."""
+    from scenes.scene_library import SceneLibrary
+    from config.models import Scene
+    lib = SceneLibrary(scenes_directory=str(tmp_path))
+    for name, category, color in scenes:
+        lib.add_scene(Scene(name=name, category=category, color=color),
+                      category=category)
+    return lib
+
+
+class TestEffectsPool:
+    def test_cells_created_per_riff(self, live_tab, tmp_path):
+        lib = _riff_library(tmp_path, [("custom", "Riff A"),
+                                       ("loops", "Riff B")])
+        live_tab.set_effect_library(lib)
+        assert set(live_tab._effect_cells) == {"custom/Riff A", "loops/Riff B"}
+
+    def test_click_stages_effect(self, live_tab, tmp_path):
+        lib = _riff_library(tmp_path, [("custom", "Riff A")])
+        live_tab.set_effect_library(lib)
+        live_tab.state.toggle_group("Movers")
+        cell = live_tab._effect_cells["custom/Riff A"]
+        cell.clicked.emit("custom/Riff A")
+        assert live_tab.state.effect == "custom/Riff A"
+        assert cell.is_active()
+
+    def test_click_same_cell_toggles_off(self, live_tab, tmp_path):
+        lib = _riff_library(tmp_path, [("custom", "Riff A")])
+        live_tab.set_effect_library(lib)
+        cell = live_tab._effect_cells["custom/Riff A"]
+        cell.clicked.emit("custom/Riff A")
+        assert live_tab.state.effect == "custom/Riff A"
+        cell.clicked.emit("custom/Riff A")
+        assert live_tab.state.effect is None
+        assert not cell.is_active()
+
+    def test_pool_disabled_without_selection_enabled_with(self, live_tab,
+                                                          tmp_path):
+        lib = _riff_library(tmp_path, [("custom", "Riff A")])
+        live_tab.set_effect_library(lib)
+        # Selection empty -> effects are selection-scoped -> pool greyed.
+        assert live_tab._effects_pool.isEnabled() is False
+        live_tab.state.toggle_group("Movers")
+        assert live_tab._effects_pool.isEnabled() is True
+        live_tab.state.clear_selection()
+        assert live_tab._effects_pool.isEnabled() is False
+
+    def test_empty_library_shows_marked_empty_state(self, live_tab, tmp_path):
+        live_tab.set_effect_library(_riff_library(tmp_path, []))
+        assert live_tab._effect_cells == {}
+        item = live_tab._effects_grid.itemAtPosition(0, 0)
+        assert item is not None
+        # MicroLabel renders caps; match case-insensitively.
+        assert "no effects yet" in item.widget().text().lower()
+
+    def test_cells_carry_card_role(self, live_tab, tmp_path):
+        live_tab.set_effect_library(_riff_library(tmp_path,
+                                                  [("custom", "Riff A")]))
+        cell = live_tab._effect_cells["custom/Riff A"]
+        assert cell.property("role") == "card"
+
+    def test_set_effect_emits_state_changed(self, live_tab):
+        hits = []
+        live_tab.state.state_changed.connect(lambda: hits.append(1))
+        live_tab.state.set_effect("custom/Riff A")
+        live_tab.state.set_effect("custom/Riff A")  # toggle off
+        assert len(hits) == 2
+        assert live_tab.state.effect is None
+
+    def test_programmer_bar_shows_effect(self, live_tab, tmp_path):
+        live_tab.set_effect_library(_riff_library(tmp_path,
+                                                  [("custom", "Riff A")]))
+        live_tab.state.toggle_group("Movers")
+        live_tab.state.set_effect("custom/Riff A")
+        assert "FX: RIFF A" in live_tab._programmer_label.text()
+
+
+class TestScenesPool:
+    def test_cells_created_per_scene(self, live_tab, tmp_path):
+        lib = _scene_library(tmp_path, [
+            ("Warm Wash", "looks", "#F0562E"),
+            ("Cold Snap", "looks", ""),
+        ])
+        live_tab.set_scene_library(lib)
+        assert set(live_tab._scene_cells) == {"looks/Warm Wash",
+                                              "looks/Cold Snap"}
+
+    def test_click_stages_scene(self, live_tab, tmp_path):
+        live_tab.set_scene_library(_scene_library(
+            tmp_path, [("Warm Wash", "looks", "#F0562E")]))
+        cell = live_tab._scene_cells["looks/Warm Wash"]
+        cell.clicked.emit("looks/Warm Wash")
+        assert live_tab.state.scene == "looks/Warm Wash"
+        assert cell.is_active()
+
+    def test_click_same_cell_toggles_off(self, live_tab, tmp_path):
+        live_tab.set_scene_library(_scene_library(
+            tmp_path, [("Warm Wash", "looks", "")]))
+        cell = live_tab._scene_cells["looks/Warm Wash"]
+        cell.clicked.emit("looks/Warm Wash")
+        assert live_tab.state.scene == "looks/Warm Wash"
+        cell.clicked.emit("looks/Warm Wash")
+        assert live_tab.state.scene is None
+
+    def test_pool_always_enabled_regardless_of_selection(self, live_tab,
+                                                         tmp_path):
+        live_tab.set_scene_library(_scene_library(
+            tmp_path, [("Warm Wash", "looks", "")]))
+        # No selection: scenes are whole-rig, so the pool stays enabled.
+        assert live_tab.state.selected == set()
+        assert live_tab._scenes_pool.isEnabled() is True
+        live_tab.state.toggle_group("Movers")
+        assert live_tab._scenes_pool.isEnabled() is True
+
+    def test_empty_library_shows_marked_empty_state(self, live_tab, tmp_path):
+        live_tab.set_scene_library(_scene_library(tmp_path, []))
+        assert live_tab._scene_cells == {}
+        item = live_tab._scenes_grid.itemAtPosition(0, 0)
+        assert item is not None
+        # MicroLabel renders caps; match case-insensitively.
+        assert "no scenes yet" in item.widget().text().lower()
+
+    def test_cells_carry_card_role(self, live_tab, tmp_path):
+        live_tab.set_scene_library(_scene_library(
+            tmp_path, [("Warm Wash", "looks", "#F0562E")]))
+        cell = live_tab._scene_cells["looks/Warm Wash"]
+        assert cell.property("role") == "card"
+
+    def test_set_scene_emits_state_changed(self, live_tab):
+        hits = []
+        live_tab.state.state_changed.connect(lambda: hits.append(1))
+        live_tab.state.set_scene("looks/Warm Wash")
+        live_tab.state.set_scene("looks/Warm Wash")  # toggle off
+        assert len(hits) == 2
+        assert live_tab.state.scene is None
+
+    def test_programmer_bar_shows_scene(self, live_tab, tmp_path):
+        live_tab.set_scene_library(_scene_library(
+            tmp_path, [("Warm Wash", "looks", "")]))
+        live_tab.state.set_scene("looks/Warm Wash")
+        assert "SCENE: WARM WASH" in live_tab._programmer_label.text()
+
+
+class TestLibraryStatePreserved:
+    def test_effect_and_scene_survive_group_change(self, live_tab):
+        live_tab.state.set_effect("custom/Riff A")
+        live_tab.state.set_scene("looks/Warm Wash")
+        new_config = _config((("Spots", "#5F86C9", 1),))
+        live_tab.config = new_config
+        live_tab.update_from_config()
+        assert live_tab.state.effect == "custom/Riff A"
+        assert live_tab.state.scene == "looks/Warm Wash"
+
+
 class TestRoles:
     def test_actions_use_theme_roles(self, live_tab):
         assert live_tab._dbo_btn.property("role") == "destructive"

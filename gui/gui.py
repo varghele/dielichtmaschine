@@ -17,6 +17,7 @@ from gui.dialogs.workspace_options_dialog import WorkspaceOptionsDialog
 from gui.progress_manager import ProgressManager, set_progress_manager
 from timeline_ui.riff_browser_widget import RiffBrowserWidget
 from riffs.riff_library import RiffLibrary
+from scenes.scene_library import SceneLibrary
 
 
 class MainWindow(QMainWindow, Ui_MainWindow):
@@ -369,8 +370,13 @@ class MainWindow(QMainWindow, Ui_MainWindow):
 
     def _create_riff_browser(self):
         """Create the riff browser dockable panel."""
-        # Initialize riff library
+        # Initialize riff library (effects) and scene library (whole-rig
+        # looks) and hand both to the Live tab's library-backed pools.
         self.riff_library = RiffLibrary()
+        self.scene_library = SceneLibrary()
+        if hasattr(self, "live_tab"):
+            self.live_tab.set_effect_library(self.riff_library)
+            self.live_tab.set_scene_library(self.scene_library)
 
         # Create riff browser widget
         self.riff_browser = RiffBrowserWidget(self.riff_library, self)

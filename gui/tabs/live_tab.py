@@ -15,9 +15,11 @@ Regions (North Star 3b):
   quick-select + CLEAR SEL) and a FADE row (SNAP / 0.5s / 2s / 4s /
   1 BAR / 4 BARS as output-select chips). Touch a palette and the
   selection "fades" to it over the chosen time (recorded, not animated).
-- CENTRE - a three-column pool grid: COLOUR PALETTES (fully built this
-  pass) | POSITION PALETTES + MOVEMENT SHAPES (placeholder, movers-only)
-  | RUDIMENTS / INTENSITY FX (placeholder, cell-fixtures gated). Below
+- CENTRE - a five-column pool grid: COLOUR PALETTES (fully built) |
+  POSITION PALETTES + MOVEMENT SHAPES (placeholder, movers-only) |
+  INTENSITY FX (placeholder, cell-fixtures gated) | EFFECTS (riffs from
+  the shared RiffLibrary, selection-scoped: greyed with no selection) |
+  SCENES (whole-rig looks from the SceneLibrary, always enabled). Below
   it a PROGRAMMER state bar names the current live look.
 - RIGHT (330px) - an ACTIVE PLAYBACKS area (display-only: "NOTHING
   ELSE RUNNING"), a STROBE rate + toggle and STROBE KILL / HOLD LOOK /
@@ -184,6 +186,13 @@ class LiveState(QObject):
         # whether a predefined show also runs underneath ("show") or not
         # ("live", the default). No engine merges them yet.
         self.mode: str = "live"                  # "show" | "live"
+        # Library-backed staging. An effect is a riff (key "category/name")
+        # scoped to the current SELECT state; a scene is a whole-rig look
+        # (key "category/name") independent of the selection. Both toggle;
+        # neither is tied to the group set, so update_from_config leaves
+        # them alone (like bpm / mode).
+        self.effect: Optional[str] = None        # staged riff key
+        self.scene: Optional[str] = None         # staged scene key
 
     # -- config sync ----------------------------------------------------
     def update_from_config(self, names) -> None:
@@ -307,6 +316,19 @@ class LiveState(QObject):
         """Set busk-on-top mode ("show" runs a predefined show underneath;
         "live" has nothing else running). Anything but "show" reads live."""
         self.mode = "show" if mode == "show" else "live"
+        self.state_changed.emit()
+
+    # -- library staging (effects / scenes) -----------------------------
+    def set_effect(self, key: Optional[str]) -> None:
+        """Toggle the staged effect (a riff, selection-scoped). Touching
+        the same key again clears it."""
+        self.effect = None if key == self.effect else key
+        self.state_changed.emit()
+
+    def set_scene(self, key: Optional[str]) -> None:
+        """Toggle the staged scene (a whole-rig look, selection-agnostic).
+        Touching the same key again clears it."""
+        self.scene = None if key == self.scene else key
         self.state_changed.emit()
 
     # -- fade -----------------------------------------------------------
@@ -579,7 +601,10 @@ class _PlaceholderCell(QWidget):
         layout.setContentsMargins(6, 6, 6, 6)
         layout.setSpacing(1)
         layout.addStretch(1)
-        self.label = DisplayLabel(label, point_size=12,
+        # 10pt (not 12): the longest single-word labels (WATERFALL) must
+        # fit a 2-column grid cell in the narrow five-column centre, and
+        # word wrap cannot split a single word.
+        self.label = DisplayLabel(label, point_size=10,
                                   weight=QFont.Weight.Bold, tracking_em=0.04)
         self.label.setMinimumWidth(1)
         self.label.setWordWrap(True)
@@ -608,6 +633,91 @@ class _PlaceholderCell(QWidget):
                 f"color: {tokens['text_disabled']}; background: transparent;")
 
 
+class _LibraryCell(QWidget):
+    """A clickable pool cell for a library item (an effect riff or a scene).
+
+    Shows the item name and, for scenes, an optional small colour chip
+    when the item carries a display colour. An accent outline (token
+    ``accent_line``) marks the active item; touching emits ``clicked``
+    with the item's "category/name" key. Greying is driven by the pool's
+    ``setEnabled`` - the cell restyles to the disabled palette when its
+    enabled state changes (effects pool greys out with no selection).
+
+    Colours come from :func:`_active_tokens` (never hardcoded) via
+    ``_restyle``; the same restyle runs on a theme switch.
+    """
+
+    clicked = pyqtSignal(str)
+
+    def __init__(self, item_key: str, label: str,
+                 chip_color: Optional[str] = None, parent=None):
+        super().__init__(parent)
+        self.item_key = item_key
+        self._chip_color = chip_color
+        self._active = False
+        self.setObjectName("LiveLibraryCell")
+        self.setProperty("role", "card")
+        self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
+        self.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.setMinimumSize(84, 46)
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(8, 6, 8, 6)
+        layout.setSpacing(3)
+        self._chip = None
+        if chip_color:
+            chip = QWidget()
+            chip.setObjectName("LiveLibraryChip")
+            chip.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
+            chip.setFixedHeight(4)
+            chip.setStyleSheet(
+                f"#LiveLibraryChip {{ background-color: {chip_color}; }}")
+            layout.addWidget(chip)
+            self._chip = chip
+        self.name_label = DisplayLabel(label, point_size=11,
+                                       weight=QFont.Weight.Bold,
+                                       tracking_em=0.03)
+        self.name_label.setMinimumWidth(1)
+        self.name_label.setWordWrap(True)
+        layout.addWidget(self.name_label)
+        layout.addStretch(1)
+        self._restyle()
+
+    def is_active(self) -> bool:
+        return self._active
+
+    def set_active(self, active: bool) -> None:
+        active = bool(active)
+        if active != self._active:
+            self._active = active
+            self.setProperty("selected", active)
+            self._restyle()
+
+    def _restyle(self) -> None:
+        tokens = _active_tokens()
+        if not self.isEnabled():
+            border = tokens["border"]
+            text_color = tokens["text_disabled"]
+        else:
+            border = tokens["accent_line"] if self._active else tokens["border"]
+            text_color = tokens["text"]
+        self.setStyleSheet(
+            "#LiveLibraryCell {"
+            f" background-color: {tokens['panel']};"
+            f" border: 1px solid {border}; }}")
+        self.name_label.setStyleSheet(
+            f"color: {text_color}; background: transparent;")
+
+    def changeEvent(self, event):
+        from PyQt6.QtCore import QEvent
+        if event.type() == QEvent.Type.EnabledChange:
+            self._restyle()
+        super().changeEvent(event)
+
+    def mousePressEvent(self, event):
+        if event.button() == Qt.MouseButton.LeftButton:
+            self.clicked.emit(self.item_key)
+
+
 # ---------------------------------------------------------------------------
 # The tab
 # ---------------------------------------------------------------------------
@@ -630,6 +740,12 @@ class LiveTab(BaseTab):
         self._colour_placeholders: Dict[str, QWidget] = {}
         self._position_cells: List[_PlaceholderCell] = []
         self._intensity_cells: List[_PlaceholderCell] = []
+        # Library-backed pools (wired to the shared RiffLibrary and a new
+        # SceneLibrary; injected by gui.py, lazily resolved otherwise).
+        self._effect_library = None
+        self._scene_library = None
+        self._effect_cells: Dict[str, _LibraryCell] = {}
+        self._scene_cells: Dict[str, _LibraryCell] = {}
         self._fade_buttons: List[Tuple[QPushButton, str, Optional[float]]] = []
         self._submaster_faders: Dict[str, _VerticalFader] = {}
         self._flash_buttons: Dict[str, QPushButton] = {}
@@ -836,9 +952,19 @@ class LiveTab(BaseTab):
         self._colour_pool = self._build_colour_pool()
         self._position_pool = self._build_position_pool()
         self._intensity_pool = self._build_intensity_pool()
-        hbox.addWidget(self._colour_pool, 11)
-        hbox.addWidget(self._position_pool, 10)
-        hbox.addWidget(self._intensity_pool, 10)
+        self._effects_pool = self._build_effects_pool()
+        self._scenes_pool = self._build_scenes_pool()
+        # Five narrower columns: COLOUR · POSITION · INTENSITY-FX · EFFECTS
+        # · SCENES. The COLOUR pool holds a fixed-width 3-wide swatch grid
+        # (~316px minimum), so it gets the largest stretch; the four
+        # text-cell pools compress fine as 2-column grids and share the
+        # rest. Tuned so all five fit at 1600x900 (centre ~1270px) with no
+        # horizontal overflow.
+        hbox.addWidget(self._colour_pool, 15)
+        hbox.addWidget(self._position_pool, 11)
+        hbox.addWidget(self._intensity_pool, 11)
+        hbox.addWidget(self._effects_pool, 11)
+        hbox.addWidget(self._scenes_pool, 11)
         self._restyle_pools_host()
         return host
 
@@ -877,6 +1003,9 @@ class LiveTab(BaseTab):
     def _marker(self, text: str) -> QLabel:
         label = MicroLabel(text, point_size=7, tracking_em=0.1)
         label.setMinimumWidth(1)
+        # Wrap instead of truncating - the five-column centre is narrow
+        # and a silently clipped marker reads as garbage.
+        label.setWordWrap(True)
         label.setContentsMargins(14, 0, 14, 6)
         return label
 
@@ -888,7 +1017,9 @@ class LiveTab(BaseTab):
         grid = QGridLayout(grid_host)
         grid.setContentsMargins(14, 0, 14, 12)
         grid.setSpacing(6)
-        columns = 4
+        # Three columns so the fixed-square swatch grid stays narrow enough
+        # to sit in one of five centre columns at 1600x900.
+        columns = 3
         cells: List[QWidget] = []
         for colour_id, label, primary, secondary in COLOUR_SWATCHES:
             swatch = _ColourSwatch(colour_id, label, primary, secondary)
@@ -916,15 +1047,17 @@ class LiveTab(BaseTab):
 
     def _build_position_pool(self) -> QWidget:
         pool, layout = self._pool_shell()
+        # Tag kept short ("Movers only", not "Applies to: movers") - the
+        # narrow five-column header truncates longer tags silently.
         layout.addWidget(self._pool_header(
-            "Position palettes", "Applies to: movers", tag_accent=True))
+            "Position palettes", "Movers only", tag_accent=True))
         layout.addWidget(self._marker("Arrives next"))
 
         grid_host = QWidget()
         grid = QGridLayout(grid_host)
         grid.setContentsMargins(14, 0, 14, 10)
         grid.setSpacing(6)
-        columns = 3
+        columns = 2
         for i, name in enumerate(POSITION_PLACEHOLDERS):
             cell = _PlaceholderCell(name)
             self._position_cells.append(cell)
@@ -934,30 +1067,37 @@ class LiveTab(BaseTab):
         layout.addWidget(grid_host)
 
         layout.addWidget(self._pool_header("Movement shapes"))
-        shape_row = QWidget()
-        shbox = QHBoxLayout(shape_row)
-        shbox.setContentsMargins(14, 0, 14, 12)
-        shbox.setSpacing(6)
-        for name in MOVEMENT_PLACEHOLDERS:
+        # A 2-per-row grid (like the palettes above), not one packed row:
+        # five cells side by side in a fifth of the centre truncate their
+        # labels to slivers at 1600x900.
+        shapes_host = QWidget()
+        shape_grid = QGridLayout(shapes_host)
+        shape_grid.setContentsMargins(14, 0, 14, 12)
+        shape_grid.setSpacing(6)
+        shape_columns = 2
+        for i, name in enumerate(MOVEMENT_PLACEHOLDERS):
             cell = _PlaceholderCell(name)
-            cell.setMinimumSize(1, 30)
+            cell.setMinimumSize(84, 34)
             self._position_cells.append(cell)
-            shbox.addWidget(cell, 1)
-        layout.addWidget(shape_row)
+            shape_grid.addWidget(cell, i // shape_columns, i % shape_columns)
+        for col in range(shape_columns):
+            shape_grid.setColumnStretch(col, 1)
+        layout.addWidget(shapes_host)
         layout.addStretch(1)
         return pool
 
     def _build_intensity_pool(self) -> QWidget:
         pool, layout = self._pool_shell()
-        layout.addWidget(self._pool_header(
-            "Rudiments · Intensity FX", "Rate 1/4"))
+        # Title shortened from "Rudiments · Intensity FX" so the Rate tag
+        # fits beside it in the narrow five-column header.
+        layout.addWidget(self._pool_header("Intensity FX", "Rate 1/4"))
         layout.addWidget(self._marker("Arrives next"))
 
         grid_host = QWidget()
         grid = QGridLayout(grid_host)
         grid.setContentsMargins(14, 0, 14, 8)
         grid.setSpacing(6)
-        columns = 3
+        columns = 2
         cells: List[_PlaceholderCell] = []
         for name in INTENSITY_PLACEHOLDERS:
             cells.append(_PlaceholderCell(name))
@@ -969,10 +1109,140 @@ class LiveTab(BaseTab):
         for col in range(columns):
             grid.setColumnStretch(col, 1)
         layout.addWidget(grid_host)
-        layout.addWidget(self._marker(
-            "Greyed = doesn't apply to selection (no cell fixtures)"))
+        layout.addWidget(self._marker("Greyed = needs cell fixtures"))
         layout.addStretch(1)
         return pool
+
+    # -- library pools (effects / scenes) --------------------------------
+
+    def _build_effects_pool(self) -> QWidget:
+        """EFFECTS pool: riffs from the shared RiffLibrary. Selection-scoped
+        - the whole pool greys out when nothing is selected (an effect
+        applies to the current SELECT state)."""
+        pool, layout = self._pool_shell()
+        layout.addWidget(self._pool_header(
+            "Effects", "Applies to: selection", tag_accent=True))
+        grid_host = QWidget()
+        grid = QGridLayout(grid_host)
+        grid.setContentsMargins(14, 0, 14, 10)
+        grid.setSpacing(6)
+        self._effects_grid = grid
+        layout.addWidget(grid_host)
+        layout.addStretch(1)
+        self._populate_effects_pool()
+        return pool
+
+    def _build_scenes_pool(self) -> QWidget:
+        """SCENES pool: whole-rig looks from the SceneLibrary. Always
+        enabled - a scene spans multiple groups, independent of the
+        current selection."""
+        pool, layout = self._pool_shell()
+        layout.addWidget(self._pool_header("Scenes", "Whole rig"))
+        grid_host = QWidget()
+        grid = QGridLayout(grid_host)
+        grid.setContentsMargins(14, 0, 14, 10)
+        grid.setSpacing(6)
+        self._scenes_grid = grid
+        layout.addWidget(grid_host)
+        layout.addStretch(1)
+        self._populate_scenes_pool()
+        return pool
+
+    @staticmethod
+    def _clear_grid(grid: QGridLayout) -> None:
+        while grid.count():
+            item = grid.takeAt(0)
+            widget = item.widget()
+            if widget is not None:
+                widget.deleteLater()
+
+    def _empty_riff_library(self):
+        """A quiet empty RiffLibrary (never crashes). Used when no library
+        is injected and the window has none."""
+        from riffs.riff_library import RiffLibrary
+        lib = RiffLibrary()
+        lib.riffs = {}
+        lib.by_category = {}
+        return lib
+
+    def _resolve_effect_library(self):
+        if self._effect_library is not None:
+            return self._effect_library
+        window = self.window()
+        lib = getattr(window, "riff_library", None) if window is not None \
+            else None
+        self._effect_library = lib if lib is not None \
+            else self._empty_riff_library()
+        return self._effect_library
+
+    def _resolve_scene_library(self):
+        if self._scene_library is not None:
+            return self._scene_library
+        window = self.window()
+        lib = getattr(window, "scene_library", None) if window is not None \
+            else None
+        if lib is None:
+            from scenes.scene_library import SceneLibrary
+            lib = SceneLibrary()
+        self._scene_library = lib
+        return self._scene_library
+
+    def _populate_effects_pool(self) -> None:
+        self._clear_grid(self._effects_grid)
+        self._effect_cells = {}
+        library = self._resolve_effect_library()
+        riffs = library.get_all_riffs() if library is not None else []
+        if not riffs:
+            self._effects_grid.addWidget(
+                self._marker("No effects yet · save riffs from the timeline"),
+                0, 0, 1, 2)
+            return
+        columns = 2
+        for i, riff in enumerate(riffs):
+            key = f"{riff.category}/{riff.name}"
+            cell = _LibraryCell(key, riff.name)
+            cell.clicked.connect(self.state.set_effect)
+            self._effect_cells[key] = cell
+            self._effects_grid.addWidget(cell, i // columns, i % columns)
+        for col in range(columns):
+            self._effects_grid.setColumnStretch(col, 1)
+
+    def _populate_scenes_pool(self) -> None:
+        self._clear_grid(self._scenes_grid)
+        self._scene_cells = {}
+        library = self._resolve_scene_library()
+        scenes = library.get_all_scenes() if library is not None else []
+        if not scenes:
+            self._scenes_grid.addWidget(
+                self._marker("No scenes yet · predefined looks arrive later"),
+                0, 0, 1, 2)
+            return
+        columns = 2
+        for i, scene in enumerate(scenes):
+            key = f"{scene.category}/{scene.name}"
+            chip = scene.color if scene.color else None
+            cell = _LibraryCell(key, scene.name, chip_color=chip)
+            cell.clicked.connect(self.state.set_scene)
+            self._scene_cells[key] = cell
+            self._scenes_grid.addWidget(cell, i // columns, i % columns)
+        for col in range(columns):
+            self._scenes_grid.setColumnStretch(col, 1)
+
+    def set_effect_library(self, library) -> None:
+        """Inject the shared RiffLibrary and rebuild the EFFECTS pool."""
+        self._effect_library = library if library is not None \
+            else self._empty_riff_library()
+        self._populate_effects_pool()
+        self._sync_from_state()
+
+    def set_scene_library(self, library) -> None:
+        """Inject the SceneLibrary and rebuild the SCENES pool."""
+        if library is None:
+            from scenes.scene_library import SceneLibrary
+            library = SceneLibrary()
+        self._scene_library = library
+        self._populate_scenes_pool()
+        self._sync_from_state()
 
     def _on_colour_touched(self, colour_id: str) -> None:
         self.state.stage_colour(colour_id)
@@ -1291,6 +1561,14 @@ class LiveTab(BaseTab):
         for colour_id, swatch in self._colour_swatches.items():
             swatch.set_active(colour_id in active_ids)
 
+        # EFFECTS: selection-scoped. Grey the whole pool with no selection,
+        # then outline the active effect. SCENES: whole-rig, always enabled.
+        self._effects_pool.setEnabled(bool(state.selected))
+        for key, cell in self._effect_cells.items():
+            cell.set_active(key == state.effect)
+        for key, cell in self._scene_cells.items():
+            cell.set_active(key == state.scene)
+
         for name, fader in self._submaster_faders.items():
             fader.set_value(state.submasters.get(name, 100))
 
@@ -1351,7 +1629,18 @@ class LiveTab(BaseTab):
             text = f"PROGRAMMER: {groups_txt} (HELD) · RELEASE TO SHOW"
         else:
             text = "PROGRAMMER: EMPTY · SELECT A GROUP · TOUCH A PALETTE"
+        if state.effect:
+            text += f" · FX: {self._key_name(state.effect).upper()}"
+        if state.scene:
+            text += f" · SCENE: {self._key_name(state.scene).upper()}"
         self._programmer_label.setText(text)
+
+    @staticmethod
+    def _key_name(key: Optional[str]) -> str:
+        """The display name from a "category/name" library key."""
+        if not key:
+            return "-"
+        return key.split("/")[-1]
 
     @staticmethod
     def _colour_label(colour_id: Optional[str]) -> str:
@@ -1373,6 +1662,9 @@ class LiveTab(BaseTab):
                 if isinstance(cell, _PlaceholderCell):
                     cell._restyle()
             for cell in self._position_cells + self._intensity_cells:
+                cell._restyle()
+            for cell in list(self._effect_cells.values()) + \
+                    list(self._scene_cells.values()):
                 cell._restyle()
             for fader in self._submaster_faders.values():
                 fader.update()

@@ -2,17 +2,20 @@
 
 Pins the North Star 3b busking surface: the TOP SELECT row (one tile per
 group with a data-color accent bar + ALL / ODD-EVEN / CLEAR SEL) and FADE
-row, the CENTRE three-pool grid (COLOUR PALETTES painted in their actual
-colours as square swatches with the active one outlined, plus marked
-POSITION and INTENSITY placeholders), the PROGRAMMER state bar, the 330px
-RIGHT column (ACTIVE PLAYBACKS placeholder, STROBE, STROBE KILL / HOLD
-LOOK / RELEASE ALL) and the BOTTOM submaster bank: a GRAND master column
-(accent fader + DBO) first, a divider, then a bounded fader per group in
-the group colours, left-aligned.
+row, the CENTRE five-pool grid (COLOUR PALETTES painted in their actual
+colours as square swatches in a 3-wide grid with the active one outlined,
+then marked POSITION and INTENSITY placeholders, then the library-backed
+EFFECTS pool - riffs, selection-scoped, greyed with no selection - and
+SCENES pool - whole-rig looks, always on - each with the active item
+outlined in the accent), the PROGRAMMER state bar, the 330px RIGHT column
+(ACTIVE PLAYBACKS placeholder, STROBE, STROBE KILL / HOLD LOOK / RELEASE
+ALL) and the BOTTOM submaster bank: a GRAND master column (accent fader +
+DBO) first, a divider, then a bounded fader per group in the group
+colours, left-aligned.
 
-The render is deterministic: two groups selected, one colour active, a
-couple of submasters at different levels, no output engine (UI shell
-only).
+The render is deterministic: two groups selected, one colour active, one
+effect and one scene staged, a couple of submasters at different levels,
+no output engine (UI shell only).
 
 Regenerate after intended changes:
 
@@ -72,7 +75,7 @@ def scene_config():
     )
 
 
-def test_live_tab_golden(qapp, scene_config):
+def test_live_tab_golden(qapp, scene_config, tmp_path):
     """Live tab (reference screen 09), two groups selected, RED active."""
     from gui.theme_manager import ThemeManager
     from gui.tabs.live_tab import LiveTab
@@ -82,6 +85,28 @@ def test_live_tab_golden(qapp, scene_config):
     tab = None
     try:
         tab = LiveTab(scene_config, parent=None)
+        # Small library-backed pools so EFFECTS and SCENES render populated
+        # + active. Built in-test (no disk scan) so the golden is stable.
+        from riffs.riff_library import RiffLibrary
+        from scenes.scene_library import SceneLibrary
+        from config.models import Riff, Scene
+
+        riff_lib = RiffLibrary(riffs_directory=str(tmp_path / "riffs"))
+        riff_lib.riffs = {}
+        riff_lib.by_category = {}
+        for cat, name in (("drops", "Build Drop"), ("loops", "Four Floor"),
+                          ("fills", "Snare Roll")):
+            riff_lib.riffs[f"{cat}/{name}"] = Riff(name=name, category=cat)
+        tab.set_effect_library(riff_lib)
+
+        scene_lib = SceneLibrary(scenes_directory=str(tmp_path / "scenes"))
+        for name, cat, color in (("Warm Wash", "looks", "#F0562E"),
+                                  ("Cold Snap", "looks", "#4ECBD4"),
+                                  ("Blackout Hit", "looks", "")):
+            scene_lib.add_scene(Scene(name=name, category=cat, color=color),
+                                category=cat)
+        tab.set_scene_library(scene_lib)
+
         # Deterministic programmer state: two groups selected with a colour
         # applied, a couple of submasters at different levels, and the
         # grandmaster pulled down so the masters read distinctly.
@@ -92,9 +117,12 @@ def test_live_tab_golden(qapp, scene_config):
         tab.state.set_submaster("Front Pars", 80)
         tab.state.set_submaster("Movers", 55)
         tab.state.set_strobe_rate(40)
-        # Round-2 additions: a tapped tempo and the default LIVE mode.
+        # Round-2 additions: a tapped tempo and the default LIVE mode, plus
+        # one staged effect and one staged scene so both pools show active.
         tab.state.set_bpm(128)
         tab.state.set_mode("live")
+        tab.state.set_effect("loops/Four Floor")
+        tab.state.set_scene("looks/Warm Wash")
         tab.setFixedSize(1600, 900)
         compare_to_golden(tab.grab().toImage(), "live_tab_dark")
     finally:
