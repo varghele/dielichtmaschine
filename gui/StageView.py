@@ -941,8 +941,12 @@ class StageView(QtWidgets.QGraphicsView):
 
         label_interval_px = int(label_interval_m * self.pixels_per_meter)
 
-        # Draw X-axis labels (bottom edge) - from center outward
+        # Draw X-axis labels (TOP edge) - from center outward. The plan
+        # was flipped so the audience sits at the bottom; the X meter
+        # numbers move up into the top padding band (where AUDIENCE used
+        # to sit) and the AUDIENCE marker owns the bottom band.
         half_width_m = self.stage_width_m / 2
+        x_label_y = self.padding - 20  # inside the top padding band
 
         # Draw labels from center to the right
         x_m = 0.0
@@ -950,10 +954,10 @@ class StageView(QtWidgets.QGraphicsView):
             x_px = center_x_px + x_m * self.pixels_per_meter
             if x_px <= self.padding + width_px + 1:
                 label = f"{x_m:.1f}" if x_m != int(x_m) else f"{int(x_m)}"
-                # Draw at bottom
+                # Draw at top
                 painter.drawText(
                     int(x_px) - 15,
-                    self.padding + depth_px + 15,
+                    x_label_y,
                     30, 15,
                     QtCore.Qt.AlignmentFlag.AlignCenter,
                     label
@@ -966,10 +970,10 @@ class StageView(QtWidgets.QGraphicsView):
             x_px = center_x_px + x_m * self.pixels_per_meter
             if x_px >= self.padding - 1:
                 label = f"{x_m:.1f}" if x_m != int(x_m) else f"{int(x_m)}"
-                # Draw at bottom
+                # Draw at top
                 painter.drawText(
                     int(x_px) - 15,
-                    self.padding + depth_px + 15,
+                    x_label_y,
                     30, 15,
                     QtCore.Qt.AlignmentFlag.AlignCenter,
                     label

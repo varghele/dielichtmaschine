@@ -47,6 +47,26 @@ PAPER_PRESETS = {
 _BAR_TYPES = ("BAR", "PIXELBAR", "SUNSTRIP")
 
 
+def plot_fixture_angle(fixture_type: str, yaw: float, pitch: float,
+                       roll: float) -> float:
+    """Screen rotation (degrees) a fixture symbol's facing/beam is drawn
+    with on the plot.
+
+    Matches the Stage tab's FixtureItem._paint_rotation. The plot renders
+    the audience/front (negative stage-Y) at the BOTTOM, and only fixture
+    POSITION was mirrored by that flip; the drawn direction must be
+    mirrored too or a front-aimed beam points upstage. A vertical
+    reflection composed with rotate(a) equals rotate(-a) for a facing
+    along the horizontal (local +X) axis, so we negate the un-mirrored
+    facing angle. Bars project their full orientation via
+    projected_bar_angle_2d; everything else faces yaw + 90 (the icon's
+    beam tick sits on local +X)."""
+    is_bar = fixture_type in _BAR_TYPES
+    base = (projected_bar_angle_2d(yaw, pitch, roll) if is_bar
+            else yaw + 90)
+    return -base
+
+
 def choose_label_rect(anchor: QRectF, label_w: float, label_h: float,
                       occupied: List[QRectF], gap: float = 2.0) -> QRectF:
     """Pick a label rectangle near ``anchor`` that avoids ``occupied``.
@@ -287,8 +307,10 @@ class StagePlotRenderer:
         painter.setBrush(Qt.BrushStyle.NoBrush)
         painter.drawRect(stage_rect)
 
-        # Meter labels along the bottom (X) and left (Y) edges, centered
-        # on 0 like the Stage tab.
+        # Meter labels along the top (X) and left (Y) edges, centered on
+        # 0 like the Stage tab. The plot is flipped so the audience sits
+        # at the bottom, so the X numbers live along the TOP edge and the
+        # AUDIENCE marker owns the bottom band.
         painter.setFont(self._font(2.2, mm))
         painter.setPen(QPen(QColor(100, 100, 100), 0.2 * mm))
         label_step = nice_label_step(ppm, 8 * mm)
@@ -298,7 +320,7 @@ class StagePlotRenderer:
             for sign in ((1,) if m == 0 else (1, -1)):
                 x = ox + sign * m * ppm
                 painter.drawText(
-                    QRectF(x - 5 * mm, stage_rect.bottom() + 0.5 * mm, 10 * mm, 3.5 * mm),
+                    QRectF(x - 5 * mm, stage_rect.top() - 4 * mm, 10 * mm, 3.5 * mm),
                     int(Qt.AlignmentFlag.AlignCenter),
                     f"{sign * m:g}",
                 )
@@ -315,8 +337,9 @@ class StagePlotRenderer:
             m += label_step
 
         # Audience edge marker. Negative stage-Y is the front, which the
-        # Stage tab (and therefore this plot) draws at the bottom. It sits
-        # below the X meter labels along the bottom edge.
+        # Stage tab (and therefore this plot) draws at the bottom. The X
+        # meter labels now sit along the TOP edge, so this marker owns the
+        # bottom band on its own.
         painter.setFont(self._font(2.8, mm, bold=True))
         painter.setPen(QPen(QColor(120, 120, 120), 0.2 * mm))
         painter.drawText(
@@ -329,8 +352,8 @@ class StagePlotRenderer:
     def _audience_marker_rect(stage_rect: QRectF, mm: float) -> QRectF:
         """Rect for the AUDIENCE edge marker. Negative stage-Y is the
         front, drawn at the BOTTOM of the plot (matching the Stage tab),
-        so the marker sits below the stage's bottom edge and clear of the
-        X meter labels."""
+        so the marker sits below the stage's bottom edge. The X meter
+        labels moved to the top edge, so the bottom band is its own."""
         return QRectF(stage_rect.left(), stage_rect.bottom() + 4.5 * mm,
                       stage_rect.width(), 4 * mm)
 
@@ -358,8 +381,7 @@ class StagePlotRenderer:
             y = oy - fixture.y * ppm
 
             is_bar = fixture.type in _BAR_TYPES
-            angle = (projected_bar_angle_2d(yaw, pitch, roll) if is_bar
-                     else yaw + 90)
+            angle = plot_fixture_angle(fixture.type, yaw, pitch, roll)
 
             painter.save()
             painter.translate(x, y)

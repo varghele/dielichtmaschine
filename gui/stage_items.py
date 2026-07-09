@@ -172,13 +172,11 @@ class FixtureItem(QGraphicsItem):
 
         # Apply rotation transformation
         painter.translate(0, 0)  # Translate to center point
-        # For bar-type fixtures, calculate 2D rotation from full 3D orientation
-        # This correctly projects the fixture's length onto the top-down view
-        if self.fixture_type in ("BAR", "PIXELBAR", "SUNSTRIP"):
-            rotation_2d = self._get_2d_rotation_angle()
-            painter.rotate(rotation_2d)
-        else:
-            painter.rotate(self.rotation_angle + 90)  # Add 90 degrees to make 0 point downwards
+        # The drawn direction (beam tick / orientation) is the vertical
+        # mirror of the stored orientation, because the plan renders the
+        # audience/front (negative stage-Y) at the BOTTOM - see
+        # _paint_rotation for why that is a negation.
+        painter.rotate(self._paint_rotation())
 
         # Set smaller font size
         font = painter.font()
@@ -388,6 +386,22 @@ class FixtureItem(QGraphicsItem):
     def _get_2d_rotation_angle(self) -> float:
         """2D rotation for the top-down view — see projected_bar_angle_2d."""
         return projected_bar_angle_2d(self.rotation_angle, self.pitch, self.roll)
+
+    def _paint_rotation(self) -> float:
+        """Screen rotation (degrees) the symbol is drawn with so its
+        beam/direction points the correct way on the plan.
+
+        The plan mirrors stage-Y vertically (audience/front at the
+        BOTTOM). The flip mirrored fixture POSITION only, so the drawn
+        direction must be mirrored too or a front-aimed beam still points
+        upstage. A vertical reflection composed with rotate(a) equals
+        rotate(-a) for a facing along the horizontal (local +X) axis - so
+        we negate the un-mirrored facing angle. Bars project their full
+        orientation; everything else faces yaw + 90 (the icon's beam tick
+        sits on local +X)."""
+        if self.fixture_type in ("BAR", "PIXELBAR", "SUNSTRIP"):
+            return -self._get_2d_rotation_angle()
+        return -(self.rotation_angle + 90)
 
     def _theme_text_color(self):
         """Return the theme-driven label colour from the parent
