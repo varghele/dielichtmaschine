@@ -50,6 +50,8 @@ def _stage_tab_buttons(config):
     return tab, {
         "layer_add": tab.add_layer_btn,
         "layer_remove": tab.remove_layer_btn,
+        "mark_add": tab.add_spot_btn,
+        "mark_remove": tab.remove_item_btn,
     }
 
 

@@ -50,6 +50,10 @@ class StageView(QtWidgets.QGraphicsView):
     # truss creates a stage layer).
     stage_element_added = QtCore.pyqtSignal(object)
 
+    # Emitted whenever the set of stage marks (spots) changes - added,
+    # removed or renamed - so the Marks list in the tab can refresh.
+    spots_changed = QtCore.pyqtSignal()
+
     def __init__(self, parent=None):
         super().__init__(parent)
         # Theme-driven colours — populated by Qt's stylesheet engine
@@ -733,10 +737,48 @@ class StageView(QtWidgets.QGraphicsView):
                 y=y_m,
                 z=z_m
             )
+        self.spots_changed.emit()
         return spot
+
+    def remove_spot(self, name: str) -> bool:
+        """Remove a single mark by name (scene, model and config)."""
+        spot = self.spots.pop(name, None)
+        if spot is None:
+            return False
+        self.scene.removeItem(spot)
+        if self.config and name in getattr(self.config, "spots", {}):
+            del self.config.spots[name]
+        self.spots_changed.emit()
+        return True
+
+    def rename_spot(self, old_name: str, new_name: str) -> bool:
+        """Rename a mark. Returns False on empty/duplicate/unknown name."""
+        new_name = (new_name or "").strip()
+        if not new_name or old_name not in self.spots:
+            return False
+        if new_name == old_name:
+            return True
+        if new_name in self.spots:
+            return False  # would collide with another mark
+        spot = self.spots.pop(old_name)
+        spot.prepareGeometryChange()  # boundingRect depends on the label
+        spot.name = new_name
+        self.spots[new_name] = spot
+        spot.update()
+        if self.config and old_name in getattr(self.config, "spots", {}):
+            # Rebuild in place so the renamed mark keeps its position in the
+            # list instead of jumping to the bottom.
+            self.config.spots[old_name].name = new_name
+            self.config.spots = {
+                (new_name if key == old_name else key): value
+                for key, value in self.config.spots.items()
+            }
+        self.spots_changed.emit()
+        return True
 
     def remove_selected_items(self):
         """Remove selected items from the stage"""
+        removed_spot = False
         for item in self.scene.selectedItems():
             if isinstance(item, FixtureItem):
                 self.scene.removeItem(item)
@@ -748,6 +790,7 @@ class StageView(QtWidgets.QGraphicsView):
                     del self.spots[item.name]
                     if self.config:
                         del self.config.spots[item.name]
+                    removed_spot = True
 
                     # Update spot counter if necessary
                     try:
@@ -757,6 +800,8 @@ class StageView(QtWidgets.QGraphicsView):
                             self.spot_counter = removed_number
                     except ValueError:
                         pass  # If the name doesn't follow the SpotX format, ignore
+        if removed_spot:
+            self.spots_changed.emit()
 
     def updateStage(self, width_m=None, depth_m=None):
         """Update stage dimensions"""

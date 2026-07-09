@@ -18,11 +18,15 @@ verbatim as the GitHub Release notes (see [docs/releasing.md](docs/releasing.md)
 
 ### Changed
 
-- **The 2D stage plan puts the audience at the bottom.** Front (the
-  audience side) now renders along the bottom edge of the top-view plan,
-  matching how stage plots are conventionally drawn; the AUDIENCE marker
-  and the depth labels moved with it. This is a display change only:
-  stored coordinates, the 3D view and exports are unchanged.
+- **The stage plan puts the audience at the bottom.** Front (the audience
+  side) now renders along the bottom edge, matching how stage plots are
+  conventionally drawn; the AUDIENCE marker and the depth labels moved
+  with it. This applies to both the interactive 2D plan and the printable
+  stage-plot export, so the two agree. Display change only: stored
+  coordinates and the 3D view are unchanged.
+- **Stage marks are managed like layers.** The Marks section is now a
+  list with add, delete (the button, the Delete key, or right-click) and
+  rename, in place of the old two bare buttons.
 - **Fit View moved into the Stage tab's action footer**, above the
   exports, and the footer order is now Fit View, Launch Visualizer, Plot
   Stage. Fit View is one click away with every section collapsed; the F

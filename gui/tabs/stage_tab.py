@@ -688,12 +688,46 @@ class StageTab(BaseTab):
         self.show_axes_checkbox.setToolTip("Show XYZ axes on every fixture")
         stage_section.addWidget(self.show_axes_checkbox)
 
-        # -- MARKS ------------------------------------------------------
+        # -- MARKS: named reference points on the plan, managed like the
+        # LAYERS list below - select and press Delete or right-click to
+        # remove, double-click or Rename to rename.
+        from gui.tabs.configuration_tab import TOOLBAR_BTN_WIDTH
         marks_section = subsection("Marks", "marks", expanded=False)
-        self.add_spot_btn = QtWidgets.QPushButton("Add Mark")
-        self.remove_item_btn = QtWidgets.QPushButton("Remove Selected")
-        marks_section.addWidget(self.add_spot_btn)
-        marks_section.addWidget(self.remove_item_btn)
+        self.marks_panel = QtWidgets.QWidget()
+        self.marks_panel.setProperty("role", "card")
+        self.marks_panel.setAttribute(
+            Qt.WidgetAttribute.WA_StyledBackground, True)
+        marks_layout = QtWidgets.QVBoxLayout(self.marks_panel)
+        marks_layout.setContentsMargins(10, 8, 10, 8)
+        marks_layout.setSpacing(6)
+        marks_layout.addWidget(self._caption("Stage marks"))
+
+        self.marks_list = QtWidgets.QListWidget()
+        self.marks_list.setMaximumHeight(110)
+        self.marks_list.setToolTip(
+            "Named reference points on the stage plan.\n"
+            "Select one and press Delete, or right-click, to remove it.\n"
+            "Double-click (or Rename) to rename it."
+        )
+        self.marks_list.setContextMenuPolicy(
+            Qt.ContextMenuPolicy.CustomContextMenu)
+        marks_layout.addWidget(self.marks_list)
+
+        marks_btn_row = QtWidgets.QHBoxLayout()
+        self.add_spot_btn = QtWidgets.QPushButton("+")
+        self.add_spot_btn.setFixedWidth(TOOLBAR_BTN_WIDTH)
+        self.add_spot_btn.setToolTip("Add a mark at stage centre")
+        self.remove_item_btn = QtWidgets.QPushButton("-")
+        self.remove_item_btn.setFixedWidth(TOOLBAR_BTN_WIDTH)
+        self.remove_item_btn.setToolTip("Delete the selected mark")
+        self.rename_mark_btn = QtWidgets.QPushButton("Rename")
+        self.rename_mark_btn.setToolTip("Rename the selected mark")
+        marks_btn_row.addWidget(self.add_spot_btn)
+        marks_btn_row.addWidget(self.remove_item_btn)
+        marks_btn_row.addWidget(self.rename_mark_btn)
+        marks_btn_row.addStretch()
+        marks_layout.addLayout(marks_btn_row)
+        marks_section.addWidget(self.marks_panel)
 
         # -- LAYERS: named Z-planes (ground stack / mid-truss /
         # top-truss). Checkbox = visibility; hidden layers disappear from
@@ -1249,9 +1283,23 @@ class StageTab(BaseTab):
         self.stage_view.stage_element_added.connect(
             lambda _element: self._refresh_layer_list())
 
-        # Spot/mark controls
-        self.add_spot_btn.clicked.connect(lambda: self.stage_view.add_spot())
-        self.remove_item_btn.clicked.connect(self.stage_view.remove_selected_items)
+        # Marks: list managed like the layers list (add / delete / rename,
+        # Delete key and a right-click menu on the list).
+        from PyQt6.QtGui import QKeySequence, QShortcut
+        self.add_spot_btn.clicked.connect(self._add_mark)
+        self.remove_item_btn.clicked.connect(self._remove_selected_mark)
+        self.rename_mark_btn.clicked.connect(self._rename_selected_mark)
+        self.marks_list.itemDoubleClicked.connect(
+            lambda _item: self._rename_selected_mark())
+        self.marks_list.customContextMenuRequested.connect(
+            self._show_marks_menu)
+        self.stage_view.spots_changed.connect(self._refresh_marks_list)
+        self._marks_delete_shortcut = QShortcut(
+            QKeySequence(QKeySequence.StandardKey.Delete), self.marks_list)
+        self._marks_delete_shortcut.setContext(
+            Qt.ShortcutContext.WidgetShortcut)
+        self._marks_delete_shortcut.activated.connect(
+            self._remove_selected_mark)
 
         # Stage layer controls
         self.add_layer_btn.clicked.connect(self._add_layer)
@@ -1376,6 +1424,7 @@ class StageTab(BaseTab):
 
             self._refresh_layer_list()
             self._refresh_group_rows()
+            self._refresh_marks_list()
 
         self._refresh_plan_overlays()
         self._refresh_embedded_visualizer()
@@ -1802,6 +1851,73 @@ class StageTab(BaseTab):
         self.stage_view.select_group_fixtures(name)
 
     # ── Stage layers ──────────────────────────────────────────────────
+
+    # ── Marks (stage spots) ──────────────────────────────────────────
+
+    def _refresh_marks_list(self):
+        """Rebuild the marks list from config.spots."""
+        if not hasattr(self, "marks_list"):
+            return
+        selected = self._selected_mark_name()
+        self.marks_list.blockSignals(True)
+        self.marks_list.clear()
+        spots = getattr(self.config, "spots", {}) if self.config else {}
+        for name in spots:
+            item = QtWidgets.QListWidgetItem(name)
+            item.setData(Qt.ItemDataRole.UserRole, name)
+            self.marks_list.addItem(item)
+        self.marks_list.blockSignals(False)
+        if selected:
+            self._select_mark_in_list(selected)
+
+    def _selected_mark_name(self):
+        item = self.marks_list.currentItem()
+        return item.data(Qt.ItemDataRole.UserRole) if item else None
+
+    def _select_mark_in_list(self, name):
+        for i in range(self.marks_list.count()):
+            if self.marks_list.item(i).data(Qt.ItemDataRole.UserRole) == name:
+                self.marks_list.setCurrentRow(i)
+                return
+
+    def _add_mark(self):
+        """Add a mark at stage centre and select it in the list."""
+        spot = self.stage_view.add_spot()  # emits spots_changed -> refresh
+        if spot is not None:
+            self._select_mark_in_list(spot.name)
+
+    def _remove_selected_mark(self):
+        name = self._selected_mark_name()
+        if name:
+            self.stage_view.remove_spot(name)  # emits spots_changed
+
+    def _rename_selected_mark(self):
+        name = self._selected_mark_name()
+        if not name:
+            return
+        new_name, ok = QtWidgets.QInputDialog.getText(
+            self, "Rename Mark", "Name:", text=name)
+        if not ok:
+            return
+        new_name = new_name.strip()
+        if not new_name or new_name == name:
+            return
+        if self.stage_view.rename_spot(name, new_name):
+            self._select_mark_in_list(new_name)
+
+    def _show_marks_menu(self, pos):
+        item = self.marks_list.itemAt(pos)
+        if item is None:
+            return
+        self.marks_list.setCurrentItem(item)
+        menu = QtWidgets.QMenu(self.marks_list)
+        rename_action = menu.addAction("Rename...")
+        delete_action = menu.addAction("Delete")
+        chosen = menu.exec(self.marks_list.viewport().mapToGlobal(pos))
+        if chosen == rename_action:
+            self._rename_selected_mark()
+        elif chosen == delete_action:
+            self._remove_selected_mark()
 
     def _refresh_layer_list(self):
         """Rebuild the layer list widget, the chip row, the inspector's

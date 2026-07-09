@@ -13,6 +13,7 @@ Contract under test:
 """
 
 import os
+from unittest.mock import patch
 
 import pytest
 
@@ -635,6 +636,7 @@ class TestLibraryPanel:
         for name in ("stage_width", "stage_height", "grid_size",
                      "grid_toggle", "snap_to_grid",
                      "show_axes_checkbox", "add_spot_btn", "remove_item_btn",
+                     "rename_mark_btn", "marks_list", "marks_panel",
                      "layer_list", "add_layer_btn",
                      "remove_layer_btn", "edit_layer_btn", "layer_panel"):
             widget = getattr(tab, name)
@@ -968,6 +970,85 @@ class TestSelectionCard:
         assert tab.embedded_visualizer.isHidden()
         tab.preview_collapse_btn.setChecked(False)
         assert not tab.embedded_visualizer.isHidden()
+
+
+class TestMarks:
+    """Marks (stage spots) are managed like the layers list: add, delete
+    (button / Delete key / right-click) and rename, kept in sync with the
+    marks list and config.spots."""
+
+    @pytest.fixture
+    def tab(self, qapp, rig_config):
+        from gui.tabs.stage_tab import StageTab
+        tab = StageTab(rig_config, parent=None)
+        tab.update_from_config()
+        yield tab
+        tab.deleteLater()
+
+    def _names(self, tab):
+        return [tab.marks_list.item(i).text()
+                for i in range(tab.marks_list.count())]
+
+    def test_add_mark_appends_and_selects(self, tab):
+        tab._add_mark()
+        tab._add_mark()
+        assert self._names(tab) == ["Spot1", "Spot2"]
+        assert list(tab.config.spots) == ["Spot1", "Spot2"]
+        assert tab._selected_mark_name() == "Spot2"  # newest selected
+
+    def test_remove_selected_mark(self, tab):
+        tab._add_mark()
+        tab._add_mark()
+        tab._select_mark_in_list("Spot1")
+        tab._remove_selected_mark()
+        assert self._names(tab) == ["Spot2"]
+        assert "Spot1" not in tab.config.spots
+
+    def test_delete_shortcut_removes_the_selected_mark(self, tab):
+        tab._add_mark()
+        tab._select_mark_in_list("Spot1")
+        tab._marks_delete_shortcut.activated.emit()
+        assert self._names(tab) == []
+        assert tab.config.spots == {}
+
+    def test_rename_keeps_list_position(self, tab):
+        tab._add_mark()
+        tab._add_mark()
+        tab._select_mark_in_list("Spot1")
+        with patch.object(QtWidgets.QInputDialog, "getText",
+                          return_value=("FOH", True)):
+            tab._rename_selected_mark()
+        # Renamed in place (not jumped to the bottom), in list and config.
+        assert self._names(tab) == ["FOH", "Spot2"]
+        assert list(tab.config.spots) == ["FOH", "Spot2"]
+        assert tab._selected_mark_name() == "FOH"
+
+    def test_rename_to_a_duplicate_is_rejected(self, tab):
+        tab._add_mark()
+        tab._add_mark()
+        assert tab.stage_view.rename_spot("Spot1", "Spot2") is False
+        assert list(tab.config.spots) == ["Spot1", "Spot2"]
+
+    def test_cancelling_rename_changes_nothing(self, tab):
+        tab._add_mark()
+        tab._select_mark_in_list("Spot1")
+        with patch.object(QtWidgets.QInputDialog, "getText",
+                          return_value=("", False)):
+            tab._rename_selected_mark()
+        assert self._names(tab) == ["Spot1"]
+
+    def test_marks_list_reloads_from_config(self, tab):
+        from config.models import Spot
+        tab.config.spots["Downstage"] = Spot(name="Downstage", x=0, y=-2)
+        tab._refresh_marks_list()
+        assert "Downstage" in self._names(tab)
+
+    def test_removing_a_plan_selected_spot_refreshes_the_list(self, tab):
+        tab._add_mark()
+        item = tab.stage_view.spots["Spot1"]
+        item.setSelected(True)
+        tab.stage_view.remove_selected_items()  # emits spots_changed
+        assert self._names(tab) == []
 
 
 class TestStageViewGroupSelection:

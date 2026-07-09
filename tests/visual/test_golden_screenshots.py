@@ -262,3 +262,22 @@ def test_stage_layer_panel_golden(qapp, scene_config):
         compare_to_golden(panel.grab().toImage(), "stage_layer_panel_dark")
     finally:
         tab.deleteLater()
+
+
+def test_stage_marks_panel_golden(qapp, scene_config):
+    """The Stage Marks card: micro caption, the marks list with two marks,
+    and the +/-/Rename buttons (managed like the layers card)."""
+    from gui.theme_manager import ThemeManager
+    from gui.tabs.stage_tab import StageTab
+
+    ThemeManager().apply(qapp, "dark")
+    tab = StageTab(scene_config, parent=None)
+    try:
+        tab.update_from_config()
+        tab._add_mark()
+        tab._add_mark()
+        tab.marks_panel.setFixedSize(240, 200)
+        compare_to_golden(tab.marks_panel.grab().toImage(),
+                          "stage_marks_panel_dark")
+    finally:
+        tab.deleteLater()
