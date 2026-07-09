@@ -32,6 +32,13 @@ def _make_song_structure():
     return ss
 
 
+def _index_of(value):
+    """Combo index of a catalog steps-per-beat value."""
+    from timeline_ui.master_timeline_widget import SUBDIVISION_CHOICES
+    return next(i for i, (_label, v) in enumerate(SUBDIVISION_CHOICES)
+               if v == value)
+
+
 def test_master_combobox_lists_documented_subdivisions(qapp):
     from timeline_ui.master_timeline_widget import (
         MasterTimelineContainer, SUBDIVISION_CHOICES,
@@ -42,7 +49,8 @@ def test_master_combobox_lists_documented_subdivisions(qapp):
         values = [container.subdivision_combo.itemData(i)
                   for i in range(container.subdivision_combo.count())]
         assert values == [v for _label, v in SUBDIVISION_CHOICES]
-        assert values == [1, 2, 4]
+        # Coarse (4/2 beats) through fine (1/16), as steps-per-beat floats.
+        assert values == [0.25, 0.5, 1.0, 2.0, 4.0, 8.0, 16.0]
     finally:
         container.deleteLater()
 
@@ -54,18 +62,18 @@ def test_master_combobox_pushes_into_timeline_and_emits_signal(qapp):
     received = []
     container.subdivision_changed.connect(received.append)
     try:
-        # Default state: subdivision==1.
-        assert container.timeline_widget.grid_subdivision == 1
+        # Default state: the on-beat grid (1.0).
+        assert container.timeline_widget.grid_subdivision == 1.0
 
-        # User picks 1/2-beat.
-        container.subdivision_combo.setCurrentIndex(1)
-        assert container.timeline_widget.grid_subdivision == 2
-        assert received == [2]
+        # User picks the every-4-beats coarse grid.
+        container.subdivision_combo.setCurrentIndex(_index_of(0.25))
+        assert container.timeline_widget.grid_subdivision == 0.25
+        assert received == [0.25]
 
-        # User picks 1/4-beat.
-        container.subdivision_combo.setCurrentIndex(2)
-        assert container.timeline_widget.grid_subdivision == 4
-        assert received == [2, 4]
+        # User picks 1/16-beat.
+        container.subdivision_combo.setCurrentIndex(_index_of(16.0))
+        assert container.timeline_widget.grid_subdivision == 16.0
+        assert received == [0.25, 16.0]
     finally:
         container.deleteLater()
 
@@ -78,11 +86,16 @@ def test_set_grid_subdivision_updates_combobox_silently(qapp):
     received = []
     container.subdivision_changed.connect(received.append)
     try:
-        container.set_grid_subdivision(4)
-        assert container.timeline_widget.grid_subdivision == 4
-        assert container.subdivision_combo.currentData() == 4
+        container.set_grid_subdivision(4.0)
+        assert container.timeline_widget.grid_subdivision == 4.0
+        assert container.subdivision_combo.currentData() == 4.0
         # No signal — programmatic sync mustn't trigger a feedback loop with
         # whoever is calling set_grid_subdivision.
+        assert received == []
+
+        # A coarse value round-trips too.
+        container.set_grid_subdivision(0.25)
+        assert container.subdivision_combo.currentData() == 0.25
         assert received == []
     finally:
         container.deleteLater()
@@ -105,15 +118,15 @@ def test_timeline_grid_fans_subdivision_to_audio_and_lanes(qapp):
     grid.add_light_lane(lane)
 
     try:
-        grid.set_grid_subdivision(2)
-        assert master.timeline_widget.grid_subdivision == 2
-        assert audio.timeline_widget.grid_subdivision == 2
-        assert lane.timeline_widget.grid_subdivision == 2
+        grid.set_grid_subdivision(2.0)
+        assert master.timeline_widget.grid_subdivision == 2.0
+        assert audio.timeline_widget.grid_subdivision == 2.0
+        assert lane.timeline_widget.grid_subdivision == 2.0
 
         # Master combobox change must fan out automatically.
-        master.subdivision_combo.setCurrentIndex(2)  # 1/4-beat
-        assert audio.timeline_widget.grid_subdivision == 4
-        assert lane.timeline_widget.grid_subdivision == 4
+        master.subdivision_combo.setCurrentIndex(_index_of(4.0))  # 1/4-beat
+        assert audio.timeline_widget.grid_subdivision == 4.0
+        assert lane.timeline_widget.grid_subdivision == 4.0
     finally:
         grid.deleteLater()
         master.deleteLater()
@@ -135,14 +148,14 @@ def test_late_added_light_lane_inherits_current_subdivision(qapp):
     grid.set_master(master)
 
     # Master is already at 1/4-beat when the new lane joins.
-    master.set_grid_subdivision(4)
+    master.set_grid_subdivision(4.0)
 
     lane_model = LightLane(name="L1", fixture_targets=["TestGroup"])
     lane = LightLaneWidget(lane_model, ["TestGroup"])
     grid.add_light_lane(lane)
 
     try:
-        assert lane.timeline_widget.grid_subdivision == 4
+        assert lane.timeline_widget.grid_subdivision == 4.0
     finally:
         grid.deleteLater()
         master.deleteLater()
@@ -173,6 +186,20 @@ def test_find_nearest_beat_time_uses_lane_subdivision(qapp):
 
         # 0.13 → 0.125 at quarter-beat (the sixteenth-note grid line).
         assert abs(tw.find_nearest_beat_time(0.13) - 0.125) < 1e-6
+
+        # Coarse grid: subdivision 0.25 == a line every 4 beats. Beat=0.5s so
+        # a step is 2.0s. A time near beat 3 (1.5s, i.e. 0.75 of a step)
+        # snaps up to beat 4 (2.0s).
+        tw.set_grid_subdivision(0.25)
+        assert abs(tw.find_nearest_beat_time(1.5) - 2.0) < 1e-6
+        assert abs(tw.find_nearest_beat_time(1.4) - 2.0) < 1e-6
+
+        # Fine grid: subdivision 16 == 1/16-beat steps (0.03125s). 0.10 snaps
+        # to the nearest 1/16-beat line.
+        tw.set_grid_subdivision(16.0)
+        step = 0.5 / 16.0
+        expected = round(0.10 / step) * step
+        assert abs(tw.find_nearest_beat_time(0.10) - expected) < 1e-6
     finally:
         tw.deleteLater()
 

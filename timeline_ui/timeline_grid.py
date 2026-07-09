@@ -51,7 +51,7 @@ class TimelineGrid(QWidget):
     playhead_moved = pyqtSignal(float)
     zoom_changed = pyqtSignal(float)
     audio_file_changed = pyqtSignal(str)
-    subdivision_changed = pyqtSignal(int)
+    subdivision_changed = pyqtSignal(float)  # Steps-per-beat (SUBDIVISION_CHOICES)
     snap_changed = pyqtSignal(bool)
 
     def __init__(self, parent=None):
@@ -228,6 +228,8 @@ class TimelineGrid(QWidget):
                 tw.set_grid_subdivision(master_tw.grid_subdivision)
             if hasattr(tw, "set_snap_to_grid"):
                 tw.set_snap_to_grid(master_tw.snap_to_grid)
+            if hasattr(tw, "set_swing"):
+                tw.set_swing(getattr(master_tw, "swing_enabled", False))
             cb = getattr(lane_widget, "snap_checkbox", None)
             if cb is not None:
                 cb.blockSignals(True)
@@ -285,7 +287,27 @@ class TimelineGrid(QWidget):
             if hasattr(tw, "set_grid_subdivision"):
                 tw.set_grid_subdivision(subdivision)
 
-    def _on_master_subdivision_changed(self, subdivision: int) -> None:
+    def set_swing(self, enabled: bool) -> None:
+        """Push triplet-swing state to master + audio + every light lane.
+
+        Mirrors ``set_grid_subdivision`` / ``set_snap_to_grid``: the shows-tab
+        SWING chip is the single control, and its state fans out so every
+        lane's drawn grid and snap targets swing together.
+        """
+        if self._master_container is not None:
+            tw = getattr(self._master_container, "timeline_widget", None)
+            if tw is not None and hasattr(tw, "set_swing"):
+                tw.set_swing(enabled)
+        if self._audio_lane is not None:
+            tw = getattr(self._audio_lane, "timeline_widget", None)
+            if tw is not None and hasattr(tw, "set_swing"):
+                tw.set_swing(enabled)
+        for entry in self._lane_rows:
+            tw = entry["lane"].timeline_widget
+            if hasattr(tw, "set_swing"):
+                tw.set_swing(enabled)
+
+    def _on_master_subdivision_changed(self, subdivision: float) -> None:
         """Fan-out hook for the master combobox."""
         # Master container already updated itself before emitting; only
         # propagate to audio + light lanes here, then re-emit upward.

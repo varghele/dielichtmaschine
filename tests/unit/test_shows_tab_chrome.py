@@ -141,11 +141,27 @@ class TestGridChips:
         assert shows_tab.lane_widgets[0].timeline_widget.grid_subdivision == 4
 
     def test_master_combo_change_syncs_chips(self, shows_tab):
+        from timeline_ui.master_timeline_widget import SUBDIVISION_CHOICES
         master = shows_tab.master_timeline
-        # Index 1 == subdivision 2 (see SUBDIVISION_CHOICES).
-        master.subdivision_combo.setCurrentIndex(1)
+        # Drive the combo to the 1/2-beat entry (value 2.0) by index.
+        idx = next(i for i, (_l, v) in enumerate(SUBDIVISION_CHOICES)
+                   if v == 2.0)
+        master.subdivision_combo.setCurrentIndex(idx)
         assert shows_tab.grid_chips[2].isChecked()
         assert not shows_tab.grid_chips[1].isChecked()
+
+    def test_seven_chips_labelled_by_grid_interval(self, shows_tab):
+        # Chip text is the grid interval in beats, coarse to fine.
+        labels = [shows_tab.grid_chips[v].text()
+                  for v in (0.25, 0.5, 1.0, 2.0, 4.0, 8.0, 16.0)]
+        assert labels == ["4", "2", "1", "1/2", "1/4", "1/8", "1/16"]
+        assert len(shows_tab.grid_chips) == 7
+
+    def test_coarse_chip_click_fans_out_float(self, shows_tab):
+        shows_tab.grid_chips[0.25].click()
+        master = shows_tab.master_timeline
+        assert master.timeline_widget.grid_subdivision == 0.25
+        assert master.subdivision_combo.currentData() == 0.25
 
     def test_no_feedback_loop_between_chip_and_combo(self, shows_tab):
         received = []
@@ -258,6 +274,32 @@ class TestSnapChip:
         shows_tab._on_snap_chip_clicked(True)
         assert received == []
         assert shows_tab.master_timeline.snap_checkbox.isChecked()
+
+
+class TestSwingChip:
+    def test_swing_chip_is_a_checkable_output_select_chip(self, shows_tab):
+        assert shows_tab.swing_chip.isCheckable()
+        assert not shows_tab.swing_chip.isChecked()  # default off
+        assert shows_tab.swing_chip.property("role") == "output-select"
+
+    def test_swing_chip_click_calls_grid_set_swing(self, shows_tab, monkeypatch):
+        calls = []
+        monkeypatch.setattr(shows_tab.timeline_grid, "set_swing",
+                            lambda enabled: calls.append(enabled))
+        shows_tab.swing_chip.click()  # off -> on
+        assert calls == [True]
+        assert shows_tab.swing_chip.isChecked()
+        shows_tab.swing_chip.click()  # on -> off
+        assert calls == [True, False]
+
+    def test_swing_chip_fans_out_to_master_and_lanes(self, shows_tab):
+        from timeline.light_lane import LightLane
+        shows_tab._add_lane_widget(LightLane("L1"))
+        shows_tab.swing_chip.click()  # turn swing on
+        master = shows_tab.master_timeline
+        assert master.timeline_widget.swing_enabled is True
+        assert shows_tab.audio_lane.timeline_widget.swing_enabled is True
+        assert shows_tab.lane_widgets[0].timeline_widget.swing_enabled is True
 
 
 class TestBarReadout:

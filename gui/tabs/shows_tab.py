@@ -327,16 +327,17 @@ class ShowsTab(BaseTab):
         chips = QHBoxLayout()
         chips.setSpacing(2)
         for label, value in SUBDIVISION_CHOICES:
-            chip = QPushButton("1" if value == 1 else f"1/{value}")
+            chip = QPushButton(label)
             chip.setCheckable(True)
             chip.setProperty("role", "output-select")
             chip.setFont(mono_font(8, tracking_em=0.05))
             chip.setCursor(Qt.CursorShape.PointingHandCursor)
-            chip.setToolTip(f"Snap grid: {label}")
+            chip.setToolTip(f"Grid: a line every {label} beat(s)")
             self.grid_chip_group.addButton(chip)
             self.grid_chips[value] = chip
             chips.addWidget(chip)
-        self.grid_chips[SUBDIVISION_CHOICES[0][1]].setChecked(True)
+        # Default to the on-beat grid (value 1.0), regardless of catalog order.
+        self.grid_chips[1.0].setChecked(True)
         toolbar.addLayout(chips)
 
         # SNAP chip (reference toolbar, right of the grid switcher). Real
@@ -350,6 +351,18 @@ class ShowsTab(BaseTab):
         self.snap_chip.setCursor(Qt.CursorShape.PointingHandCursor)
         self.snap_chip.setToolTip("Snap block edges to the grid")
         toolbar.addWidget(self.snap_chip)
+
+        # SWING chip (right of SNAP). Toggles a triplet feel on the off-beat
+        # grid; TimelineGrid.set_swing fans it out to master + audio + lanes,
+        # and the drawn grid + snap targets follow. Default off.
+        self.swing_chip = QPushButton("SWING")
+        self.swing_chip.setCheckable(True)
+        self.swing_chip.setChecked(False)
+        self.swing_chip.setProperty("role", "output-select")
+        self.swing_chip.setFont(mono_font(8, tracking_em=0.05))
+        self.swing_chip.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.swing_chip.setToolTip("Swing the off-beat grid (triplet feel)")
+        toolbar.addWidget(self.swing_chip)
 
         toolbar.addSpacing(10)
 
@@ -618,9 +631,10 @@ class ShowsTab(BaseTab):
         return f"BAR {bar} · {minutes:02d}:{seconds:04.1f}"
 
     def _grid_label(self) -> str:
+        labels = {value: label for label, value in SUBDIVISION_CHOICES}
         for value, chip in self.grid_chips.items():
             if chip.isChecked():
-                return "1" if value == 1 else f"1/{value}"
+                return labels.get(value, "1")
         return "1"
 
     def _update_status_line(self):
@@ -744,6 +758,9 @@ class ShowsTab(BaseTab):
         # master checkbox silently; snap_changed only fires from the master).
         self.snap_chip.clicked.connect(self._on_snap_chip_clicked)
         self.timeline_grid.snap_changed.connect(self._sync_snap_chip)
+
+        # SWING chip: one-way push (no master swing control to sync back).
+        self.swing_chip.clicked.connect(self._on_swing_chip_clicked)
 
         # Right-pane header affordances.
         self.pane_popout_btn.clicked.connect(lambda: self._launch_visualizer())
@@ -1348,13 +1365,13 @@ class ShowsTab(BaseTab):
 
     # === Grid Subdivision Chips ===
 
-    def _on_grid_chip_clicked(self, value: int):
+    def _on_grid_chip_clicked(self, value: float):
         """Toolbar chip -> TimelineGrid (fans out to master + audio +
         every lane; the master combobox syncs without re-emitting)."""
         self.timeline_grid.set_grid_subdivision(value)
         self._update_status_line()
 
-    def _sync_grid_chips(self, value: int):
+    def _sync_grid_chips(self, value: float):
         """Master combobox change -> check the matching toolbar chip.
 
         setChecked never emits clicked, so this can't loop back into
@@ -1373,6 +1390,10 @@ class ShowsTab(BaseTab):
         """Master snap checkbox -> toolbar chip (no clicked signal, no loop)."""
         if self.snap_chip.isChecked() != snap:
             self.snap_chip.setChecked(snap)
+
+    def _on_swing_chip_clicked(self, checked: bool):
+        """Toolbar SWING chip -> TimelineGrid (master + audio + lanes)."""
+        self.timeline_grid.set_swing(checked)
 
     # === 3D Preview Pane Toggle ===
 

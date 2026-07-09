@@ -3,9 +3,108 @@
 # Adapted from midimaker_and_show_structure/ui/lane_widget.py
 
 import json
+import math
 from PyQt6.QtWidgets import QWidget, QMenu
 from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtGui import QPainter, QPen, QColor, QWheelEvent, QBrush
+
+
+# Standard triplet-swing ratio: the off-beat lands at 2/3 of the beat.
+SWING_RATIO = 2.0 / 3.0
+# Epsilon guards. Subdivision is now a float (steps per beat): coarse grids
+# are fractions (0.25 = a line every 4 beats), fine grids are >1 (16 = 1/16).
+_SUBDIVISION_EPS = 1e-6
+_STEP_EPS = 1e-9
+
+
+def swing_warp(f: float, ratio: float = SWING_RATIO) -> float:
+    """Warp a within-beat fraction ``f`` in [0, 1) to a triplet (2:1) feel.
+
+    ``swing_warp(0) == 0`` (beat/bar lines are unaffected), ``swing_warp(0.5)``
+    lands on ``ratio`` (2/3), and the function is monotonic increasing on
+    [0, 1) with ``swing_warp(f) -> 1`` as ``f -> 1``. Two linear pieces map
+    the first and second half of the beat onto [0, ratio] and [ratio, 1].
+    """
+    if f < 0.5:
+        return (f / 0.5) * ratio
+    return ratio + ((f - 0.5) / 0.5) * (1.0 - ratio)
+
+
+def _is_multiple(value: float, base: float, eps: float = 1e-6) -> bool:
+    """True if ``value`` is (approximately) an integer multiple of ``base``."""
+    if base <= 0:
+        return False
+    r = value % base
+    return r < eps or (base - r) < eps
+
+
+def iter_grid_steps(part_start, seconds_per_beat, beats_per_bar, total_beats,
+                    subdivision, swing, is_last_part,
+                    pixels_per_second, min_subdivision_pixels):
+    """Yield ``(step_time, kind)`` grid lines for one part.
+
+    ``kind`` is ``"bar"`` (bar boundary), ``"beat"`` (beat boundary) or
+    ``"sub"`` (finer sub-beat line). ``subdivision`` is steps-per-beat as a
+    float: values <= 1 give sparse coarse grids (a line every 1/subdivision
+    beats) that are always drawn; values > 1 give fine sub-beat lines that
+    are hidden when they get denser than ``min_subdivision_pixels``. When
+    ``swing`` is on, sub-beat fractions are warped by :func:`swing_warp`;
+    beat/bar lines (fraction 0) are never moved.
+    """
+    subdivision = max(_SUBDIVISION_EPS, float(subdivision))
+    seconds_per_step = seconds_per_beat / subdivision
+    pixels_per_step = seconds_per_step * pixels_per_second
+    # Fine sub-lines become visual noise below the density floor: fall back
+    # to a beat-resolution grid. Coarse grids (<= 1) are sparse: always drawn.
+    if subdivision > 1.0 and pixels_per_step < min_subdivision_pixels:
+        sub = 1.0
+    else:
+        sub = subdivision
+
+    upper = total_beats + _STEP_EPS if is_last_part else total_beats - _STEP_EPS
+    step_index = 0
+    while True:
+        beat_pos = step_index / sub
+        if beat_pos > upper:
+            break
+        beat_index = int(math.floor(beat_pos + _STEP_EPS))
+        frac = beat_pos - beat_index
+        if frac < _STEP_EPS:
+            frac = 0.0
+        warped = swing_warp(frac) if (swing and frac > 0.0) else frac
+        step_time = part_start + (beat_index + warped) * seconds_per_beat
+        if frac == 0.0:
+            kind = "bar" if _is_multiple(beat_index, beats_per_bar) else "beat"
+        else:
+            kind = "sub"
+        yield step_time, kind
+        step_index += 1
+
+
+def _snap_in_frame(target, frame_start, seconds_per_beat, subdivision, swing):
+    """Snap ``target`` to the grid within a single-tempo frame.
+
+    ``frame_start`` is the reference (part start or 0); ``subdivision`` is
+    steps-per-beat (float). Without swing (or for coarse grids <= 1) this is
+    plain nearest-step rounding. With swing on and a fine grid, candidate
+    positions are the swing-warped sub-beat fractions of the nearby beats.
+    """
+    seconds_per_step = seconds_per_beat / subdivision
+    if not swing or subdivision <= 1.0:
+        step = round((target - frame_start) / seconds_per_step)
+        return frame_start + step * seconds_per_step
+
+    steps_per_beat = max(1, int(round(subdivision)))
+    beat = (target - frame_start) / seconds_per_beat
+    base_beat = int(math.floor(beat))
+    best = None
+    for b in (base_beat - 1, base_beat, base_beat + 1):
+        for k in range(steps_per_beat):
+            f = k / steps_per_beat
+            cand = frame_start + (b + swing_warp(f)) * seconds_per_beat
+            if best is None or abs(cand - target) < abs(best - target):
+                best = cand
+    return best
 
 
 class TimelineWidget(QWidget):
@@ -27,13 +126,20 @@ class TimelineWidget(QWidget):
         self.base_pixels_per_second = 60  # Base: 60 pixels per second
         self.pixels_per_second = self.base_pixels_per_second
         self.snap_to_grid = True
-        # Number of snap points per beat. 1=on-beat, 2=half-beat, 4=quarter-beat.
-        # Subdivision lines are visually rendered fainter than beat lines and
-        # are zoom-gated (hidden when too small to read — see draw_*_grid).
-        self.grid_subdivision = 1
-        # Below this many pixels per subdivision step, the extra grid lines
-        # become visual noise rather than guidance. Snap targets stay active.
+        # Grid steps per beat, as a float. 1.0=on-beat; fractions give coarse
+        # grids (0.25 = a line every 4 beats, 0.5 = every 2 beats); values > 1
+        # give fine sub-beat lines (2=1/2, 4=1/4, 8=1/8, 16=1/16). Fine lines
+        # render fainter than beat lines and are zoom-gated (hidden when too
+        # small to read — see draw_*_grid); coarse grids are always drawn.
+        self.grid_subdivision = 1.0
+        # Below this many pixels per subdivision step, the extra fine grid
+        # lines become visual noise rather than guidance. Snap targets stay
+        # active.
         self.min_subdivision_pixels = 12
+        # Triplet swing for the off-beat grid. When True, sub-beat lines and
+        # snap targets are warped so the eighth-note off-beat sits at 2/3 of
+        # the beat instead of 1/2. Beat/bar lines are never moved.
+        self.swing_enabled = False
         self.playhead_position = 0.0  # Position in seconds
         self.dragging_playhead = False
         self.min_zoom = 0.1
@@ -104,11 +210,19 @@ class TimelineWidget(QWidget):
         """Enable/disable snap to grid."""
         self.snap_to_grid = snap
 
-    def set_grid_subdivision(self, subdivision: int):
-        """Set how many snap steps fit in one beat. 1/2/4 are the supported
-        UI choices; values outside that range still work mathematically.
+    def set_grid_subdivision(self, subdivision: float):
+        """Set how many grid steps fit in one beat (float, steps per beat).
+
+        0.25/0.5 give coarse grids (a line every 4/2 beats); 1 is on-beat;
+        2/4/8/16 give fine sub-beat grids. Values outside the UI catalog still
+        work mathematically.
         """
-        self.grid_subdivision = max(1, int(subdivision))
+        self.grid_subdivision = max(_SUBDIVISION_EPS, float(subdivision))
+        self.update()
+
+    def set_swing(self, enabled: bool):
+        """Enable/disable triplet swing on the sub-beat grid and repaint."""
+        self.swing_enabled = bool(enabled)
         self.update()
 
     def set_playhead_position(self, position: float):
@@ -224,18 +338,34 @@ class TimelineWidget(QWidget):
     def find_nearest_beat_time(self, target_time: float) -> float:
         """Find the nearest snap position using song structure if available.
 
-        Honours ``self.grid_subdivision`` so half/quarter-beat snapping works
-        identically whether or not a song structure is loaded.
+        Honours ``self.grid_subdivision`` (float steps-per-beat, so coarse and
+        fine grids snap uniformly) and ``self.swing_enabled`` (off-beat targets
+        warp to the triplet feel), whether or not a song structure is loaded.
+        Snapping is done in-widget rather than delegating to SongStructure so
+        the float/swing behaviour matches the drawn grid exactly.
         """
-        subdivision = max(1, int(self.grid_subdivision))
-        if not (self.song_structure and hasattr(self.song_structure, 'parts') and self.song_structure.parts):
-            # Fallback to simple beat snapping with default BPM
-            step_duration = (60.0 / self.bpm) / subdivision
-            nearest_step = round(target_time / step_duration)
-            return nearest_step * step_duration
+        subdivision = max(_SUBDIVISION_EPS, float(getattr(self, "grid_subdivision", 1.0)))
+        swing = bool(getattr(self, "swing_enabled", False))
 
-        # Use song structure's snap function with current subdivision
-        return self.song_structure.find_nearest_beat_time(target_time, subdivision=subdivision)
+        ss = self.song_structure
+        if ss and hasattr(ss, 'parts') and ss.parts:
+            part = ss.get_part_at_time(target_time)
+            if part is None:
+                # Before the first part or past the last: no grid to snap to.
+                if target_time < 0:
+                    return 0.0
+                return target_time
+            if getattr(part, "transition", "instant") != "instant":
+                # Gradual transitions have no stable beat grid; punt (matches
+                # SongStructure.find_nearest_beat_time).
+                return target_time
+            seconds_per_beat = 60.0 / part.bpm
+            return _snap_in_frame(target_time, part.start_time,
+                                  seconds_per_beat, subdivision, swing)
+
+        # Fallback: bare-BPM snap with no song structure.
+        seconds_per_beat = 60.0 / self.bpm
+        return _snap_in_frame(target_time, 0.0, seconds_per_beat, subdivision, swing)
 
     def draw_grid(self, painter, width, height):
         """Draw grid with song structure awareness."""
@@ -257,7 +387,9 @@ class TimelineWidget(QWidget):
         bar_pen = QPen(QColor(127, 127, 127, 160), 2)
         part_pen = QPen(QColor(127, 127, 127, 220), 3)
 
-        subdivision = max(1, int(self.grid_subdivision))
+        subdivision = getattr(self, "grid_subdivision", 1.0)
+        swing = getattr(self, "swing_enabled", False)
+        min_px = getattr(self, "min_subdivision_pixels", 12)
 
         num_parts = len(self.song_structure.parts)
         for part_idx, part in enumerate(self.song_structure.parts):
@@ -265,39 +397,26 @@ class TimelineWidget(QWidget):
             total_beats_in_part = int(part.num_bars * beats_per_bar)
             seconds_per_beat = 60.0 / part.bpm
 
-            # Pixels per subdivision step govern whether sub-beat lines are
-            # visible at the current zoom — under min_subdivision_pixels they
-            # smear together into noise, so we draw beats only.
-            pixels_per_step = (seconds_per_beat / subdivision) * self.pixels_per_second
-            draw_subs = subdivision > 1 and pixels_per_step >= self.min_subdivision_pixels
-
             # Draw part boundary
             start_x = round(self.time_to_pixel(part.start_time))
             if 0 <= start_x <= width:
                 painter.setPen(part_pen)
                 painter.drawLine(start_x, 0, start_x, height)
 
-            # For all parts except the last, skip the final beat
             is_last_part = (part_idx == num_parts - 1)
-            max_beat = total_beats_in_part if is_last_part else total_beats_in_part - 1
-
-            steps_per_beat = subdivision if draw_subs else 1
-            seconds_per_step = seconds_per_beat / steps_per_beat
-            total_steps = max_beat * steps_per_beat + (steps_per_beat if is_last_part else 1)
-
-            for step_index in range(total_steps + 1):
-                step_time = part.start_time + (step_index * seconds_per_step)
+            for step_time, kind in iter_grid_steps(
+                    part.start_time, seconds_per_beat, beats_per_bar,
+                    total_beats_in_part, subdivision, swing, is_last_part,
+                    self.pixels_per_second, min_px):
                 step_x = round(self.time_to_pixel(step_time))
-
                 if not (0 <= step_x <= width):
                     continue
-
-                is_beat = (step_index % steps_per_beat == 0)
-                if not is_beat:
-                    painter.setPen(sub_pen)
+                if kind == "bar":
+                    painter.setPen(bar_pen)
+                elif kind == "beat":
+                    painter.setPen(beat_pen)
                 else:
-                    beat_index = step_index // steps_per_beat
-                    painter.setPen(bar_pen if beat_index % beats_per_bar == 0 else beat_pen)
+                    painter.setPen(sub_pen)
                 painter.drawLine(step_x, 0, step_x, height)
 
     def draw_basic_grid(self, painter, width, height):
@@ -306,26 +425,27 @@ class TimelineWidget(QWidget):
         beat_pen = QPen(QColor(127, 127, 127, 80), 1)
         bar_pen = QPen(QColor(127, 127, 127, 160), 2)
 
-        subdivision = max(1, int(self.grid_subdivision))
+        subdivision = getattr(self, "grid_subdivision", 1.0)
+        swing = getattr(self, "swing_enabled", False)
+        min_px = getattr(self, "min_subdivision_pixels", 12)
         seconds_per_beat = 60.0 / self.bpm
-        pixels_per_step = (seconds_per_beat / subdivision) * self.pixels_per_second
-        draw_subs = subdivision > 1 and pixels_per_step >= self.min_subdivision_pixels
-        steps_per_beat = subdivision if draw_subs else 1
-        seconds_per_step = seconds_per_beat / steps_per_beat
 
+        # Cover the visible width; treat it as one 4/4 "part".
         max_time = width / self.pixels_per_second
-        step_count = 0
-        step_time = 0.0
-        while step_time <= max_time:
+        total_beats = int(math.ceil(max_time / seconds_per_beat)) + 1
+        for step_time, kind in iter_grid_steps(
+                0.0, seconds_per_beat, 4.0, total_beats, subdivision, swing,
+                True, self.pixels_per_second, min_px):
             x = round(self.time_to_pixel(step_time))
-            if step_count % steps_per_beat != 0:
-                painter.setPen(sub_pen)
+            if not (0 <= x <= width):
+                continue
+            if kind == "bar":
+                painter.setPen(bar_pen)
+            elif kind == "beat":
+                painter.setPen(beat_pen)
             else:
-                beat_index = step_count // steps_per_beat
-                painter.setPen(bar_pen if beat_index % 4 == 0 else beat_pen)
+                painter.setPen(sub_pen)
             painter.drawLine(x, 0, x, height)
-            step_count += 1
-            step_time = step_count * seconds_per_step
 
     def draw_playhead(self, painter, width, height):
         """Draw playhead at time position."""

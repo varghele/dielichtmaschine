@@ -7,13 +7,20 @@ from PyQt6.QtWidgets import (QWidget, QHBoxLayout, QVBoxLayout, QLabel,
                              QCheckBox)
 from PyQt6.QtCore import Qt, pyqtSignal, QPoint, QRectF
 from PyQt6.QtGui import QPainter, QPen, QColor, QPolygon, QBrush
-from .timeline_widget import TimelineWidget
+from .timeline_widget import TimelineWidget, iter_grid_steps
 
 
+# Grid interval choices. First tuple element is the LABEL (grid interval in
+# beats, as shown on the chip/combobox); second is steps-per-beat (float).
+# "4" -> a line every 4 beats -> 0.25 steps/beat; "1/16" -> 16 steps/beat.
 SUBDIVISION_CHOICES = [
-    ("1 (beat)", 1),
-    ("1/2 (half)", 2),
-    ("1/4 (quarter)", 4),
+    ("4", 0.25),
+    ("2", 0.5),
+    ("1", 1.0),
+    ("1/2", 2.0),
+    ("1/4", 4.0),
+    ("1/8", 8.0),
+    ("1/16", 16.0),
 ]
 
 
@@ -161,7 +168,9 @@ class MasterTimelineWidget(TimelineWidget):
                 bar_pen = QPen(QColor(127, 127, 127, 200), 1)
                 beat_pen = QPen(QColor(127, 127, 127, 100), 1)
 
-                subdivision = max(1, int(getattr(self, "grid_subdivision", 1)))
+                subdivision = getattr(self, "grid_subdivision", 1.0)
+                swing = getattr(self, "swing_enabled", False)
+                min_px = getattr(self, "min_subdivision_pixels", 12)
 
                 num_parts = len(self.song_structure.parts)
                 for part_idx, part in enumerate(self.song_structure.parts):
@@ -169,30 +178,20 @@ class MasterTimelineWidget(TimelineWidget):
                     total_beats_in_part = int(part.num_bars * beats_per_bar)
                     seconds_per_beat = 60.0 / part.bpm
 
-                    pixels_per_step = (seconds_per_beat / subdivision) * self.pixels_per_second
-                    min_px = getattr(self, "min_subdivision_pixels", 12)
-                    draw_subs = subdivision > 1 and pixels_per_step >= min_px
-                    steps_per_beat = subdivision if draw_subs else 1
-                    seconds_per_step = seconds_per_beat / steps_per_beat
-
                     is_last_part = (part_idx == num_parts - 1)
-                    max_beat_index = total_beats_in_part if is_last_part else total_beats_in_part - 1
-                    total_steps = max_beat_index * steps_per_beat + (steps_per_beat if is_last_part else 1)
-
-                    for step_index in range(total_steps + 1):
-                        step_time = part.start_time + (step_index * seconds_per_step)
+                    for step_time, kind in iter_grid_steps(
+                            part.start_time, seconds_per_beat, beats_per_bar,
+                            total_beats_in_part, subdivision, swing,
+                            is_last_part, self.pixels_per_second, min_px):
                         step_x_rounded = round(self.time_to_pixel(step_time))
-
                         if not (0 <= step_x_rounded <= width):
                             continue
-
-                        is_beat = (step_index % steps_per_beat == 0)
-                        if not is_beat:
-                            painter.setPen(sub_pen)
+                        if kind == "bar":
+                            painter.setPen(bar_pen)
+                        elif kind == "beat":
+                            painter.setPen(beat_pen)
                         else:
-                            beat_index = step_index // steps_per_beat
-                            is_bar_line = (beat_index % beats_per_bar == 0)
-                            painter.setPen(bar_pen if is_bar_line else beat_pen)
+                            painter.setPen(sub_pen)
                         painter.drawLine(step_x_rounded, 0, step_x_rounded, height)
 
             except Exception as e:
@@ -243,7 +242,7 @@ class MasterTimelineContainer(QWidget):
     playhead_moved = pyqtSignal(float)
     scroll_position_changed = pyqtSignal(int)
     zoom_changed = pyqtSignal(float)
-    subdivision_changed = pyqtSignal(int)  # New value in {1, 2, 4}
+    subdivision_changed = pyqtSignal(float)  # Steps-per-beat (see SUBDIVISION_CHOICES)
     snap_changed = pyqtSignal(bool)  # Master snap toggle — fan out to all lanes
 
     def __init__(self, parent=None):
@@ -289,11 +288,16 @@ class MasterTimelineContainer(QWidget):
         self.subdivision_label.setStyleSheet("font-size: 10px;")
         self.subdivision_combo = QComboBox()
         self.subdivision_combo.setToolTip(
-            "Snap-to-grid resolution. 1 = on the beat, 1/2 = half-beat, 1/4 = quarter-beat."
+            "Grid resolution. 4/2 = a line every 4/2 beats; 1 = on the beat; "
+            "1/2 ... 1/16 = sub-beat lines."
         )
         for label, value in SUBDIVISION_CHOICES:
             self.subdivision_combo.addItem(label, value)
-        self.subdivision_combo.setCurrentIndex(0)
+        # Default to the on-beat entry (value 1.0) to match the whole-beat
+        # default grid, not the first catalog entry.
+        default_index = next(
+            i for i, (_label, v) in enumerate(SUBDIVISION_CHOICES) if v == 1.0)
+        self.subdivision_combo.setCurrentIndex(default_index)
         self.subdivision_combo.currentIndexChanged.connect(self._on_subdivision_changed)
 
         # NOTE: this top_row_layout is what shows BEFORE detach_pieces() runs
@@ -376,10 +380,12 @@ class MasterTimelineContainer(QWidget):
         self.timeline_widget.set_snap_to_grid(checked)
         self.snap_changed.emit(checked)
 
-    def set_grid_subdivision(self, subdivision: int):
+    def set_grid_subdivision(self, subdivision: float):
         """Set the master timeline's grid subdivision and sync the combobox."""
         self.timeline_widget.set_grid_subdivision(subdivision)
-        # Reflect on combobox without re-emitting subdivision_changed.
+        # Reflect on combobox without re-emitting subdivision_changed. Compare
+        # against the stored catalog value (both come from SUBDIVISION_CHOICES,
+        # so the float match is exact) rather than doing any arithmetic.
         for i in range(self.subdivision_combo.count()):
             if self.subdivision_combo.itemData(i) == subdivision:
                 self.subdivision_combo.blockSignals(True)
@@ -392,7 +398,7 @@ class MasterTimelineContainer(QWidget):
         timeline and re-emits the value for the surrounding tab to fan out
         to other lanes via TimelineGrid.
         """
-        value = int(self.subdivision_combo.currentData())
+        value = float(self.subdivision_combo.currentData())
         self.timeline_widget.set_grid_subdivision(value)
         self.subdivision_changed.emit(value)
 

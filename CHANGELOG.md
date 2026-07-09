@@ -13,6 +13,11 @@ verbatim as the GitHub Release notes (see [docs/releasing.md](docs/releasing.md)
 
 ### Added
 
+- **A fuller timeline grid and a swing toggle.** The grid snap now ranges
+  from coarse to fine: 4, 2, 1, 1/2, 1/4, 1/8, 1/16 (4 and 2 place a line
+  every 4 and every 2 beats; the fractions subdivide the beat). A new
+  SWING toggle shifts the off-beat grid lines to a triplet feel, so blocks
+  snap to swung positions; beat and bar lines are unaffected.
 - **Drag to reorder show parts.** In the Show Structure tab, drag a part
   card onto another to move it there, in addition to the Move buttons.
 - **Autosave with crash recovery.** While you work, unsaved changes are
