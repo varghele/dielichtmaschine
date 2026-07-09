@@ -572,6 +572,16 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         # Settings menu actions
         self.actionAudioSettings.triggered.connect(self.open_audio_settings)
 
+        # Hidden deep setting: canvas sub-lane purpose labels in the Show
+        # Timeline. Reflect the persisted state in the check box, then
+        # persist + repaint on toggle.
+        from utils.app_settings import app_settings
+        self.actionShowSublaneLabels.setChecked(
+            app_settings().value(
+                "timeline/show_sublane_labels", True, type=bool))
+        self.actionShowSublaneLabels.toggled.connect(
+            self._on_toggle_sublane_labels)
+
         # View menu actions
         self.actionToggleFullscreen.triggered.connect(self._toggle_fullscreen)
         self.actionScreensaver.triggered.connect(self._start_screensaver)
@@ -1671,6 +1681,13 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             QMessageBox.critical(self, "Error", f"Failed to open render dialog: {str(e)}")
             import traceback
             traceback.print_exc()
+
+    def _on_toggle_sublane_labels(self, checked):
+        """Persist the sub-lane-label deep setting and repaint the timeline."""
+        from utils.app_settings import app_settings
+        app_settings().setValue("timeline/show_sublane_labels", checked)
+        if hasattr(self, "shows_tab") and self.shows_tab is not None:
+            self.shows_tab.refresh_sublane_labels_setting()
 
     def open_audio_settings(self):
         """Open audio settings dialog"""

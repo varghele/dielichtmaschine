@@ -223,6 +223,13 @@ class Ui_MainWindow(object):
         self.actionAudioSettings = QAction("Audio Settings...", MainWindow)
         self.actionAudioSettings.setShortcut("Ctrl+,")
         self.menuSettings.addAction(self.actionAudioSettings)
+        # Hidden deep setting: toggle the canvas sub-lane purpose labels in
+        # the Show Timeline. Checkable, persisted to the
+        # "timeline/show_sublane_labels" QSettings key (default on).
+        self.actionShowSublaneLabels = QAction(
+            "Show timeline sub-lane labels", MainWindow)
+        self.actionShowSublaneLabels.setCheckable(True)
+        self.menuSettings.addAction(self.actionShowSublaneLabels)
 
         # Help menu
         self.menuHelp = QtWidgets.QMenu("Help", parent=MainWindow)

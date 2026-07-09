@@ -490,55 +490,64 @@ class TimelineWidget(QWidget):
             painter.drawLine(0, int(y), width, int(y))
 
     def draw_sublane_labels(self, painter, width, height):
-        """Draw sublane type labels on the left side of each row."""
+        """Draw the faint sub-lane purpose labels at the start of each row.
+
+        Restyled to the brand: a faint low-alpha neutral chip with hard
+        corners (radius 0) and disabled-text mono caps, colors sniffed from
+        the active theme (custom painters can't reach a QSS role). These are
+        distinct from the DIM/COL/MOV/SPC micro-label column in the lane
+        header; a hidden deep setting
+        (``timeline/show_sublane_labels``, default True) suppresses them
+        while keeping the code path.
+        """
         if self.num_sublanes <= 1 or not self.capabilities:
             return
 
-        from PyQt6.QtGui import QFont
-        from PyQt6.QtCore import QRect
+        from utils.app_settings import app_settings
+        if not app_settings().value(
+                "timeline/show_sublane_labels", True, type=bool):
+            return
 
-        # Get sublane types in order
+        from PyQt6.QtCore import QRect
+        from gui.typography import mono_font
+        from .light_block_widget import token_qcolor
+
+        # Sub-lane purpose names in row order.
         sublane_types = []
         if self.capabilities.has_dimmer:
-            sublane_types.append(("Dimmer", QColor(255, 200, 100)))
+            sublane_types.append("Dimmer")
         if self.capabilities.has_colour:
-            sublane_types.append(("Colour", QColor(100, 255, 150)))
+            sublane_types.append("Colour")
         if self.capabilities.has_movement:
-            sublane_types.append(("Movement", QColor(100, 150, 255)))
+            sublane_types.append("Movement")
         if self.capabilities.has_special:
-            sublane_types.append(("Special", QColor(200, 100, 255)))
+            sublane_types.append("Special")
 
-        # Set font for labels
-        font = QFont()
-        font.setPointSize(8)
-        font.setBold(True)
-        painter.setFont(font)
+        painter.setFont(mono_font(7, tracking_em=0.08))
+        metrics = painter.fontMetrics()
 
-        # Draw each label
-        for i, (label, color) in enumerate(sublane_types):
+        # Faint neutral chip + disabled-text glyphs, both from brand tokens.
+        chip_fill = token_qcolor("raised", 40)
+        chip_border = token_qcolor("border", 90)
+        text_color = token_qcolor("text_disabled")
+
+        for i, label in enumerate(sublane_types):
             y_offset = i * self.sublane_height
-
-            # Calculate text size
-            metrics = painter.fontMetrics()
             text_width = metrics.horizontalAdvance(label)
             text_height = metrics.height()
 
-            # Position at left with padding
             x_pos = 4
             y_pos = y_offset + (self.sublane_height + text_height) // 2 - 3
             padding = 3
 
-            # Draw semi-transparent colored background
+            # Hard-corner faint chip (radius 0).
             bg_rect = QRect(x_pos - padding, y_offset + 2,
-                           text_width + 2 * padding, text_height + padding)
-            bg_color = QColor(color)
-            bg_color.setAlpha(100)
-            painter.setBrush(bg_color)
-            painter.setPen(QPen(color.darker(130), 1))
-            painter.drawRoundedRect(bg_rect, 2, 2)
+                            text_width + 2 * padding, text_height + padding)
+            painter.setBrush(chip_fill)
+            painter.setPen(QPen(chip_border, 1))
+            painter.drawRect(bg_rect)
 
-            # Draw text in dark color for contrast
-            painter.setPen(QPen(QColor(40, 40, 40)))
+            painter.setPen(QPen(text_color))
             painter.drawText(x_pos, y_pos, label)
 
     def paintEvent(self, event):
