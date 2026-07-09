@@ -610,6 +610,12 @@ class FixturesTab(BaseTab):
         self._group_row_delegate = GroupRowDelegate(self.table)
         self.table.setItemDelegate(self._group_row_delegate)
 
+        # Right-click a row for Duplicate / Remove (connected in
+        # connect_signals). The row outline is the only selection chrome;
+        # GroupRowDelegate strips the dotted focus rect.
+        self.table.setContextMenuPolicy(
+            Qt.ContextMenuPolicy.CustomContextMenu)
+
         header = self.table.horizontalHeader()
         header.setStretchLastSection(False)
         header.setSectionResizeMode(
@@ -781,6 +787,8 @@ class FixturesTab(BaseTab):
         self.duplicate_btn.clicked.connect(self._duplicate_fixture)
         self.group_add_btn.clicked.connect(self._add_group)
         self.table.itemSelectionChanged.connect(self._refresh_inspector)
+        self.table.customContextMenuRequested.connect(
+            self._show_table_context_menu)
 
     # ------------------------------------------------------------------
     # Config sync
@@ -1512,6 +1520,44 @@ class FixturesTab(BaseTab):
         custom_fixtures/ come first and are tagged 'bundled'."""
         from utils.fixture_library import all_fixture_files
         return all_fixture_files()
+
+    # ------------------------------------------------------------------
+    # Table context menu (Duplicate / Remove)
+    # ------------------------------------------------------------------
+    def _build_table_context_menu(self) -> QtWidgets.QMenu:
+        """The Duplicate / Remove menu for the patch table.
+
+        Split out from :meth:`_show_table_context_menu` so the action
+        wiring is testable without popping the (blocking) menu. Labels
+        match the inspector footer buttons; both actions reuse the
+        existing CRUD methods, which operate on the current selection.
+        """
+        menu = QtWidgets.QMenu(self.table)
+        duplicate_action = menu.addAction("Duplicate")
+        duplicate_action.triggered.connect(self._duplicate_fixture)
+        remove_action = menu.addAction("Remove")
+        remove_action.triggered.connect(self._remove_fixture)
+        return menu
+
+    def _show_table_context_menu(self, pos: QtCore.QPoint):
+        """Show the Duplicate / Remove menu at a right-click on the table.
+
+        Selects the row under the cursor when it is not already part of
+        the selection, then defers to the existing CRUD methods (which
+        act on the first selected row). Shows nothing when the click
+        misses every row.
+        """
+        index = self.table.indexAt(pos)
+        if not index.isValid():
+            return
+        row = index.row()
+        selection_model = self.table.selectionModel()
+        selected_rows = ({i.row() for i in selection_model.selectedRows()}
+                         if selection_model is not None else set())
+        if row not in selected_rows:
+            self.table.selectRow(row)
+        menu = self._build_table_context_menu()
+        menu.exec(self.table.viewport().mapToGlobal(pos))
 
     def _add_fixture(self):
         """Open the fixture browser and add the picked fixture(s)."""

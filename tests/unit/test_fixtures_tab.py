@@ -534,6 +534,114 @@ def test_remove_deletes_selected_fixture(qapp, sample_configuration):
 
 
 # ---------------------------------------------------------------------------
+# GroupRowDelegate: no dotted per-cell focus rectangle on selection
+# ---------------------------------------------------------------------------
+
+def test_group_row_delegate_strips_focus_and_selection(qapp):
+    """The delegate clears State_HasFocus (kills Qt's dotted focus rect)
+    and State_Selected (keeps the group tint) on the style option, so the
+    only selection chrome is the RowOutlineTableWidget outline. Asserted
+    on the option flags, not via a screenshot of the dotted line."""
+    from PyQt6.QtCore import QModelIndex
+    from PyQt6.QtWidgets import QStyle, QStyleOptionViewItem
+    from gui.widgets.group_row_delegate import GroupRowDelegate
+
+    delegate = GroupRowDelegate()
+    option = QStyleOptionViewItem()
+    option.state |= QStyle.StateFlag.State_HasFocus
+    option.state |= QStyle.StateFlag.State_Selected
+    delegate.initStyleOption(option, QModelIndex())
+    assert not (option.state & QStyle.StateFlag.State_HasFocus)
+    assert not (option.state & QStyle.StateFlag.State_Selected)
+
+
+# ---------------------------------------------------------------------------
+# Table right-click context menu: Duplicate / Remove
+# ---------------------------------------------------------------------------
+
+def test_table_context_menu_is_custom(qapp, sample_configuration):
+    from PyQt6.QtCore import Qt
+
+    tab = _make_tab(qapp, sample_configuration)
+    try:
+        assert (tab.table.contextMenuPolicy()
+                == Qt.ContextMenuPolicy.CustomContextMenu)
+    finally:
+        tab.deleteLater()
+
+
+def test_context_menu_actions_dispatch_to_crud(qapp, sample_configuration,
+                                               monkeypatch):
+    """The menu items reuse the existing CRUD methods. Triggering the
+    actions calls _duplicate_fixture / _remove_fixture (patched so no real
+    popup or config mutation runs)."""
+    tab = _make_tab(qapp, sample_configuration)
+    try:
+        called = []
+        monkeypatch.setattr(tab, "_duplicate_fixture",
+                            lambda: called.append("duplicate"))
+        monkeypatch.setattr(tab, "_remove_fixture",
+                            lambda: called.append("remove"))
+
+        menu = tab._build_table_context_menu()
+        actions = {a.text(): a for a in menu.actions()}
+        assert set(actions) == {"Duplicate", "Remove"}
+
+        actions["Duplicate"].trigger()
+        actions["Remove"].trigger()
+        assert called == ["duplicate", "remove"]
+    finally:
+        tab.deleteLater()
+
+
+def test_context_menu_selects_row_under_cursor(qapp, sample_configuration,
+                                               monkeypatch):
+    """A right-click on an unselected row selects that row before the menu
+    opens, so the CRUD methods act on the clicked fixture. The menu itself
+    is stubbed so no blocking exec runs (qt-gotchas #7)."""
+    from unittest.mock import MagicMock
+    from PyQt6 import QtCore
+    from config.models import Fixture, FixtureMode
+
+    sample_configuration.fixtures.append(Fixture(
+        universe=0, address=11, manufacturer="TestMfr", model="TestModel",
+        name="Second", group="TestGroup", current_mode="Standard",
+        available_modes=[FixtureMode(name="Standard", channels=10)],
+    ))
+    tab = _make_tab(qapp, sample_configuration)
+    try:
+        model = tab.table.model()
+        monkeypatch.setattr(tab.table, "indexAt",
+                            lambda pos: model.index(1, 0))
+        monkeypatch.setattr(tab, "_build_table_context_menu",
+                            lambda: MagicMock())
+
+        tab.table.clearSelection()
+        tab._show_table_context_menu(QtCore.QPoint(0, 0))
+        assert tab._selected_fixture_row() == 1
+    finally:
+        tab.deleteLater()
+
+
+def test_context_menu_absent_on_empty_click(qapp, sample_configuration,
+                                            monkeypatch):
+    """Right-clicking past the last row builds no menu (invalid index)."""
+    from PyQt6 import QtCore
+
+    tab = _make_tab(qapp, sample_configuration)
+    try:
+        monkeypatch.setattr(tab.table, "indexAt",
+                            lambda pos: QtCore.QModelIndex())
+        built = []
+        monkeypatch.setattr(tab, "_build_table_context_menu",
+                            lambda: built.append(1))
+        tab._show_table_context_menu(QtCore.QPoint(0, 0))
+        assert built == []
+    finally:
+        tab.deleteLater()
+
+
+# ---------------------------------------------------------------------------
 # DMX address conflict indicators
 #
 # Contract: fixtures whose (universe, address range) footprints overlap
