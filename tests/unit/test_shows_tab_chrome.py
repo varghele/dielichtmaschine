@@ -135,20 +135,12 @@ class TestGridChips:
         shows_tab.grid_chips[4].click()
 
         master = shows_tab.master_timeline
+        # The master no longer has its own combobox; the chip drives its
+        # grid drawing via the timeline widget.
         assert master.timeline_widget.grid_subdivision == 4
-        assert master.subdivision_combo.currentData() == 4
+        assert not hasattr(master, "subdivision_combo")
         assert shows_tab.audio_lane.timeline_widget.grid_subdivision == 4
         assert shows_tab.lane_widgets[0].timeline_widget.grid_subdivision == 4
-
-    def test_master_combo_change_syncs_chips(self, shows_tab):
-        from timeline_ui.master_timeline_widget import SUBDIVISION_CHOICES
-        master = shows_tab.master_timeline
-        # Drive the combo to the 1/2-beat entry (value 2.0) by index.
-        idx = next(i for i, (_l, v) in enumerate(SUBDIVISION_CHOICES)
-                   if v == 2.0)
-        master.subdivision_combo.setCurrentIndex(idx)
-        assert shows_tab.grid_chips[2].isChecked()
-        assert not shows_tab.grid_chips[1].isChecked()
 
     def test_seven_chips_labelled_by_grid_interval(self, shows_tab):
         # Chip text is the grid interval in beats, coarse to fine.
@@ -161,16 +153,14 @@ class TestGridChips:
         shows_tab.grid_chips[0.25].click()
         master = shows_tab.master_timeline
         assert master.timeline_widget.grid_subdivision == 0.25
-        assert master.subdivision_combo.currentData() == 0.25
 
-    def test_no_feedback_loop_between_chip_and_combo(self, shows_tab):
-        received = []
-        shows_tab.timeline_grid.subdivision_changed.connect(received.append)
-        shows_tab.grid_chips[2].click()
-        # set_grid_subdivision syncs the master combo silently - the
-        # grid-level signal must not re-fire from the chip path.
-        assert received == []
-        assert shows_tab.master_timeline.subdivision_combo.currentData() == 2
+    def test_grid_signals_removed_with_master_controls(self, shows_tab):
+        # The master combobox + its subdivision_changed/snap_changed fan-out
+        # signals were removed; the toolbar chips are the single control.
+        assert not hasattr(shows_tab.timeline_grid, "subdivision_changed")
+        assert not hasattr(shows_tab.timeline_grid, "snap_changed")
+        assert not hasattr(shows_tab.master_timeline, "subdivision_combo")
+        assert not hasattr(shows_tab.master_timeline, "snap_checkbox")
 
 
 class TestTransportButtons:
@@ -257,23 +247,12 @@ class TestSnapChip:
         assert not shows_tab.snap_chip.isChecked()
 
         master = shows_tab.master_timeline
+        # The master has no snap checkbox now; the chip drives its ruler
+        # snap via the timeline widget, and each lane follows.
         assert master.timeline_widget.snap_to_grid is False
-        assert not master.snap_checkbox.isChecked()
         assert shows_tab.lane_widgets[0].timeline_widget.snap_to_grid is False
-
-    def test_master_snap_checkbox_syncs_chip_without_loop(self, shows_tab):
-        received = []
-        shows_tab.timeline_grid.snap_changed.connect(received.append)
-
-        shows_tab.master_timeline.snap_checkbox.setChecked(False)
-        assert not shows_tab.snap_chip.isChecked()
-        assert received == [False]
-
-        # Chip path must not re-emit the grid-level signal.
-        received.clear()
-        shows_tab._on_snap_chip_clicked(True)
-        assert received == []
-        assert shows_tab.master_timeline.snap_checkbox.isChecked()
+        # The per-lane checkbox mirrors the global state.
+        assert not shows_tab.lane_widgets[0].snap_checkbox.isChecked()
 
 
 class TestSwingChip:
@@ -467,6 +446,53 @@ class TestThemeRolesExist:
             assert rule in qss, rule
 
 
+class TestButtonCoherence:
+    """Every toolbar/transport/pane button maps onto one coherent role
+    system so there is no font/weight/color drift within a zone."""
+
+    def test_toolbar_action_roles(self, shows_tab):
+        # Add semantic -> success; the sole loud CTA -> cta-accent; every
+        # other text action -> cta-outline (bordered display caps).
+        assert shows_tab.add_lane_btn.property("role") == "success"
+        assert shows_tab.autogen_btn.property("role") == "cta-accent"
+        assert shows_tab.save_btn.property("role") == "cta-outline"
+        assert shows_tab.inspector_btn.property("role") == "cta-outline"
+        assert shows_tab.pane_popout_btn.property("role") == "cta-outline"
+
+    def test_display_caps_actions_are_uppercase(self, shows_tab):
+        # cta-accent / cta-outline text buttons carry display caps.
+        assert shows_tab.autogen_btn.text() == "AUTO-GENERATE"
+        assert shows_tab.save_btn.text() == "SAVE"
+        assert shows_tab.inspector_btn.text() == "INSPECTOR"
+
+    def test_toggle_chips_share_the_output_select_role(self, shows_tab):
+        for chip in (shows_tab.snap_chip, shows_tab.swing_chip,
+                     *shows_tab.grid_chips.values()):
+            assert chip.property("role") == "output-select"
+
+    def test_transport_uses_function_colors(self, shows_tab):
+        assert shows_tab.play_btn.property("role") == "success"
+        assert shows_tab.stop_btn.property("role") == "destructive"
+
+    def test_icon_only_chevrons_share_the_pane_icon_role(self, shows_tab):
+        for btn in (shows_tab.pane_toggle_btn, shows_tab.pane_collapse_btn):
+            assert btn.property("role") == "pane-icon"
+            assert btn.text() == ""
+
+    def test_lane_and_audio_chips_are_output_select(self, shows_tab):
+        from timeline.light_lane import LightLane
+        shows_tab._add_lane_widget(LightLane("L1"))
+        lane = shows_tab.lane_widgets[0]
+        assert lane.mute_button.property("role") == "output-select"
+        assert lane.solo_button.property("role") == "output-select"
+        assert lane.add_block_button.property("role") == "success"
+        assert lane.remove_button.property("role") == "destructive"
+        assert shows_tab.audio_lane.mute_button.property("role") == \
+            "output-select"
+        assert shows_tab.audio_lane.load_button.property("role") == \
+            "cta-outline"
+
+
 class TestPreservedChrome:
     def test_existing_toolbar_widgets_survive(self, shows_tab):
         """gui.py drives these by attribute - pin their existence."""
@@ -477,7 +503,7 @@ class TestPreservedChrome:
                      "embedded_riff_panel", "embedded_visualizer",
                      "snap_chip", "status_line", "block_inspector"):
             assert getattr(shows_tab, name, None) is not None, name
-        assert shows_tab.autogen_btn.property("role") == "primary"
+        assert shows_tab.autogen_btn.property("role") == "cta-accent"
 
     def test_show_loads_and_zoom_still_works(self, shows_tab):
         shows_tab.update_from_config()

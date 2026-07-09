@@ -51,8 +51,6 @@ class TimelineGrid(QWidget):
     playhead_moved = pyqtSignal(float)
     zoom_changed = pyqtSignal(float)
     audio_file_changed = pyqtSignal(str)
-    subdivision_changed = pyqtSignal(float)  # Steps-per-beat (SUBDIVISION_CHOICES)
-    snap_changed = pyqtSignal(bool)
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -165,11 +163,9 @@ class TimelineGrid(QWidget):
 
         master_container.timeline_widget.playhead_moved.connect(self.playhead_moved.emit)
         master_container.timeline_widget.zoom_changed.connect(self.zoom_changed.emit)
-        # When the master combobox moves, fan the new subdivision out to every
-        # lane and re-emit so the surrounding tab can act on it (auto-save etc).
-        master_container.subdivision_changed.connect(self._on_master_subdivision_changed)
-        # Same for the master Snap checkbox — fan out to lane snap state.
-        master_container.snap_changed.connect(self._on_master_snap_changed)
+        # The master no longer carries its own Snap/Grid controls; the
+        # toolbar's global chips drive set_grid_subdivision / set_snap_to_grid
+        # / set_swing on this grid, which fan out to master + audio + lanes.
 
     def set_audio_lane(self, audio_lane) -> None:
         """Embed the audio lane as the second row."""
@@ -307,20 +303,6 @@ class TimelineGrid(QWidget):
             if hasattr(tw, "set_swing"):
                 tw.set_swing(enabled)
 
-    def _on_master_subdivision_changed(self, subdivision: float) -> None:
-        """Fan-out hook for the master combobox."""
-        # Master container already updated itself before emitting; only
-        # propagate to audio + light lanes here, then re-emit upward.
-        if self._audio_lane is not None:
-            tw = getattr(self._audio_lane, "timeline_widget", None)
-            if tw is not None and hasattr(tw, "set_grid_subdivision"):
-                tw.set_grid_subdivision(subdivision)
-        for entry in self._lane_rows:
-            tw = entry["lane"].timeline_widget
-            if hasattr(tw, "set_grid_subdivision"):
-                tw.set_grid_subdivision(subdivision)
-        self.subdivision_changed.emit(subdivision)
-
     def set_snap_to_grid(self, snap: bool) -> None:
         """Push snap-to-grid state to master + audio + every light lane.
 
@@ -345,26 +327,6 @@ class TimelineGrid(QWidget):
                 cb.blockSignals(True)
                 cb.setChecked(snap)
                 cb.blockSignals(False)
-
-    def _on_master_snap_changed(self, snap: bool) -> None:
-        """Fan-out hook for the master snap checkbox."""
-        # Master container already updated its own timeline_widget + checkbox
-        # before emitting; only propagate to audio + light lanes here.
-        if self._audio_lane is not None:
-            tw = getattr(self._audio_lane, "timeline_widget", None)
-            if tw is not None and hasattr(tw, "set_snap_to_grid"):
-                tw.set_snap_to_grid(snap)
-        for entry in self._lane_rows:
-            lane = entry["lane"]
-            tw = lane.timeline_widget
-            if hasattr(tw, "set_snap_to_grid"):
-                tw.set_snap_to_grid(snap)
-            cb = getattr(lane, "snap_checkbox", None)
-            if cb is not None:
-                cb.blockSignals(True)
-                cb.setChecked(snap)
-                cb.blockSignals(False)
-        self.snap_changed.emit(snap)
 
     def set_zoom_factor(self, zoom_factor: float) -> None:
         if self._master_container is not None:

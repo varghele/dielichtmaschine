@@ -29,36 +29,33 @@ def _make_lane_widget(config, targets):
 
 
 class TestMuteSoloChips:
-    """Checked state uses brand tokens (accent), never Material red/amber."""
+    """Mute/Solo are the shared output-select toggle-chip role (same as the
+    toolbar SNAP/SWING chips), with no per-chip inline stylesheet - so every
+    toggle chip in the timeline reads as one family. Assert the role and the
+    theme rule, never widget.styleSheet()."""
 
-    def test_mute_chip_uses_accent_tokens(self, qapp, sample_configuration):
+    def test_mute_chip_is_output_select(self, qapp, sample_configuration):
         widget = _make_lane_widget(sample_configuration, ["TestGroup"])
         try:
-            qss = widget.mute_button.styleSheet()
-            assert ":checked" in qss
-            assert THEMES["dark"]["accent"] in qss
-            # The old Material red/amber must be gone.
-            assert "#d32f2f" not in qss.lower()
-            assert "#ffc107" not in qss.lower()
+            assert widget.mute_button.property("role") == "output-select"
+            # No leftover per-chip inline stylesheet (Material red is gone).
+            assert widget.mute_button.styleSheet() == ""
         finally:
             widget.deleteLater()
 
-    def test_solo_chip_is_filled_accent(self, qapp, sample_configuration):
+    def test_solo_chip_is_output_select(self, qapp, sample_configuration):
         widget = _make_lane_widget(sample_configuration, ["TestGroup"])
         try:
-            qss = widget.solo_button.styleSheet()
-            assert THEMES["dark"]["accent"] in qss
-            assert THEMES["dark"]["on_accent"] in qss
-            assert "#ffc107" not in qss.lower()
+            assert widget.solo_button.property("role") == "output-select"
+            assert widget.solo_button.styleSheet() == ""
         finally:
             widget.deleteLater()
 
-    def test_mute_and_solo_are_distinct(self, qapp, sample_configuration):
-        widget = _make_lane_widget(sample_configuration, ["TestGroup"])
-        try:
-            assert widget.mute_button.styleSheet() != widget.solo_button.styleSheet()
-        finally:
-            widget.deleteLater()
+    def test_output_select_checked_uses_accent(self):
+        from gui.theme_tokens import render_theme
+        qss = render_theme("dark")
+        assert 'QPushButton[role="output-select"]:checked' in qss
+        assert THEMES["dark"]["accent"] in qss
 
 
 class TestFixtureCount:

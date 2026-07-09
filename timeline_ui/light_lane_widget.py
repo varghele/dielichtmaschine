@@ -8,7 +8,7 @@ from PyQt6.QtWidgets import (QWidget, QHBoxLayout, QVBoxLayout, QLabel,
 from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtGui import QUndoStack
 from .timeline_widget import TimelineWidget
-from .light_block_widget import LightBlockWidget, active_tokens
+from .light_block_widget import LightBlockWidget
 from .undo_commands import InsertRiffCommand, DeleteBlockCommand, AddBlockCommand
 from timeline.light_lane import LightLane
 
@@ -205,17 +205,17 @@ class LightLaneWidget(QFrame):
         # Row 3: Mute, Solo, Add Block
         controls_layout = QHBoxLayout()
 
-        # Mute / Solo toggle chips. Base look from the theme; the
-        # :checked state uses brand tokens (mute = accent-tint outline,
-        # solo = filled accent) so the two stay distinct and subtle,
-        # never the old Material red/amber. density=compact keeps the
-        # single glyph inside the 30x25 chip.
+        # Mute / Solo toggle chips - the shared output-select chip role
+        # (same as the toolbar SNAP/SWING and grid chips) so every toggle
+        # chip in the timeline reads as one family: accent outline when
+        # active, never the old Material red/amber or a per-chip inline
+        # stylesheet. density=compact keeps the single glyph inside 30x25.
         self.mute_button = QPushButton("M")
         self.mute_button.setFixedSize(30, 25)
         self.mute_button.setCheckable(True)
         self.mute_button.setChecked(self.lane.muted)
         self.mute_button.setProperty("density", "compact")
-        self.mute_button.setStyleSheet(self._mute_chip_qss())
+        self.mute_button.setProperty("role", "output-select")
         self.mute_button.toggled.connect(self.on_mute_toggled)
         controls_layout.addWidget(self.mute_button)
 
@@ -224,7 +224,7 @@ class LightLaneWidget(QFrame):
         self.solo_button.setCheckable(True)
         self.solo_button.setChecked(self.lane.solo)
         self.solo_button.setProperty("density", "compact")
-        self.solo_button.setStyleSheet(self._solo_chip_qss())
+        self.solo_button.setProperty("role", "output-select")
         self.solo_button.toggled.connect(self.on_solo_toggled)
         controls_layout.addWidget(self.solo_button)
 
@@ -248,30 +248,6 @@ class LightLaneWidget(QFrame):
         layout.addLayout(controls_layout)
 
         return widget
-
-    def _mute_chip_qss(self) -> str:
-        """Checked-state look for the Mute chip: accent-tint outline.
-        Built from brand tokens (never Material red)."""
-        t = active_tokens()
-        return (
-            "QPushButton:checked {"
-            f"background-color: {t['accent_tint']};"
-            f"color: {t['accent']};"
-            f"border: 1px solid {t['accent_line']};"
-            "}"
-        )
-
-    def _solo_chip_qss(self) -> str:
-        """Checked-state look for the Solo chip: filled accent (the
-        spotlight). Distinct from Mute's outline, both brand tokens."""
-        t = active_tokens()
-        return (
-            "QPushButton:checked {"
-            f"background-color: {t['accent']};"
-            f"color: {t['on_accent']};"
-            f"border: 1px solid {t['accent_line']};"
-            "}"
-        )
 
     def _fixture_count(self) -> int:
         """Number of distinct fixtures this lane targets.

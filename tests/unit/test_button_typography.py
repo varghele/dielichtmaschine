@@ -137,17 +137,25 @@ class TestCallSitesMigrated:
             home.deleteLater()
 
     def test_timeline_toolbar_shares_one_family(self, qapp):
-        """Save / Auto-Generate / Inspector / + Add Light Lane / POP OUT."""
+        """SAVE / AUTO-GENERATE / INSPECTOR / + Add Light Lane / POP OUT.
+
+        Auto-Generate is the sole accent-filled CTA (cta-accent); the other
+        text actions read uniform as bordered display caps (cta-outline);
+        the Add action stays the success color.
+        """
         from config.models import Configuration
         from gui.tabs.shows_tab import ShowsTab
         tab = ShowsTab(Configuration(), parent=None)
         try:
-            assert tab.save_btn.property("role") == "primary"
-            assert tab.autogen_btn.property("role") == "primary"
+            assert tab.autogen_btn.property("role") == "cta-accent"
+            assert tab.save_btn.property("role") == "cta-outline"
+            assert tab.inspector_btn.property("role") == "cta-outline"
             assert tab.add_lane_btn.property("role") == "success"
-            assert not tab.inspector_btn.property("role")
-            # The only display-family button in the strip is uppercase.
             assert tab.pane_popout_btn.text() == "POP OUT"
             assert tab.pane_popout_btn.property("role") == "cta-outline"
+            # Display-caps CTAs carry uppercase text.
+            assert tab.autogen_btn.text() == "AUTO-GENERATE"
+            assert tab.save_btn.text() == "SAVE"
+            assert tab.inspector_btn.text() == "INSPECTOR"
         finally:
             tab.deleteLater()

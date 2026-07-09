@@ -305,15 +305,19 @@ class ShowsTab(BaseTab):
         self.add_lane_btn.setProperty("role", "success")
         toolbar.addWidget(self.add_lane_btn)
 
-        # Auto-generate button - the accent CTA of the 4a toolbar
-        # ("SHOW AUS AUDIO GENERIEREN" in the mockup).
-        self.autogen_btn = QPushButton("Auto-Generate")
-        self.autogen_btn.setProperty("role", "primary")
+        # Auto-generate button - the single loud CTA of the 4a toolbar
+        # ("SHOW AUS AUDIO GENERIEREN" in the mockup): accent-filled display
+        # caps, the only accent-filled button in the strip.
+        self.autogen_btn = QPushButton("AUTO-GENERATE")
+        self.autogen_btn.setProperty("role", "cta-accent")
         self.autogen_btn.setToolTip("Automatically generate light show from audio analysis")
         toolbar.addWidget(self.autogen_btn)
 
-        # Inspector toggle (checkable — uses default theme :checked styling)
-        self.inspector_btn = QPushButton("Inspector")
+        # Inspector toggle - a bordered display-caps action so it reads
+        # uniform with the other text actions (Save, POP OUT). Checkable:
+        # the base :checked rule tints it while the inspector is open.
+        self.inspector_btn = QPushButton("INSPECTOR")
+        self.inspector_btn.setProperty("role", "cta-outline")
         self.inspector_btn.setCheckable(True)
         self.inspector_btn.setEnabled(False)
         self.inspector_btn.setToolTip("Show generation decision inspector (requires auto-generated show)")
@@ -387,9 +391,11 @@ class ShowsTab(BaseTab):
 
         toolbar.addStretch()
 
-        # Save button
-        self.save_btn = QPushButton("Save")
-        self.save_btn.setProperty("role", "primary")
+        # Save button - a bordered display-caps text action (uniform with
+        # Inspector / POP OUT); not accent-filled, so Auto-Generate stays
+        # the sole CTA of the strip.
+        self.save_btn = QPushButton("SAVE")
+        self.save_btn.setProperty("role", "cta-outline")
         toolbar.addWidget(self.save_btn)
 
         # 3D-pane chevron (4a right-pane collapse affordance, kept in the
@@ -400,6 +406,11 @@ class ShowsTab(BaseTab):
         self.pane_toggle_btn.setCheckable(True)
         self.pane_toggle_btn.setChecked(True)
         self.pane_toggle_btn.setFixedWidth(TOOLBAR_BTN_WIDTH)
+        # Flat icon-only chevron (role="pane-icon", same as the Auto tab and
+        # riff-browser collapse chevrons) so the icon-only buttons read as
+        # one family; the base :checked accent border would fight an
+        # always-checked toggle.
+        self.pane_toggle_btn.setProperty("role", "pane-icon")
         self.pane_toggle_btn.setToolTip("Show or hide the 3D preview pane")
         toolbar.addWidget(self.pane_toggle_btn)
 
@@ -493,6 +504,9 @@ class ShowsTab(BaseTab):
         # chevron drives (reference puts one in the pane header).
         self.pane_collapse_btn = QPushButton()
         self.pane_collapse_btn.setFixedWidth(TOOLBAR_BTN_WIDTH)
+        # Flat icon-only chevron (role="pane-icon"), consistent with the
+        # toolbar pane-toggle chevron.
+        self.pane_collapse_btn.setProperty("role", "pane-icon")
         self.pane_collapse_btn.setToolTip("Collapse the 3D preview pane")
         row.addWidget(self.pane_collapse_btn)
         return header
@@ -752,17 +766,17 @@ class ShowsTab(BaseTab):
         self.save_btn.clicked.connect(self.save_to_config)
         self.pane_toggle_btn.toggled.connect(self._on_pane_toggle)
 
-        # Grid chips: toolbar -> grid (master combo syncs silently);
-        # master combo -> grid.subdivision_changed -> chips.
+        # Grid chips are the single global GRID control (the master's own
+        # combobox was removed): a click fans the subdivision out to master
+        # + audio + every lane via TimelineGrid.
         for value, chip in self.grid_chips.items():
             chip.clicked.connect(
                 lambda _=False, v=value: self._on_grid_chip_clicked(v))
-        self.timeline_grid.subdivision_changed.connect(self._sync_grid_chips)
 
-        # SNAP chip: same non-looping pattern (set_snap_to_grid syncs the
-        # master checkbox silently; snap_changed only fires from the master).
+        # SNAP chip is the single global SNAP control (the master's own snap
+        # checkbox was removed): a click fans out via TimelineGrid. Per-lane
+        # snap checkboxes stay as individual overrides.
         self.snap_chip.clicked.connect(self._on_snap_chip_clicked)
-        self.timeline_grid.snap_changed.connect(self._sync_snap_chip)
 
         # SWING chip: one-way push (no master swing control to sync back).
         self.swing_chip.clicked.connect(self._on_swing_chip_clicked)
@@ -1174,7 +1188,7 @@ class ShowsTab(BaseTab):
 
         # Disable button during generation
         self.autogen_btn.setEnabled(False)
-        self.autogen_btn.setText("Generating...")
+        self.autogen_btn.setText("GENERATING...")
 
         # Run in background thread
         self._autogen_worker = AutogenWorker(
@@ -1188,7 +1202,7 @@ class ShowsTab(BaseTab):
     def _on_autogen_finished(self, lanes, report=None):
         """Handle generated lanes from background worker."""
         self.autogen_btn.setEnabled(True)
-        self.autogen_btn.setText("Auto-Generate")
+        self.autogen_btn.setText("AUTO-GENERATE")
 
         # Store generation report for inspector
         self._generation_report = report
@@ -1239,7 +1253,7 @@ class ShowsTab(BaseTab):
     def _on_autogen_error(self, error_msg):
         """Handle auto-generation error."""
         self.autogen_btn.setEnabled(True)
-        self.autogen_btn.setText("Auto-Generate")
+        self.autogen_btn.setText("AUTO-GENERATE")
         QMessageBox.critical(self, "Auto-Generate Error",
             f"Generation failed:\n{error_msg}",
             QMessageBox.StandardButton.Ok)
@@ -1372,33 +1386,27 @@ class ShowsTab(BaseTab):
 
     def _on_grid_chip_clicked(self, value: float):
         """Toolbar chip -> TimelineGrid (fans out to master + audio +
-        every lane; the master combobox syncs without re-emitting)."""
+        every lane; the master's grid drawing follows)."""
         self.timeline_grid.set_grid_subdivision(value)
-        self._update_status_line()
-
-    def _sync_grid_chips(self, value: float):
-        """Master combobox change -> check the matching toolbar chip.
-
-        setChecked never emits clicked, so this can't loop back into
-        _on_grid_chip_clicked.
-        """
-        chip = self.grid_chips.get(value)
-        if chip is not None and not chip.isChecked():
-            chip.setChecked(True)
         self._update_status_line()
 
     def _on_snap_chip_clicked(self, checked: bool):
         """Toolbar SNAP chip -> TimelineGrid (master + audio + lanes)."""
         self.timeline_grid.set_snap_to_grid(checked)
 
-    def _sync_snap_chip(self, snap: bool):
-        """Master snap checkbox -> toolbar chip (no clicked signal, no loop)."""
-        if self.snap_chip.isChecked() != snap:
-            self.snap_chip.setChecked(snap)
-
     def _on_swing_chip_clicked(self, checked: bool):
         """Toolbar SWING chip -> TimelineGrid (master + audio + lanes)."""
         self.timeline_grid.set_swing(checked)
+
+    def refresh_sublane_labels_setting(self):
+        """Repaint the lane timelines after the hidden
+        ``timeline/show_sublane_labels`` deep setting is toggled from the
+        Settings menu. Only light-lane timelines draw the canvas sub-lane
+        purpose labels, so only those need invalidating."""
+        for lane_widget in self.lane_widgets:
+            tw = getattr(lane_widget, "timeline_widget", None)
+            if tw is not None:
+                tw.update()
 
     # === 3D Preview Pane Toggle ===
 

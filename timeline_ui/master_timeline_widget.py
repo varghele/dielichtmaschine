@@ -3,8 +3,7 @@
 # Adapted from midimaker_and_show_structure/ui/master_timeline_widget.py
 
 from PyQt6.QtWidgets import (QWidget, QHBoxLayout, QVBoxLayout, QLabel,
-                             QScrollArea, QStyle, QStyleOption, QComboBox,
-                             QCheckBox)
+                             QScrollArea, QStyle, QStyleOption)
 from PyQt6.QtCore import Qt, pyqtSignal, QPoint, QRectF
 from PyQt6.QtGui import QPainter, QPen, QColor, QPolygon, QBrush
 from .timeline_widget import TimelineWidget, iter_grid_steps
@@ -242,12 +241,19 @@ class MasterTimelineContainer(QWidget):
     playhead_moved = pyqtSignal(float)
     scroll_position_changed = pyqtSignal(int)
     zoom_changed = pyqtSignal(float)
-    subdivision_changed = pyqtSignal(float)  # Steps-per-beat (see SUBDIVISION_CHOICES)
-    snap_changed = pyqtSignal(bool)  # Master snap toggle — fan out to all lanes
 
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setup_ui()
+
+    def _info_style(self, point_size: int) -> str:
+        """Info-readout stylesheet with the color sourced from the active
+        theme (text_secondary), not a hardcoded #333 that only reads on a
+        light background. Custom-styled QLabels can't reach a QSS role, so
+        we sniff the brand tokens the same way the block painter does."""
+        from .light_block_widget import active_tokens
+        return (f"color: {active_tokens()['text_secondary']}; "
+                f"font-size: {point_size}px;")
 
     def setup_ui(self):
         layout = QVBoxLayout(self)
@@ -267,49 +273,20 @@ class MasterTimelineContainer(QWidget):
         label_layout.addWidget(master_label)
         label_layout.addStretch()
 
-        # Info display widget
+        # Info display widget. The master no longer carries its own
+        # Snap/Grid controls: the toolbar's global SNAP / GRID / SWING
+        # (fanned out via TimelineGrid) drive the master's grid drawing,
+        # and per-lane snap lives on each lane's own checkbox.
         self.info_widget = QLabel()
-        self.info_widget.setStyleSheet("color: #333; font-size: 10px; font-weight: bold;")
+        self.info_widget.setStyleSheet(self._info_style(10))
         self.info_widget.setText("Time: 0.00s | BPM: 120.0 | Zoom: 1.0x")
-
-        # Master snap toggle — when off, the playhead can be dragged to
-        # arbitrary times and lane block edits ignore the grid. The toggle
-        # fans out to every lane via TimelineGrid so all snapping stays in
-        # sync with what the user sees on the master ruler.
-        self.snap_checkbox = QCheckBox("Snap")
-        self.snap_checkbox.setChecked(True)
-        self.snap_checkbox.setToolTip(
-            "Snap playhead and block edits to the grid set in 'Grid' below."
-        )
-        self.snap_checkbox.toggled.connect(self._on_snap_toggled)
-
-        # Grid subdivision picker — controls how fine snap-to-grid is.
-        self.subdivision_label = QLabel("Grid:")
-        self.subdivision_label.setStyleSheet("font-size: 10px;")
-        self.subdivision_combo = QComboBox()
-        self.subdivision_combo.setToolTip(
-            "Grid resolution. 4/2 = a line every 4/2 beats; 1 = on the beat; "
-            "1/2 ... 1/16 = sub-beat lines."
-        )
-        for label, value in SUBDIVISION_CHOICES:
-            self.subdivision_combo.addItem(label, value)
-        # Default to the on-beat entry (value 1.0) to match the whole-beat
-        # default grid, not the first catalog entry.
-        default_index = next(
-            i for i, (_label, v) in enumerate(SUBDIVISION_CHOICES) if v == 1.0)
-        self.subdivision_combo.setCurrentIndex(default_index)
-        self.subdivision_combo.currentIndexChanged.connect(self._on_subdivision_changed)
 
         # NOTE: this top_row_layout is what shows BEFORE detach_pieces() runs
         # (e.g., if MasterTimelineContainer is used standalone). Once embedded
         # in TimelineGrid, detach_pieces() rebuilds the header into a 2-row
-        # stack so the controls don't fight the info_widget for space inside
-        # the 320 px header column.
+        # stack (title row + info row).
         top_row_layout.addWidget(timeline_label)
         top_row_layout.addWidget(self.info_widget, 1)
-        top_row_layout.addWidget(self.snap_checkbox)
-        top_row_layout.addWidget(self.subdivision_label)
-        top_row_layout.addWidget(self.subdivision_combo)
 
         # Bottom row with scrollable timeline
         bottom_row_layout = QHBoxLayout()
@@ -366,41 +343,20 @@ class MasterTimelineContainer(QWidget):
         self.update_info_display(position)
 
     def set_snap_to_grid(self, snap: bool):
-        """Set snap to grid for playhead. Also syncs the snap checkbox so
-        programmatic toggles match the UI without re-emitting snap_changed.
+        """Set snap to grid for the master ruler's playhead.
+
+        Driven by the toolbar's global SNAP chip via TimelineGrid; the
+        master no longer owns a snap control of its own.
         """
         self.timeline_widget.set_snap_to_grid(snap)
-        if hasattr(self, "snap_checkbox") and self.snap_checkbox is not None:
-            self.snap_checkbox.blockSignals(True)
-            self.snap_checkbox.setChecked(snap)
-            self.snap_checkbox.blockSignals(False)
-
-    def _on_snap_toggled(self, checked: bool):
-        """User flipped the master Snap checkbox."""
-        self.timeline_widget.set_snap_to_grid(checked)
-        self.snap_changed.emit(checked)
 
     def set_grid_subdivision(self, subdivision: float):
-        """Set the master timeline's grid subdivision and sync the combobox."""
-        self.timeline_widget.set_grid_subdivision(subdivision)
-        # Reflect on combobox without re-emitting subdivision_changed. Compare
-        # against the stored catalog value (both come from SUBDIVISION_CHOICES,
-        # so the float match is exact) rather than doing any arithmetic.
-        for i in range(self.subdivision_combo.count()):
-            if self.subdivision_combo.itemData(i) == subdivision:
-                self.subdivision_combo.blockSignals(True)
-                self.subdivision_combo.setCurrentIndex(i)
-                self.subdivision_combo.blockSignals(False)
-                break
+        """Set the master timeline's grid drawing resolution.
 
-    def _on_subdivision_changed(self, _index: int):
-        """Combobox handler — pushes the new subdivision into the master
-        timeline and re-emits the value for the surrounding tab to fan out
-        to other lanes via TimelineGrid.
+        Driven by the toolbar's global GRID chips via TimelineGrid; the
+        master no longer owns a grid combobox of its own.
         """
-        value = float(self.subdivision_combo.currentData())
-        self.timeline_widget.set_grid_subdivision(value)
-        self.subdivision_changed.emit(value)
+        self.timeline_widget.set_grid_subdivision(subdivision)
 
     def sync_scroll_position(self, position: int):
         """Sync scroll position with other timelines."""
@@ -416,17 +372,17 @@ class MasterTimelineContainer(QWidget):
         """Return (header_widget, stripe_widget) for embedding in TimelineGrid.
 
         Inside TimelineGrid the header is constrained to a 320 px column to
-        match the lane controls. Stuffing title + info_widget + Snap + Grid
-        on a single row overflows that budget — the rightmost controls get
-        pushed off-screen. This method builds a 2-row stack instead:
+        match the lane controls. The header is a 2-row stack:
 
             ┌─ MasterTimelineHeader (320 px wide) ───────────┐
-            │ Master Timeline      Snap ✓   Grid: [1 ▾]      │  ← controls
+            │ Master                                         │  ← title
             │ Time: 0.00s | BPM: 120.0 | Zoom: 1.0x          │  ← info
             └────────────────────────────────────────────────┘
 
-        Signals on ``self`` remain wired (they pass through ``timeline_widget``
-        and the controls themselves), so callers keep using
+        The master's own Snap/Grid controls were removed - the toolbar's
+        global SNAP / GRID / SWING drive the master ruler's grid drawing
+        via TimelineGrid. Signals on ``self`` remain wired (they pass
+        through ``timeline_widget``), so callers keep using
         ``self.set_playhead_position``, ``self.playhead_moved``, etc.
         """
         from PyQt6.QtWidgets import QWidget, QHBoxLayout, QVBoxLayout, QLabel
@@ -442,7 +398,7 @@ class MasterTimelineContainer(QWidget):
         outer.setContentsMargins(8, 4, 8, 4)
         outer.setSpacing(2)
 
-        # Row 1 — title and snap/grid controls.
+        # Row 1 — title only.
         controls_row = QHBoxLayout()
         controls_row.setContentsMargins(0, 0, 0, 0)
         controls_row.setSpacing(6)
@@ -450,26 +406,12 @@ class MasterTimelineContainer(QWidget):
         master_label.setStyleSheet("font-weight: bold; font-size: 12px;")
         controls_row.addWidget(master_label)
         controls_row.addStretch()
-        if hasattr(self, "snap_checkbox") and self.snap_checkbox is not None:
-            self.snap_checkbox.setParent(header)
-            self.snap_checkbox.setStyleSheet("font-size: 11px;")
-            controls_row.addWidget(self.snap_checkbox)
-        if hasattr(self, "subdivision_label") and self.subdivision_label is not None:
-            self.subdivision_label.setParent(header)
-            controls_row.addWidget(self.subdivision_label)
-        if hasattr(self, "subdivision_combo") and self.subdivision_combo is not None:
-            self.subdivision_combo.setParent(header)
-            # A compact combobox keeps the controls row inside the 320 px
-            # column even when the dropdown items are wider than the field.
-            self.subdivision_combo.setMinimumWidth(70)
-            self.subdivision_combo.setMaximumWidth(110)
-            controls_row.addWidget(self.subdivision_combo)
         outer.addLayout(controls_row)
 
         # Row 2 — info display (Time/BPM/Zoom/Part).
         if hasattr(self, "info_widget") and self.info_widget is not None:
             self.info_widget.setParent(header)
-            self.info_widget.setStyleSheet("font-size: 9px; color: gray;")
+            self.info_widget.setStyleSheet(self._info_style(9))
             outer.addWidget(self.info_widget)
 
         # Detach the timeline from the scrollarea so TimelineGrid can take it.

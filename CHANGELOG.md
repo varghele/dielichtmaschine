@@ -13,6 +13,10 @@ verbatim as the GitHub Release notes (see [docs/releasing.md](docs/releasing.md)
 
 ### Added
 
+- **A Settings toggle for the timeline sub-lane labels.** The faint
+  dimmer/colour/movement/special labels drawn on each sub-lane were
+  restyled to the brand, and Settings now has a "Show timeline sub-lane
+  labels" switch to hide them (they stay in the code, off is one click).
 - **A Live tab (first pass).** The touch-palette busking surface (North
   Star layout 3b): pick fixture groups on the left, apply palette cells
   (Static / Strobe / Sparkle / Waterfall / Circle / White wash) to the
@@ -39,6 +43,14 @@ verbatim as the GitHub Release notes (see [docs/releasing.md](docs/releasing.md)
 
 ### Changed
 
+- **Timeline snap is per-lane again.** The master timeline no longer has
+  its own Snap and Grid controls (they overrode the individual lane
+  snaps); the per-lane snap checkboxes plus the toolbar's global
+  GRID/SNAP/SWING are the controls now.
+- **The timeline buttons are consistent.** Across the toolbar, transport
+  and lanes they follow one scheme: Add actions green, Auto-Generate the
+  single accent CTA, other text buttons bordered caps, toggles as chips,
+  Play/Stop in the function colors.
 - **The timeline transport moved to the top.** The play / stop / scrubber
   bar now sits under the toolbar instead of at the bottom, matching the
   North Star. (One self-contained change, easy to revert.)

@@ -7,7 +7,6 @@ from PyQt6.QtWidgets import (QWidget, QHBoxLayout, QVBoxLayout, QLabel,
                              QFileDialog, QLineEdit)
 from PyQt6.QtCore import Qt, pyqtSignal
 from .timeline_widget import TimelineWidget
-from .light_block_widget import active_tokens
 
 # Try to import audio components - may not be available in all installations
 try:
@@ -169,12 +168,14 @@ class AudioLaneWidget(QFrame):
         self.file_path_edit.setReadOnly(True)
         file_layout.addWidget(self.file_path_edit, 1)
 
-        self.load_button = QPushButton("Load")
-        self.load_button.setFixedWidth(50)
-        # density=compact tightens padding so "Load" fits in 50 px wide;
-        # the global 6×14 padding leaves only 22 px for the text and
-        # crushes it.
+        self.load_button = QPushButton("LOAD")
+        self.load_button.setFixedWidth(56)
+        # cta-outline is the shared bordered display-caps role for text
+        # actions across the timeline (Save, Inspector, POP OUT); "LOAD"
+        # joins them. density=compact tightens padding so the caps fit in
+        # the narrow lane-header column.
         self.load_button.setProperty("density", "compact")
+        self.load_button.setProperty("role", "cta-outline")
         self.load_button.clicked.connect(self._on_load_clicked)
         file_layout.addWidget(self.load_button)
 
@@ -183,17 +184,17 @@ class AudioLaneWidget(QFrame):
         # Row 3: Volume and mute controls
         controls_layout = QHBoxLayout()
 
-        # Mute chip — base look from the theme; the :checked rule uses
-        # brand tokens (accent-tint outline), matching the light lane
-        # mute chip, never the old Material red. density=compact keeps
-        # the glyph inside the 30x25 chip. (Don't use "size" as the
-        # property name — collides with Qt's QSize geometry property.)
+        # Mute chip - the shared output-select toggle-chip role, matching
+        # the light-lane mute/solo chips and the toolbar SNAP/SWING chips
+        # (accent outline when active, no per-chip inline stylesheet).
+        # density=compact keeps the glyph inside the 30x25 chip. (Don't use
+        # "size" as the property name - collides with Qt's QSize property.)
         self.mute_button = QPushButton("M")
         self.mute_button.setFixedSize(30, 25)
         self.mute_button.setCheckable(True)
         self.mute_button.setProperty("density", "compact")
+        self.mute_button.setProperty("role", "output-select")
         self.mute_button.toggled.connect(self._on_mute_toggled)
-        self.mute_button.setStyleSheet(self._mute_chip_qss())
         controls_layout.addWidget(self.mute_button)
 
         from gui.typography import MicroLabel
@@ -218,18 +219,6 @@ class AudioLaneWidget(QFrame):
         layout.addLayout(controls_layout)
 
         return widget
-
-    def _mute_chip_qss(self) -> str:
-        """Checked-state look for the Mute chip: accent-tint outline from
-        brand tokens (never Material red)."""
-        t = active_tokens()
-        return (
-            "QPushButton:checked {"
-            f"background-color: {t['accent_tint']};"
-            f"color: {t['accent']};"
-            f"border: 1px solid {t['accent_line']};"
-            "}"
-        )
 
     def _on_load_clicked(self):
         """Handle load button click - open file dialog."""
