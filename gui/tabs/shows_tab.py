@@ -251,9 +251,14 @@ class ShowsTab(BaseTab):
         self._selection_overlay = SelectionOverlay(self)
         self._selection_overlay.hide()
 
-        # Bottom transport bar (a real QWidget so visual tests can grab it)
+        # Transport bar (a real QWidget so visual tests can grab it).
+        # North Star 06 puts the play controls at the TOP, so it is
+        # inserted right under the toolbar (index 1) rather than appended
+        # at the bottom. Creation stays here - after the master/lane
+        # widgets it may reference - and only the placement moves, so a
+        # single-line revert restores the bottom bar.
         self.transport_bar = self._create_playback_controls()
-        main_layout.addWidget(self.transport_bar)
+        main_layout.insertWidget(1, self.transport_bar)
 
         # Footer status line (reference statusbar): one mono line of real
         # timeline state.

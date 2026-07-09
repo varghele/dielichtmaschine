@@ -39,6 +39,9 @@ verbatim as the GitHub Release notes (see [docs/releasing.md](docs/releasing.md)
 
 ### Changed
 
+- **The timeline transport moved to the top.** The play / stop / scrubber
+  bar now sits under the toolbar instead of at the bottom, matching the
+  North Star. (One self-contained change, easy to revert.)
 - **The timeline body now matches the brand.** The lanes, blocks, riff
   browser and the block-edit dialogs were still in pre-rebrand
   Material/Windows colors while the toolbar around them was rebranded.
