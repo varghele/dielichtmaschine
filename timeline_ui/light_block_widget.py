@@ -13,6 +13,46 @@ from config.models import LightBlock
 ACCENT = QColor(240, 86, 46)
 
 
+def active_tokens() -> dict:
+    """Token dict of the theme currently applied to the app.
+
+    Custom painters cannot reach QSS roles, so they read the brand
+    tokens directly. Same stylesheet sniff the tabs use (see
+    gui/dialogs/autogen_dialog._active_tokens): the light theme's
+    window color only ever appears in the light stylesheet.
+    """
+    from PyQt6.QtWidgets import QApplication
+    from gui.theme_tokens import THEMES
+
+    app = QApplication.instance()
+    qss = app.styleSheet() if app is not None else ""
+    light = THEMES.get("light")
+    if light is not None and light["window"] in qss:
+        return light
+    return THEMES["dark"]
+
+
+def token_qcolor(key: str, alpha: int = 255) -> QColor:
+    """Brand token as a QColor, optionally with an alpha override.
+
+    Only the solid ``#rrggbb`` tokens are used here; the ``rgba(...)``
+    string tokens (e.g. accent_tint) are not QColor-parseable, so we
+    pass the base accent through with an explicit alpha instead.
+    """
+    tok = active_tokens()
+    color = QColor(tok.get(key, "#000000"))
+    if alpha != 255:
+        color.setAlpha(alpha)
+    return color
+
+
+def _tinted(base: QColor, alpha: int) -> QColor:
+    """A copy of ``base`` at the given alpha (for low-alpha row tints)."""
+    color = QColor(base)
+    color.setAlpha(alpha)
+    return color
+
+
 class LightBlockWidget(QWidget):
     """Visual representation of a light effect block on the timeline.
 
@@ -214,6 +254,38 @@ class LightBlockWidget(QWidget):
             painter.setPen(QPen(marquee_pen, 2))
             painter.drawRect(rect)
 
+    def _has_group_color(self) -> bool:
+        """True when the lane resolves to a group data color."""
+        if hasattr(self.lane_widget, "group_color"):
+            return bool(self.lane_widget.group_color())
+        return False
+
+    def _group_base_color(self) -> QColor:
+        """Base color for this block's fills and hairlines.
+
+        The lane's group data color when resolvable (North Star: blocks
+        read in their group's color), else a faint brand neutral so the
+        block still reads on the dark surface without inventing a
+        Material color.
+        """
+        if hasattr(self.lane_widget, "group_color"):
+            group = self.lane_widget.group_color()
+            if group:
+                return QColor(group)
+        return token_qcolor("text_secondary")
+
+    def sublane_fill_color(self, sublane_type: str, sublane_block=None) -> QColor:
+        """Base (pre-alpha) fill color for a sublane row.
+
+        Colour rows use the block's own RGBW data color (the real
+        content); every other row is a tint of the lane's group color.
+        Exposed so tests can assert fills derive from the group color
+        rather than a fixed Material palette.
+        """
+        if sublane_type == "colour" and sublane_block is not None:
+            return self._get_colour_block_color(sublane_block)
+        return self._group_base_color()
+
     def _draw_envelope(self, painter):
         """Draw the effect envelope: group-color frame + tint fill.
 
@@ -222,13 +294,11 @@ class LightBlockWidget(QWidget):
         fill. Lanes without a resolvable group keep the old neutral
         gray. Selection stays distinct: a solid accent border.
         """
-        group = None
-        if hasattr(self.lane_widget, "group_color"):
-            group = self.lane_widget.group_color()
-        base = QColor(group) if group else QColor(150, 150, 150)
+        base = self._group_base_color()
+        group = self._has_group_color()
 
-        fill = QColor(base) if group else QColor(60, 60, 60)
-        fill.setAlpha(46 if group else 100)  # ~0.18 tint
+        fill = QColor(base)
+        fill.setAlpha(46 if group else 60)  # ~0.18 group tint / faint neutral
         painter.setBrush(QBrush(fill))
 
         if self._is_multi_selected:
@@ -271,15 +341,16 @@ class LightBlockWidget(QWidget):
         y_pos = 6
         padding = 4
 
-        # Draw semi-transparent dark background behind text
+        # Draw semi-transparent panel background behind text (brand
+        # surface + border tokens, not Material grays)
         bg_rect = QRect(x_pos - padding, y_pos - padding,
                        text_width + 2 * padding, text_height + 2 * padding)
-        painter.setBrush(QBrush(QColor(30, 30, 30, 200)))  # Dark gray, semi-transparent
-        painter.setPen(QPen(QColor(100, 100, 100), 1))  # Subtle border
+        painter.setBrush(QBrush(token_qcolor("panel", 200)))
+        painter.setPen(QPen(token_qcolor("border"), 1))
         painter.drawRect(bg_rect)
 
-        # Draw text in white
-        painter.setPen(QPen(QColor(255, 255, 255)))  # White text
+        # Draw text in warm white (#F4F1EA), never pure white
+        painter.setPen(QPen(token_qcolor("text")))
         painter.drawText(x_pos, y_pos + text_height - 3, text)
 
     def _draw_riff_indicator(self, painter):
@@ -287,17 +358,19 @@ class LightBlockWidget(QWidget):
         from PyQt6.QtGui import QFont
         from PyQt6.QtCore import QRect
 
-        # Choose indicator text and color based on modification state
+        # Choose indicator text and color based on modification state.
+        # Modified reads in the brand accent; unmodified stays a quiet
+        # neutral chip (brand tokens, no Material tan/green).
         if self.block.modified:
-            # Modified riff - yellow indicator with asterisk
             indicator_text = "R*"
-            bg_color = QColor(180, 150, 50, 220)  # Yellow-brown
-            border_color = QColor(220, 180, 70)
+            bg_color = token_qcolor("accent", 220)
+            border_color = token_qcolor("accent_line")
+            text_color = token_qcolor("on_accent")
         else:
-            # Unmodified riff - green indicator
             indicator_text = "R"
-            bg_color = QColor(50, 150, 80, 220)  # Green
-            border_color = QColor(80, 200, 120)
+            bg_color = token_qcolor("raised", 220)
+            border_color = token_qcolor("border")
+            text_color = token_qcolor("text_secondary")
 
         # Set font
         font = QFont()
@@ -323,12 +396,22 @@ class LightBlockWidget(QWidget):
         painter.drawRect(bg_rect)
 
         # Draw text
-        painter.setPen(QPen(QColor(255, 255, 255)))
+        painter.setPen(QPen(text_color))
         painter.drawText(x_pos, y_pos + text_height - 3, indicator_text)
 
     def _draw_sublane_blocks(self, painter):
-        """Draw individual sublane blocks within the envelope."""
+        """Draw individual sublane blocks within the envelope.
+
+        North Star: every row tints in the lane's group data color;
+        colour rows keep the block's own RGBW color (the real content)
+        as a left-to-right gradient. No Material per-type palette.
+        """
         sublane_height = self.lane_widget.sublane_height
+
+        # Group data color (or brand neutral) drives the non-colour rows
+        # and every hairline border.
+        group_base = self._group_base_color()
+        hairline = _tinted(group_base, 180)
 
         # Get capabilities
         caps = self.lane_widget.capabilities if hasattr(self.lane_widget, 'capabilities') and self.lane_widget.capabilities else None
@@ -340,18 +423,13 @@ class LightBlockWidget(QWidget):
         # Draw dimmer blocks if lane has dimmer or colour capability
         if has_dimmer or has_colour:
             for dimmer_block in self.block.dimmer_blocks:
-                # Use orange/amber color if controlling RGB instead of dimmer
-                if not has_dimmer and has_colour:
-                    dimmer_color = QColor(255, 140, 0)  # Orange (RGB control mode)
-                else:
-                    dimmer_color = QColor(255, 200, 100)  # Warm yellow (normal dimmer)
-
                 self._draw_sublane_block(
                     painter,
                     dimmer_block,
                     "dimmer",
-                    dimmer_color,
-                    sublane_height
+                    _tinted(group_base, 60),
+                    sublane_height,
+                    border_color=hairline,
                 )
 
         # Draw colour blocks if lane has colour capability
@@ -363,7 +441,8 @@ class LightBlockWidget(QWidget):
                     colour_block,
                     "colour",
                     color,
-                    sublane_height
+                    sublane_height,
+                    border_color=hairline,
                 )
 
         # Draw movement blocks if lane has movement capability
@@ -373,8 +452,9 @@ class LightBlockWidget(QWidget):
                     painter,
                     movement_block,
                     "movement",
-                    QColor(100, 150, 255),  # Blue
-                    sublane_height
+                    _tinted(group_base, 60),
+                    sublane_height,
+                    border_color=hairline,
                 )
 
         # Draw special blocks if lane has special capability
@@ -384,11 +464,13 @@ class LightBlockWidget(QWidget):
                     painter,
                     special_block,
                     "special",
-                    QColor(200, 100, 255),  # Purple
-                    sublane_height
+                    _tinted(group_base, 60),
+                    sublane_height,
+                    border_color=hairline,
                 )
 
-    def _draw_sublane_block(self, painter, sublane_block, sublane_type, color, sublane_height):
+    def _draw_sublane_block(self, painter, sublane_block, sublane_type, color,
+                            sublane_height, border_color=None):
         """Draw a single sublane block."""
         # Get sublane row index
         sublane_index = self.lane_widget.get_sublane_index(sublane_type)
@@ -404,15 +486,31 @@ class LightBlockWidget(QWidget):
         x_offset = block_start_pixel - envelope_start_pixel
         width = block_end_pixel - block_start_pixel
 
-        # Draw the sublane block
-        painter.setBrush(QBrush(color))
+        # Draw the sublane block. Colour rows carry the real content
+        # color, so they render as a left-to-right gradient (North Star
+        # color-block sheen); other rows are a flat group-color tint.
+        if sublane_type == "colour":
+            from PyQt6.QtGui import QLinearGradient
+            gradient = QLinearGradient(int(x_offset), 0,
+                                       int(x_offset + width), 0)
+            left = QColor(color)
+            left.setAlpha(210)
+            right = QColor(color.darker(140))
+            right.setAlpha(210)
+            gradient.setColorAt(0.0, left)
+            gradient.setColorAt(1.0, right)
+            painter.setBrush(QBrush(gradient))
+        else:
+            painter.setBrush(QBrush(color))
 
-        # Thicker, brighter border if this specific block is selected.
+        # Thicker accent border if this specific block is selected;
+        # otherwise a group-color hairline (never Material darkening).
         is_selected = (sublane_block is self.selected_sublane_block)
         if is_selected:
-            painter.setPen(QPen(QColor(255, 255, 255), 3))  # Bright white border when selected
+            painter.setPen(QPen(ACCENT, 3))  # Accent border when selected
         else:
-            painter.setPen(QPen(color.darker(130), 2))
+            hairline = border_color if border_color is not None else color.darker(130)
+            painter.setPen(QPen(hairline, 1))
 
         # Draw with some margin from edges; hard corners (radius 0)
         margin = 2
@@ -443,7 +541,7 @@ class LightBlockWidget(QWidget):
 
         # Draw resize handles if this specific block is selected.
         if is_selected:
-            handle_color = QColor(255, 255, 255, 150)
+            handle_color = token_qcolor("accent", 180)
             painter.setBrush(QBrush(handle_color))
             painter.setPen(Qt.PenStyle.NoPen)
 
@@ -527,8 +625,9 @@ class LightBlockWidget(QWidget):
         text_x = int(x_offset + (width - text_width) / 2)
         text_y = int(y_offset + (sublane_height + text_height) / 2 - 2)
 
-        # Draw text with dark outline for better visibility
-        painter.setPen(QPen(QColor(40, 40, 40)))
+        # Draw text in warm white (#F4F1EA); reads on the group tint and
+        # on the colour gradient without pure white
+        painter.setPen(QPen(token_qcolor("text")))
         painter.drawText(text_x, text_y, full_text)
 
     def _draw_rgb_icon(self, painter, x_offset, y_offset, width, sublane_height, margin):
@@ -551,14 +650,14 @@ class LightBlockWidget(QWidget):
         icon_x = int(x_offset + width - text_width - 6)
         icon_y = int(y_offset + margin + text_height)
 
-        # Draw semi-transparent background
+        # Draw semi-transparent background (brand surface + text tokens)
         bg_rect = QRect(icon_x - 2, icon_y - text_height, text_width + 4, text_height + 2)
-        painter.setBrush(QBrush(QColor(0, 0, 0, 150)))
-        painter.setPen(QPen(QColor(255, 255, 255, 200), 1))
+        painter.setBrush(QBrush(token_qcolor("window", 150)))
+        painter.setPen(QPen(token_qcolor("text", 200), 1))
         painter.drawRect(bg_rect)
 
         # Draw text
-        painter.setPen(QPen(QColor(255, 255, 255)))
+        painter.setPen(QPen(token_qcolor("text")))
         painter.drawText(icon_x, icon_y, icon_text)
 
     def _draw_intensity_handle(self, painter, sublane_block, x_offset, y_offset, width, sublane_height, margin):
@@ -575,7 +674,7 @@ class LightBlockWidget(QWidget):
 
             # Draw darkened overlay above the handle
             if intensity < 255:
-                dark_overlay = QColor(0, 0, 0, 100)
+                dark_overlay = token_qcolor("window", 120)
                 painter.setBrush(QBrush(dark_overlay))
                 painter.setPen(Qt.PenStyle.NoPen)
                 painter.drawRect(
@@ -586,7 +685,7 @@ class LightBlockWidget(QWidget):
                 )
 
             # Draw intensity handle line
-            handle_pen = QPen(QColor(255, 255, 255, 200), 2)
+            handle_pen = QPen(token_qcolor("text", 220), 2)
             painter.setPen(handle_pen)
             painter.drawLine(
                 int(x_offset + margin),
@@ -615,14 +714,14 @@ class LightBlockWidget(QWidget):
                 label_x = int(x_offset + width / 2 - text_width / 2)
                 label_y = int(handle_y_offset - 5)
 
-                # Draw background
+                # Draw background (brand surface + text tokens)
                 bg_rect = QRect(label_x - 3, label_y - text_height, text_width + 6, text_height + 3)
-                painter.setBrush(QBrush(QColor(40, 40, 40, 200)))
-                painter.setPen(QPen(QColor(255, 255, 255), 1))
+                painter.setBrush(QBrush(token_qcolor("panel", 210)))
+                painter.setPen(QPen(token_qcolor("text"), 1))
                 painter.drawRect(bg_rect)
 
                 # Draw text
-                painter.setPen(QPen(QColor(255, 255, 255)))
+                painter.setPen(QPen(token_qcolor("text")))
                 painter.drawText(label_x, label_y, intensity_text)
 
         except Exception as e:
@@ -667,8 +766,9 @@ class LightBlockWidget(QWidget):
             # Calculate number of steps
             num_steps = int(block_duration / seconds_per_step)
 
-            # Draw grid lines (black for better visibility on yellow dimmer blocks)
-            grid_pen = QPen(QColor(0, 0, 0, 120), 1, Qt.PenStyle.DotLine)
+            # Draw beat grid lines (faint brand neutral, readable on the
+            # group-color tint over the dark surface)
+            grid_pen = QPen(token_qcolor("text_disabled", 150), 1, Qt.PenStyle.DotLine)
             painter.setPen(grid_pen)
 
             for step in range(1, num_steps):  # Skip first (start) and last (end)
@@ -727,8 +827,8 @@ class LightBlockWidget(QWidget):
             # Calculate number of steps
             num_steps = int(block_duration / seconds_per_step)
 
-            # Draw grid lines (black like dimmer blocks for consistency)
-            grid_pen = QPen(QColor(0, 0, 0, 120), 1, Qt.PenStyle.DotLine)
+            # Draw beat grid lines (faint brand neutral, matches dimmer)
+            grid_pen = QPen(token_qcolor("text_disabled", 150), 1, Qt.PenStyle.DotLine)
             painter.setPen(grid_pen)
 
             for step in range(1, num_steps):  # Skip first (start) and last (end)
@@ -855,7 +955,7 @@ class LightBlockWidget(QWidget):
 
     def _draw_resize_handles(self, painter):
         """Draw resize handles on the envelope edges."""
-        handle_color = QColor(255, 255, 255, 100)
+        handle_color = token_qcolor("text", 100)
         painter.setBrush(QBrush(handle_color))
         painter.setPen(Qt.PenStyle.NoPen)
 
@@ -880,24 +980,14 @@ class LightBlockWidget(QWidget):
         x_offset = start_pixel - envelope_start_pixel
         width = end_pixel - start_pixel
 
-        # Get color for this sublane type (semi-transparent)
-        # Use RED if overlap detected (invalid placement)
+        # Preview tint from the group data color; the destructive token
+        # flags an invalid (overlapping) placement.
         if self.overlap_detected:
-            color = QColor(255, 0, 0, 150)  # RED - overlap warning!
-            border_color = QColor(255, 100, 100, 200)
+            color = token_qcolor("destructive", 150)  # overlap warning
+            border_color = token_qcolor("destructive", 220)
         else:
-            # Normal colors
-            if self.creating_sublane == "dimmer":
-                color = QColor(255, 200, 100, 120)  # Yellow, semi-transparent
-            elif self.creating_sublane == "colour":
-                color = QColor(100, 255, 150, 120)  # Green, semi-transparent
-            elif self.creating_sublane == "movement":
-                color = QColor(100, 150, 255, 120)  # Blue, semi-transparent
-            elif self.creating_sublane == "special":
-                color = QColor(200, 100, 255, 120)  # Purple, semi-transparent
-            else:
-                color = QColor(150, 150, 150, 120)  # Gray, semi-transparent
-            border_color = QColor(255, 255, 255, 150)
+            color = _tinted(self._group_base_color(), 120)
+            border_color = token_qcolor("text", 150)
 
         # Draw preview block
         painter.setBrush(QBrush(color))
@@ -921,7 +1011,7 @@ class LightBlockWidget(QWidget):
             QColor for display
         """
         if not colour_block:
-            return QColor(100, 255, 150)  # Default green
+            return self._group_base_color()  # No content: read in group color
 
         r = int(colour_block.red)
         g = int(colour_block.green)
@@ -939,8 +1029,8 @@ class LightBlockWidget(QWidget):
         if r > 0 or g > 0 or b > 0:
             return QColor(r, g, b)
 
-        # Default to green (no color set)
-        return QColor(100, 255, 150)
+        # No color set: read in the group data color, not an arbitrary hue
+        return self._group_base_color()
 
     def _get_sublane_row_at_y(self, y_pos):
         """Detect which sublane row a Y position is in.
@@ -1115,28 +1205,15 @@ class LightBlockWidget(QWidget):
         return None
 
     def _get_block_color(self) -> QColor:
-        """Get color for block based on effect or parameters."""
+        """Get color for block based on effect or parameters.
+
+        Falls back to the lane's group data color (or a brand neutral)
+        rather than a Material per-effect palette.
+        """
         # Use color from parameters if set
         if self.block.parameters.get('color'):
             return QColor(self.block.parameters['color'])
-
-        # Default colors based on effect type
-        if not self.block.effect_name:
-            return QColor("#666666")
-
-        effect_lower = self.block.effect_name.lower()
-        if 'static' in effect_lower:
-            return QColor("#4CAF50")  # Green
-        elif 'fade' in effect_lower:
-            return QColor("#2196F3")  # Blue
-        elif 'pulse' in effect_lower or 'strobe' in effect_lower:
-            return QColor("#FF9800")  # Orange
-        elif 'wave' in effect_lower:
-            return QColor("#9C27B0")  # Purple
-        elif 'rainbow' in effect_lower or 'color' in effect_lower:
-            return QColor("#E91E63")  # Pink
-        else:
-            return QColor("#607D8B")  # Blue-gray
+        return self._group_base_color()
 
     def mousePressEvent(self, event: QMouseEvent):
         """Handle mouse press for dragging/resizing envelope or sublane blocks."""

@@ -8,7 +8,7 @@ from PyQt6.QtWidgets import (QWidget, QHBoxLayout, QVBoxLayout, QLabel,
 from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtGui import QUndoStack
 from .timeline_widget import TimelineWidget
-from .light_block_widget import LightBlockWidget
+from .light_block_widget import LightBlockWidget, active_tokens
 from .undo_commands import InsertRiffCommand, DeleteBlockCommand, AddBlockCommand
 from timeline.light_lane import LightLane
 
@@ -154,16 +154,20 @@ class LightLaneWidget(QFrame):
         self.sublane_labels = []
         self.refresh_sublane_labels()
 
-        # Row 1: Name and remove button — visuals from active theme.
+        # Row 1: Lane name + fixture count + remove button (North Star
+        # lane anatomy). The name reads in the Barlow Condensed display
+        # voice; the "N FIX" count is a mono micro-label in text_disabled.
+        from gui.typography import display_font, MicroLabel
+
         name_layout = QHBoxLayout()
 
-        name_label = QLabel("Name:")
-        name_label.setStyleSheet("font-weight: bold; font-size: 12px;")
-        name_layout.addWidget(name_label)
-
         self.name_edit = QLineEdit(self.lane.name)
+        self.name_edit.setFont(display_font(13))
         self.name_edit.textChanged.connect(self.on_name_changed)
-        name_layout.addWidget(self.name_edit)
+        name_layout.addWidget(self.name_edit, 1)
+
+        self.fix_count_label = MicroLabel(self._fixture_count_text())
+        name_layout.addWidget(self.fix_count_label)
 
         self.remove_button = QPushButton("×")
         self.remove_button.setFixedSize(25, 25)
@@ -180,8 +184,8 @@ class LightLaneWidget(QFrame):
         # Row 2: Fixture targets
         targets_layout = QHBoxLayout()
 
-        targets_label = QLabel("Targets:")
-        targets_label.setStyleSheet("font-weight: bold; font-size: 12px;")
+        from gui.typography import MicroLabel
+        targets_label = MicroLabel("Targets")
         targets_layout.addWidget(targets_label)
 
         # Read-only display label — give it an objectName so the theme can
@@ -201,39 +205,34 @@ class LightLaneWidget(QFrame):
         # Row 3: Mute, Solo, Add Block
         controls_layout = QHBoxLayout()
 
-        # Mute button — base look from theme; :checked goes red.
-        # density=compact gives tight padding so "M" fits 30×25.
+        # Mute / Solo toggle chips. Base look from the theme; the
+        # :checked state uses brand tokens (mute = accent-tint outline,
+        # solo = filled accent) so the two stay distinct and subtle,
+        # never the old Material red/amber. density=compact keeps the
+        # single glyph inside the 30x25 chip.
         self.mute_button = QPushButton("M")
         self.mute_button.setFixedSize(30, 25)
         self.mute_button.setCheckable(True)
         self.mute_button.setChecked(self.lane.muted)
         self.mute_button.setProperty("density", "compact")
-        self.mute_button.setStyleSheet(
-            "QPushButton:checked { background-color: #d32f2f; color: white; "
-            "border-color: #b71c1c; }"
-        )
+        self.mute_button.setStyleSheet(self._mute_chip_qss())
         self.mute_button.toggled.connect(self.on_mute_toggled)
         controls_layout.addWidget(self.mute_button)
 
-        # Solo button — base look from theme; :checked goes amber.
         self.solo_button = QPushButton("S")
         self.solo_button.setFixedSize(30, 25)
         self.solo_button.setCheckable(True)
         self.solo_button.setChecked(self.lane.solo)
         self.solo_button.setProperty("density", "compact")
-        self.solo_button.setStyleSheet(
-            "QPushButton:checked { background-color: #FFC107; color: #222; "
-            "border-color: #FFA000; }"
-        )
+        self.solo_button.setStyleSheet(self._solo_chip_qss())
         self.solo_button.toggled.connect(self.on_solo_toggled)
         controls_layout.addWidget(self.solo_button)
 
         controls_layout.addSpacing(10)
 
-        # Snap checkbox
+        # Snap checkbox — visuals from the active theme.
         self.snap_checkbox = QCheckBox("Snap")
         self.snap_checkbox.setChecked(True)
-        self.snap_checkbox.setStyleSheet("font-size: 12px;")
         self.snap_checkbox.toggled.connect(self.on_snap_toggled)
         controls_layout.addWidget(self.snap_checkbox)
 
@@ -249,6 +248,62 @@ class LightLaneWidget(QFrame):
         layout.addLayout(controls_layout)
 
         return widget
+
+    def _mute_chip_qss(self) -> str:
+        """Checked-state look for the Mute chip: accent-tint outline.
+        Built from brand tokens (never Material red)."""
+        t = active_tokens()
+        return (
+            "QPushButton:checked {"
+            f"background-color: {t['accent_tint']};"
+            f"color: {t['accent']};"
+            f"border: 1px solid {t['accent_line']};"
+            "}"
+        )
+
+    def _solo_chip_qss(self) -> str:
+        """Checked-state look for the Solo chip: filled accent (the
+        spotlight). Distinct from Mute's outline, both brand tokens."""
+        t = active_tokens()
+        return (
+            "QPushButton:checked {"
+            f"background-color: {t['accent']};"
+            f"color: {t['on_accent']};"
+            f"border: 1px solid {t['accent_line']};"
+            "}"
+        )
+
+    def _fixture_count(self) -> int:
+        """Number of distinct fixtures this lane targets.
+
+        Whole-group targets count every fixture in the group; indexed
+        targets (``Group:2``) count that one fixture. Deduped per group
+        so a mixed target list does not double-count."""
+        if not self.config or not self.lane.fixture_targets:
+            return 0
+        from utils.target_resolver import parse_target
+        per_group = {}
+        for target in self.lane.fixture_targets:
+            group_name, index = parse_target(target)
+            group = self.config.groups.get(group_name) if self.config.groups else None
+            if not group:
+                continue
+            fixtures = getattr(group, "fixtures", None) or []
+            slot = per_group.setdefault(group_name, set())
+            if index is None:
+                slot.update(range(len(fixtures)))
+            else:
+                slot.add(index)
+        return sum(len(slot) for slot in per_group.values())
+
+    def _fixture_count_text(self) -> str:
+        """`N FIX` label text for the lane header."""
+        return f"{self._fixture_count()} FIX"
+
+    def _refresh_fixture_count(self):
+        """Update the N FIX micro-label after targets/groups change."""
+        if hasattr(self, "fix_count_label") and self.fix_count_label is not None:
+            self.fix_count_label.setText(self._fixture_count_text())
 
     def _detect_group_capabilities(self):
         """Detect capabilities from all fixture targets."""
@@ -534,6 +589,7 @@ class LightLaneWidget(QFrame):
     def _update_targets_display(self):
         """Update the targets display label."""
         self._apply_group_border()
+        self._refresh_fixture_count()
         targets = self.lane.fixture_targets
         if not targets:
             self.targets_display.setText("(none)")

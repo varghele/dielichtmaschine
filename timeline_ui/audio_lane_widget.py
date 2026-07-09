@@ -7,6 +7,7 @@ from PyQt6.QtWidgets import (QWidget, QHBoxLayout, QVBoxLayout, QLabel,
                              QFileDialog, QLineEdit)
 from PyQt6.QtCore import Qt, pyqtSignal
 from .timeline_widget import TimelineWidget
+from .light_block_widget import active_tokens
 
 # Try to import audio components - may not be available in all installations
 try:
@@ -152,10 +153,10 @@ class AudioLaneWidget(QFrame):
         layout.setSpacing(4)
         layout.setContentsMargins(8, 8, 8, 8)
 
-        # Row 1: Audio label
+        # Row 1: Audio label — Barlow Condensed display caps (North Star)
+        from gui.typography import DisplayLabel
         title_layout = QHBoxLayout()
-        title_label = QLabel("Audio Track")
-        title_label.setStyleSheet("font-weight: bold; font-size: 13px;")
+        title_label = DisplayLabel("Audio Track", point_size=13)
         title_layout.addWidget(title_label)
         title_layout.addStretch()
         layout.addLayout(title_layout)
@@ -182,24 +183,21 @@ class AudioLaneWidget(QFrame):
         # Row 3: Volume and mute controls
         controls_layout = QHBoxLayout()
 
-        # Mute button — :checked state is data-driven; theme handles base look,
-        # the inline :checked rule colors it red when engaged.
-        # density=compact gives tight padding so "M" fits the 30×25 fixed size.
-        # (Don't use "size" as the property name — collides with Qt's
-        # built-in QSize geometry property and is silently ignored.)
+        # Mute chip — base look from the theme; the :checked rule uses
+        # brand tokens (accent-tint outline), matching the light lane
+        # mute chip, never the old Material red. density=compact keeps
+        # the glyph inside the 30x25 chip. (Don't use "size" as the
+        # property name — collides with Qt's QSize geometry property.)
         self.mute_button = QPushButton("M")
         self.mute_button.setFixedSize(30, 25)
         self.mute_button.setCheckable(True)
         self.mute_button.setProperty("density", "compact")
         self.mute_button.toggled.connect(self._on_mute_toggled)
-        self.mute_button.setStyleSheet(
-            "QPushButton:checked { background-color: #d32f2f; color: white; "
-            "border-color: #b71c1c; }"
-        )
+        self.mute_button.setStyleSheet(self._mute_chip_qss())
         controls_layout.addWidget(self.mute_button)
 
-        vol_label = QLabel("Vol:")
-        vol_label.setStyleSheet("font-size: 11px;")
+        from gui.typography import MicroLabel
+        vol_label = MicroLabel("Vol")
         controls_layout.addWidget(vol_label)
 
         self.volume_slider = QSlider(Qt.Orientation.Horizontal)
@@ -209,9 +207,10 @@ class AudioLaneWidget(QFrame):
         self.volume_slider.valueChanged.connect(self._on_volume_changed)
         controls_layout.addWidget(self.volume_slider)
 
+        from gui.typography import mono_font
         self.volume_label = QLabel("100%")
         self.volume_label.setFixedWidth(35)
-        self.volume_label.setStyleSheet("font-size: 10px;")
+        self.volume_label.setFont(mono_font(10))
         controls_layout.addWidget(self.volume_label)
 
         controls_layout.addStretch()
@@ -219,6 +218,18 @@ class AudioLaneWidget(QFrame):
         layout.addLayout(controls_layout)
 
         return widget
+
+    def _mute_chip_qss(self) -> str:
+        """Checked-state look for the Mute chip: accent-tint outline from
+        brand tokens (never Material red)."""
+        t = active_tokens()
+        return (
+            "QPushButton:checked {"
+            f"background-color: {t['accent_tint']};"
+            f"color: {t['accent']};"
+            f"border: 1px solid {t['accent_line']};"
+            "}"
+        )
 
     def _on_load_clicked(self):
         """Handle load button click - open file dialog."""
