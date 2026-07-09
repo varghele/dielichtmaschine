@@ -1,17 +1,45 @@
 # timeline_ui/riff_browser_widget.py
-"""RiffBrowserWidget - Dockable panel for browsing and selecting riffs."""
+"""RiffBrowserWidget - Dockable panel for browsing and selecting riffs.
+
+Styled to the Die Lichtmaschine North Star (docs/timeline-styling-review.md
+item 3): brand surfaces and the Glutorange accent replace the old
+Windows-blue / Material-gray inline colors. Ordinary chrome (the panel
+container, search field, tree selection, icon buttons) goes through theme
+QSS roles so the widget inherits the app-wide look; the only widget-local
+styles left are token-derived surfaces that no single role covers (the
+raised riff-item card with its accent hover) and the QPainter drag
+preview, which reads brand colors from the active theme tokens.
+"""
 
 import json
 from PyQt6.QtWidgets import (
     QDockWidget, QWidget, QVBoxLayout, QHBoxLayout,
     QLineEdit, QTreeWidget, QTreeWidgetItem, QPushButton,
-    QLabel, QFrame, QSizePolicy, QStackedWidget
+    QLabel, QFrame, QSizePolicy, QStackedWidget, QApplication
 )
 from PyQt6.QtCore import Qt, pyqtSignal, QMimeData
 from PyQt6.QtGui import QDrag, QPixmap, QPainter, QColor, QFont
 
 from config.models import Riff, FixtureGroup
 from riffs.riff_library import RiffLibrary
+
+
+def _active_tokens() -> dict:
+    """The token dict of the theme currently applied to the app.
+
+    The applied stylesheet is the only reliable record of the active
+    theme, so sniff it the same way ``gui/tabs/stage_tab.py::_active_tokens``
+    does: the light theme's window color is unique to light. Falls back
+    to dark (the default before a theme is applied).
+    """
+    from gui.theme_tokens import THEMES
+
+    app = QApplication.instance()
+    qss = app.styleSheet() if app is not None else ""
+    light = THEMES.get("light")
+    if light is not None and light["window"] in qss:
+        return light
+    return THEMES["dark"]
 
 
 class RiffItemWidget(QFrame):
@@ -24,27 +52,33 @@ class RiffItemWidget(QFrame):
         self.setAcceptDrops(False)
 
     def _setup_ui(self):
-        self.setFrameStyle(QFrame.Shape.StyledPanel | QFrame.Shadow.Raised)
-        self.setStyleSheet("""
-            RiffItemWidget {
-                background-color: #3c3c3c;
-                border: 1px solid #555;
-                border-radius: 4px;
+        # A raised card that stands against the panel-colored tree, with an
+        # accent hover. No single theme role covers "raised surface + accent
+        # hover", so this stays widget-local, but every color is a brand
+        # token (radius 0 per the brand).
+        t = _active_tokens()
+        self.setStyleSheet(f"""
+            RiffItemWidget {{
+                background-color: {t['raised']};
+                border: 1px solid {t['border']};
                 padding: 4px;
-            }
-            RiffItemWidget:hover {
-                background-color: #4a4a4a;
-                border-color: #777;
-            }
+            }}
+            RiffItemWidget:hover {{
+                background-color: {t['accent_tint']};
+                border-color: {t['accent']};
+            }}
         """)
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(6, 4, 6, 4)
         layout.setSpacing(2)
 
-        # Riff name
+        # Riff name - brand text color comes from the app-wide QWidget rule;
+        # bold is set on the font so no widget-local color is needed.
         name_label = QLabel(self.riff.name.replace('_', ' ').title())
-        name_label.setStyleSheet("font-weight: bold; color: #fff;")
+        name_font = name_label.font()
+        name_font.setBold(True)
+        name_label.setFont(name_font)
         layout.addWidget(name_label)
 
         # Info line: beats | fixture type
@@ -62,7 +96,7 @@ class RiffItemWidget(QFrame):
             info_parts.append("Universal")
 
         info_label = QLabel(" | ".join(info_parts))
-        info_label.setStyleSheet("color: #aaa; font-size: 11px;")
+        info_label.setProperty("role", "micro")
         layout.addWidget(info_label)
 
     def mousePressEvent(self, event):
@@ -105,11 +139,18 @@ class RiffItemWidget(QFrame):
         """Create a simple pixmap for drag preview."""
         width = 120
         height = 30
+        # Brand-colored preview: raised surface + primary text, read from
+        # the active theme tokens (a QPainter can't reach QSS roles).
+        t = _active_tokens()
+        fill = QColor(t['raised'])
+        fill.setAlpha(220)
         pixmap = QPixmap(width, height)
-        pixmap.fill(QColor(60, 60, 60, 200))
+        pixmap.fill(fill)
 
         painter = QPainter(pixmap)
-        painter.setPen(QColor(255, 255, 255))
+        painter.setPen(QColor(t['accent']))
+        painter.drawRect(0, 0, width - 1, height - 1)
+        painter.setPen(QColor(t['text']))
         painter.setFont(QFont("Arial", 9))
 
         # Draw riff name
@@ -133,45 +174,26 @@ class CollapsedRiffBar(QWidget):
 
     def _setup_ui(self):
         self.setFixedWidth(28)
-        self.setStyleSheet("""
-            CollapsedRiffBar {
-                background-color: #2d2d2d;
-                border-left: 1px solid #555;
-            }
-        """)
+        # Panel surface + border via the inspector role (the same library
+        # panel chrome the rest of the app uses).
+        self.setProperty("role", "inspector")
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(2, 4, 2, 4)
         layout.setSpacing(4)
 
-        # Expand button at top
+        # Expand chevron - flat pane-icon treatment (accent-tint hover).
         self.expand_btn = QPushButton("◀")
         self.expand_btn.setFixedSize(24, 24)
         self.expand_btn.setToolTip("Expand Riff Library")
+        self.expand_btn.setProperty("role", "pane-icon")
         self.expand_btn.clicked.connect(self.expand_clicked.emit)
-        self.expand_btn.setStyleSheet("""
-            QPushButton {
-                background-color: #3c3c3c;
-                border: 1px solid #555;
-                border-radius: 4px;
-                color: #fff;
-                font-size: 12px;
-            }
-            QPushButton:hover {
-                background-color: #4a4a4a;
-                border-color: #777;
-            }
-        """)
         layout.addWidget(self.expand_btn)
 
-        # Vertical label
+        # Vertical label - secondary micro caption.
         self.label = QLabel("R\ni\nf\nf\ns")
         self.label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.label.setStyleSheet("""
-            color: #888;
-            font-size: 11px;
-            font-weight: bold;
-        """)
+        self.label.setProperty("role", "micro")
         layout.addWidget(self.label)
 
         layout.addStretch()
@@ -218,6 +240,10 @@ class RiffBrowserPanel(QWidget):
 
     def _setup_ui(self):
         """Set up the panel UI."""
+        # Library-panel chrome (panel surface + border) from the shared
+        # inspector role.
+        self.setProperty("role", "inspector")
+
         layout = QVBoxLayout(self)
         layout.setContentsMargins(4, 4, 4, 4)
         layout.setSpacing(4)
@@ -227,102 +253,47 @@ class RiffBrowserPanel(QWidget):
         header_layout.setSpacing(4)
 
         if self._show_collapse_button and self._on_collapse_clicked is not None:
+            # Flat collapse chevron (pane-icon role).
             self._collapse_btn = QPushButton("▶")
             self._collapse_btn.setFixedSize(24, 24)
             self._collapse_btn.setToolTip("Collapse Riff Library")
+            self._collapse_btn.setProperty("role", "pane-icon")
             self._collapse_btn.clicked.connect(self._on_collapse_clicked)
-            self._collapse_btn.setStyleSheet("""
-                QPushButton {
-                    background-color: #3c3c3c;
-                    border: 1px solid #555;
-                    border-radius: 4px;
-                    color: #fff;
-                    font-size: 12px;
-                }
-                QPushButton:hover {
-                    background-color: #4a4a4a;
-                }
-            """)
             header_layout.addWidget(self._collapse_btn)
 
-        # Search bar
+        # Search bar - app-wide QLineEdit styling (raised surface, brand
+        # border, accent focus + accent selection) covers this fully.
         self.search_input = QLineEdit()
         self.search_input.setPlaceholderText("Search riffs...")
         self.search_input.textChanged.connect(self._on_search_changed)
-        self.search_input.setStyleSheet("""
-            QLineEdit {
-                background-color: #2d2d2d;
-                border: 1px solid #555;
-                border-radius: 4px;
-                padding: 4px 8px;
-                color: #fff;
-            }
-            QLineEdit:focus {
-                border-color: #0078d4;
-            }
-        """)
         header_layout.addWidget(self.search_input, 1)
 
-        # Refresh button
+        # Refresh button - bordered icon action (output-select role).
         refresh_btn = QPushButton("↻")
         refresh_btn.setFixedSize(28, 28)
         refresh_btn.setToolTip("Refresh riff library")
+        refresh_btn.setProperty("role", "output-select")
         refresh_btn.clicked.connect(self._on_refresh)
-        refresh_btn.setStyleSheet("""
-            QPushButton {
-                background-color: #3c3c3c;
-                border: 1px solid #555;
-                border-radius: 4px;
-                color: #fff;
-                font-size: 14px;
-            }
-            QPushButton:hover {
-                background-color: #4a4a4a;
-            }
-        """)
         header_layout.addWidget(refresh_btn)
 
         layout.addLayout(header_layout)
 
-        # Category tree
+        # Category tree - app-wide QTreeView styling gives the panel
+        # surface, brand border and the accent selection color. No
+        # QTreeWidget::item rule here on purpose (docs/qt-gotchas.md #1);
+        # the accent selection comes from selection-background-color on the
+        # QTreeView rule, not an ::item override.
         self.tree = QTreeWidget()
         self.tree.setHeaderHidden(True)
         self.tree.setIndentation(16)
         self.tree.setAnimated(True)
         self.tree.setExpandsOnDoubleClick(True)
         self.tree.setDragEnabled(False)  # We handle drag manually
-        self.tree.setStyleSheet("""
-            QTreeWidget {
-                background-color: #2d2d2d;
-                border: 1px solid #555;
-                border-radius: 4px;
-                color: #fff;
-            }
-            QTreeWidget::item {
-                padding: 2px 0;
-            }
-            QTreeWidget::item:hover {
-                background-color: #3c3c3c;
-            }
-            QTreeWidget::item:selected {
-                background-color: #0078d4;
-            }
-            QTreeWidget::branch:has-children:!has-siblings:closed,
-            QTreeWidget::branch:closed:has-children:has-siblings {
-                image: url(none);
-                border-image: none;
-            }
-            QTreeWidget::branch:open:has-children:!has-siblings,
-            QTreeWidget::branch:open:has-children:has-siblings {
-                image: url(none);
-                border-image: none;
-            }
-        """)
         layout.addWidget(self.tree, 1)
 
-        # Status label
+        # Status label - secondary micro caption.
         self.status_label = QLabel()
-        self.status_label.setStyleSheet("color: #888; font-size: 11px;")
+        self.status_label.setProperty("role", "micro")
         layout.addWidget(self.status_label)
 
         self._update_status()
