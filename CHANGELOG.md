@@ -33,6 +33,15 @@ verbatim as the GitHub Release notes (see [docs/releasing.md](docs/releasing.md)
 
 ### Changed
 
+- **The timeline body now matches the brand.** The lanes, blocks, riff
+  browser and the block-edit dialogs were still in pre-rebrand
+  Material/Windows colors while the toolbar around them was rebranded.
+  Lane headers now use the group color, the Barlow name, a fixture count
+  and the sub-lane labels; blocks tint from the group's own color instead
+  of a fixed palette (colour rows show the real gradient); the riff
+  browser and the colour/movement/dimmer/special/target/save dialogs
+  moved onto the theme's roles and accent. Custom-painted widgets read the
+  theme tokens directly (see docs/timeline-styling-review.md).
 - **The Add button stays put between the Universes and Fixtures tabs.**
   The Universes tab now uses the same top action strip as Fixtures, so
   "+ ADD UNIVERSE" and "+ ADD FIXTURE" sit in the identical spot and the

@@ -79,7 +79,7 @@ class SaveRiffDialog(QDialog):
         beats = duration * self.bpm / 60.0
         info_text = f"Duration: {duration:.2f}s ({beats:.1f} beats at {self.bpm:.0f} BPM)"
         info_label = QLabel(info_text)
-        info_label.setStyleSheet("color: #888; font-size: 11px;")
+        info_label.setProperty("role", "stat-caption")
         layout.addWidget(info_label)
 
         # Button box
@@ -87,6 +87,8 @@ class SaveRiffDialog(QDialog):
             QDialogButtonBox.StandardButton.Save |
             QDialogButtonBox.StandardButton.Cancel
         )
+        self.save_button = button_box.button(QDialogButtonBox.StandardButton.Save)
+        self.save_button.setProperty("role", "primary")
         button_box.accepted.connect(self.save_riff)
         button_box.rejected.connect(self.reject)
         layout.addWidget(button_box)

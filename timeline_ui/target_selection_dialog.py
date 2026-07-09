@@ -38,7 +38,7 @@ class TargetSelectionDialog(QDialog):
 
         # Instructions
         instructions = QLabel("Select groups and/or individual fixtures to target.")
-        instructions.setStyleSheet("color: #888; font-style: italic;")
+        instructions.setProperty("role", "stat-caption")
         layout.addWidget(instructions)
 
         # Tree group
@@ -49,19 +49,6 @@ class TargetSelectionDialog(QDialog):
         self.tree = QTreeWidget()
         self.tree.setHeaderHidden(True)
         self.tree.itemChanged.connect(self._on_item_changed)
-        self.tree.setStyleSheet("""
-            QTreeWidget {
-                background-color: #2d2d2d;
-                color: white;
-                border: 1px solid #555;
-            }
-            QTreeWidget::item {
-                padding: 4px;
-            }
-            QTreeWidget::item:selected {
-                background-color: #0078d4;
-            }
-        """)
         tree_layout.addWidget(self.tree)
 
         tree_group.setLayout(tree_layout)
@@ -72,12 +59,10 @@ class TargetSelectionDialog(QDialog):
 
         select_all_btn = QPushButton("Select All")
         select_all_btn.clicked.connect(self._select_all)
-        select_all_btn.setStyleSheet("background-color: #4a4a4a; color: white;")
         btn_layout.addWidget(select_all_btn)
 
         clear_btn = QPushButton("Clear All")
         clear_btn.clicked.connect(self._clear_all)
-        clear_btn.setStyleSheet("background-color: #4a4a4a; color: white;")
         btn_layout.addWidget(clear_btn)
 
         btn_layout.addStretch()
@@ -87,6 +72,8 @@ class TargetSelectionDialog(QDialog):
         buttons = QDialogButtonBox(
             QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
         )
+        self.ok_button = buttons.button(QDialogButtonBox.StandardButton.Ok)
+        self.ok_button.setProperty("role", "primary")
         buttons.accepted.connect(self.accept)
         buttons.rejected.connect(self.reject)
         layout.addWidget(buttons)
