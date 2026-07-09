@@ -17,12 +17,13 @@ verbatim as the GitHub Release notes (see [docs/releasing.md](docs/releasing.md)
   dimmer/colour/movement/special labels drawn on each sub-lane were
   restyled to the brand, and Settings now has a "Show timeline sub-lane
   labels" switch to hide them (they stay in the code, off is one click).
-- **A Live tab (first pass).** The touch-palette busking surface (North
-  Star layout 3b): pick fixture groups on the left, apply palette cells
-  (Static / Strobe / Sparkle / Waterfall / Circle / White wash) to the
-  selection with a fade time, and a master fader, strobe, and blackout on
-  the right. This pass drives an in-memory live state; live DMX output is
-  a later pass.
+- **A Live tab.** The touch-palette busking surface (North Star layout
+  3b): pick fixture groups, apply colour palettes painted in their real
+  colour (with a fade time), per-group submaster faders with flash, a
+  grandmaster, strobe and a dead blackout. Position/movement and
+  intensity-FX pools are laid in and marked as arriving next. Drives an
+  in-memory live state (with a grand x sub output resolve); live DMX
+  output is a later pass.
 - **A fuller timeline grid and a swing toggle.** The grid snap now ranges
   from coarse to fine: 4, 2, 1, 1/2, 1/4, 1/8, 1/16 (4 and 2 place a line
   every 4 and every 2 beats; the fractions subdivide the beat). A new

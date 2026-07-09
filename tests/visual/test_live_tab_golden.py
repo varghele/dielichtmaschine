@@ -1,14 +1,17 @@
 """Golden screenshot for the Live tab (reference screen 09, layout 3b).
 
-Pins the three-region busking surface: the 320px LEFT panel (one SELECT
-tile per group with a data-color accent bar + a PROGRAMMER readout), the
-CENTER palette grid (STATIC / STROBE / SPARKLE / WATERFALL / CIRCLE /
-WHITE WASH with the active cell in the accent) over the engineering grid,
-and the 340px RIGHT panel (MASTER fader, STROBE, FADE TIME, BLACKOUT,
-SONG PALETTE strip).
+Pins the North Star 3b busking surface: the TOP SELECT row (one tile per
+group with a data-color accent bar + ALL / ODD-EVEN / CLEAR SEL) and FADE
+row, the CENTRE three-pool grid (COLOUR PALETTES painted in their actual
+colours with the active swatch outlined, plus marked POSITION and
+INTENSITY placeholders), the PROGRAMMER state bar, the 330px RIGHT column
+(GRAND / SUB faders, STROBE, STROBE KILL / HOLD LOOK / RELEASE ALL, the
+big DBO and the ACTIVE PLAYBACKS placeholder) and the BOTTOM submaster
+bank painted in the group colours.
 
-The render is deterministic: two groups selected and one palette staged,
-no output engine (this is a UI shell only).
+The render is deterministic: two groups selected, one colour active, a
+couple of submasters at different levels, no output engine (UI shell
+only).
 
 Regenerate after intended changes:
 
@@ -69,7 +72,7 @@ def scene_config():
 
 
 def test_live_tab_golden(qapp, scene_config):
-    """Live tab (reference screen 09), two groups selected, CIRCLE staged."""
+    """Live tab (reference screen 09), two groups selected, RED active."""
     from gui.theme_manager import ThemeManager
     from gui.tabs.live_tab import LiveTab
 
@@ -78,14 +81,18 @@ def test_live_tab_golden(qapp, scene_config):
     tab = None
     try:
         tab = LiveTab(scene_config, parent=None)
-        # Deterministic programmer state: select two groups and stage a
-        # palette so the active cell + PROGRAMMER readout render.
+        # Deterministic programmer state: two groups selected with a colour
+        # applied, a couple of submasters at different levels, and the
+        # grandmaster pulled down so the masters read distinctly.
         tab.state.toggle_group("Front Pars")
         tab.state.toggle_group("Movers")
-        tab.state.stage_palette("circle")
-        tab.state.set_master(85)
+        tab.state.stage_colour("red")
+        tab.state.set_grandmaster(85)
+        tab.state.set_sub_master(70)
+        tab.state.set_submaster("Front Pars", 80)
+        tab.state.set_submaster("Movers", 55)
         tab.state.set_strobe_rate(40)
-        tab.setFixedSize(1600, 860)
+        tab.setFixedSize(1600, 900)
         compare_to_golden(tab.grab().toImage(), "live_tab_dark")
     finally:
         if tab is not None:
