@@ -158,6 +158,38 @@ class TestInlinePreviewCompact:
             dialog.deleteLater()
 
 
+class TestApplyToGroupSignal:
+    """Clicking the checkbox must re-apply immediately in the inline path,
+    which acts on values_changed. It used to be wired to nothing, so the
+    box read as broken in the Stage tab."""
+
+    def test_clicking_apply_to_group_emits_values_changed(self, qapp):
+        panel = OrientationPanel([], None)
+        try:
+            panel.apply_to_group_checkbox.setEnabled(True)
+            fired = []
+            panel.values_changed.connect(lambda: fired.append(True))
+            panel.apply_to_group_checkbox.click()  # a real user click
+            assert fired, "clicking apply-to-group emitted no values_changed"
+        finally:
+            panel.cleanup()
+            panel.deleteLater()
+
+    def test_programmatic_setchecked_does_not_emit(self, qapp):
+        """Re-binding the panel toggles the box in code; that must not
+        re-apply values to whatever fixtures are bound."""
+        panel = OrientationPanel([], None)
+        try:
+            panel.apply_to_group_checkbox.setChecked(True)  # enable path first
+            fired = []
+            panel.values_changed.connect(lambda: fired.append(True))
+            panel.apply_to_group_checkbox.setChecked(False)
+            assert not fired, "programmatic setChecked must stay silent"
+        finally:
+            panel.cleanup()
+            panel.deleteLater()
+
+
 class TestModalStillOpensEverything:
     def test_apply_and_cancel_fit_within_the_minimum_dialog(self, qapp):
         dialog = OrientationDialog([], None)

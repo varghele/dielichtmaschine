@@ -1952,8 +1952,10 @@ class OrientationPanel(QWidget):
         preview_layout = QVBoxLayout(self.preview_group)
         # The theme's QGroupBox only reserves top padding for the title, so
         # the GL widget would otherwise render flush against (and appear to
-        # overlap) the left/right/bottom border. Inset it a few pixels.
-        preview_layout.setContentsMargins(8, 6, 8, 8)
+        # overlap) the border. Inset it. Top margin 0 because the theme
+        # already adds 8px padding-top; that balances the 8px bottom margin
+        # so the preview has equal top and bottom insets.
+        preview_layout.setContentsMargins(8, 0, 8, 8)
         self.preview_widget = OrientationPreviewWidget()
         preview_layout.addWidget(self.preview_widget)
         layout.addWidget(self.preview_group, stretch=1)
@@ -2211,6 +2213,16 @@ class OrientationPanel(QWidget):
         # Z-height edits don't reshape the gimbal, but inline embedders need
         # to know when the value changed so they can write it back.
         self.z_spin.valueChanged.connect(lambda _v: self.values_changed.emit())
+
+        # Ticking "apply to group default" must take effect immediately in
+        # the inline (Stage tab) path, which acts on values_changed. Without
+        # this the box read as broken: the modal reads it at Apply time, but
+        # inline nothing re-applied until some other value changed.
+        # `clicked` (not `toggled`): fire only on real user interaction, so
+        # the programmatic setChecked(False) that runs while re-binding the
+        # panel to a new selection does not spuriously re-apply values.
+        self.apply_to_group_checkbox.clicked.connect(
+            lambda _checked: self.values_changed.emit())
 
         # Connect preview widget's ring drag signal to update spin boxes
         self.preview_widget.orientation_changed.connect(self._on_preview_orientation_changed)
