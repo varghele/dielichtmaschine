@@ -398,10 +398,43 @@ class MainWindow(QMainWindow, Ui_MainWindow):
 
         self._init_autosave()
 
+    def _rebind_tabs_to_config(self):
+        """Point every tab and 3D preview at the current self.config and
+        refresh them. The one config-rebind ladder (used by file load and
+        by crash recovery) - add new tabs here, nowhere else."""
+        self._preload_fixture_definitions()
+
+        self.config_tab.config = self.config
+        self.config_tab.update_from_config()
+
+        self.fixtures_tab.config = self.config
+        self.fixtures_tab.schedule_update()
+
+        self.stage_tab.config = self.config
+        self.stage_tab.update_from_config()
+
+        self.structure_tab.config = self.config
+        self.structure_tab.update_from_config()
+
+        self.shows_tab.config = self.config
+        self.shows_tab.mark_config_dirty()
+        self.shows_tab.update_from_config()
+
+        # Auto tab was bound to the old Configuration at construction; without
+        # rebinding it keeps showing the previous session's fixtures.
+        self.auto_tab.config = self.config
+        self.auto_tab.update_from_config()
+
+        # Repaint all three embedded 3D previews with the new fixture set.
+        self.on_visualizer_config_changed()
+
     def _clear_autosave(self):
-        """Drop the crash-recovery backup after a real save."""
+        """Drop the crash-recovery backup (and the pointer to it) after a
+        real save, so a later crash offers no stale recovery."""
         if hasattr(self, "_autosave"):
             self._autosave.clear()
+        from utils.app_settings import app_settings
+        app_settings().remove("autosave/last_project")
 
     def _config_fingerprint(self):
         """A value that changes when the config content changes, for the
@@ -425,8 +458,50 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self._autosave.prime()
         self._autosave_timer = QTimer(self)
         self._autosave_timer.setInterval(15000)  # 15 seconds
-        self._autosave_timer.timeout.connect(self._autosave.maybe_backup)
+        self._autosave_timer.timeout.connect(self._autosave_tick)
         self._autosave_timer.start()
+        # After the window is up, offer to recover a previous session that
+        # ended (crashed) with unsaved changes.
+        QTimer.singleShot(300, self._offer_launch_recovery)
+
+    def _autosave_tick(self):
+        """Timer tick: back up if changed, and remember which project the
+        unsaved work belongs to so it can be recovered at next launch
+        (empty string == an unsaved, never-saved project)."""
+        if self._autosave.maybe_backup() is not None:
+            from utils.app_settings import app_settings
+            app_settings().setValue("autosave/last_project",
+                                    self.config_path or "")
+
+    def _offer_launch_recovery(self):
+        """At launch, if the last session left unsaved changes, offer to
+        recover them into the current (still empty) session."""
+        from PyQt6.QtWidgets import QMessageBox
+        from utils.app_settings import app_settings
+        from utils.autosave import autosave_dir, find_recoverable
+
+        # Only when nothing has been opened/edited yet this launch.
+        if self.config_path or self.config.fixtures or self.config.universes \
+                or self.config.groups or self.config.shows:
+            return
+        last = app_settings().value("autosave/last_project", "", type=str)
+        backup = find_recoverable(last or None, autosave_dir())
+        if not backup:
+            return
+        resp = QMessageBox.question(
+            self, "Recover unsaved changes",
+            "Unsaved changes from your last session were found.\n\n"
+            "Recover them?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
+        if resp != QMessageBox.StandardButton.Yes:
+            return
+        self.config = Configuration.load(backup)
+        self.config_path = last or None  # None keeps it an untitled project
+        self._rebind_tabs_to_config()
+        # Leave it dirty (no prime) so the recovered work keeps autosaving
+        # until the user saves it. Show the tab pages instead of Home.
+        if hasattr(self, "show_pages"):
+            self.show_pages()
 
     def _on_undo_clean_changed(self, clean: bool):
         """Handle undo stack clean state change.
@@ -950,47 +1025,9 @@ class MainWindow(QMainWindow, Ui_MainWindow):
                 # saves the recovered work.
                 self._autosave.prime()
 
-            # Step 2: Pre-cache fixture definitions
-            self.progress_manager.update_modal(2, "Loading fixture definitions...")
-            self._preload_fixture_definitions()
-
-            # Step 3-7: Update tabs with progress
-            self.progress_manager.update_modal(3, "Updating configuration tab...")
-            self.config_tab.config = self.config
-            self.config_tab.update_from_config()
-
-            self.progress_manager.update_modal(4, "Updating fixtures tab...")
-            self.fixtures_tab.config = self.config
-            self.fixtures_tab.schedule_update()
-
-            self.progress_manager.update_modal(5, "Updating stage tab...")
-            self.stage_tab.config = self.config
-            self.stage_tab.update_from_config()
-
-            self.progress_manager.update_modal(6, "Updating structure tab...")
-            self.structure_tab.config = self.config
-            self.structure_tab.update_from_config()
-
-            self.progress_manager.update_modal(7, "Loading shows...")
-            self.shows_tab.config = self.config
-            self.shows_tab.mark_config_dirty()
-            self.shows_tab.update_from_config()
-
-            # Auto tab needs the same treatment — its self.config was
-            # bound at construction time and stays pointing at the old
-            # Configuration instance unless we explicitly rebind it
-            # here. Without this the Auto tab keeps showing fixtures
-            # from the previous session (or none at all), and its
-            # embedded visualizer renders an empty stage even after a
-            # config file is loaded.
-            self.auto_tab.config = self.config
-            self.auto_tab.update_from_config()
-
-            # Push the freshly-loaded config to every embedded 3D
-            # preview so all three (Stage / Shows / Auto) repaint with
-            # the new fixture set without waiting for the user to
-            # activate each tab.
-            self.on_visualizer_config_changed()
+            # Steps 2-7: rebind every tab and preview to the new config.
+            self.progress_manager.update_modal(4, "Updating tabs...")
+            self._rebind_tabs_to_config()
 
             self.progress_manager.update_modal(8, "Done")
             self.progress_manager.finish_modal()

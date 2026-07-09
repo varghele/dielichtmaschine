@@ -15,11 +15,12 @@ verbatim as the GitHub Release notes (see [docs/releasing.md](docs/releasing.md)
 
 - **Autosave with crash recovery.** While you work, unsaved changes are
   written every few seconds to a backup file next to the project (Reaper
-  style). Ctrl+S writes the project and clears the backup; if the app
-  stops before a save, the next time you open that project it offers to
-  recover the unsaved changes. The manual "UPDATE CONFIG" button on the
-  Universes tab is gone: edits apply live and are autosaved, so there is
-  nothing to push by hand.
+  style). Ctrl+S writes the project and clears the backup. If the app
+  stops before a save, the unsaved work is offered back to you: at the
+  next launch (for the session you were in, saved or brand-new) and again
+  whenever you reopen that specific project. The manual "UPDATE CONFIG"
+  button on the Universes tab is gone: edits apply live and are
+  autosaved, so there is nothing to push by hand.
 - **F7 opens the pause screen** (screensaver). F11 stays fullscreen; F
   and L remain the Stage tab's own zoom/layer keys.
 

@@ -1,6 +1,10 @@
 """Autosave / crash-recovery core logic."""
 
 import os
+import types
+from unittest.mock import MagicMock
+
+import pytest
 
 from utils.autosave import (
     AutosaveManager, backup_path_for, find_recoverable,
@@ -123,3 +127,105 @@ def test_end_to_end_with_a_real_config(tmp_path):
     mgr.clear()
     assert not os.path.exists(backup)
     assert find_recoverable(project, str(tmp_path)) is None
+
+
+# ---------------------------------------------------------------------------
+# Launch recovery (MainWindow._offer_launch_recovery), tested against a fake
+# self so no heavy MainWindow is built (same pattern as test_visualizer_sync).
+# ---------------------------------------------------------------------------
+
+def _fake_window():
+    from config.models import Configuration
+    return types.SimpleNamespace(
+        config=Configuration(), config_path=None,
+        _rebind_tabs_to_config=MagicMock(),
+        show_pages=MagicMock())
+
+
+def _write_untitled_backup(tmp_path):
+    from config.models import Configuration, Universe
+    cfg = Configuration(universes={0: Universe(id=0, name="U0", output={})})
+    backup = os.path.join(str(tmp_path), "untitled.autosave.yaml")
+    cfg.save(backup)
+    return backup
+
+
+@pytest.fixture
+def _isolated_autosave(tmp_path, monkeypatch):
+    monkeypatch.setenv("QLC_AUTOSAVE_DIR", str(tmp_path))
+    from utils.app_settings import app_settings
+    yield tmp_path
+    app_settings().remove("autosave/last_project")
+
+
+def test_launch_recovery_recovers_when_confirmed(qapp, _isolated_autosave,
+                                                 monkeypatch):
+    from PyQt6.QtWidgets import QMessageBox
+    from gui.gui import MainWindow
+    from utils.app_settings import app_settings
+
+    _write_untitled_backup(_isolated_autosave)
+    app_settings().setValue("autosave/last_project", "")  # untitled session
+    monkeypatch.setattr(
+        QMessageBox, "question",
+        staticmethod(lambda *a, **k: QMessageBox.StandardButton.Yes))
+
+    fake = _fake_window()
+    MainWindow._offer_launch_recovery(fake)
+
+    assert 0 in fake.config.universes            # recovered content
+    assert fake.config_path is None              # stays untitled
+    fake._rebind_tabs_to_config.assert_called_once()
+    fake.show_pages.assert_called_once()
+
+
+def test_launch_recovery_declined_changes_nothing(qapp, _isolated_autosave,
+                                                  monkeypatch):
+    from PyQt6.QtWidgets import QMessageBox
+    from gui.gui import MainWindow
+    from utils.app_settings import app_settings
+
+    _write_untitled_backup(_isolated_autosave)
+    app_settings().setValue("autosave/last_project", "")
+    monkeypatch.setattr(
+        QMessageBox, "question",
+        staticmethod(lambda *a, **k: QMessageBox.StandardButton.No))
+
+    fake = _fake_window()
+    MainWindow._offer_launch_recovery(fake)
+
+    assert fake.config.universes == {}
+    fake._rebind_tabs_to_config.assert_not_called()
+
+
+def test_launch_recovery_no_backup_is_silent(qapp, _isolated_autosave,
+                                             monkeypatch):
+    from PyQt6.QtWidgets import QMessageBox
+    from gui.gui import MainWindow
+
+    def _boom(*a, **k):
+        raise AssertionError("must not prompt when there is nothing to recover")
+
+    monkeypatch.setattr(QMessageBox, "question", staticmethod(_boom))
+    fake = _fake_window()
+    MainWindow._offer_launch_recovery(fake)  # no backup present -> returns
+    fake._rebind_tabs_to_config.assert_not_called()
+
+
+def test_launch_recovery_skips_when_a_project_is_already_open(
+        qapp, _isolated_autosave, monkeypatch):
+    from PyQt6.QtWidgets import QMessageBox
+    from gui.gui import MainWindow
+    from utils.app_settings import app_settings
+
+    _write_untitled_backup(_isolated_autosave)
+    app_settings().setValue("autosave/last_project", "")
+
+    def _boom(*a, **k):
+        raise AssertionError("must not prompt once something is loaded")
+
+    monkeypatch.setattr(QMessageBox, "question", staticmethod(_boom))
+    fake = _fake_window()
+    fake.config_path = "/some/open/project.yaml"  # already working on a file
+    MainWindow._offer_launch_recovery(fake)
+    fake._rebind_tabs_to_config.assert_not_called()
