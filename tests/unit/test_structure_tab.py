@@ -115,9 +115,9 @@ class TestPartsStrip:
     def test_micro_caption_present(self, tab):
         assert tab.parts_caption.text().startswith("PARTS")
 
-    def test_parts_caption_is_honest_about_reordering(self, tab):
-        # No drag-reorder implemented: the caption must not promise it.
-        assert "DRAG" not in tab.parts_caption.text()
+    def test_parts_caption_advertises_drag_reorder(self, tab):
+        # Cards reorder by drag-and-drop; the caption says so.
+        assert "DRAG" in tab.parts_caption.text()
 
     def test_grid_caption_totals(self, tab):
         # 4 + 8 bars; 4 bars @ 120 = 8 s, 8 bars @ 140 ~ 13.7 s -> 00:21
@@ -399,6 +399,59 @@ class TestAddDeleteReorder:
         tab._move_part(-1)  # first part, move left
         names = [p.name for p in tab.current_show.parts]
         assert names == ["Intro", "Verse"]
+
+    def test_reorder_part_moves_and_selects(self, tab):
+        # Drag "Intro" (0) onto the "Verse" card (1): Intro moves after it.
+        tab._reorder_part(0, 1)
+        names = [p.name for p in tab.current_show.parts]
+        assert names == ["Verse", "Intro"]
+        assert tab._selected_index == 1
+        assert tab._cards[1].name_label.text() == "INTRO"
+
+    def test_reorder_part_same_index_is_noop(self, tab):
+        tab._reorder_part(1, 1)
+        assert [p.name for p in tab.current_show.parts] == ["Intro", "Verse"]
+
+    def test_part_card_is_a_drag_source_and_drop_target(self, tab):
+        from gui.tabs.structure_tab import PART_MIME_TYPE
+        from PyQt6.QtCore import QMimeData
+
+        assert tab._cards[0].acceptDrops()
+        # A drop carrying source index 0 onto card 1 asks to reorder (0 -> 1).
+        got = []
+        tab._cards[1].reorder_requested.connect(
+            lambda s, t: got.append((s, t)))
+        mime = QMimeData()
+        mime.setData(PART_MIME_TYPE, b"0")
+
+        class _Drop:
+            def mimeData(self):
+                return mime
+
+            def acceptProposedAction(self):
+                pass
+
+        tab._cards[1].dropEvent(_Drop())
+        assert got == [(0, 1)]
+
+    def test_part_card_ignores_a_foreign_drop(self, tab):
+        from PyQt6.QtCore import QMimeData
+
+        got = []
+        tab._cards[1].reorder_requested.connect(
+            lambda s, t: got.append((s, t)))
+        mime = QMimeData()
+        mime.setData("application/x-something-else", b"0")
+
+        class _Drop:
+            def mimeData(self):
+                return mime
+
+            def acceptProposedAction(self):
+                pass
+
+        tab._cards[1].dropEvent(_Drop())
+        assert got == []
 
 
 # ---------------------------------------------------------------------------

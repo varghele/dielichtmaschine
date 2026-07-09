@@ -37,10 +37,15 @@ from PyQt6.QtWidgets import (QVBoxLayout, QHBoxLayout, QWidget, QLabel,
                              QGridLayout,
                              QSizePolicy, QMenu, QFileDialog, QProgressDialog,
                              QGroupBox, QCheckBox)
-from PyQt6.QtCore import Qt, QTimer, pyqtSignal, QRectF, QPointF
+from PyQt6.QtCore import Qt, QTimer, pyqtSignal, QRectF, QPointF, QMimeData
 from PyQt6.QtGui import (QPainter, QColor, QPen, QBrush, QFont, QAction,
-                         QFontMetrics)
+                         QFontMetrics, QDrag)
 import shutil
+
+
+# Drag-and-drop contract for reordering song parts: the payload is the
+# dragged card's part index, UTF-8 encoded.
+PART_MIME_TYPE = "application/x-lichtmaschine-part"
 from config.models import Configuration, Show, ShowPart, TimelineData, MidiInputDevice, PauseShowConfig
 from gui.typography import DisplayLabel, MicroLabel, display_font, mono_font
 from gui.widgets.chip import Chip
@@ -321,6 +326,9 @@ class PartCard(QWidget):
     """
 
     clicked = pyqtSignal(int)
+    # (source index, target index): the dragged card asks to move to the
+    # slot of the card it was dropped on.
+    reorder_requested = pyqtSignal(int, int)
 
     CARD_WIDTH = 190
 
@@ -334,6 +342,10 @@ class PartCard(QWidget):
         self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
         self.setCursor(Qt.CursorShape.PointingHandCursor)
         self.setFixedWidth(self.CARD_WIDTH)
+        # Cards reorder by drag-and-drop: each is both a drag source and a
+        # drop target.
+        self.setAcceptDrops(True)
+        self._press_pos = None
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(16, 14, 16, 12)
@@ -416,8 +428,49 @@ class PartCard(QWidget):
             style.polish(self)
 
     def mousePressEvent(self, event):
-        self.clicked.emit(self.index)
+        if event.button() == Qt.MouseButton.LeftButton:
+            self._press_pos = event.position().toPoint()
+        self.clicked.emit(self.index)   # press selects; a drag may follow
         event.accept()
+
+    def mouseMoveEvent(self, event):
+        from PyQt6.QtWidgets import QApplication
+        if (self._press_pos is None
+                or not (event.buttons() & Qt.MouseButton.LeftButton)):
+            return
+        if ((event.position().toPoint() - self._press_pos).manhattanLength()
+                < QApplication.startDragDistance()):
+            return
+        mime = QMimeData()
+        mime.setData(PART_MIME_TYPE,
+                     str(self.index).encode("utf-8"))
+        drag = QDrag(self)
+        drag.setMimeData(mime)
+        drag.setPixmap(self.grab())
+        drag.exec(Qt.DropAction.MoveAction)
+        self._press_pos = None
+
+    def _source_index(self, mime) -> int:
+        if mime is None or not mime.hasFormat(PART_MIME_TYPE):
+            return -1
+        try:
+            return int(bytes(mime.data(PART_MIME_TYPE)).decode("utf-8"))
+        except ValueError:
+            return -1
+
+    def dragEnterEvent(self, event):
+        if self._source_index(event.mimeData()) >= 0:
+            event.acceptProposedAction()
+
+    def dragMoveEvent(self, event):
+        if self._source_index(event.mimeData()) >= 0:
+            event.acceptProposedAction()
+
+    def dropEvent(self, event):
+        source = self._source_index(event.mimeData())
+        if source >= 0 and source != self.index:
+            self.reorder_requested.emit(source, self.index)
+            event.acceptProposedAction()
 
 
 class StructureTab(BaseTab):
@@ -519,7 +572,7 @@ class StructureTab(BaseTab):
         # Parts strip: micro caption + horizontal card row.
         parts_section = QVBoxLayout()
         parts_section.setSpacing(12)
-        self.parts_caption = MicroLabel("Parts · Select to edit",
+        self.parts_caption = MicroLabel("Parts · Drag to reorder",
                                         point_size=8, tracking_em=0.12)
         parts_section.addWidget(self.parts_caption)
         parts_section.addWidget(self._create_parts_strip())
@@ -1158,6 +1211,7 @@ class StructureTab(BaseTab):
                 self.parts_row.addSpacing(6)
             card = PartCard(i)
             card.clicked.connect(self._select_part)
+            card.reorder_requested.connect(self._reorder_part)
             self._cards.append(card)
             self.parts_row.addWidget(card)
 
@@ -1583,6 +1637,20 @@ class StructureTab(BaseTab):
         if not (0 <= source < len(parts) and 0 <= target < len(parts)):
             return
         parts[source], parts[target] = parts[target], parts[source]
+        self._selected_index = target
+        self._rebuild_parts_strip()
+        self._update_timelines()
+        self._auto_save()
+
+    def _reorder_part(self, source: int, target: int):
+        """Move the part at ``source`` to the slot of the card dropped on
+        (``target``). Driven by drag-and-drop between part cards."""
+        parts = self.current_show.parts if self.current_show else []
+        if not (0 <= source < len(parts)) or source == target:
+            return
+        part = parts.pop(source)
+        target = max(0, min(target, len(parts)))
+        parts.insert(target, part)
         self._selected_index = target
         self._rebuild_parts_strip()
         self._update_timelines()

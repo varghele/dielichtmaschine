@@ -13,6 +13,8 @@ verbatim as the GitHub Release notes (see [docs/releasing.md](docs/releasing.md)
 
 ### Added
 
+- **Drag to reorder show parts.** In the Show Structure tab, drag a part
+  card onto another to move it there, in addition to the Move buttons.
 - **Autosave with crash recovery.** While you work, unsaved changes are
   written every few seconds to a backup file next to the project (Reaper
   style). Ctrl+S writes the project and clears the backup. If the app
