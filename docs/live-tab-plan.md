@@ -107,4 +107,63 @@ Today: `selected`, `group_palettes`, `master`, `blackout`, `strobe`,
 Stages 1-3 cover everything you called out (colour marking, submasters,
 grandmaster); 4-5 add the movement and FX pools; 6-7 finish the surface.
 
-Nothing here is started; this is the plan.
+Stages 1-3 are DONE (commits through c3a732a): colour swatches, per-group
+submasters, grandmaster-as-first-bank-fader + DBO.
+
+## Requested additions (round 2, decisions locked)
+
+New asks and their decided shape:
+
+- **BPM + TAP** - reuse `auto/bpm_detector.py::TapBPM` (`tap()` returns the
+  running estimate, `reset()` clears). A tempo cluster: a BPM readout + a
+  TAP button (and a reset). This tempo is the reference for rate-based
+  controls (strobe rate, the rudiment "1/4" etc.). When a show is running
+  underneath (see mode), sync to the show BPM; free-busk uses the tap.
+- **Effect palette = the Riff library.** A `Riff` already is "a reusable
+  pattern of sublane blocks", so the EFFECTS pool lists riffs from the
+  shared `RiffLibrary` (the same catalog the riff browser shows). "Customize
+  from the library" is exactly this.
+- **Scenes palette = a new scene library** (parallel to riffs), predefined
+  and populated later. A `Scene` is a static look; the palette lists scenes
+  from a `SceneLibrary`. For now the pool renders from the (possibly empty /
+  seeded) library and is clearly marked when empty - no live capture yet.
+- **Queue = both** a running-playbacks stack AND a preloaded next-up list.
+  The right column's ACTIVE PLAYBACKS is the running stack (each pausable /
+  killable); a NEXT-UP list holds items you staged with "add to queue";
+  firing moves an item next-up -> running. Scenes/effects/palettes can be
+  fired live or added to next-up.
+- **Show-vs-live selector = busk-on-top.** The surface is ALWAYS live; a
+  SHOW / LIVE toggle says whether a predefined show also runs underneath.
+  In SHOW mode the running-show cue appears in ACTIVE PLAYBACKS and the
+  live controls layer over it (merge). In LIVE mode there is no show
+  underneath. (The actual merge is the engine pass; here it is state +
+  the playbacks display.)
+
+### Layout placement (proposed)
+
+- Top strip: the SHOW / LIVE mode toggle (segment) on the left near SELECT;
+  the BPM readout + TAP on the right of the FADE row.
+- Centre pools: today COLOUR / POSITION / INTENSITY-FX sit side by side.
+  Adding EFFECTS (riffs) and SCENES would make five - too wide. Proposed: a
+  pool-selector segment row above the grid (COLOUR · POSITION · FX ·
+  EFFECTS · SCENES) that switches which pool fills the centre, so each pool
+  stays readable and the set scales. (Open for your call - alternative is a
+  5-column grid with narrower pools.)
+- Right column: ACTIVE PLAYBACKS becomes the running stack; a NEXT-UP
+  section below it for the queued items, with the GO / add-to-queue wiring.
+
+### Revised staging for the additions (each its own commit + golden)
+
+A. BPM + TAP cluster + the SHOW/LIVE mode toggle (state + display; reuse
+   TapBPM). No centre-layout change.
+B. Effects pool wired to the shared RiffLibrary (+ the pool-selector if we
+   go that route).
+C. Scenes pool + a `SceneLibrary` model (empty/seeded, predefined later).
+D. Queue: running stack + next-up list + add-to-queue / GO wiring in state.
+E. (later) engine resolve so busk-on-top actually merges over the show.
+
+`LiveState` grows: `bpm`, `mode` ("show"/"live"), `running` (list),
+`next_up` (list), `effect`/`scene` per selection. Still one
+`state_changed`; still no DMX this round.
+
+Stages 1-3 done; A onward is the round-2 work.
