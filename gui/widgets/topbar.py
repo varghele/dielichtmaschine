@@ -65,6 +65,9 @@ def default_sections():
         Section("auto", QCoreApplication.translate("Shell", "Auto"), [
             ("auto", QCoreApplication.translate("Shell", "Auto"), 5),
         ]),
+        Section("live", QCoreApplication.translate("Shell", "Live"), [
+            ("live", QCoreApplication.translate("Shell", "Live"), 6),
+        ]),
     ]
 
 
@@ -331,6 +334,8 @@ def screen_hints():
             "Shell", "Drop riffs onto lanes · Ctrl+Z undo · Auto-Generate builds a show from audio"),
         5: QCoreApplication.translate(
             "Shell", "Pick an audio input and press Start · Ctrl+L jumps here"),
+        6: QCoreApplication.translate(
+            "Shell", "Select groups, then touch a palette to busk the rig live"),
     }
 
 

@@ -82,6 +82,11 @@ class Ui_MainWindow(object):
         # (operator runtime view) can claim that name.
         self.tab_auto = QtWidgets.QWidget()
 
+        # Live Tab (UI created by LiveTab) - the touch-palette busking
+        # surface (North Star screen 09, layout 3b). The "Live" name was
+        # freed when the old Live tab became Auto.
+        self.tab_live = QtWidgets.QWidget()
+
         # Add tabs to widget
         self.tabWidget.addTab(self.tab_config, "Configuration")
         self.tabWidget.addTab(self.tab, "Fixtures")
@@ -89,6 +94,7 @@ class Ui_MainWindow(object):
         self.tabWidget.addTab(self.tab_structure, "Structure")
         self.tabWidget.addTab(self.tab_2, "Shows")
         self.tabWidget.addTab(self.tab_auto, "Auto(Experimental)")
+        self.tabWidget.addTab(self.tab_live, "Live")
 
         # The shell topbar + subnav are the visible navigation; the tab
         # bar itself is hidden and the QTabWidget stays as the page host
@@ -121,6 +127,7 @@ class Ui_MainWindow(object):
         self.tabWidget.setTabText(self.tabWidget.indexOf(self.tab_structure), _translate("MainWindow", "Structure"))
         self.tabWidget.setTabText(self.tabWidget.indexOf(self.tab_2), _translate("MainWindow", "Shows"))
         self.tabWidget.setTabText(self.tabWidget.indexOf(self.tab_auto), _translate("MainWindow", "Auto(Experimental)"))
+        self.tabWidget.setTabText(self.tabWidget.indexOf(self.tab_live), _translate("MainWindow", "Live"))
         # Toolbar actions
         self.saveAction.setText(_translate("MainWindow", "Save Configuration"))
         self.loadAction.setText(_translate("MainWindow", "Load Configuration"))

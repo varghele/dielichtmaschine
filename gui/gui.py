@@ -10,8 +10,8 @@ from PyQt6.QtGui import QUndoStack, QKeySequence, QAction
 from config.models import Configuration
 from utils.create_workspace import create_qlc_workspace
 from gui.Ui_MainWindow import Ui_MainWindow
-from gui.tabs import (ConfigurationTab, FixturesTab, AutoTab, ShowsTab,
-                       StageTab, StructureTab)
+from gui.tabs import (ConfigurationTab, FixturesTab, AutoTab, LiveTab,
+                       ShowsTab, StageTab, StructureTab)
 from gui.audio_settings_dialog import AudioSettingsDialog
 from gui.dialogs.workspace_options_dialog import WorkspaceOptionsDialog
 from gui.progress_manager import ProgressManager, set_progress_manager
@@ -264,6 +264,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.structure_tab = StructureTab(self.config, self)
         self.shows_tab = ShowsTab(self.config, self)
         self.auto_tab = AutoTab(self.config, self)
+        self.live_tab = LiveTab(self.config, self)
 
         # Replace placeholder tabs with actual tab widgets
         # The tab widget structure is created in Ui_MainWindow
@@ -350,6 +351,19 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         new_layout.setContentsMargins(0, 0, 0, 0)
         new_layout.addWidget(self.auto_tab)
 
+        # Live tab (tab_live)
+        layout = self.tab_live.layout()
+        if layout:
+            while layout.count():
+                item = layout.takeAt(0)
+                if item.widget():
+                    item.widget().deleteLater()
+            layout.deleteLater()
+
+        new_layout = QtWidgets.QVBoxLayout(self.tab_live)
+        new_layout.setContentsMargins(0, 0, 0, 0)
+        new_layout.addWidget(self.live_tab)
+
         # Create Riff Browser dockable panel
         self._create_riff_browser()
 
@@ -424,6 +438,11 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         # rebinding it keeps showing the previous session's fixtures.
         self.auto_tab.config = self.config
         self.auto_tab.update_from_config()
+
+        # Live busking surface - refresh its SELECT tiles from the new
+        # group set (no output engine wired yet).
+        self.live_tab.config = self.config
+        self.live_tab.update_from_config()
 
         # Repaint all three embedded 3D previews with the new fixture set.
         self.on_visualizer_config_changed()
@@ -619,6 +638,8 @@ class MainWindow(QMainWindow, Ui_MainWindow):
                 tab_map[4] = self.shows_tab
             if hasattr(self, 'auto_tab'):
                 tab_map[5] = self.auto_tab
+            if hasattr(self, 'live_tab'):
+                tab_map[6] = self.live_tab
 
             # Call on_tab_deactivated on the previous tab
             if hasattr(self, '_current_tab_index') and self._current_tab_index in tab_map:
@@ -1171,6 +1192,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             self.structure_tab.config = self.config
             self.shows_tab.config = self.config
             self.auto_tab.config = self.config
+            self.live_tab.config = self.config
 
             # Refresh all tabs
             self.progress_manager.update_modal(3, "Updating Configuration tab...")
@@ -1191,6 +1213,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             # Auto tab refresh + central visualizer push so all 3D
             # previews repaint with the imported fixture set.
             self.auto_tab.update_from_config()
+            self.live_tab.update_from_config()
             self.on_visualizer_config_changed()
 
             self.progress_manager.finish_modal()

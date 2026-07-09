@@ -13,6 +13,12 @@ verbatim as the GitHub Release notes (see [docs/releasing.md](docs/releasing.md)
 
 ### Added
 
+- **A Live tab (first pass).** The touch-palette busking surface (North
+  Star layout 3b): pick fixture groups on the left, apply palette cells
+  (Static / Strobe / Sparkle / Waterfall / Circle / White wash) to the
+  selection with a fade time, and a master fader, strobe, and blackout on
+  the right. This pass drives an in-memory live state; live DMX output is
+  a later pass.
 - **A fuller timeline grid and a swing toggle.** The grid snap now ranges
   from coarse to fine: 4, 2, 1, 1/2, 1/4, 1/8, 1/16 (4 and 2 place a line
   every 4 and every 2 beats; the fractions subdivide the beat). A new
