@@ -15,8 +15,7 @@ Anatomy (left to right, top to bottom):
   ADDRESS / GROUP. Plain read-only items, group-tinted rows (low-alpha
   background brushes - allowed because the theme has no
   QTableView::item rule, see docs/qt-gotchas.md #1), group names in the
-  group color, red UNI/ADDRESS cells on DMX conflicts. The AUTO-PATCH
-  footer line sits underneath.
+  group color, red UNI/ADDRESS cells on DMX conflicts.
 - a 380px inspector: display-caps fixture name + mono provenance,
   CAPABILITIES chip row, CHANNEL MAP mono list (both derived from the
   fixture-definition cache), the editors (name / universe / address /
@@ -332,6 +331,7 @@ class _GroupRow(QtWidgets.QWidget):
     """One clickable row of the GROUPS panel."""
 
     clicked = QtCore.pyqtSignal(str)
+    context_requested = QtCore.pyqtSignal(str, QtCore.QPoint)
 
     def __init__(self, group_name: str, parent=None):
         super().__init__(parent)
@@ -343,6 +343,9 @@ class _GroupRow(QtWidgets.QWidget):
     def mousePressEvent(self, event):
         if event.button() == Qt.MouseButton.LeftButton:
             self.clicked.emit(self._group_name)
+        elif event.button() == Qt.MouseButton.RightButton:
+            self.context_requested.emit(
+                self._group_name, event.globalPosition().toPoint())
         super().mousePressEvent(event)
 
 
@@ -423,7 +426,7 @@ class FixturesTab(BaseTab):
     # ------------------------------------------------------------------
     def setup_ui(self):
         """Build the reference screen: action strip, groups panel,
-        display table + AUTO-PATCH footer, inspector, status strip."""
+        display table, inspector, status strip."""
         from gui.typography import MicroLabel, display_font
         from gui.widgets.chip import Chip
 
@@ -550,8 +553,7 @@ class FixturesTab(BaseTab):
         self.groups_hint.setProperty("role", "hint-box")
 
     def _build_table_column(self) -> QtWidgets.QVBoxLayout:
-        """The patch table plus the AUTO-PATCH footer line."""
-        from gui.typography import MicroLabel
+        """The group-tinted patch table."""
         from gui.widgets.row_outline_table import RowOutlineTableWidget
 
         column = QtWidgets.QVBoxLayout()
@@ -564,15 +566,6 @@ class FixturesTab(BaseTab):
         self.table = RowOutlineTableWidget()
         self._setup_table()
         column.addWidget(self.table, 1)
-
-        footer_row = QtWidgets.QHBoxLayout()
-        footer_row.setContentsMargins(16, 8, 16, 8)
-        self.autopatch_label = MicroLabel(
-            "Auto-patch: new fixtures take the next free address range",
-            point_size=8, tracking_em=0.1)
-        footer_row.addWidget(self.autopatch_label)
-        footer_row.addStretch()
-        column.addLayout(footer_row)
         return column
 
     def _setup_table(self):
@@ -1091,6 +1084,7 @@ class FixturesTab(BaseTab):
             layout.addWidget(role_label)
 
         row.clicked.connect(self._on_group_row_clicked)
+        row.context_requested.connect(self._show_group_context_menu)
         return row
 
     def _on_group_row_clicked(self, name: str):
@@ -1218,6 +1212,13 @@ class FixturesTab(BaseTab):
         if 0 <= row < len(self.config.fixtures):
             return row
         return -1
+
+    def _selected_fixture_rows(self) -> list:
+        """Every selected row's config.fixtures index, ascending."""
+        model = self.table.selectionModel()
+        rows = ({index.row() for index in model.selectedRows()}
+                if model else {item.row() for item in self.table.selectedItems()})
+        return sorted(r for r in rows if 0 <= r < len(self.config.fixtures))
 
     def _refresh_inspector(self):
         """Load the selected fixture into the inspector.
@@ -1537,7 +1538,90 @@ class FixturesTab(BaseTab):
         duplicate_action.triggered.connect(self._duplicate_fixture)
         remove_action = menu.addAction("Remove")
         remove_action.triggered.connect(self._remove_fixture)
+
+        # Assign to group: acts on every selected row, so several fixtures
+        # can join a group in one go.
+        rows = self._selected_fixture_rows()
+        assign_menu = menu.addMenu("Assign to group")
+        if len(rows) > 1:
+            assign_menu.setTitle(f"Assign {len(rows)} to group")
+        for name in self.config.groups:
+            act = assign_menu.addAction(name)
+            act.triggered.connect(
+                lambda _checked, g=name: self._assign_selected_to_group(g))
+        if self.config.groups:
+            assign_menu.addSeparator()
+        new_group_action = assign_menu.addAction("New group...")
+        new_group_action.triggered.connect(self._assign_selected_to_new_group)
+        # Ungroup is just assigning the empty group.
+        assign_menu.addSeparator()
+        clear_action = assign_menu.addAction("Ungroup")
+        clear_action.triggered.connect(
+            lambda: self._assign_selected_to_group(""))
         return menu
+
+    def _assign_selected_to_group(self, group_name: str):
+        """Assign every selected fixture to ``group_name`` ("" ungroups)."""
+        rows = self._selected_fixture_rows()
+        if not rows:
+            return
+        for row in rows:
+            self.config.fixtures[row].group = group_name
+        self._after_group_assignment(group_name)
+
+    def _assign_selected_to_new_group(self):
+        """Prompt for a new group name, create it, and assign the selection."""
+        rows = self._selected_fixture_rows()
+        if not rows:
+            return
+        name, ok = QtWidgets.QInputDialog.getText(
+            self, "New Group", "Group name:")
+        name = name.strip() if ok else ""
+        if not name:
+            return
+        self._create_group(name)
+        self._assign_selected_to_group(name)
+
+    def _after_group_assignment(self, group_name: str):
+        """Shared refresh after fixtures change group (mirrors the inspector
+        group-change path but for a multi-row assignment)."""
+        self._update_groups()
+        self._refresh_all_row_visuals()
+        self._update_conflict_indicators()
+        if group_name and group_name in self.config.groups:
+            self._selected_group = group_name
+        elif self._selected_group not in self.config.groups:
+            self._selected_group = None
+        self._refresh_groups_panel()
+        self._refresh_inspector()
+        self._update_status_strip()
+        self._sync_fingerprint()
+        self._notify_main_window()
+
+    def _duplicate_group(self, name: str):
+        """Duplicate a group's settings (lighting role) into a new, empty
+        group. A fixture belongs to one group, so membership is not copied;
+        the copy is ready to receive its own fixtures."""
+        source = self.config.groups.get(name)
+        if source is None:
+            return
+        new_name = self._unique_group_name(f"{name} copy")
+        self._create_group(new_name, getattr(source, "lighting_role", ""))
+
+    def _unique_group_name(self, base: str) -> str:
+        if base not in self.config.groups:
+            return base
+        i = 2
+        while f"{base} {i}" in self.config.groups:
+            i += 1
+        return f"{base} {i}"
+
+    def _show_group_context_menu(self, name: str, global_pos):
+        menu = QtWidgets.QMenu(self)
+        duplicate_action = menu.addAction("Duplicate group")
+        duplicate_action.triggered.connect(
+            lambda: self._duplicate_group(name))
+        menu.exec(global_pos)
 
     def _show_table_context_menu(self, pos: QtCore.QPoint):
         """Show the Duplicate / Remove menu at a right-click on the table.

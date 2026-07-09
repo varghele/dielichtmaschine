@@ -255,19 +255,25 @@ class ConfigurationTab(BaseTab):
         from gui.typography import DisplayLabel, MicroLabel, display_font
 
         main_layout = QtWidgets.QVBoxLayout(self)
-        main_layout.setContentsMargins(16, 12, 16, 12)
-        main_layout.setSpacing(10)
+        main_layout.setContentsMargins(0, 0, 0, 0)
+        main_layout.setSpacing(0)
 
-        # Action strip. No tab title: the shell subnav already names the
+        # 38px action strip matching the Fixtures tab, so the accent
+        # "+ ADD ..." button lands in the exact same spot when switching
+        # between the two tabs. No tab title: the shell subnav names the
         # screen (reference 03).
-        title_row = QtWidgets.QHBoxLayout()
-        title_row.addStretch(1)
+        strip = QtWidgets.QWidget()
+        strip.setFixedHeight(38)
+        strip_row = QtWidgets.QHBoxLayout(strip)
+        strip_row.setContentsMargins(16, 0, 16, 0)
+        strip_row.setSpacing(12)
+        strip_row.addStretch(1)
 
         self.update_config_btn = QtWidgets.QPushButton("UPDATE CONFIG")
         self.update_config_btn.setProperty("role", "cta-outline")
         self.update_config_btn.setToolTip("Write the current settings "
                                           "into the configuration")
-        title_row.addWidget(self.update_config_btn)
+        strip_row.addWidget(self.update_config_btn)
 
         self.add_universe_btn = QtWidgets.QPushButton("+ ADD UNIVERSE")
         self.add_universe_btn.setProperty("role", "cta-accent")
@@ -275,8 +281,14 @@ class ConfigurationTab(BaseTab):
                                                    tracking_em=0.08))
         self.add_universe_btn.setToolTip("Add Universe")
         self.add_universe_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        title_row.addWidget(self.add_universe_btn)
-        main_layout.addLayout(title_row)
+        strip_row.addWidget(self.add_universe_btn)
+        main_layout.addWidget(strip)
+
+        # Body + status strip carry the tab's inner margins.
+        content = QtWidgets.QWidget()
+        content_layout = QtWidgets.QVBoxLayout(content)
+        content_layout.setContentsMargins(16, 10, 16, 12)
+        content_layout.setSpacing(10)
 
         body = QtWidgets.QHBoxLayout()
         body.setSpacing(16)
@@ -318,8 +330,9 @@ class ConfigurationTab(BaseTab):
 
         # -- Right: inspector -------------------------------------------
         body.addWidget(self._build_inspector())
-        main_layout.addLayout(body, 1)
-        main_layout.addWidget(self._build_status_strip())
+        content_layout.addLayout(body, 1)
+        content_layout.addWidget(self._build_status_strip())
+        main_layout.addWidget(content, 1)
 
         self.update_from_config()
 

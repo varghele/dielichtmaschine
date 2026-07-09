@@ -18,6 +18,11 @@ verbatim as the GitHub Release notes (see [docs/releasing.md](docs/releasing.md)
 
 ### Changed
 
+- **The Add button stays put between the Universes and Fixtures tabs.**
+  The Universes tab now uses the same top action strip as Fixtures, so
+  "+ ADD UNIVERSE" and "+ ADD FIXTURE" sit in the identical spot and the
+  button no longer jumps when you switch tabs. The redundant "auto-patch"
+  hint line under the fixtures table was removed (the behavior stays).
 - **The stage plan puts the audience at the bottom.** Front (the audience
   side) now renders along the bottom edge, matching how stage plots are
   conventionally drawn; the AUDIENCE marker moved there, fixture beams now
@@ -48,6 +53,11 @@ verbatim as the GitHub Release notes (see [docs/releasing.md](docs/releasing.md)
 
 - **Right-click a fixture row to Duplicate or Remove it** in the Fixtures
   tab, alongside the existing buttons.
+- **Assign several fixtures to a group at once**: select multiple rows and
+  use the right-click "Assign to group" menu (existing group, a new one,
+  or Ungroup).
+- **Duplicate a group** by right-clicking it in the groups panel; the copy
+  keeps the lighting role and starts empty, ready for its own fixtures.
 
 ### Fixed
 

@@ -25,6 +25,8 @@ import pytest
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
+from PyQt6 import QtWidgets
+
 from gui.tabs.fixtures_tab import (
     COL_ADDRESS, COL_FIXTURE, COL_GROUP, COL_MODE, COL_NUM, COL_TYPE,
     COL_UNI, CONFLICT_BG, GROUP_TINT_ALPHA,
@@ -487,7 +489,6 @@ def test_status_strip_counts_and_universe_usage(qapp, sample_configuration):
     try:
         assert tab.summary_label.text() == "1 FIXTURE · 1 GROUP"
         assert tab.universe_usage_label.text() == "U0 10/512"
-        assert "AUTO-PATCH" in tab.autopatch_label.text()
     finally:
         tab.deleteLater()
 
@@ -584,8 +585,10 @@ def test_context_menu_actions_dispatch_to_crud(qapp, sample_configuration,
                             lambda: called.append("remove"))
 
         menu = tab._build_table_context_menu()
-        actions = {a.text(): a for a in menu.actions()}
-        assert set(actions) == {"Duplicate", "Remove"}
+        actions = {a.text(): a for a in menu.actions() if a.text()}
+        # Duplicate and Remove are the top-level CRUD items (an "Assign to
+        # group" submenu also lives here now).
+        assert {"Duplicate", "Remove"} <= set(actions)
 
         actions["Duplicate"].trigger()
         actions["Remove"].trigger()
@@ -637,6 +640,144 @@ def test_context_menu_absent_on_empty_click(qapp, sample_configuration,
                             lambda: built.append(1))
         tab._show_table_context_menu(QtCore.QPoint(0, 0))
         assert built == []
+    finally:
+        tab.deleteLater()
+
+
+# ---------------------------------------------------------------------------
+# Group assignment (multi-select) and group duplication
+# ---------------------------------------------------------------------------
+
+def _multi_fixture_config():
+    from config.models import (Configuration, Fixture, FixtureGroup,
+                               FixtureMode, Universe)
+
+    def mk(name, address, group=""):
+        return Fixture(universe=0, address=address, manufacturer="M",
+                       model="X", name=name, group=group, current_mode="Std",
+                       available_modes=[FixtureMode(name="Std", channels=4)],
+                       type="PAR")
+
+    return Configuration(
+        fixtures=[mk("P1", 1), mk("P2", 5), mk("P3", 9, "Wash")],
+        groups={"Wash": FixtureGroup("Wash", [], lighting_role="wash")},
+        universes={0: Universe(id=0, name="U0", output={})})
+
+
+def _select_rows(tab, rows):
+    from PyQt6.QtCore import QItemSelection, QItemSelectionModel
+    model = tab.table.selectionModel()
+    model.clear()
+    for r in rows:
+        idx = tab.table.model().index(r, 0)
+        model.select(QItemSelection(idx, tab.table.model().index(
+            r, tab.table.columnCount() - 1)),
+            QItemSelectionModel.SelectionFlag.Select)
+
+
+def test_assign_multiple_fixtures_to_a_group(qapp):
+    tab = _make_tab(qapp, _multi_fixture_config())
+    try:
+        _select_rows(tab, [0, 1])
+        assert tab._selected_fixture_rows() == [0, 1]
+        tab._assign_selected_to_group("Wash")
+        groups = {f.name: f.group for f in tab.config.fixtures}
+        assert groups == {"P1": "Wash", "P2": "Wash", "P3": "Wash"}
+    finally:
+        tab.deleteLater()
+
+
+def test_assign_selection_to_a_new_group(qapp):
+    from unittest.mock import patch
+    tab = _make_tab(qapp, _multi_fixture_config())
+    try:
+        _select_rows(tab, [0, 1])
+        with patch.object(QtWidgets.QInputDialog, "getText",
+                          return_value=("Spots", True)):
+            tab._assign_selected_to_new_group()
+        assert "Spots" in tab.config.groups
+        assert tab.config.fixtures[0].group == "Spots"
+        assert tab.config.fixtures[1].group == "Spots"
+    finally:
+        tab.deleteLater()
+
+
+def test_ungroup_selection(qapp):
+    tab = _make_tab(qapp, _multi_fixture_config())
+    try:
+        _select_rows(tab, [2])  # P3 is in "Wash"
+        tab._assign_selected_to_group("")
+        assert tab.config.fixtures[2].group == ""
+    finally:
+        tab.deleteLater()
+
+
+def test_context_menu_has_assign_submenu(qapp):
+    tab = _make_tab(qapp, _multi_fixture_config())
+    try:
+        _select_rows(tab, [0])
+        menu = tab._build_table_context_menu()
+        submenus = [a.menu() for a in menu.actions() if a.menu() is not None]
+        assign = next((m for m in submenus
+                       if m.title().startswith("Assign")), None)
+        assert assign is not None
+        labels = [a.text() for a in assign.actions() if a.text()]
+        assert "Wash" in labels          # existing group
+        assert "New group..." in labels
+        assert "Ungroup" in labels
+    finally:
+        tab.deleteLater()
+
+
+def test_duplicate_group_copies_role_into_a_new_empty_group(qapp):
+    tab = _make_tab(qapp, _multi_fixture_config())
+    try:
+        tab._duplicate_group("Wash")
+        assert "Wash copy" in tab.config.groups
+        assert tab.config.groups["Wash copy"].lighting_role == "wash"
+        # Membership is not copied (a fixture belongs to one group).
+        assert tab.config.groups["Wash copy"].fixtures == []
+        # A second duplicate gets a distinct name.
+        tab._duplicate_group("Wash")
+        assert "Wash copy 2" in tab.config.groups
+    finally:
+        tab.deleteLater()
+
+
+def test_group_row_right_click_offers_duplicate(qapp):
+    """The group row emits context_requested; the handler builds a menu."""
+    from PyQt6.QtCore import QPoint
+    from unittest.mock import patch
+    tab = _make_tab(qapp, _multi_fixture_config())
+    try:
+        captured = {}
+
+        class FakeMenu:
+            def __init__(self, *a):
+                self._actions = []
+
+            def addAction(self, text):
+                from PyQt6.QtGui import QAction
+                act = QAction(text)
+                self._actions.append(act)
+                captured["actions"] = self._actions
+                return act
+
+            def exec(self, *a):
+                return None
+
+        with patch.object(QtWidgets, "QMenu", FakeMenu):
+            tab._show_group_context_menu("Wash", QPoint(0, 0))
+        assert any(a.text() == "Duplicate group"
+                   for a in captured.get("actions", []))
+    finally:
+        tab.deleteLater()
+
+
+def test_auto_patch_footer_text_is_gone(qapp, sample_configuration):
+    tab = _make_tab(qapp, sample_configuration)
+    try:
+        assert not hasattr(tab, "autopatch_label")
     finally:
         tab.deleteLater()
 
