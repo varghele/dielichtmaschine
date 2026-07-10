@@ -1842,10 +1842,16 @@ class FixturesTab(BaseTab):
 
             worker = CacheWorker(manufacturer, model)
             worker.finished.connect(loading_dialog.accept)
+            # A loading dialog is a progress indicator, not a question, so
+            # never QDialog.exec() - the test suite's modal guard bans it
+            # (docs/qt-gotchas.md #7) and a modal loop adds nothing here.
+            # A plain QEventLoop waits for the worker while the shown
+            # dialog keeps animating; the WindowModal flag still blocks
+            # input to the tab underneath.
+            wait_loop = QtCore.QEventLoop()
+            worker.finished.connect(wait_loop.quit)
             worker.start()
-
-            # Block until worker finishes (but event loop keeps running for animation)
-            loading_dialog.exec()
+            wait_loop.exec()
             worker.wait()  # Ensure thread is fully done
         else:
             # Already cached, no need for loading dialog

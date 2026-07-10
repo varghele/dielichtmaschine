@@ -54,6 +54,15 @@ verbatim as the GitHub Release notes (see [docs/releasing.md](docs/releasing.md)
 - **F7 opens the pause screen** (screensaver). F11 stays fullscreen; F
   and L remain the Stage tab's own zoom/layer keys.
 
+### Fixed
+
+- **The fixture-loading dialog no longer runs a modal event loop.** On a
+  cold fixture-capabilities cache, adding fixtures from a definition
+  showed its progress dialog via a blocking exec; it now waits on the
+  background cache worker with a plain event loop while the dialog
+  animates. Same behaviour, no modal loop, and the multi-add test runs
+  clean on a cold cache.
+
 ### Changed
 
 - **Shows became songs in a setlist.** What the app called a show (parts,
