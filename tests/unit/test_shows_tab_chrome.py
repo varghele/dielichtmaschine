@@ -21,9 +21,11 @@ Covers:
   pane, and follows manual splitter drags; the pane header carries the
   reference's POP-OUT + collapse chevron.
 - The right-pane block inspector reflects the real SelectionManager
-  state (empty / single / multi) and carries no overlap-function chip
-  row, because per-block overlap functions do not exist in the data
-  model (roadmap v1.6).
+  state (empty / single / multi), carries the timeline v3 field rows
+  (RANGE with bar span + snap, DIM effect chain, COL painted colour
+  swatches with a transition arrow), and carries no overlap-function
+  chip row or OVERLAP field, because per-block overlap functions do
+  not exist in the data model (roadmap v1.6, plan "Deferred").
 - The footer status line reports lanes / blocks / grid / zoom.
 
 Constructing ShowsTab headlessly normally hangs on the embedded-GL
@@ -399,12 +401,35 @@ def _lane_with_block(shows_tab, lane_name="Front Pars"):
     return shows_tab.lane_widgets[-1]
 
 
+def _col_row_contents(shows_tab):
+    """The COL row's live layout contents, in order: "chip:#RRGGBB" for
+    a painted swatch, or the label text for arrows / placeholders.
+    Reads the layout (not findChildren) so swatches replaced by an
+    earlier refresh (deleteLater pending) can't leak in."""
+    from PyQt6.QtWidgets import QLabel
+    box = shows_tab._inspector_col_box
+    out = []
+    for i in range(box.count()):
+        widget = box.itemAt(i).widget()
+        if not isinstance(widget, QLabel):
+            continue
+        pixmap = widget.pixmap()
+        if pixmap is not None and not pixmap.isNull():
+            color = pixmap.toImage().pixelColor(
+                pixmap.width() // 2, pixmap.height() // 2)
+            out.append(f"chip:{color.name().upper()}")
+        else:
+            out.append(widget.text())
+    return out
+
+
 class TestBlockInspector:
     def test_empty_state_when_nothing_selected(self, shows_tab):
         shows_tab.update_from_config()
         assert shows_tab.inspector_empty.text() == "NO BLOCK SELECTED"
         assert shows_tab.inspector_empty.property("role") == "hint-box"
         assert shows_tab.inspector_stats_row.isHidden()
+        assert shows_tab.inspector_rows.isHidden()
 
     def test_single_selection_shows_real_block_facts(self, shows_tab):
         shows_tab.update_from_config()
@@ -416,12 +441,91 @@ class TestBlockInspector:
         assert shows_tab.inspector_title.text() == "EFFECT BLOCK · CHORUS HIT"
         meta = shows_tab.inspector_meta.text()
         assert "FRONT PARS" in meta
-        assert "BARS 1-3" in meta  # 0-4 s at 120 BPM = bars 1..3
         assert "4.0S" in meta
+        # The bar span moved into the RANGE field row (T5), counted the
+        # same way as the T3 block header strip: 0-4 s at 120 BPM 4/4 is
+        # bars 1..2 (a block ending on a bar line doesn't claim the next
+        # bar); the default grid is the whole-beat "1" with snap on.
+        assert shows_tab.inspector_range_value.text() == "BARS 1-2 · SNAP 1"
         assert shows_tab.inspector_stat_values["DIM"].text() == "2"
         assert shows_tab.inspector_stat_values["COL"].text() == "1"
         assert shows_tab.inspector_stat_values["MOV"].text() == "0"
         assert shows_tab.inspector_stat_values["SPC"].text() == "0"
+
+    def test_range_row_follows_snap_and_grid_state(self, shows_tab):
+        shows_tab.update_from_config()
+        lane_widget = _lane_with_block(shows_tab)
+        shows_tab.selection_manager.select(
+            lane_widget.get_all_block_widgets()[0])
+
+        shows_tab.grid_chips[4].click()  # 1/4 grid
+        assert shows_tab.inspector_range_value.text() == \
+            "BARS 1-2 · SNAP 1/4"
+
+        shows_tab.snap_chip.click()  # snap off
+        assert shows_tab.inspector_range_value.text() == \
+            "BARS 1-2 · SNAP OFF"
+
+    def test_dim_row_lists_the_effect_chain(self, shows_tab):
+        from config.models import DimmerBlock
+        shows_tab.update_from_config()
+        lane_widget = _lane_with_block(shows_tab)
+        block_widget = lane_widget.get_all_block_widgets()[0]
+        block_widget.block.dimmer_blocks = [
+            DimmerBlock(start_time=0.0, end_time=2.0,
+                        effect_type="fade", intensity=208.0),
+            DimmerBlock(start_time=2.0, end_time=4.0,
+                        effect_type="pulse", effect_speed="1/2"),
+        ]
+
+        shows_tab.selection_manager.select(block_widget)
+        assert shows_tab.inspector_dim_value.text() == "FADE 208 → PULSE 1/2"
+
+    def test_dim_row_placeholder_without_dimmer_blocks(self, shows_tab):
+        shows_tab.update_from_config()
+        lane_widget = _lane_with_block(shows_tab)
+        block_widget = lane_widget.get_all_block_widgets()[0]
+        block_widget.block.dimmer_blocks = []
+        shows_tab.selection_manager.select(block_widget)
+        assert shows_tab.inspector_dim_value.text() == "-"
+
+    def test_col_row_paints_swatches_with_transition_arrow(self, shows_tab):
+        """Two colours in the block -> two ACTUAL QColor swatches joined
+        by an arrow (the mock's chip → chip treatment)."""
+        from config.models import ColourBlock
+        shows_tab.update_from_config()
+        lane_widget = _lane_with_block(shows_tab)
+        block_widget = lane_widget.get_all_block_widgets()[0]
+        block_widget.block.colour_blocks = [
+            ColourBlock(start_time=0.0, end_time=2.0, red=225, green=113,
+                        blue=38),
+            ColourBlock(start_time=2.0, end_time=4.0, red=255, green=0,
+                        blue=255),
+        ]
+
+        shows_tab.selection_manager.select(block_widget)
+        assert _col_row_contents(shows_tab) == \
+            ["chip:#E17126", "→", "chip:#FF00FF"]
+        assert len(shows_tab.inspector_col_chips) == 2
+
+    def test_col_row_single_colour_has_no_arrow(self, shows_tab):
+        from config.models import ColourBlock
+        shows_tab.update_from_config()
+        lane_widget = _lane_with_block(shows_tab)
+        block_widget = lane_widget.get_all_block_widgets()[0]
+        block_widget.block.colour_blocks = [
+            ColourBlock(start_time=0.0, end_time=4.0, red=255)]
+
+        shows_tab.selection_manager.select(block_widget)
+        assert _col_row_contents(shows_tab) == ["chip:#FF0000"]
+
+    def test_col_row_placeholder_without_colour_blocks(self, shows_tab):
+        shows_tab.update_from_config()
+        lane_widget = _lane_with_block(shows_tab)
+        block_widget = lane_widget.get_all_block_widgets()[0]
+        block_widget.block.colour_blocks = []
+        shows_tab.selection_manager.select(block_widget)
+        assert _col_row_contents(shows_tab) == ["-"]
 
     def test_lane_name_carries_the_group_color(self, shows_tab,
                                                sample_configuration):
@@ -440,6 +544,7 @@ class TestBlockInspector:
             [a.get_all_block_widgets()[0], b.get_all_block_widgets()[0]])
         assert shows_tab.inspector_empty.text() == "2 BLOCKS SELECTED"
         assert shows_tab.inspector_stats_row.isHidden()
+        assert shows_tab.inspector_rows.isHidden()
 
     def test_clearing_selection_returns_to_empty_state(self, shows_tab):
         shows_tab.update_from_config()
@@ -447,15 +552,27 @@ class TestBlockInspector:
         shows_tab.selection_manager.select(lane_widget.get_all_block_widgets()[0])
         shows_tab.selection_manager.clear_selection()
         assert shows_tab.inspector_empty.text() == "NO BLOCK SELECTED"
+        assert shows_tab.inspector_rows.isHidden()
 
     def test_no_overlap_function_chip_row(self, shows_tab):
-        """Per-block overlap functions (XFADE/HTP/LTP/ADD in the design
-        reference) do not exist in the data model - v1.6 roadmap work.
-        The inspector must not fake them."""
-        from PyQt6.QtWidgets import QPushButton
-        labels = {b.text().upper()
-                  for b in shows_tab.block_inspector.findChildren(QPushButton)}
-        assert not ({"XFADE", "HTP", "LTP", "ADD"} & labels)
+        """Per-block overlap functions (XFADE/HTP/LTP/ADD and the
+        mock's OVERLAP field row) do not exist in the data model -
+        v1.6 roadmap work (plan "Deferred"). The inspector must not
+        fake them, even with a block selected."""
+        from PyQt6.QtWidgets import QLabel, QPushButton
+
+        shows_tab.update_from_config()
+        lane_widget = _lane_with_block(shows_tab)
+        shows_tab.selection_manager.select(
+            lane_widget.get_all_block_widgets()[0])
+
+        buttons = {b.text().upper()
+                   for b in shows_tab.block_inspector.findChildren(QPushButton)}
+        assert not ({"XFADE", "HTP", "LTP", "ADD"} & buttons)
+        labels = {l.text().upper()
+                  for l in shows_tab.block_inspector.findChildren(QLabel)}
+        assert "OVERLAP" not in labels
+        assert not any("XFADE" in text for text in labels)
 
 
 class TestStatusFooter:

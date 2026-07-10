@@ -16,6 +16,9 @@ from utils.fixture_utils import load_fixture_definitions_from_qlc, get_cached_fi
 from timeline_ui import (MasterTimelineContainer, LightLaneWidget, AudioLaneWidget,
                          TimelineGrid)
 from timeline_ui.master_timeline_widget import SUBDIVISION_CHOICES
+from timeline_ui.light_block_widget import (bar_range_label,
+                                            blend_white_channel,
+                                            dimmer_segment_label)
 from gui.icons import line_icon, shell_icon
 from gui.typography import DisplayLabel, MicroLabel, mono_font
 from gui.tabs.configuration_tab import TOOLBAR_BTN_WIDTH
@@ -161,8 +164,12 @@ class ShowsTab(BaseTab):
         # and a single column boundary inside TimelineGrid. We still keep
         # references to the lane widgets themselves so signals/methods on
         # them keep working — TimelineGrid just owns their visual layout.
-        self.master_timeline = MasterTimelineContainer()
-        self.audio_lane = AudioLaneWidget()
+        # compact=True is the timeline v3 look (stage T4): the master row
+        # is the 26px PARTS band, the audio row the 44px AUDIO row, and
+        # both carry the unified 2px accent playhead (light lanes follow
+        # via TimelineGrid). The Structure tab keeps the default look.
+        self.master_timeline = MasterTimelineContainer(compact=True)
+        self.audio_lane = AudioLaneWidget(compact=True)
         self.timeline_grid = TimelineGrid()
         self.timeline_grid.set_master(self.master_timeline)
         self.timeline_grid.set_audio_lane(self.audio_lane)
@@ -560,12 +567,15 @@ class ShowsTab(BaseTab):
     def _create_block_inspector(self) -> QWidget:
         """Read-only inspector for the current block selection.
 
-        The reference shows an EFFECT BLOCK inspector with a per-block
-        overlap-function chip row (XFADE / HTP / LTP / ADD). Overlap
-        functions do not exist in the data model (roadmap v1.6), so the
-        chip row is deliberately absent - everything here reflects real
-        state: the block name, its lane (in the lane's group color), its
-        bar range and duration, and the sub-lane block counts.
+        Timeline v3 (stage T5): under the title + meta line the panel
+        carries the mock's field rows for the selected block - RANGE
+        (bar span + snap state), DIM (the dimmer effect chain) and COL
+        (painted colour swatches with an arrow when the block
+        transitions between colours) - then the DIM/COL/MOV/SPC count
+        tiles. The reference also shows an OVERLAP row (XFADE / 1 BAR):
+        per-block overlap functions do not exist in the data model
+        (roadmap v1.6, see docs/timeline-v3-plan.md "Deferred"), so that
+        row is deliberately absent - everything here reflects real state.
         """
         panel = QWidget()
         panel.setObjectName("ShowBlockInspector")
@@ -584,6 +594,51 @@ class ShowsTab(BaseTab):
         self.inspector_meta.setFont(mono_font(8))
         self.inspector_meta.setTextFormat(Qt.TextFormat.RichText)
         outer.addWidget(self.inspector_meta)
+
+        # Field rows (mock 06b right rail): mono caption left, value
+        # right. Captions use the stat-caption treatment so the rows and
+        # tiles read as one family.
+        self.inspector_rows = QWidget()
+        self.inspector_rows.setObjectName("ShowBlockInspectorRows")
+        rows = QVBoxLayout(self.inspector_rows)
+        rows.setContentsMargins(0, 0, 0, 0)
+        rows.setSpacing(3)
+
+        def field_row(caption: str) -> QHBoxLayout:
+            row = QHBoxLayout()
+            row.setContentsMargins(0, 0, 0, 0)
+            row.setSpacing(6)
+            cap = QLabel(caption)
+            cap.setProperty("role", "stat-caption")
+            cap.setFont(mono_font(7, tracking_em=0.12))
+            row.addWidget(cap)
+            row.addStretch()
+            return row
+
+        range_row = field_row("RANGE")
+        self.inspector_range_value = QLabel("")
+        self.inspector_range_value.setObjectName("ShowBlockInspectorRange")
+        self.inspector_range_value.setFont(mono_font(8))
+        range_row.addWidget(self.inspector_range_value)
+        rows.addLayout(range_row)
+
+        dim_row = field_row("DIM")
+        self.inspector_dim_value = QLabel("")
+        self.inspector_dim_value.setObjectName("ShowBlockInspectorDim")
+        self.inspector_dim_value.setFont(mono_font(8))
+        dim_row.addWidget(self.inspector_dim_value)
+        rows.addLayout(dim_row)
+
+        col_row = field_row("COL")
+        col_value = QWidget()
+        self._inspector_col_box = QHBoxLayout(col_value)
+        self._inspector_col_box.setContentsMargins(0, 0, 0, 0)
+        self._inspector_col_box.setSpacing(4)
+        self.inspector_col_chips = []
+        col_row.addWidget(col_value)
+        rows.addLayout(col_row)
+
+        outer.addWidget(self.inspector_rows)
 
         self.inspector_stats_row = QWidget()
         stats = QHBoxLayout(self.inspector_stats_row)
@@ -695,6 +750,62 @@ class ShowsTab(BaseTab):
             f"GRID {self._grid_label()} · ZOOM {zoom:.1f}X"
         )
 
+    @staticmethod
+    def _colour_chip(color) -> QLabel:
+        """A painted 14px colour swatch (an actual pixel fill, not a
+        stylesheet, so tests and users see the real QColor)."""
+        from PyQt6.QtGui import QPixmap
+        chip = QLabel()
+        pixmap = QPixmap(14, 14)
+        pixmap.fill(color)
+        chip.setPixmap(pixmap)
+        chip.setFixedSize(14, 14)
+        chip.setToolTip(color.name().upper())
+        return chip
+
+    def _set_inspector_colours(self, colour_blocks):
+        """Rebuild the COL row: one swatch per colour the block moves
+        through (consecutive duplicates collapse), an arrow between
+        swatches when a transition exists, a "-" when the block has no
+        colour content. Capped at 3 swatches + a "+N" overflow tag."""
+        while self._inspector_col_box.count():
+            item = self._inspector_col_box.takeAt(0)
+            child = item.widget()
+            if child is not None:
+                child.deleteLater()
+        self.inspector_col_chips = []
+
+        def tag(text: str) -> QLabel:
+            label = QLabel(text)
+            label.setFont(mono_font(8))
+            return label
+
+        ordered = sorted(colour_blocks,
+                         key=lambda b: (b.start_time, b.end_time))
+        colours = []
+        for colour_block in ordered:
+            rgb = blend_white_channel(
+                colour_block.red, colour_block.green, colour_block.blue,
+                getattr(colour_block, "white", 0))
+            from PyQt6.QtGui import QColor
+            qcolor = QColor(*rgb)
+            if not colours or colours[-1].rgb() != qcolor.rgb():
+                colours.append(qcolor)
+
+        if not colours:
+            self._inspector_col_box.addWidget(tag("-"))
+            return
+        shown = colours[:3]
+        for index, qcolor in enumerate(shown):
+            if index:
+                self._inspector_col_box.addWidget(tag("→"))
+            chip = self._colour_chip(qcolor)
+            self.inspector_col_chips.append(chip)
+            self._inspector_col_box.addWidget(chip)
+        overflow = len(colours) - len(shown)
+        if overflow > 0:
+            self._inspector_col_box.addWidget(tag(f"+{overflow}"))
+
     def _refresh_block_inspector(self):
         """Mirror the current block selection into the right-pane inspector.
 
@@ -708,6 +819,7 @@ class ShowsTab(BaseTab):
         if len(selected) != 1:
             self.inspector_stats_row.setVisible(False)
             self.inspector_meta.setVisible(False)
+            self.inspector_rows.setVisible(False)
             self.inspector_empty.setVisible(True)
             if selected:
                 self.inspector_title.setText("Effect Blocks")
@@ -733,13 +845,27 @@ class ShowsTab(BaseTab):
         lane_html = (f'<span style="color:{color}">{lane_name.upper()}</span>'
                      if color else lane_name.upper())
 
-        start_bar = self._bar_number_at(block.start_time)
-        end_bar = self._bar_number_at(block.end_time)
-        bars = (f"BARS {start_bar}-{end_bar}"
-                if start_bar and end_bar else "BARS -")
         duration = block.get_duration()
-        self.inspector_meta.setText(
-            f"{lane_html} · {bars} · {duration:.1f}S")
+        self.inspector_meta.setText(f"{lane_html} · {duration:.1f}S")
+
+        # RANGE: the block's bar span (same counting as the T3 block
+        # header strip) plus the live snap state.
+        bars = bar_range_label(self.song_structure, block.start_time,
+                               block.end_time) or "BARS -"
+        snap = (f"SNAP {self._grid_label()}"
+                if self.snap_chip.isChecked() else "SNAP OFF")
+        self.inspector_range_value.setText(f"{bars} · {snap}")
+
+        # DIM: the dimmer effect chain in timeline order.
+        ordered_dimmers = sorted(block.dimmer_blocks,
+                                 key=lambda b: (b.start_time, b.end_time))
+        chain = " → ".join(
+            dimmer_segment_label(d.effect_type, d.effect_speed, d.intensity)
+            for d in ordered_dimmers)
+        self.inspector_dim_value.setText(chain or "-")
+
+        # COL: painted swatches with transition arrows.
+        self._set_inspector_colours(block.colour_blocks)
 
         counts = {
             "DIM": len(block.dimmer_blocks),
@@ -752,6 +878,7 @@ class ShowsTab(BaseTab):
 
         self.inspector_empty.setVisible(False)
         self.inspector_meta.setVisible(True)
+        self.inspector_rows.setVisible(True)
         self.inspector_stats_row.setVisible(True)
 
     def _apply_chrome_icons(self):
@@ -1420,10 +1547,14 @@ class ShowsTab(BaseTab):
         every lane; the master's grid drawing follows)."""
         self.timeline_grid.set_grid_subdivision(value)
         self._update_status_line()
+        # The inspector RANGE row echoes the snap resolution.
+        self._refresh_block_inspector()
 
     def _on_snap_chip_clicked(self, checked: bool):
         """Toolbar SNAP chip -> TimelineGrid (master + audio + lanes)."""
         self.timeline_grid.set_snap_to_grid(checked)
+        # The inspector RANGE row echoes the snap state.
+        self._refresh_block_inspector()
 
     def _show_swing_menu(self):
         """Open the SWING percentage menu under the chip (non-blocking)."""

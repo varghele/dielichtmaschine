@@ -13,14 +13,18 @@ the theme itself, and never open a modal (docs/qt-gotchas.md #7).
 
 import pytest
 
-from PyQt6.QtWidgets import QPushButton
+from PyQt6.QtWidgets import QLabel, QPushButton
 
-from config.models import Riff
+from config.models import Riff, Scene
 from gui.theme_tokens import THEMES, render_theme
+from scenes.scene_library import SceneLibrary
 from timeline_ui.riff_browser_widget import (
     RiffBrowserPanel,
     RiffItemWidget,
+    SceneItemWidget,
     CollapsedRiffBar,
+    SCENE_MIME_TYPE,
+    SCENES_EMPTY_TEXT,
     _active_tokens,
 )
 
@@ -106,6 +110,119 @@ def test_collapsed_bar_carries_brand_roles(qapp):
         assert bar.styleSheet() == ""  # no inline Material surface
     finally:
         bar.deleteLater()
+
+
+# ── Scenes section (timeline v3 stage T5) ────────────────────────────
+#
+# The library rail lists the shared SceneLibrary below the riff
+# categories. Display + drag SOURCE only: the rows carry a distinct
+# scene mime type, and no timeline accepts it - cross-lane scene drops
+# are deferred to the capability-mapping pass (docs/timeline-v3-plan.md
+# "Deferred"), so the drag is inert by design.
+
+
+def _empty_scene_library() -> SceneLibrary:
+    # A directory that does not exist yields an empty library (that is
+    # SceneLibrary's documented missing-dir behaviour).
+    return SceneLibrary(scenes_directory="__no_such_scenes_dir__")
+
+
+def _scene_library(*scenes) -> SceneLibrary:
+    lib = _empty_scene_library()
+    for scene in scenes:
+        lib.add_scene(scene, scene.category)
+    return lib
+
+
+@pytest.fixture
+def scenes_panel(qapp):
+    lib = _scene_library(
+        Scene(name="Drop Total", category="general", color="#F0562E",
+              groups=["Front", "Back", "Movers", "Blinders"]),
+        Scene(name="Warm Pause", category="general",
+              groups=["Front"]),
+    )
+    panel = RiffBrowserPanel(scene_library=lib)
+    yield panel
+    panel.deleteLater()
+
+
+def _scene_row_widgets(panel):
+    section = panel._scenes_item
+    return [panel.tree.itemWidget(section.child(i), 0)
+            for i in range(section.childCount())]
+
+
+def test_scenes_section_is_last_and_labelled(scenes_panel):
+    from PyQt6.QtCore import Qt
+    tree = scenes_panel.tree
+    last = tree.topLevelItem(tree.topLevelItemCount() - 1)
+    assert last is scenes_panel._scenes_item
+    assert "Scenes (2)" in last.text(0)
+    data = last.data(0, Qt.ItemDataRole.UserRole)
+    assert data["type"] == "scene_category"
+
+
+def test_scene_rows_show_name_chip_and_group_tag(scenes_panel):
+    rows = _scene_row_widgets(scenes_panel)
+    assert all(isinstance(w, SceneItemWidget) for w in rows)
+    by_name = {w.scene.name: w for w in rows}
+
+    coloured = by_name["Drop Total"]
+    names = [lbl.text() for lbl in coloured.findChildren(QLabel)
+             if lbl.text()]
+    assert "Drop Total" in names
+    assert coloured.tag_label.text() == "4 GROUPS"
+    # The colour chip is an ACTUAL painted swatch of scene.color.
+    assert coloured.chip_label is not None
+    pixmap = coloured.chip_label.pixmap()
+    assert not pixmap.isNull()
+    center = pixmap.toImage().pixelColor(pixmap.width() // 2,
+                                         pixmap.height() // 2)
+    assert center.name().upper() == "#F0562E"
+
+    plain = by_name["Warm Pause"]
+    assert plain.chip_label is None  # no colour set -> no chip
+    assert plain.tag_label.text() == "1 GROUP"
+
+
+def test_scene_drag_mime_is_distinct_from_riffs(scenes_panel):
+    import json
+    assert SCENE_MIME_TYPE == "application/x-lm-scene"
+    widget = _scene_row_widgets(scenes_panel)[0]
+    mime = widget._build_mime_data()
+    assert mime.hasFormat(SCENE_MIME_TYPE)
+    # NOT the riff mime: timelines only accept riff drops, so the scene
+    # drag stays inert until the deferred drop handler lands.
+    assert not mime.hasFormat("application/x-qlc-riff")
+    payload = json.loads(bytes(mime.data(SCENE_MIME_TYPE)).decode())
+    assert payload["key"] == "general/Drop Total"
+    assert payload["groups"] == ["Front", "Back", "Movers", "Blinders"]
+
+
+def test_empty_scene_library_shows_the_live_tab_marker(qapp):
+    panel = RiffBrowserPanel(scene_library=_empty_scene_library())
+    try:
+        section = panel._scenes_item
+        assert "Scenes (0)" in section.text(0)
+        assert section.childCount() == 1
+        marker = panel.tree.itemWidget(section.child(0), 0)
+        assert isinstance(marker, QLabel)
+        assert marker.text() == SCENES_EMPTY_TEXT
+        assert marker.text() == \
+            "No scenes yet · predefined looks arrive later"
+        assert marker.property("role") == "micro"
+    finally:
+        panel.deleteLater()
+
+
+def test_scene_library_resolves_to_safe_empty_fallback(panel):
+    # No injected library and no main-window scene_library attribute:
+    # the panel must still render a (possibly empty) scenes section
+    # rather than crash - the same fallback the Live tab uses.
+    assert panel._scenes_item is not None
+    lib = panel._resolve_scene_library()
+    assert lib is not None
 
 
 def test_tree_selection_is_accent_in_rendered_dark_theme():

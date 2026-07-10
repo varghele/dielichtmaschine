@@ -23,12 +23,32 @@ SUBDIVISION_CHOICES = [
 ]
 
 
+# Height of the compact parts band (timeline v3 regions row, screen 06b).
+PARTS_BAND_HEIGHT = 26
+# ~0.2-alpha tint of the part colour across a parts-band region.
+PARTS_BAND_TINT_ALPHA = 51
+# Width of the dark separator between adjacent parts-band regions.
+PARTS_BAND_SEPARATOR_PX = 2
+
+
 class MasterTimelineWidget(TimelineWidget):
-    """Master timeline widget with enhanced playhead and song structure display."""
+    """Master timeline widget with enhanced playhead and song structure display.
+
+    Two looks share this class:
+
+    - default (Structure tab): the North Star region bands (3px part-color
+      top bar over a ~0.18 tint, stacked name + BPM readout, red playhead
+      with the grab triangle) at the taller row height.
+    - ``parts_band=True`` (Shows tab, timeline v3 stage T4): the 26px
+      PARTS band from screen 06b - regions tinted in the part colour at
+      ~0.2 alpha, part name in condensed caps with a small mono BPM tag
+      inline, 2px dark separators between regions, and the unified 2px
+      accent playhead line.
+    """
 
     playhead_moved = pyqtSignal(float)  # Emits new playhead position in seconds
 
-    def __init__(self, parent=None):
+    def __init__(self, parent=None, parts_band=False):
         # Initialize attributes before calling super()
         self.song_structure = None
         self.playhead_position = 0.0
@@ -37,10 +57,13 @@ class MasterTimelineWidget(TimelineWidget):
         self.base_pixels_per_second = 60
         self.min_zoom = 0.1
         self.max_zoom = 5.0
+        self.parts_band = parts_band
 
         super().__init__(parent)
 
-        self.setMinimumHeight(40)
+        # Unified accent playhead is part of the v3 parts-band look.
+        self.playhead_accent = parts_band
+        self.setMinimumHeight(PARTS_BAND_HEIGHT if parts_band else 40)
         self.setMinimumWidth(2000)
         # Background and border come from the active theme via the
         # `MasterTimelineWidget` selector — no inline stylesheet here.
@@ -113,6 +136,9 @@ class MasterTimelineWidget(TimelineWidget):
         # Deferred import: the gui package imports timeline_ui at module
         # load, so a top-level import here would be circular.
         from gui.typography import display_font, mono_font
+        if self.parts_band:
+            self._draw_parts_band(painter, width, height)
+            return
         try:
             for part in self.song_structure.parts:
                 start_x = self.time_to_pixel(part.start_time)
@@ -155,6 +181,88 @@ class MasterTimelineWidget(TimelineWidget):
                     painter.drawText(bpm_rect, Qt.AlignmentFlag.AlignLeft, bpm_text)
         except Exception as e:
             print(f"Error in draw_song_structure: {e}")
+
+    def _bpm_tag_text(self, part) -> str:
+        """"192 BPM" mono tag; "120->140 BPM" across a gradual ramp."""
+        bpm = f"{part.bpm:g}"
+        if getattr(part, "transition", "instant") == "gradual":
+            prev_bpm = self.get_previous_part_bpm(part)
+            if prev_bpm != part.bpm:
+                return f"{prev_bpm:g}->{bpm} BPM"
+        return f"{bpm} BPM"
+
+    def _draw_parts_band(self, painter, width, height):
+        """Timeline v3 parts band (mock 06b regions row): each region is
+        a ~0.2-alpha tint of the part colour with the part name in
+        condensed caps and a small mono BPM tag inline, separated from
+        the next region by a 2px window-dark hairline. Labels elide and
+        the BPM tag drops before anything paints outside its region."""
+        from PyQt6.QtGui import QFont
+        from gui.typography import display_font, mono_font
+        from .light_block_widget import active_tokens, elided
+
+        tokens = active_tokens()
+        name_color = QColor(tokens["text"])
+        separator_color = QColor(tokens["window"])
+        # Steel gray reads on the near-background tint in both themes
+        # (same value the block sub-row labels use).
+        bpm_color = QColor(141, 146, 153)
+
+        try:
+            parts = self.song_structure.parts
+            for index, part in enumerate(parts):
+                start_x = self.time_to_pixel(part.start_time)
+                end_x = self.time_to_pixel(part.start_time + part.duration)
+                if end_x < 0 or start_x > width:
+                    continue
+
+                x = int(start_x)
+                band_width = int(end_x - start_x)
+                tint = QColor(part.color)
+                tint.setAlpha(PARTS_BAND_TINT_ALPHA)
+                painter.fillRect(x, 0, band_width, height, tint)
+
+                # 2px dark separator between adjacent regions (none after
+                # the last - the band simply ends, per the mock).
+                if index < len(parts) - 1:
+                    painter.fillRect(int(end_x) - PARTS_BAND_SEPARATOR_PX, 0,
+                                     PARTS_BAND_SEPARATOR_PX, height,
+                                     separator_color)
+
+                # Part name in condensed caps, vertically centered.
+                label_left = start_x + 8
+                label_avail = end_x - 8 - label_left
+                if label_avail <= 12:
+                    continue
+                painter.setFont(display_font(9, QFont.Weight.Bold))
+                metrics = painter.fontMetrics()
+                name_text = elided(metrics, (part.name or "").upper(),
+                                   label_avail)
+                if not name_text:
+                    continue
+                painter.setPen(QPen(name_color, 1))
+                painter.drawText(
+                    QRectF(label_left, 0, label_avail, height),
+                    Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter,
+                    name_text)
+
+                # Small mono BPM tag inline after the name.
+                bpm_left = label_left + metrics.horizontalAdvance(name_text) + 8
+                bpm_avail = end_x - 8 - bpm_left
+                if bpm_avail <= 12:
+                    continue
+                painter.setFont(mono_font(7))
+                bpm_text = elided(painter.fontMetrics(),
+                                  self._bpm_tag_text(part), bpm_avail)
+                if not bpm_text:
+                    continue
+                painter.setPen(QPen(bpm_color, 1))
+                painter.drawText(
+                    QRectF(bpm_left, 0, bpm_avail, height),
+                    Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter,
+                    bpm_text)
+        except Exception as e:
+            print(f"Error in _draw_parts_band: {e}")
 
     def draw_grid(self, painter, width, height):
         """Draw time-based grid with beat lines and optional sub-beat lines."""
@@ -202,7 +310,15 @@ class MasterTimelineWidget(TimelineWidget):
             self.draw_basic_grid(painter, width, height)
 
     def draw_playhead(self, painter, width, height):
-        """Draw enhanced playhead with triangle."""
+        """Draw the playhead.
+
+        Parts-band mode uses the base class's unified 2px accent line
+        (timeline v3: one playhead look across master + audio + lanes);
+        the default look keeps the legacy red line + grab triangle.
+        """
+        if self.parts_band:
+            super().draw_playhead(painter, width, height)
+            return
         try:
             playhead_x = self.time_to_pixel(self.playhead_position)
             playhead_x_rounded = round(playhead_x)
@@ -236,14 +352,23 @@ class MasterTimelineWidget(TimelineWidget):
 
 
 class MasterTimelineContainer(QWidget):
-    """Container for master timeline with label and info display."""
+    """Container for master timeline with label and info display.
+
+    ``compact=True`` (Shows tab, timeline v3 stage T4) turns the master
+    row into the 26px PARTS band: the timeline widget renders in
+    parts-band mode and ``detach_pieces`` returns a single "PARTS"
+    header cell instead of the 2-row title + info stack.
+    ``embedded_row_height`` tells TimelineGrid the row height to pin.
+    """
 
     playhead_moved = pyqtSignal(float)
     scroll_position_changed = pyqtSignal(int)
     zoom_changed = pyqtSignal(float)
 
-    def __init__(self, parent=None):
+    def __init__(self, parent=None, compact=False):
         super().__init__(parent)
+        self._compact = compact
+        self.embedded_row_height = PARTS_BAND_HEIGHT if compact else None
         self.setup_ui()
 
     def _info_style(self, point_size: int) -> str:
@@ -297,7 +422,7 @@ class MasterTimelineContainer(QWidget):
 
         # Scrollable timeline area
         self.timeline_scroll = QScrollArea()
-        self.timeline_widget = MasterTimelineWidget()
+        self.timeline_widget = MasterTimelineWidget(parts_band=self._compact)
         self.timeline_widget.playhead_moved.connect(self.playhead_moved.emit)
         self.timeline_widget.zoom_changed.connect(self.zoom_changed.emit)
         self.timeline_widget.playhead_moved.connect(self.update_info_display)
@@ -394,6 +519,27 @@ class MasterTimelineContainer(QWidget):
         # bg in both themes.
         header.setObjectName("MasterTimelineHeader")
         header.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
+
+        if self._compact:
+            # Timeline v3 parts band: the header cell is just "PARTS" in
+            # tracked mono micro caps (mock 06b). Position readouts live
+            # in the toolbar's BAR chip, so the info widget stays hidden
+            # (the attribute survives - update_info_display keeps
+            # feeding it and callers keep their references).
+            from gui.typography import MicroLabel
+            row = QHBoxLayout(header)
+            row.setContentsMargins(12, 0, 8, 0)
+            row.setSpacing(6)
+            row.addWidget(MicroLabel("Parts", point_size=8))
+            row.addStretch()
+            if hasattr(self, "info_widget") and self.info_widget is not None:
+                self.info_widget.hide()
+                self.info_widget.setParent(header)
+            if hasattr(self, "timeline_scroll") and self.timeline_scroll is not None:
+                self.timeline_scroll.takeWidget()
+                self.timeline_scroll.setParent(None)
+                self.timeline_scroll = None
+            return header, self.timeline_widget
 
         outer = QVBoxLayout(header)
         outer.setContentsMargins(8, 4, 8, 4)

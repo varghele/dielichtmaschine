@@ -230,7 +230,9 @@ def test_timeline_block_golden(qapp, scene_config):
 def test_master_timeline_golden(qapp, mock_song_structure):
     """Master timeline region bands (slice T2): 3px part-color top bar
     over a ~0.18-alpha tint, part name in condensed caps, grid lines
-    and the red playhead on the themed background."""
+    and the red playhead on the themed background. This is the DEFAULT
+    look the Structure tab embeds; the Shows tab's compact parts band
+    is pinned by test_parts_band_and_audio_golden below."""
     from gui.theme_manager import ThemeManager
     from timeline_ui.master_timeline_widget import MasterTimelineWidget
 
@@ -245,6 +247,39 @@ def test_master_timeline_golden(qapp, mock_song_structure):
         compare_to_golden(widget.grab().toImage(), "master_timeline_dark")
     finally:
         widget.deleteLater()
+
+
+def test_parts_band_and_audio_golden(qapp, mock_song_structure):
+    """Timeline v3 (stage T4, screen 06b): the 26px PARTS band (regions
+    tinted in the part colour at ~0.2 alpha, condensed part name + mono
+    BPM tag, 2px dark separator) over the 44px AUDIO row (AUDIO caption
+    + elided filename, M / volume / LOAD chips), with the unified 2px
+    accent playhead crossing both rows and the "PARTS" header cell in
+    the shared 260px column."""
+    from gui.theme_manager import ThemeManager
+    from timeline_ui.audio_lane_widget import AudioLaneWidget
+    from timeline_ui.master_timeline_widget import MasterTimelineContainer
+    from timeline_ui.timeline_grid import TimelineGrid
+
+    ThemeManager().apply(qapp, "dark")
+    master = MasterTimelineContainer(compact=True)
+    audio = AudioLaneWidget(compact=True)
+    grid = TimelineGrid()
+    try:
+        grid.set_master(master)
+        grid.set_audio_lane(audio)
+        grid.set_song_structure(mock_song_structure)
+        grid.set_playhead_position(2.0)
+        audio.file_path_edit.setText("monsters_demo.ogg")
+        grid.setFixedSize(900, 110)
+        grid.show()
+        from PyQt6.QtWidgets import QApplication
+        for _ in range(5):
+            QApplication.processEvents()
+        compare_to_golden(grid.grab().toImage(), "timeline_parts_audio_dark")
+    finally:
+        grid.hide()
+        grid.deleteLater()
 
 
 # The standalone Stage Layers / Stage Marks card goldens were dropped when

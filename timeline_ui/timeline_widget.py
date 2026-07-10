@@ -175,6 +175,13 @@ class TimelineWidget(QWidget):
         self.min_zoom = 0.1
         self.max_zoom = 5.0
         self.song_structure = None
+        # Timeline v3 (stage T4): the Shows tab unifies the playhead as a
+        # 2px brand-accent line across master + audio + light lanes.
+        # Default stays the legacy red so the Structure tab's shared
+        # master/audio rows (and their goldens) are untouched; the Shows
+        # tab opts in (compact master/audio set it, TimelineGrid fans it
+        # out to light lanes from the master).
+        self.playhead_accent = False
 
         # Sublane support
         self.num_sublanes = 1  # Number of sublanes (1-4)
@@ -487,12 +494,26 @@ class TimelineWidget(QWidget):
                 painter.setPen(sub_pen)
             painter.drawLine(x, 0, x, height)
 
+    def _playhead_color(self) -> QColor:
+        """Ink for the playhead line.
+
+        Brand accent when ``playhead_accent`` is set (timeline v3 look,
+        Shows tab); legacy red otherwise. Custom painters cannot reach
+        QSS roles, so the accent is read from the active theme tokens
+        (deferred import: light_block_widget imports config models only,
+        no cycle back into this module's importers).
+        """
+        if getattr(self, "playhead_accent", False):
+            from .light_block_widget import token_qcolor
+            return token_qcolor("accent")
+        return QColor("#FF4444")
+
     def draw_playhead(self, painter, width, height):
-        """Draw playhead at time position."""
+        """Draw playhead at time position (a 2px vertical line)."""
         playhead_x = round(self.time_to_pixel(self.playhead_position))
 
         if 0 <= playhead_x <= width:
-            playhead_pen = QPen(QColor("#FF4444"), 2)
+            playhead_pen = QPen(self._playhead_color(), 2)
             painter.setPen(playhead_pen)
             painter.drawLine(playhead_x, 0, playhead_x, height)
 

@@ -65,6 +65,15 @@ verbatim as the GitHub Release notes (see [docs/releasing.md](docs/releasing.md)
   with `shows` load forever and get a setlist synthesized. Editing UI
   and the trigger engine follow in later passes; workspace export is
   byte-identical.
+- **Timeline chrome finished the v3 pass.** The parts band is a slim
+  tinted region row with part names and BPM tags behind a shared PARTS
+  header cell; the audio track compacts to one 44px row (filename,
+  mute, volume, load beside the waveform); the playhead is one accent
+  line across every track. The effect-block inspector spells out the
+  selected block (bar range with the active snap, the dimmer chain,
+  the actual colours as swatches with transition arrows), and the riff
+  library rail gained a Scenes section from the shared scene library
+  (drag arrives with the cross-lane drop pass).
 - **Timeline blocks read like clips, not debug output.** Blocks are
   tinted in their part's colour (group colour when they cross parts) at
   a muted alpha, carry a header strip with the block name and its bar

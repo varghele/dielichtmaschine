@@ -14,8 +14,11 @@ Pins the tab-level chrome owned by gui/tabs/shows_tab.py:
 - ``shows_footer_dark``: the mono status line (lanes / blocks / grid /
   zoom).
 - ``shows_block_inspector_dark``: the right-pane EFFECT BLOCK inspector
-  with a block selected (title, group-colored lane + bar range + length,
-  DIM/COL/MOV/SPC stat tiles).
+  with a block selected (title, group-colored lane + length, the
+  timeline v3 field rows - RANGE with bar span + snap, the DIM effect
+  chain, COL painted colour swatches with the transition arrow - and
+  the DIM/COL/MOV/SPC stat tiles). No OVERLAP row: per-block overlap
+  functions are v1.6 work (docs/timeline-v3-plan.md "Deferred").
 
 Deliberately grabs only the toolbar, footer and inspector widgets, not
 the timeline grid area - lane/master rendering belongs to timeline_ui
@@ -146,7 +149,9 @@ def test_shows_footer_golden(chrome_tab):
 
 
 def test_shows_block_inspector_golden(qapp, chrome_tab):
-    """Right-pane block inspector with a single block selected."""
+    """Right-pane block inspector with a single block selected: field
+    rows populated with a real effect chain and a colour transition so
+    the golden pins the swatches + arrow."""
     from config.models import ColourBlock, DimmerBlock, LightBlock
     from timeline.light_lane import LightLane
 
@@ -154,8 +159,18 @@ def test_shows_block_inspector_golden(qapp, chrome_tab):
     lane.fixture_targets = ["TestGroup"]
     block = LightBlock(start_time=0.0, end_time=6.0,
                        effect_name="bars.static", name="Chorus Hit")
-    block.dimmer_blocks = [DimmerBlock(start_time=0.0, end_time=3.0)]
-    block.colour_blocks = [ColourBlock(start_time=0.0, end_time=6.0)]
+    block.dimmer_blocks = [
+        DimmerBlock(start_time=0.0, end_time=3.0,
+                    effect_type="fade", intensity=208.0),
+        DimmerBlock(start_time=3.0, end_time=6.0,
+                    effect_type="pulse", effect_speed="1/2"),
+    ]
+    block.colour_blocks = [
+        ColourBlock(start_time=0.0, end_time=3.0, red=225, green=113,
+                    blue=38),
+        ColourBlock(start_time=3.0, end_time=6.0, red=255, green=0,
+                    blue=255),
+    ]
     lane.light_blocks = [block]
     chrome_tab._add_lane_widget(lane)
 

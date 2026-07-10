@@ -55,7 +55,21 @@ def _stage_tab_buttons(config):
     }
 
 
+def _compact_audio_lane_buttons(config):
+    # Timeline v3 (stage T4): the 44px audio header shrinks its chips.
+    # M is a short-glyph fixed-size chip -> in sweep scope. LOAD is a
+    # 56px display-caps text chip: 4 characters render wider than 56px
+    # under the offscreen fallback font (native Barlow fits), so it
+    # stays out of the offscreen sweep per the module docstring.
+    from timeline_ui.audio_lane_widget import AudioLaneWidget
+    lane = AudioLaneWidget(compact=True)
+    return lane, {
+        "mute": lane.mute_button,
+    }
+
+
 _COLLECTORS = {
+    "audio_compact": _compact_audio_lane_buttons,
     "fixtures": _fixtures_tab_buttons,
     "stage": _stage_tab_buttons,
 }

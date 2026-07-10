@@ -46,6 +46,7 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 _MASTER_BG = (0x25, 0x25, 0x26)  # MasterTimelineWidget background
 _LANE_BG = (0x2A, 0x2A, 0x2A)    # TimelineWidget background
 _PLAYHEAD_RED = (0xFF, 0x44, 0x44)  # MasterTimelineWidget.draw_playhead
+_ACCENT = (0xF0, 0x56, 0x2E)     # Glutorange: the unified v3 playhead
 
 
 def _color_histogram(image, *, step: int = 2) -> collections.Counter:
@@ -246,6 +247,189 @@ def test_compact_button_padding_takes_effect(qapp):
         plain.hide()
         compact.deleteLater()
         plain.deleteLater()
+
+
+# ── Timeline v3 (stage T4): parts band + compact audio row ───────────
+#
+# The Shows tab opts into compact master/audio rows; the defaults above
+# stay untouched (the Structure tab embeds the same widgets and its
+# golden pins the default look).
+
+
+def _build_v3_grid(qapp, mock_song_structure):
+    from gui.theme_manager import ThemeManager
+    from timeline_ui.audio_lane_widget import AudioLaneWidget
+    from timeline_ui.master_timeline_widget import MasterTimelineContainer
+    from timeline_ui.timeline_grid import TimelineGrid
+
+    ThemeManager().apply(qapp, "dark")
+    master = MasterTimelineContainer(compact=True)
+    audio = AudioLaneWidget(compact=True)
+    grid = TimelineGrid()
+    grid.set_master(master)
+    grid.set_audio_lane(audio)
+    grid.set_song_structure(mock_song_structure)
+    return grid, master, audio
+
+
+def test_parts_band_and_audio_rows_are_compact(qapp, mock_song_structure):
+    """Compact containers pin the v3 row heights: 26px PARTS band,
+    44px audio row (mock 06b). The default containers above keep 76/100."""
+    grid, master, audio = _build_v3_grid(qapp, mock_song_structure)
+    try:
+        grid.resize(900, 140)
+        grid.show()
+        for _ in range(5):
+            qapp.processEvents()
+        assert master.timeline_widget.height() == 26
+        assert audio.timeline_widget.height() == 44
+        assert audio.controls_widget.height() == 44
+    finally:
+        grid.hide()
+        grid.deleteLater()
+
+
+def _accentish(color) -> bool:
+    """Glutorange-family pixel: strong red with green clearly above
+    blue (the accent's 86/46 split survives the audio row's waveform
+    overlay dimming it to ~199/75/43). The legacy playhead red
+    (#FF4444, g == b) never matches."""
+    r, g, b = color
+    return r >= 150 and g > b + 15 and g < 130
+
+
+def _legacy_reddish(color) -> bool:
+    """#FF4444-family pixel (g ~= b), even under a dimming overlay."""
+    r, g, b = color
+    return r >= 150 and abs(g - b) <= 10 and g < 100
+
+
+def test_v3_playhead_is_one_accent_line_across_rows(qapp,
+                                                    mock_song_structure):
+    """The unified playhead: a 2px Glutorange line on master AND audio,
+    with the legacy red gone from both stripes. Predicate-based rather
+    than exact-color: the audio row's waveform child dims the stripe."""
+    grid, master, audio = _build_v3_grid(qapp, mock_song_structure)
+    try:
+        grid.set_playhead_position(2.0)
+        grid.resize(900, 140)
+        grid.show()
+        for _ in range(5):
+            qapp.processEvents()
+
+        for name, stripe in (("master", master.timeline_widget),
+                             ("audio", audio.timeline_widget)):
+            histogram = _color_histogram(stripe.grab().toImage(), step=1)
+            accent = sum(count for color, count in histogram.items()
+                         if _accentish(color))
+            legacy = sum(count for color, count in histogram.items()
+                         if _legacy_reddish(color))
+            assert accent >= stripe.height() // 2, (
+                f"{name} stripe: accent playhead not visible "
+                f"(accent-ish count={accent}). Top colors: "
+                f"{histogram.most_common(5)}"
+            )
+            assert legacy == 0, (
+                f"{name} stripe still paints the legacy red playhead "
+                f"(red-ish count={legacy})"
+            )
+    finally:
+        grid.hide()
+        grid.deleteLater()
+
+
+def test_lanes_follow_the_master_playhead_ink(qapp, mock_song_structure):
+    """TimelineGrid fans the master's playhead ink out to light lanes,
+    so the Shows tab's lanes join the accent line while the default
+    (Structure-tab) master leaves everything legacy red."""
+    from timeline.light_lane import LightLane
+    from timeline_ui.light_lane_widget import LightLaneWidget
+
+    grid, master, audio = _build_v3_grid(qapp, mock_song_structure)
+    lane = LightLaneWidget(LightLane("L1"), [], None)
+    try:
+        grid.add_light_lane(lane)
+        assert lane.timeline_widget.playhead_accent is True
+    finally:
+        grid.deleteLater()
+
+    # Default master -> lanes stay on the legacy ink.
+    from timeline_ui.master_timeline_widget import MasterTimelineContainer
+    from timeline_ui.timeline_grid import TimelineGrid
+    grid2 = TimelineGrid()
+    grid2.set_master(MasterTimelineContainer())
+    lane2 = LightLaneWidget(LightLane("L2"), [], None)
+    try:
+        grid2.add_light_lane(lane2)
+        assert lane2.timeline_widget.playhead_accent is False
+    finally:
+        grid2.deleteLater()
+
+
+def test_parts_band_regions_tint_in_part_colour(qapp, mock_song_structure):
+    """The parts band tints each region in the part colour at ~0.2
+    alpha over the master bg (no more 3px top bar in v3 mode)."""
+    grid, master, audio = _build_v3_grid(qapp, mock_song_structure)
+    try:
+        grid.resize(900, 140)
+        grid.show()
+        for _ in range(5):
+            qapp.processEvents()
+
+        image = master.timeline_widget.grab().toImage()
+        histogram = _color_histogram(image, step=1)
+        # #FF0000 at alpha 51/255 over #252526 blends to ~(81, 30, 30).
+        reddish = sum(count for (r, g, b), count in histogram.items()
+                      if 70 <= r <= 92 and g <= 45 and b <= 45)
+        assert reddish >= 200, (
+            f"Intro region tint not visible (reddish count={reddish}). "
+            "Top colors: " + str(histogram.most_common(5))
+        )
+        # The full-saturation top bar of the default look must be gone.
+        assert histogram.get((0xFF, 0x00, 0x00), 0) == 0
+    finally:
+        grid.hide()
+        grid.deleteLater()
+
+
+def test_compact_audio_header_keeps_the_control_contract(qapp):
+    """The 44px audio header keeps every control attribute and its
+    behaviour: mute toggles, volume updates its readout, LOAD stays a
+    real button, and the filename readout middle-elides while text()
+    returns the full string (shows_tab drives these by attribute)."""
+    from gui.theme_manager import ThemeManager
+    from timeline_ui.audio_lane_widget import AudioLaneWidget
+
+    ThemeManager().apply(qapp, "dark")
+    audio = AudioLaneWidget(compact=True)
+    try:
+        for name in ("file_path_edit", "load_button", "mute_button",
+                     "volume_slider", "volume_label"):
+            assert getattr(audio, name, None) is not None, name
+
+        audio.mute_button.toggle()
+        assert audio.is_muted() is True
+        audio.volume_slider.setValue(40)
+        assert audio.volume_label.text() == "40%"
+        assert audio.get_volume() == 0.4
+        assert audio.load_button.text() == "LOAD"
+
+        # Middle elision: the painted text shrinks, the stored text stays.
+        label = audio.file_path_edit
+        label.setFixedWidth(80)
+        long_name = "a_very_long_audio_file_name_for_the_show.ogg"
+        label.setText(long_name)
+        assert label.text() == long_name
+        from PyQt6.QtWidgets import QLabel
+        painted = QLabel.text(label)
+        assert painted != long_name
+        assert "…" in painted
+        # ElideMiddle keeps the head and tail of the filename.
+        assert painted.startswith("a")
+        assert painted.endswith("g")
+    finally:
+        audio.cleanup()
+        audio.deleteLater()
 
 
 @pytest.mark.parametrize(

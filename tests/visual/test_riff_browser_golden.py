@@ -52,3 +52,39 @@ def test_riff_browser_golden(riff_panel):
         "grab size drifted - golden invalid"
     )
     compare_to_golden(riff_panel.grab().toImage(), "riff_browser_dark")
+
+
+def test_riff_browser_scenes_golden(qapp):
+    """The SCENES section of the library rail (timeline v3 stage T5):
+    the category header, a scene row with the painted colour swatch +
+    "N GROUPS" mono tag, a chip-less row, and - in a second panel - the
+    empty-library marker (same copy as the Live tab). Scrolled to the
+    bottom so the section is inside the grab."""
+    from PyQt6.QtWidgets import QApplication
+    from config.models import Scene
+    from gui.theme_manager import ThemeManager
+    from scenes.scene_library import SceneLibrary
+    from timeline_ui.riff_browser_widget import RiffBrowserPanel
+
+    ThemeManager().apply(qapp, "dark")
+    library = SceneLibrary(scenes_directory="__no_such_scenes_dir__")
+    library.add_scene(Scene(name="Drop Total", color="#F0562E",
+                            groups=["Front", "Back", "Movers", "Blinders"]),
+                      "general")
+    library.add_scene(Scene(name="Warm Pause", groups=["Front"]),
+                      "general")
+    panel = RiffBrowserPanel(scene_library=library)
+    panel.resize(280, 460)
+    panel.show()
+    panel.tree.scrollToBottom()
+    for _ in range(5):
+        QApplication.processEvents()
+    try:
+        assert (panel.width(), panel.height()) == (280, 460), (
+            "grab size drifted - golden invalid"
+        )
+        compare_to_golden(panel.grab().toImage(), "riff_browser_scenes_dark")
+    finally:
+        panel.hide()
+        panel.deleteLater()
+        QApplication.processEvents()

@@ -155,8 +155,11 @@ class TimelineGrid(QWidget):
         # vertical space for both rows. 76 px ≈ 2 × 30 px row + padding,
         # comfortable on both dark and light themes without crushing the
         # info text. Stripe matches so part-label rendering has the same
-        # vertical real estate.
-        master_row_height = max(stripe.minimumHeight(), 76)
+        # vertical real estate. Compact containers (timeline v3 parts
+        # band, Shows tab) pin their own row height instead.
+        override = getattr(master_container, "embedded_row_height", None)
+        master_row_height = int(override) if override else max(
+            stripe.minimumHeight(), 76)
         header.setMinimumHeight(master_row_height)
         header.setMaximumHeight(master_row_height)
         stripe.setMinimumHeight(master_row_height)
@@ -181,7 +184,12 @@ class TimelineGrid(QWidget):
         # floor) which squishes the header.
         audio_min = audio_lane.minimumHeight()
         header, stripe = audio_lane.detach_pieces()
-        row_height = max(stripe.minimumHeight(), audio_min, 100)
+        # Compact audio lanes (timeline v3 44px row, Shows tab) pin their
+        # own row height; the default keeps the 100px floor the 3-row
+        # header needs.
+        override = getattr(audio_lane, "embedded_row_height", None)
+        row_height = int(override) if override else max(
+            stripe.minimumHeight(), audio_min, 100)
         header.setMinimumHeight(row_height)
         header.setMaximumHeight(row_height)
         stripe.setMinimumHeight(row_height)
@@ -228,6 +236,10 @@ class TimelineGrid(QWidget):
                 tw.set_snap_to_grid(master_tw.snap_to_grid)
             if hasattr(tw, "set_swing"):
                 tw.set_swing(getattr(master_tw, "swing_amount", 0.0))
+            # Timeline v3: lanes follow the master's playhead ink so the
+            # unified accent line spans every row (legacy red when the
+            # master is not in parts-band mode, e.g. the Structure tab).
+            tw.playhead_accent = getattr(master_tw, "playhead_accent", False)
             cb = getattr(lane_widget, "snap_checkbox", None)
             if cb is not None:
                 cb.blockSignals(True)
