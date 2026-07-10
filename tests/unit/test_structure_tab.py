@@ -4,15 +4,19 @@ directory chip, audio readout + AUTOGENERATE button; the song title
 row (condensed caps name, mono meta line, RENAME SONG / DELETE
 chips); song parts as colored cards with clickable transition chips;
 the master grid behind its 150px MASTER / AUDIO header column with a
-compact transport row; 400px part inspector on the right (stat tiles
-+ editors + AUDIO ANALYSIS rows); mono status strip; 330px setlist
-rail on the left.
+compact transport row; the 340px inspector on the right (S2c: SONG
+trigger section, AFTER THE SONG pause look, PART stat tiles + editors,
+AUDIO ANALYSIS meter bars, pinned DELETE PART); mono status strip;
+330px setlist rail on the left.
 
 Covers the card strip anatomy, click-to-select, every inspector editor
 writing through to the ShowPart model, add/delete/reorder, the playback
 card highlight, the read-out strips, the autogenerate wiring, the
-setlist rail, and the S2b contracts (title row, transition chip menu,
-master grid header, legacy chrome gone).
+setlist rail, the S2b contracts (title row, transition chip menu,
+master grid header, legacy chrome gone) and the S2c contracts (trigger
+segment two-way mapping, per-mode editors, timecode validation, LEARN
+placeholder, unlisted-song hint, pause-look editing with live rail
+refresh, analysis bars vs the honest empty state).
 """
 
 import os
@@ -329,17 +333,28 @@ class TestSelection:
         assert tab.stat_duration.value_label.text() == "8.0 s"
 
     def test_inspector_panel_width(self, tab):
-        assert tab.inspector_title.parent().width() == 400
+        # S2c narrowed the inspector to the mock's 340px column. The
+        # title now sits inside a scrolled section, so walk up to the
+        # panel by object name.
+        panel = tab.inspector_title.parent()
+        while panel is not None and panel.objectName() != "PartInspector":
+            panel = panel.parent()
+        assert panel is not None
+        assert panel.width() == 340
 
     def test_inspector_title_uses_part_color(self, tab):
         assert "#ff0000" in tab.inspector_title.styleSheet().lower()
 
-    def test_analysis_rows_are_placeholders_without_report(self, tab):
+    def test_analysis_rows_hidden_behind_empty_state_without_report(
+            self, tab):
+        # No generation report: the bars hide and the honest empty
+        # state shows instead of fake meters.
         for row in (tab.analysis_energy, tab.analysis_vocals,
                     tab.analysis_contrast):
-            assert row.value_label.text() == "-"
-            assert row.value_label.toolTip() == \
-                "Available after Autogenerate analysis"
+            assert row.isHidden()
+        assert not tab.analysis_empty_hint.isHidden()
+        assert tab.analysis_empty_hint.text() == \
+            "No analysis yet · runs with autogen"
 
     def test_analysis_rows_render_report_values(self, tab):
         class _Section:
@@ -353,9 +368,34 @@ class TestSelection:
 
         tab._autogen_report = _Report()
         tab._refresh_inspector()
+        assert tab.analysis_empty_hint.isHidden()
+        for row in (tab.analysis_energy, tab.analysis_vocals,
+                    tab.analysis_contrast):
+            assert not row.isHidden()
         assert tab.analysis_energy.value_label.text() == "0.82 HIGH"
         assert tab.analysis_vocals.value_label.text() == "PRESENT"
         assert tab.analysis_contrast.value_label.text() == "0.64 RICH"
+
+    def test_analysis_bars_carry_fractions_and_leading_accent(self, tab):
+        class _Section:
+            name = "Intro"
+            relative_energy = 0.82
+            vocal_presence = 0.7
+            spectral_contrast = 0.64
+
+        class _Report:
+            sections = [_Section()]
+
+        tab._autogen_report = _Report()
+        tab._refresh_inspector()
+        assert tab.analysis_energy.bar._fraction == pytest.approx(0.82)
+        assert tab.analysis_vocals.bar._fraction == pytest.approx(0.7)
+        assert tab.analysis_contrast.bar._fraction == pytest.approx(0.64)
+        # Energy is the strongest metric: accent fill, the rest stay
+        # in the secondary tone.
+        assert tab.analysis_energy._leading
+        assert not tab.analysis_vocals._leading
+        assert not tab.analysis_contrast._leading
 
     def test_move_buttons_reflect_position(self, tab):
         assert not tab.move_left_btn.isEnabled()   # first part
@@ -758,10 +798,10 @@ class TestLegacyChromeGone:
         assert tab.findChildren(QGroupBox) == []
 
     def test_per_show_trigger_row_is_gone(self, tab):
-        # Triggers live on the setlist entries now (rail lines, S2c
-        # inspector); the old per-show device/channel row is gone.
+        # Triggers live on the setlist entries now, edited in the S2c
+        # inspector; the old per-show device combo is gone. (The S2c
+        # channel spin is a different, entry-bound widget.)
         assert not hasattr(tab, "trigger_device_combo")
-        assert not hasattr(tab, "trigger_channel_spin")
 
     def test_new_show_button_is_gone(self, tab):
         # Song creation is the rail's + SONG tile.
@@ -825,6 +865,15 @@ class TestThemeContract:
                  tab.audio_header_file.text()]
         texts += [chip.text() for chip in tab._chips]
         texts += [card.check_label.text() for card in tab._cards]
+        # S2c inspector strings (the pause chip's ↓ is the established
+        # dropdown indicator, deliberately not in the forbidden set).
+        texts += [tab.song_caption.text(), tab.song_unlisted_hint.text(),
+                  tab.learn_btn.text(), tab.trigger_micro_hint.text(),
+                  tab.trigger_mode_hint.text(), tab.pause_mode_chip.text(),
+                  tab.pause_micro_hint.text(),
+                  tab.analysis_empty_hint.text()]
+        texts += [b.text() for b in tab.trigger_buttons.values()]
+        texts += [b.text() for b in tab.pause_until_buttons.values()]
         for text in texts:
             assert not any(ch in text for ch in forbidden), text
 
@@ -1214,3 +1263,252 @@ class TestSetlistRailMutations:
         cards = [c for c in setlist_tab._rail_cards if c.entry_index >= 0]
         assert len(cards) == 2
         assert len(setlist_tab._rail_pause_rows) == 1
+
+
+# ---------------------------------------------------------------------------
+# S2c: SONG section (the open song's setlist-entry trigger)
+# ---------------------------------------------------------------------------
+class TestSongTriggerSection:
+    """The setlist_tab opens "Monsters" (sorted combo): setlist entry
+    2, trigger midi_note 36 (C2) on channel 1, pause hold_last."""
+
+    def rail_card(self, tab, index):
+        return [c for c in tab._rail_cards if c.entry_index >= 0][index]
+
+    def test_caption_names_the_open_song(self, setlist_tab):
+        assert setlist_tab.song_caption.text() == "SONG · MONSTERS"
+
+    def test_all_six_model_modes_have_a_segment(self, setlist_tab):
+        # The mock collapses to four; the model has six - all six stay
+        # honest, two rows of three at 340px.
+        assert set(setlist_tab.trigger_buttons) == \
+            {"manual", "midi_pc", "midi_note", "mtc", "smpte", "follow"}
+        labels = [setlist_tab.trigger_buttons[m].text() for m in
+                  ("manual", "midi_pc", "midi_note",
+                   "mtc", "smpte", "follow")]
+        assert labels == ["MANUAL", "MIDI PC", "MIDI NOTE",
+                          "MTC", "SMPTE", "FOLLOW"]
+
+    def test_segments_reflect_the_model(self, setlist_tab):
+        assert setlist_tab.trigger_buttons["midi_note"].isChecked()
+        for mode in ("manual", "midi_pc", "mtc", "smpte", "follow"):
+            assert not setlist_tab.trigger_buttons[mode].isChecked()
+
+    def test_segments_follow_a_song_switch(self, setlist_tab):
+        setlist_tab._rail_cards[0].clicked.emit("Neon Ruinen")
+        assert setlist_tab.song_caption.text() == "SONG · NEON RUINEN"
+        assert setlist_tab.trigger_buttons["midi_pc"].isChecked()
+        assert setlist_tab.trigger_value_spin.value() == 5
+        assert setlist_tab.trigger_value_spin.prefix() == "PC#"
+        assert setlist_tab.trigger_channel_spin.value() == 1
+
+    def test_segment_click_writes_mode_and_updates_the_rail(self,
+                                                            setlist_tab):
+        setlist_tab.trigger_buttons["mtc"].click()
+        entry = setlist_tab.config.setlist.entries[1]
+        assert entry.trigger.mode == "mtc"
+        # Rail trigger line updates live (timecode unset: mode name).
+        assert self.rail_card(setlist_tab, 1).trigger_label.text() == "MTC"
+        # Exclusive: the old mode unchecked.
+        assert not setlist_tab.trigger_buttons["midi_note"].isChecked()
+
+    def test_editor_visibility_per_mode(self, setlist_tab):
+        cases = {
+            "manual": (False, False, False, False, True),
+            "midi_pc": (True, False, True, False, False),
+            "midi_note": (True, True, True, False, False),
+            "mtc": (False, False, False, True, False),
+            "smpte": (False, False, False, True, False),
+            "follow": (False, False, False, False, True),
+        }
+        for mode, (value, note, channel, timecode, hint) in cases.items():
+            setlist_tab.trigger_buttons[mode].click()
+            assert setlist_tab.trigger_value_spin.isHidden() != value, mode
+            assert setlist_tab.trigger_note_label.isHidden() != note, mode
+            assert setlist_tab.trigger_channel_spin.isHidden() != channel, \
+                mode
+            assert setlist_tab.trigger_timecode_edit.isHidden() != timecode, \
+                mode
+            assert setlist_tab.trigger_mode_hint.isHidden() != hint, mode
+
+    def test_mode_hints_copy(self, setlist_tab):
+        setlist_tab.trigger_buttons["manual"].click()
+        assert setlist_tab.trigger_mode_hint.text() == \
+            "Started from the app"
+        setlist_tab.trigger_buttons["follow"].click()
+        assert setlist_tab.trigger_mode_hint.text() == \
+            "Chains after the previous song's pause look"
+
+    def test_note_value_write_through_with_note_name(self, setlist_tab):
+        setlist_tab.trigger_value_spin.setValue(37)
+        entry = setlist_tab.config.setlist.entries[1]
+        assert entry.trigger.value == 37
+        assert setlist_tab.trigger_note_label.text() == "C#2"
+        assert self.rail_card(setlist_tab, 1).trigger_label.text() == \
+            "NOTE C#2 · CH 1"
+
+    def test_channel_write_through(self, setlist_tab):
+        setlist_tab.trigger_channel_spin.setValue(5)
+        entry = setlist_tab.config.setlist.entries[1]
+        assert entry.trigger.channel == 5
+        assert self.rail_card(setlist_tab, 1).trigger_label.text() == \
+            "NOTE C2 · CH 5"
+
+    def test_timecode_valid_write_through(self, setlist_tab):
+        setlist_tab.trigger_buttons["mtc"].click()
+        setlist_tab.trigger_timecode_edit.setText("00:14:32:00")
+        setlist_tab.trigger_timecode_edit.editingFinished.emit()
+        entry = setlist_tab.config.setlist.entries[1]
+        assert entry.trigger.timecode == "00:14:32:00"
+        assert setlist_tab.trigger_timecode_edit.property("state") == ""
+        assert self.rail_card(setlist_tab, 1).trigger_label.text() == \
+            "00:14:32:00"
+
+    def test_timecode_invalid_keeps_old_value_and_tints(self, setlist_tab):
+        setlist_tab.trigger_buttons["smpte"].click()
+        setlist_tab.trigger_timecode_edit.setText("01:00:00:00")
+        setlist_tab.trigger_timecode_edit.editingFinished.emit()
+        setlist_tab.trigger_timecode_edit.setText("nonsense")
+        setlist_tab.trigger_timecode_edit.editingFinished.emit()
+        entry = setlist_tab.config.setlist.entries[1]
+        # The model keeps the old value; the field reverts and carries
+        # the quiet warning property (no popup).
+        assert entry.trigger.timecode == "01:00:00:00"
+        assert setlist_tab.trigger_timecode_edit.text() == "01:00:00:00"
+        assert setlist_tab.trigger_timecode_edit.property("state") == \
+            "invalid"
+        # A valid edit clears the tint.
+        setlist_tab.trigger_timecode_edit.setText("02:00:00:00")
+        setlist_tab.trigger_timecode_edit.editingFinished.emit()
+        assert entry.trigger.timecode == "02:00:00:00"
+        assert setlist_tab.trigger_timecode_edit.property("state") == ""
+
+    def test_timecode_may_be_cleared(self, setlist_tab):
+        setlist_tab.trigger_buttons["mtc"].click()
+        setlist_tab.trigger_timecode_edit.setText("00:14:32:00")
+        setlist_tab.trigger_timecode_edit.editingFinished.emit()
+        setlist_tab.trigger_timecode_edit.setText("")
+        setlist_tab.trigger_timecode_edit.editingFinished.emit()
+        entry = setlist_tab.config.setlist.entries[1]
+        assert entry.trigger.timecode == ""
+        assert self.rail_card(setlist_tab, 1).trigger_label.text() == "MTC"
+
+    def test_learn_is_a_disabled_honest_placeholder(self, setlist_tab):
+        assert setlist_tab.learn_btn.text() == "LEARN"
+        assert not setlist_tab.learn_btn.isEnabled()
+        assert setlist_tab.learn_btn.toolTip() == \
+            "Arrives with the sync engine (v1.7)"
+
+    def test_micro_hint_names_the_timecode_format(self, setlist_tab):
+        assert setlist_tab.trigger_micro_hint.text() == \
+            "MTC/SMPTE: start time e.g. 00:14:32:00 · devices in Settings"
+
+    def test_unlisted_song_hides_editors_behind_a_hint(self, tab):
+        # The legacy fixture's "Demo" song has no setlist entry.
+        assert tab.song_caption.text() == "SONG · DEMO"
+        assert tab.trigger_host.isHidden()
+        assert not tab.song_unlisted_hint.isHidden()
+        assert tab.song_unlisted_hint.text().startswith(
+            "No setlist entry for this song")
+        assert tab.pause_section.isHidden()
+
+    def test_no_song_at_all_is_the_unlisted_state(self, empty_tab):
+        assert empty_tab.song_caption.text() == "SONG · -"
+        assert empty_tab.trigger_host.isHidden()
+        assert not empty_tab.song_unlisted_hint.isHidden()
+
+    def test_entry_sections_return_when_song_joins_the_setlist(self, tab):
+        tab.config.setlist.entries.append(SetlistEntry(song="Demo"))
+        tab.update_from_config()
+        assert not tab.trigger_host.isHidden()
+        assert tab.song_unlisted_hint.isHidden()
+        assert not tab.pause_section.isHidden()
+        assert tab.trigger_buttons["manual"].isChecked()   # entry default
+
+
+# ---------------------------------------------------------------------------
+# S2c: AFTER THE SONG section (the open entry's pause look)
+# ---------------------------------------------------------------------------
+class TestPauseLookSection:
+    """Open song "Monsters" = entry index 1: its pause look renders in
+    rail pause row 1 (the row above card 3)."""
+
+    def test_chip_shows_current_mode(self, setlist_tab):
+        assert setlist_tab.pause_mode_chip.text() == "HOLD LAST LOOK ↓"
+
+    def test_menu_lists_the_four_modes_with_current_checked(self,
+                                                            setlist_tab):
+        menu = setlist_tab._build_pause_mode_menu()
+        actions = menu.actions()
+        assert [a.text() for a in actions] == \
+            ["BLACKOUT", "WARM WHITE", "HOLD LAST LOOK", "AMBIENT LOOP"]
+        assert [a.isChecked() for a in actions] == \
+            [False, False, True, False]
+
+    def test_menu_action_writes_mode_and_refreshes_the_rail(self,
+                                                            setlist_tab):
+        menu = setlist_tab._build_pause_mode_menu()
+        menu.actions()[0].trigger()   # BLACKOUT
+        entry = setlist_tab.config.setlist.entries[1]
+        assert entry.pause_after.mode == "blackout"
+        assert setlist_tab.pause_mode_chip.text() == "BLACKOUT ↓"
+        assert setlist_tab._rail_pause_rows[1].text() == \
+            "PAUSE LOOK · Blackout · until trigger"
+
+    def test_level_spin_only_for_warm_white(self, setlist_tab):
+        assert setlist_tab.pause_level_row.isHidden()   # hold_last
+        setlist_tab._set_pause_mode("warm_white")
+        assert not setlist_tab.pause_level_row.isHidden()
+        assert setlist_tab.pause_level_spin.value() == 20   # model default
+
+    def test_level_write_through_and_live_rail_refresh(self, setlist_tab):
+        setlist_tab._set_pause_mode("warm_white")
+        setlist_tab.pause_level_spin.setValue(55)
+        entry = setlist_tab.config.setlist.entries[1]
+        assert entry.pause_after.level == 55
+        assert setlist_tab._rail_pause_rows[1].text() == \
+            "PAUSE LOOK · Warm white 55% · until trigger"
+
+    def test_until_duration_shows_the_spin_and_writes(self, setlist_tab):
+        assert setlist_tab.pause_until_buttons["trigger"].isChecked()
+        assert setlist_tab.pause_duration_spin.isHidden()
+        setlist_tab.pause_until_buttons["duration"].click()
+        entry = setlist_tab.config.setlist.entries[1]
+        assert entry.pause_after.until == "duration"
+        assert not setlist_tab.pause_duration_spin.isHidden()
+        setlist_tab.pause_duration_spin.setValue(30)
+        assert entry.pause_after.duration_s == 30.0
+        assert setlist_tab._rail_pause_rows[1].text() == \
+            "PAUSE LOOK · Hold last look · 30s"
+
+    def test_until_trigger_hides_the_spin_again(self, setlist_tab):
+        setlist_tab.pause_until_buttons["duration"].click()
+        setlist_tab.pause_until_buttons["trigger"].click()
+        entry = setlist_tab.config.setlist.entries[1]
+        assert entry.pause_after.until == "trigger"
+        assert setlist_tab.pause_duration_spin.isHidden()
+
+    def test_last_entry_pause_edits_write_without_a_rail_row(self,
+                                                             setlist_tab):
+        # "Schwarzes Gold" is the last entry: no pause row below it, but
+        # the model write path is identical.
+        setlist_tab._rail_cards[2].clicked.emit("Schwarzes Gold")
+        setlist_tab._set_pause_mode("ambient_loop")
+        entry = setlist_tab.config.setlist.entries[2]
+        assert entry.pause_after.mode == "ambient_loop"
+        assert setlist_tab.pause_mode_chip.text() == "AMBIENT LOOP ↓"
+
+    def test_micro_hint_is_honest_about_the_engine(self, setlist_tab):
+        assert setlist_tab.pause_micro_hint.text() == (
+            "Ambient loop = the screensaver rig behaviour · engine "
+            "arrives with v1.7")
+
+    def test_pause_edits_mark_the_config_dirty_via_auto_save(self,
+                                                             setlist_tab,
+                                                             monkeypatch):
+        calls = []
+        monkeypatch.setattr(setlist_tab, "_auto_save",
+                            lambda: calls.append(True))
+        setlist_tab._set_pause_mode("blackout")
+        setlist_tab.trigger_buttons["manual"].click()
+        assert len(calls) == 2

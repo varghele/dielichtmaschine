@@ -28,11 +28,20 @@ Anatomy (top to bottom):
   master grid with its own 150px header column ("MASTER . N BARS" for
   the parts band, "AUDIO" + filename + LOAD for the waveform row), a
   compact transport row and the mono snap-hint row.
-- a 400px inspector: the part name in display caps *in the part color*,
-  a 2x2 grid of bordered stat tiles (BPM / TIME SIG / BARS / DURATION),
-  the editors (name, BPM, time signature, bars, color, reorder), the
-  TRANSITION OUT combo, the AUDIO ANALYSIS read-out rows, and a
-  destructive Delete Part footer.
+- a 340px inspector (S2c, mock right column), four sections over a
+  pinned footer: SONG (caption "SONG . NAME", the START TRIGGER
+  segment rows - all six trigger modes over two rows of three - the
+  per-mode value editors, the disabled LEARN placeholder and the mono
+  MTC/SMPTE hint; hidden behind an honest hint when the open song has
+  no setlist entry), AFTER THE SONG (pause-look mode chip + QMenu,
+  warm-white level spin, until trigger/duration pair), PART (the part
+  name in display caps *in the part color*, the 2x2 stat tiles BPM /
+  TIME SIG / BARS / DURATION plus the COLOUR tile carrying the painted
+  swatch button, the editors, the TRANSITION OUT combo, reorder), and
+  AUDIO ANALYSIS (energy / vocals / contrast as 6px meter bars from
+  the autogen section report, accent fill on the leading metric, an
+  honest empty state before any analysis ran). DELETE PART is pinned
+  at the bottom, outside the scroll.
 - a mono status strip: "N PARTS . N BARS . mm:ss".
 
 Gone since S2b: the SHOW combo row (the setlist rail is the selector;
@@ -49,6 +58,7 @@ status strip.
 """
 
 import os
+import re
 import csv
 import zlib
 from PyQt6.QtWidgets import (QVBoxLayout, QHBoxLayout, QWidget, QLabel,
@@ -129,6 +139,31 @@ SONG_COLOR_PALETTE = ("#D9A441", "#4ECBD4", "#C95FD0", "#6F9E4C",
 _NOTE_NAMES = ("C", "C#", "D", "D#", "E", "F",
                "F#", "G", "G#", "A", "A#", "B")
 
+# The six SongTrigger modes, in inspector segment order (mock collapses
+# to four; the model has six - all six stay honest, two rows of three
+# so nothing clips at the 340px inspector width).
+TRIGGER_MODES = (("manual", "MANUAL"), ("midi_pc", "MIDI PC"),
+                 ("midi_note", "MIDI NOTE"), ("mtc", "MTC"),
+                 ("smpte", "SMPTE"), ("follow", "FOLLOW"))
+
+# One-line mono hints for the trigger modes that carry no value editor.
+TRIGGER_MODE_HINTS = {
+    "manual": "Started from the app",
+    "follow": "Chains after the previous song's pause look",
+}
+
+# PauseLook.mode display texts, in mock dropdown order. Shared between
+# the rail's pause rows and the inspector's mode chip + menu.
+PAUSE_MODE_TEXTS = {
+    "blackout": "Blackout",
+    "warm_white": "Warm white",
+    "hold_last": "Hold last look",
+    "ambient_loop": "Ambient loop",
+}
+
+# Loose HH:MM:SS:FF check for the MTC/SMPTE start-time field.
+TIMECODE_RE = re.compile(r"^\d{1,2}:\d{2}:\d{2}:\d{2}$")
+
 
 def midi_note_name(note: int) -> str:
     """MIDI note number as name + octave, middle C convention (60 = C4,
@@ -156,13 +191,9 @@ def trigger_line(trigger) -> str:
 
 def pause_look_line(pause) -> str:
     """The dashed pause row between two setlist cards."""
-    mode_texts = {
-        "blackout": "Blackout",
-        "warm_white": f"Warm white {pause.level}%",
-        "hold_last": "Hold last look",
-        "ambient_loop": "Ambient loop",
-    }
-    text = mode_texts.get(pause.mode, pause.mode)
+    text = PAUSE_MODE_TEXTS.get(pause.mode, pause.mode)
+    if pause.mode == "warm_white":
+        text = f"{text} {pause.level}%"
     tail = ("until trigger" if pause.until == "trigger"
             else f"{pause.duration_s:g}s")
     return f"PAUSE LOOK · {text} · {tail}"
@@ -196,7 +227,7 @@ class StatTile(QFrame):
         self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
 
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(12, 10, 12, 10)
+        layout.setContentsMargins(10, 6, 10, 6)
         layout.setSpacing(2)
 
         self.caption_label = MicroLabel(caption, point_size=7,
@@ -207,7 +238,7 @@ class StatTile(QFrame):
         self.value_label = QLabel("-")
         self.value_label.setObjectName("StatTileValue")
         self.value_label.setProperty("role", "stat-value")
-        self.value_label.setFont(mono_font(16))
+        self.value_label.setFont(mono_font(14))   # mock: 14px values
         layout.addWidget(self.value_label)
 
     def apply_tokens(self, tokens: dict) -> None:
@@ -222,55 +253,114 @@ class StatTile(QFrame):
         self.value_label.setText(text)
 
 
-class AnalysisRow(QWidget):
-    """One mono row of the inspector's AUDIO ANALYSIS block: label left,
-    value right. The value is a dim "-" until a generation report with
-    per-section audio features exists."""
+class MeterBar(QWidget):
+    """The mock's 6px analysis meter: a full-width track in the border
+    tone with a fraction-wide fill (accent for the leading metric,
+    text_secondary for the rest). Painted, not styled: the fill width
+    is data."""
 
-    PLACEHOLDER = "-"
-    PLACEHOLDER_TOOLTIP = "Available after Autogenerate analysis"
+    BAR_HEIGHT = 6
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setFixedHeight(self.BAR_HEIGHT)
+        self.setSizePolicy(QSizePolicy.Policy.Expanding,
+                           QSizePolicy.Policy.Fixed)
+        self._fraction = 0.0
+        self._track = QColor("#2d2d2d")
+        self._fill = QColor("#8d9299")
+
+    def set_state(self, fraction: float, track: str, fill: str) -> None:
+        self._fraction = max(0.0, min(1.0, float(fraction)))
+        self._track = QColor(track)
+        self._fill = QColor(fill)
+        self.update()
+
+    def paintEvent(self, event):
+        painter = QPainter(self)
+        painter.fillRect(self.rect(), self._track)
+        fill_width = int(round(self.width() * self._fraction))
+        if fill_width > 0:
+            painter.fillRect(0, 0, fill_width, self.height(), self._fill)
+        painter.end()
+
+
+class AnalysisRow(QWidget):
+    """One row of the inspector's AUDIO ANALYSIS block: mono label,
+    6px meter bar, mono value words. The whole row hides while no
+    autogen section report exists (the section shows an honest empty
+    hint instead)."""
+
+    LABEL_WIDTH = 56
 
     def __init__(self, caption: str, parent=None):
         super().__init__(parent)
         layout = QHBoxLayout(self)
-        layout.setContentsMargins(0, 5, 0, 5)
+        layout.setContentsMargins(0, 2, 0, 2)
         layout.setSpacing(8)
 
         self.name_label = QLabel(caption)
         self.name_label.setFont(mono_font(9))
         self.name_label.setProperty("role", "micro")
+        self.name_label.setFixedWidth(self.LABEL_WIDTH)
         layout.addWidget(self.name_label)
-        layout.addStretch()
 
-        self.value_label = QLabel(self.PLACEHOLDER)
+        self.bar = MeterBar()
+        layout.addWidget(self.bar, 1)
+
+        self.value_label = QLabel("")
         self.value_label.setObjectName("AnalysisValue")
         self.value_label.setFont(mono_font(9))
         layout.addWidget(self.value_label)
 
         self._tokens = _active_tokens()
-        self.set_value(None)
+        self._fraction = 0.0
+        self._text = ""
+        self._leading = False
+        self._render()
 
     def apply_tokens(self, tokens: dict) -> None:
         self._tokens = tokens
-        self.set_value(self._value)
+        self._render()
 
-    def set_value(self, text) -> None:
-        """``None`` renders the dim placeholder with the explanatory
-        tooltip; a string renders in the theme's primary text color."""
-        self._value = text
+    def set_value(self, fraction: float, text: str,
+                  leading: bool = False) -> None:
+        """A 0..1 fraction for the bar, the mono read-out words, and
+        whether this is the strongest metric (accent fill)."""
+        self._fraction = max(0.0, min(1.0, float(fraction)))
+        self._text = text
+        self._leading = leading
+        self._render()
+
+    def _render(self) -> None:
         tokens = self._tokens
-        if text is None:
-            self.value_label.setText(self.PLACEHOLDER)
-            self.value_label.setToolTip(self.PLACEHOLDER_TOOLTIP)
-            self.setToolTip(self.PLACEHOLDER_TOOLTIP)
-            color = tokens["text_disabled"]
-        else:
-            self.value_label.setText(text)
-            self.value_label.setToolTip("")
-            self.setToolTip("")
-            color = tokens["text"]
+        fill = (tokens["accent_line"] if self._leading
+                else tokens["text_secondary"])
+        self.bar.set_state(self._fraction, tokens["border"], fill)
+        self.value_label.setText(self._text)
+        value_color = tokens["text"] if self._leading \
+            else tokens["text_secondary"]
         self.value_label.setStyleSheet(
-            f"color: {color}; background: transparent;")
+            f"color: {value_color}; background: transparent;")
+
+
+class MenuChip(Chip):
+    """A clickable Chip that opens a QMenu (popup, never exec): the
+    inspector's pause-look mode dropdown, same pattern as the parts
+    strip's TransitionChip. The ↓ is the established dropdown
+    indicator."""
+
+    clicked = pyqtSignal()
+
+    def __init__(self, text: str = "", parent=None):
+        super().__init__(text, variant="neutral", point_size=8,
+                         parent=parent)
+        self.setCursor(Qt.CursorShape.PointingHandCursor)
+
+    def mousePressEvent(self, event):
+        if event.button() == Qt.MouseButton.LeftButton:
+            self.clicked.emit()
+        event.accept()
 
 
 class TimeSignatureWidget(QWidget):
@@ -603,7 +693,7 @@ class TransitionChip(Chip):
 class PauseLookRow(QLabel):
     """The dashed mono row between two setlist cards: the preceding
     entry's pause look ("PAUSE LOOK · Warm white 20% · until trigger").
-    Display-only this stage; editing arrives with the S2c inspector.
+    Display-only; edited from the inspector's AFTER THE SONG section.
     Dashed chrome comes from the theme's role="hint-box"."""
 
     def __init__(self, text: str = "", parent=None):
@@ -790,9 +880,11 @@ class StructureTab(BaseTab):
       with clickable transition chips between them and a dashed add tile
     - Master grid (master timeline + audio waveform) behind a 150px
       MASTER / AUDIO header column, with a compact transport row
-    - Part inspector on the right: stat tiles, all editing (name, BPM,
+    - 340px inspector on the right: SONG (setlist-entry trigger
+      editing + LEARN placeholder), AFTER THE SONG (pause look), PART
+      (stat tiles incl. the COLOUR swatch, all editing: name, BPM,
       signature, bars, transition, color, reorder, delete) and the
-      AUDIO ANALYSIS read-outs
+      AUDIO ANALYSIS meter bars
     - Action-strip directory chip, audio readout + "AUTOGENERATE
       SHOW..." entry point
     - CSV import/export, audio playback
@@ -852,8 +944,9 @@ class StructureTab(BaseTab):
 
     def setup_ui(self):
         """Build the reference screen: action strip, centre song editor
-        (title row, parts strip, master grid + transport + hint), 400px
-        part inspector, mono status strip."""
+        (title row, parts strip, master grid + transport + hint), 340px
+        inspector (SONG / AFTER THE SONG / PART / AUDIO ANALYSIS), mono
+        status strip."""
         self._tokens = _active_tokens()
 
         main_layout = QVBoxLayout(self)
@@ -1387,6 +1480,11 @@ class StructureTab(BaseTab):
             if i < len(entries):
                 row.setText(pause_look_line(entries[i].pause_after))
 
+        # The inspector's SONG / AFTER THE SONG sections edit the same
+        # entries the rail renders: keep them in lockstep (pure model
+        # read, signal-blocked - no write-back loop).
+        self._refresh_entry_sections()
+
     def _on_rail_card_clicked(self, song_name: str):
         """Open the clicked song in the centre editor through the
         existing song combo (single source of song-switching truth)."""
@@ -1416,25 +1514,294 @@ class StructureTab(BaseTab):
         self._rebuild_setlist_rail()
         self._auto_save()
 
-    INSPECTOR_WIDTH = 400
+    INSPECTOR_WIDTH = 340
 
     def _build_inspector(self) -> QWidget:
-        """The 400px part inspector (reference detail column).
-
-        Reference order: part name in display caps *in the part color*,
-        the 2x2 stat-tile grid, then (ours) the editors that used to be
-        table cell widgets, the TRANSITION OUT combo, the AUDIO ANALYSIS
-        rows and the destructive Delete Part footer.
-        """
+        """The 340px inspector (mock right column): SONG, AFTER THE
+        SONG, PART and AUDIO ANALYSIS sections in a scroll body, with
+        DELETE PART pinned at the bottom outside the scroll."""
         panel = QWidget()
         panel.setObjectName("PartInspector")
         panel.setProperty("role", "inspector")
         panel.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
         panel.setFixedWidth(self.INSPECTOR_WIDTH)
-        layout = QVBoxLayout(panel)
-        layout.setContentsMargins(20, 20, 20, 20)
-        layout.setSpacing(10)
+        column = QVBoxLayout(panel)
+        column.setContentsMargins(0, 0, 0, 0)
+        column.setSpacing(0)
 
+        tokens = self._tokens or _active_tokens()
+        self._inspector_dividers = []
+        self._inspector_segment_hosts = []
+
+        body = QWidget()
+        body_column = QVBoxLayout(body)
+        body_column.setContentsMargins(0, 0, 0, 0)
+        body_column.setSpacing(0)
+        for section in (self._build_song_section(),
+                        self._build_pause_section(),
+                        self._build_part_section(),
+                        self._build_analysis_section()):
+            body_column.addWidget(section)
+            divider = self._rail_divider(tokens)
+            self._inspector_dividers.append(divider)
+            body_column.addWidget(divider)
+        # The last divider doubles as the footer's top hairline.
+        body_column.addStretch(1)
+
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QFrame.Shape.NoFrame)
+        scroll.setHorizontalScrollBarPolicy(
+            Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        scroll.setWidget(body)
+        column.addWidget(scroll, 1)
+
+        # -- pinned footer: DELETE PART (mock bottom row) ---------------
+        footer = QWidget()
+        footer_row = QHBoxLayout(footer)
+        footer_row.setContentsMargins(14, 10, 14, 10)
+        self.delete_part_btn = QPushButton("- Delete Part")
+        self.delete_part_btn.setProperty("role", "destructive-outline")
+        footer_row.addWidget(self.delete_part_btn)
+        column.addWidget(footer)
+
+        self._style_inspector_chrome(tokens)
+        return panel
+
+    @staticmethod
+    def _segment_button(label: str) -> QPushButton:
+        """One chip of a role="segment" row (the S2a SYNC pattern),
+        stretched so a row of them fills the inspector width."""
+        btn = QPushButton(label)
+        btn.setCheckable(True)
+        btn.setProperty("role", "segment")
+        btn.setFont(mono_font(8))
+        btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        btn.setSizePolicy(QSizePolicy.Policy.Expanding,
+                          QSizePolicy.Policy.Fixed)
+        return btn
+
+    def _segment_host(self) -> QWidget:
+        """The 1px box around a segment row (the theme's segment role
+        is borderless; same sanctioned pattern as SyncSegmentGroup)."""
+        host = QWidget()
+        host.setObjectName("InspectorSegmentGroup")
+        host.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
+        self._inspector_segment_hosts.append(host)
+        row = QHBoxLayout(host)
+        row.setContentsMargins(1, 1, 1, 1)
+        row.setSpacing(0)
+        return host
+
+    def _build_song_section(self) -> QWidget:
+        """SONG section: edits the open song's setlist entry trigger.
+        Hidden behind an honest hint when the song has no entry."""
+        section = QWidget()
+        col = QVBoxLayout(section)
+        col.setContentsMargins(14, 6, 14, 6)
+        col.setSpacing(4)
+
+        self.song_caption = MicroLabel("Song · -", point_size=8,
+                                       tracking_em=0.12)
+        col.addWidget(self.song_caption)
+
+        # Honest hint for the unlisted case (song exists but has no
+        # setlist entry): triggers live on entries, so there is nothing
+        # to edit here.
+        self.song_unlisted_hint = QLabel(
+            "No setlist entry for this song · add it to the setlist to "
+            "give it a start trigger and a pause look.")
+        self.song_unlisted_hint.setObjectName("SongUnlistedHint")
+        self.song_unlisted_hint.setFont(mono_font(8))
+        self.song_unlisted_hint.setProperty("role", "micro")
+        self.song_unlisted_hint.setWordWrap(True)
+        self.song_unlisted_hint.hide()
+        col.addWidget(self.song_unlisted_hint)
+
+        self.trigger_host = QWidget()
+        host_col = QVBoxLayout(self.trigger_host)
+        host_col.setContentsMargins(0, 0, 0, 0)
+        host_col.setSpacing(4)
+
+        # "START TRIGGER" + the disabled LEARN placeholder on one row.
+        label_row = QHBoxLayout()
+        label_row.setSpacing(8)
+        label_row.addWidget(MicroLabel("Start trigger", point_size=8,
+                                       tracking_em=0.1))
+        label_row.addStretch(1)
+        self.learn_btn = QPushButton("LEARN")
+        self.learn_btn.setObjectName("TriggerLearnChip")
+        self.learn_btn.setProperty("role", "cta-outline")
+        self.learn_btn.setProperty("density", "compact")
+        learn_font = display_font(8, QFont.Weight.DemiBold,
+                                  tracking_em=0.08)
+        self.learn_btn.setFont(learn_font)
+        self.learn_btn.setFixedWidth(
+            QFontMetrics(learn_font).horizontalAdvance(
+                self.learn_btn.text()) + 24)
+        self.learn_btn.setEnabled(False)   # honest placeholder
+        self.learn_btn.setToolTip("Arrives with the sync engine (v1.7)")
+        label_row.addWidget(self.learn_btn)
+        host_col.addLayout(label_row)
+
+        # Six trigger modes, two segment rows of three (one row of six
+        # clips MIDI NOTE at 340px). One exclusive group across both.
+        self.trigger_buttons = {}
+        self._trigger_group = QButtonGroup(self)
+        self._trigger_group.setExclusive(True)
+        for row_modes in (TRIGGER_MODES[:3], TRIGGER_MODES[3:]):
+            host = self._segment_host()
+            row = host.layout()
+            for i, (mode, label) in enumerate(row_modes):
+                btn = self._segment_button(label)
+                btn.setProperty("divider", "true" if i else "false")
+                btn.toggled.connect(
+                    lambda checked, m=mode:
+                    self._on_trigger_mode_selected(m) if checked else None)
+                self._trigger_group.addButton(btn)
+                row.addWidget(btn)
+                self.trigger_buttons[mode] = btn
+            host_col.addWidget(host)
+
+        # Per-mode value editors, visibility swapped in
+        # _update_trigger_editors.
+        editor_row = QHBoxLayout()
+        editor_row.setSpacing(6)
+        self.trigger_value_spin = QSpinBox()
+        self.trigger_value_spin.setRange(0, 127)
+        self.trigger_value_spin.setToolTip(
+            "MIDI program / note number (0-127)")
+        editor_row.addWidget(self.trigger_value_spin)
+        self.trigger_note_label = QLabel("")
+        self.trigger_note_label.setObjectName("TriggerNoteName")
+        self.trigger_note_label.setFont(mono_font(9))
+        editor_row.addWidget(self.trigger_note_label)
+        self.trigger_channel_caption = MicroLabel("CH", point_size=8,
+                                                  tracking_em=0.1)
+        editor_row.addWidget(self.trigger_channel_caption)
+        self.trigger_channel_spin = QSpinBox()
+        self.trigger_channel_spin.setRange(1, 16)
+        self.trigger_channel_spin.setToolTip("MIDI channel (1-16)")
+        editor_row.addWidget(self.trigger_channel_spin)
+        self.trigger_timecode_edit = QLineEdit()
+        self.trigger_timecode_edit.setObjectName("TriggerTimecodeEdit")
+        self.trigger_timecode_edit.setFont(mono_font(9))
+        self.trigger_timecode_edit.setPlaceholderText("00:14:32:00")
+        self.trigger_timecode_edit.setFixedWidth(120)
+        editor_row.addWidget(self.trigger_timecode_edit)
+        self.trigger_mode_hint = QLabel("")
+        self.trigger_mode_hint.setObjectName("TriggerModeHint")
+        self.trigger_mode_hint.setFont(mono_font(8))
+        self.trigger_mode_hint.setProperty("role", "micro")
+        editor_row.addWidget(self.trigger_mode_hint)
+        editor_row.addStretch(1)
+        host_col.addLayout(editor_row)
+
+        # The mock's mono micro line under the trigger block.
+        self.trigger_micro_hint = QLabel(
+            "MTC/SMPTE: start time e.g. 00:14:32:00 · devices in Settings")
+        self.trigger_micro_hint.setObjectName("TriggerMicroHint")
+        self.trigger_micro_hint.setFont(mono_font(8))
+        self.trigger_micro_hint.setProperty("role", "micro")
+        self.trigger_micro_hint.setWordWrap(True)
+        host_col.addWidget(self.trigger_micro_hint)
+
+        col.addWidget(self.trigger_host)
+
+        self._timecode_invalid = False
+        self.trigger_value_spin.valueChanged.connect(
+            self._on_trigger_value_changed)
+        self.trigger_channel_spin.valueChanged.connect(
+            self._on_trigger_channel_changed)
+        self.trigger_timecode_edit.editingFinished.connect(
+            self._on_trigger_timecode_edited)
+        return section
+
+    def _build_pause_section(self) -> QWidget:
+        """AFTER THE SONG: the open entry's pause look (mode chip +
+        menu, warm-white level, until trigger/duration)."""
+        self.pause_section = QWidget()
+        col = QVBoxLayout(self.pause_section)
+        col.setContentsMargins(14, 6, 14, 6)
+        col.setSpacing(4)
+
+        col.addWidget(MicroLabel("After the song", point_size=8,
+                                 tracking_em=0.12))
+
+        self.pause_mode_chip = MenuChip("Hold last look ↓")
+        self.pause_mode_chip.setObjectName("PauseModeChip")
+        self.pause_mode_chip.setToolTip(
+            "The look on stage after this song ends")
+        self.pause_mode_chip.clicked.connect(
+            self._on_pause_mode_chip_clicked)
+        col.addWidget(self.pause_mode_chip, 0,
+                      Qt.AlignmentFlag.AlignLeft)
+
+        # Warm-white level, only visible for that mode.
+        self.pause_level_row = QWidget()
+        level_row = QHBoxLayout(self.pause_level_row)
+        level_row.setContentsMargins(0, 0, 0, 0)
+        level_row.setSpacing(6)
+        level_row.addWidget(MicroLabel("Level", point_size=8,
+                                       tracking_em=0.1))
+        self.pause_level_spin = QSpinBox()
+        self.pause_level_spin.setRange(0, 100)
+        self.pause_level_spin.setSuffix(" %")
+        self.pause_level_spin.valueChanged.connect(
+            self._on_pause_level_changed)
+        level_row.addWidget(self.pause_level_spin)
+        level_row.addStretch(1)
+        col.addWidget(self.pause_level_row)
+
+        # Until: trigger / duration pair + the duration spin.
+        until_row = QHBoxLayout()
+        until_row.setSpacing(6)
+        until_row.addWidget(MicroLabel("Until", point_size=8,
+                                       tracking_em=0.1))
+        host = self._segment_host()
+        row = host.layout()
+        self.pause_until_buttons = {}
+        self._pause_until_group = QButtonGroup(self)
+        self._pause_until_group.setExclusive(True)
+        for i, (until, label) in enumerate((("trigger", "TRIGGER"),
+                                            ("duration", "DURATION"))):
+            btn = self._segment_button(label)
+            btn.setProperty("divider", "true" if i else "false")
+            btn.toggled.connect(
+                lambda checked, u=until:
+                self._on_pause_until_selected(u) if checked else None)
+            self._pause_until_group.addButton(btn)
+            row.addWidget(btn)
+            self.pause_until_buttons[until] = btn
+        until_row.addWidget(host, 1)
+        self.pause_duration_spin = QSpinBox()
+        self.pause_duration_spin.setRange(0, 3600)
+        self.pause_duration_spin.setSuffix(" s")
+        self.pause_duration_spin.valueChanged.connect(
+            self._on_pause_duration_changed)
+        until_row.addWidget(self.pause_duration_spin)
+        col.addLayout(until_row)
+
+        self.pause_micro_hint = QLabel(
+            "Ambient loop = the screensaver rig behaviour · engine "
+            "arrives with v1.7")
+        self.pause_micro_hint.setObjectName("PauseMicroHint")
+        self.pause_micro_hint.setFont(mono_font(8))
+        self.pause_micro_hint.setProperty("role", "micro")
+        self.pause_micro_hint.setWordWrap(True)
+        col.addWidget(self.pause_micro_hint)
+        return self.pause_section
+
+    def _build_part_section(self) -> QWidget:
+        """PART section: mock shape (stat tiles + COLOUR swatch tile),
+        keeping every existing editor as the write path."""
+        section = QWidget()
+        layout = QVBoxLayout(section)
+        layout.setContentsMargins(14, 6, 14, 6)
+        layout.setSpacing(4)
+
+        # The coloured part title is the section caption (mock:
+        # "PART · CHORUS 1" carries the part colour).
         self.inspector_title = DisplayLabel("No part selected",
                                             point_size=13,
                                             weight=QFont.Weight.Bold,
@@ -1442,10 +1809,11 @@ class StructureTab(BaseTab):
         self.inspector_title.setObjectName("PartInspectorTitle")
         layout.addWidget(self.inspector_title)
 
-        # 2x2 read-out tiles (BPM / TIME SIG / BARS / DURATION).
+        # 2x2 read-out tiles + the COLOUR tile carrying the painted
+        # swatch button (the write path for the part colour).
         tiles = QGridLayout()
-        tiles.setHorizontalSpacing(10)
-        tiles.setVerticalSpacing(10)
+        tiles.setHorizontalSpacing(8)
+        tiles.setVerticalSpacing(8)
         self.stat_bpm = StatTile("BPM")
         self.stat_signature = StatTile("Time sig")
         self.stat_bars = StatTile("Bars")
@@ -1456,17 +1824,24 @@ class StructureTab(BaseTab):
         tiles.addWidget(self.stat_duration, 1, 1)
         self._stat_tiles = (self.stat_bpm, self.stat_signature,
                             self.stat_bars, self.stat_duration)
+        self.stat_colour = StatTile("Colour")
+        self.stat_colour.value_label.hide()
+        self.part_color_btn = ColorButton("#4CAF50")
+        self.part_color_btn.setToolTip("Part colour · click to change")
+        self.part_color_btn.setFixedHeight(22)
+        self.stat_colour.layout().addWidget(self.part_color_btn)
+        tiles.addWidget(self.stat_colour, 2, 0, 1, 2)
         layout.addLayout(tiles)
 
-        # Editors: the write path. The tiles above are pure read-outs and
-        # refresh from these.
-        layout.addWidget(MicroLabel("Name", point_size=8, tracking_em=0.1))
+        # Editors: the write path. The tiles above are pure read-outs
+        # and refresh from these.
         self.part_name_edit = QLineEdit()
+        self.part_name_edit.setPlaceholderText("Part name")
         layout.addWidget(self.part_name_edit)
 
         grid = QGridLayout()
-        grid.setHorizontalSpacing(10)
-        grid.setVerticalSpacing(4)
+        grid.setHorizontalSpacing(8)
+        grid.setVerticalSpacing(2)
         grid.addWidget(MicroLabel("BPM", point_size=8, tracking_em=0.1),
                        0, 0)
         grid.addWidget(MicroLabel("Time sig", point_size=8,
@@ -1480,49 +1855,254 @@ class StructureTab(BaseTab):
         grid.addWidget(self.signature_widget, 1, 1)
         grid.addWidget(MicroLabel("Bars", point_size=8, tracking_em=0.1),
                        2, 0)
-        grid.addWidget(MicroLabel("Color", point_size=8,
+        grid.addWidget(MicroLabel("Transition out", point_size=8,
                                   tracking_em=0.1), 2, 1)
         self.bars_spin = QSpinBox()
         self.bars_spin.setRange(1, 9999)
         grid.addWidget(self.bars_spin, 3, 0)
-        self.part_color_btn = ColorButton("#4CAF50")
-        grid.addWidget(self.part_color_btn, 3, 1)
+        self.transition_combo = QComboBox()
+        self.transition_combo.addItems(["instant", "gradual"])
+        grid.addWidget(self.transition_combo, 3, 1)
         layout.addLayout(grid)
 
         move_row = QHBoxLayout()
         move_row.setSpacing(6)
         self.move_left_btn = QPushButton("< Move")
         self.move_left_btn.setToolTip("Move part earlier")
+        self.move_left_btn.setProperty("density", "compact")
         move_row.addWidget(self.move_left_btn)
         self.move_right_btn = QPushButton("Move >")
         self.move_right_btn.setToolTip("Move part later")
+        self.move_right_btn.setProperty("density", "compact")
         move_row.addWidget(self.move_right_btn)
         layout.addLayout(move_row)
+        return section
 
-        layout.addWidget(MicroLabel("Transition out", point_size=8,
-                                    tracking_em=0.1))
-        self.transition_combo = QComboBox()
-        self.transition_combo.addItems(["instant", "gradual"])
-        layout.addWidget(self.transition_combo)
+    def _build_analysis_section(self) -> QWidget:
+        """AUDIO ANALYSIS: meter bars from the autogen section report,
+        or the honest empty state before any analysis ran."""
+        section = QWidget()
+        layout = QVBoxLayout(section)
+        layout.setContentsMargins(14, 6, 14, 6)
+        layout.setSpacing(4)
 
-        layout.addSpacing(4)
         layout.addWidget(MicroLabel("Audio analysis", point_size=8,
-                                    tracking_em=0.1))
+                                    tracking_em=0.12))
+        self.analysis_empty_hint = QLabel(
+            "No analysis yet · runs with autogen")
+        self.analysis_empty_hint.setObjectName("AnalysisEmptyHint")
+        self.analysis_empty_hint.setFont(mono_font(8))
+        self.analysis_empty_hint.setProperty("role", "micro")
+        self.analysis_empty_hint.setWordWrap(True)
+        layout.addWidget(self.analysis_empty_hint)
+
         self.analysis_energy = AnalysisRow("Energy")
         self.analysis_vocals = AnalysisRow("Vocals")
         self.analysis_contrast = AnalysisRow("Contrast")
         self._analysis_rows = (self.analysis_energy, self.analysis_vocals,
                                self.analysis_contrast)
         for analysis_row in self._analysis_rows:
+            analysis_row.hide()
             layout.addWidget(analysis_row)
+        return section
 
-        layout.addStretch(1)
+    def _style_inspector_chrome(self, tokens: dict) -> None:
+        """Token-read chrome of the inspector: section hairlines, the
+        segment row boxes and the timecode warning tint."""
+        for divider in self._inspector_dividers:
+            divider.setStyleSheet(
+                f"background-color: {tokens['border']}; border: none;")
+        for host in self._inspector_segment_hosts:
+            host.setStyleSheet(
+                f"QWidget#InspectorSegmentGroup {{"
+                f" border: 1px solid {tokens['border']}; }}")
+        self._style_timecode_state()
 
-        self.delete_part_btn = QPushButton("- Delete Part")
-        self.delete_part_btn.setProperty("role", "destructive")
-        layout.addWidget(self.delete_part_btn)
+    # ------------------------------------------------------------------
+    # SONG + AFTER THE SONG sections (the open song's setlist entry)
+    # ------------------------------------------------------------------
+    def _open_entry(self):
+        """The open song's setlist entry, or None (unlisted song /
+        no song)."""
+        for entry in self.config.setlist.entries:
+            if entry.song == self.current_song_name:
+                return entry
+        return None
 
-        return panel
+    def _refresh_entry_sections(self):
+        """Load the open song's setlist entry into the SONG and AFTER
+        THE SONG sections (signal-blocked: pure model read)."""
+        name = self.current_song_name or "-"
+        self.song_caption.setText(f"Song · {name}")
+        entry = self._open_entry()
+        listed = entry is not None
+        self.trigger_host.setVisible(listed)
+        self.song_unlisted_hint.setVisible(not listed)
+        self.pause_section.setVisible(listed)
+        if not listed:
+            return
+
+        trigger = entry.trigger
+        for mode, btn in self.trigger_buttons.items():
+            btn.blockSignals(True)
+            btn.setChecked(mode == trigger.mode)
+            btn.blockSignals(False)
+        for spin, value in ((self.trigger_value_spin, trigger.value),
+                            (self.trigger_channel_spin, trigger.channel)):
+            spin.blockSignals(True)
+            spin.setValue(value)
+            spin.blockSignals(False)
+        self.trigger_timecode_edit.setText(trigger.timecode)
+        self._set_timecode_invalid(False)
+        self._update_trigger_editors(trigger)
+
+        pause = entry.pause_after
+        self.pause_mode_chip.setText(
+            f"{PAUSE_MODE_TEXTS.get(pause.mode, pause.mode)} ↓")
+        self.pause_level_row.setVisible(pause.mode == "warm_white")
+        self.pause_level_spin.blockSignals(True)
+        self.pause_level_spin.setValue(pause.level)
+        self.pause_level_spin.blockSignals(False)
+        for until, btn in self.pause_until_buttons.items():
+            btn.blockSignals(True)
+            btn.setChecked(until == pause.until)
+            btn.blockSignals(False)
+        self.pause_duration_spin.setVisible(pause.until == "duration")
+        self.pause_duration_spin.blockSignals(True)
+        self.pause_duration_spin.setValue(int(round(pause.duration_s)))
+        self.pause_duration_spin.blockSignals(False)
+
+    def _update_trigger_editors(self, trigger) -> None:
+        """Show the value editors that belong to the trigger mode."""
+        mode = trigger.mode
+        midi = mode in ("midi_pc", "midi_note")
+        self.trigger_value_spin.setVisible(midi)
+        self.trigger_value_spin.setPrefix(
+            "PC#" if mode == "midi_pc" else "")
+        self.trigger_note_label.setVisible(mode == "midi_note")
+        self.trigger_note_label.setText(
+            midi_note_name(trigger.value) if mode == "midi_note" else "")
+        self.trigger_channel_caption.setVisible(midi)
+        self.trigger_channel_spin.setVisible(midi)
+        self.trigger_timecode_edit.setVisible(mode in ("mtc", "smpte"))
+        hint = TRIGGER_MODE_HINTS.get(mode, "")
+        self.trigger_mode_hint.setVisible(bool(hint))
+        self.trigger_mode_hint.setText(hint)
+
+    def _on_trigger_mode_selected(self, mode: str):
+        entry = self._open_entry()
+        if entry is None or entry.trigger.mode == mode:
+            return
+        entry.trigger.mode = mode
+        self._update_trigger_editors(entry.trigger)
+        self._refresh_setlist_rail()   # trigger lines update live
+        self._auto_save()
+
+    def _on_trigger_value_changed(self, value: int):
+        entry = self._open_entry()
+        if entry is None:
+            return
+        entry.trigger.value = value
+        self._refresh_setlist_rail()
+        self._auto_save()
+
+    def _on_trigger_channel_changed(self, channel: int):
+        entry = self._open_entry()
+        if entry is None:
+            return
+        entry.trigger.channel = channel
+        self._refresh_setlist_rail()
+        self._auto_save()
+
+    def _on_trigger_timecode_edited(self):
+        """Loose HH:MM:SS:FF validation: invalid input keeps the old
+        value and tints the field (quiet warning, no popup)."""
+        entry = self._open_entry()
+        if entry is None:
+            return
+        text = self.trigger_timecode_edit.text().strip()
+        if text and not TIMECODE_RE.match(text):
+            self.trigger_timecode_edit.setText(entry.trigger.timecode)
+            self._set_timecode_invalid(True)
+            return
+        self._set_timecode_invalid(False)
+        if text == entry.trigger.timecode:
+            return
+        entry.trigger.timecode = text
+        self._refresh_setlist_rail()
+        self._auto_save()
+
+    def _set_timecode_invalid(self, invalid: bool) -> None:
+        """The quiet warning tint on the timecode field, carried as the
+        ``state`` property + a widget-local border in the warning token
+        (data-ish state, the sanctioned pattern)."""
+        self._timecode_invalid = invalid
+        self.trigger_timecode_edit.setProperty(
+            "state", "invalid" if invalid else "")
+        self.trigger_timecode_edit.setToolTip(
+            "Timecode must be HH:MM:SS:FF · kept the previous value"
+            if invalid else "MTC/SMPTE start time (HH:MM:SS:FF)")
+        self._style_timecode_state()
+
+    def _style_timecode_state(self) -> None:
+        if getattr(self, "trigger_timecode_edit", None) is None:
+            return
+        tokens = self._tokens or _active_tokens()
+        if self._timecode_invalid:
+            self.trigger_timecode_edit.setStyleSheet(
+                f"QLineEdit {{ border: 1px solid {tokens['warning']}; }}")
+        else:
+            self.trigger_timecode_edit.setStyleSheet("")
+
+    def _build_pause_mode_menu(self) -> QMenu:
+        """The pause-look mode menu: one checkable action per
+        PauseLook.mode, the entry's current one checked."""
+        menu = QMenu(self)
+        entry = self._open_entry()
+        current = entry.pause_after.mode if entry else ""
+        for mode, text in PAUSE_MODE_TEXTS.items():
+            action = menu.addAction(text.upper())
+            action.setCheckable(True)
+            action.setChecked(mode == current)
+            action.triggered.connect(
+                lambda checked, m=mode: self._set_pause_mode(m))
+        return menu
+
+    def _on_pause_mode_chip_clicked(self):
+        menu = self._build_pause_mode_menu()
+        menu.popup(QCursor.pos())
+
+    def _set_pause_mode(self, mode: str):
+        entry = self._open_entry()
+        if entry is None or entry.pause_after.mode == mode:
+            return
+        entry.pause_after.mode = mode
+        self._refresh_setlist_rail()   # pause rows + chip/level update
+        self._auto_save()
+
+    def _on_pause_level_changed(self, level: int):
+        entry = self._open_entry()
+        if entry is None:
+            return
+        entry.pause_after.level = level
+        self._refresh_setlist_rail()
+        self._auto_save()
+
+    def _on_pause_until_selected(self, until: str):
+        entry = self._open_entry()
+        if entry is None or entry.pause_after.until == until:
+            return
+        entry.pause_after.until = until
+        self._refresh_setlist_rail()
+        self._auto_save()
+
+    def _on_pause_duration_changed(self, seconds: int):
+        entry = self._open_entry()
+        if entry is None:
+            return
+        entry.pause_after.duration_s = float(seconds)
+        self._refresh_setlist_rail()
+        self._auto_save()
 
     def _create_title_row(self) -> QHBoxLayout:
         """The song title row (mock centre column, top): the open
@@ -2107,20 +2687,30 @@ class StructureTab(BaseTab):
         self.stat_duration.set_value(f"{part.duration:.1f} s")
 
     def _update_analysis_rows(self, part):
-        """AUDIO ANALYSIS rows from the autogen section report when one
-        exists; otherwise the dim placeholder with its tooltip (the model
-        carries no per-part audio features)."""
+        """AUDIO ANALYSIS meter bars from the autogen section report
+        when one exists; otherwise the honest empty state (the model
+        carries no per-part audio features - analysis lives only in the
+        session's GenerationReport)."""
         section = self._section_report(part) if part is not None else None
-        if section is None:
-            for analysis_row in self._analysis_rows:
-                analysis_row.set_value(None)
+        has_report = section is not None
+        self.analysis_empty_hint.setVisible(not has_report)
+        for analysis_row in self._analysis_rows:
+            analysis_row.setVisible(has_report)
+        if not has_report:
             return
+        energy = getattr(section, "relative_energy", 0.0)
+        vocals = getattr(section, "vocal_presence", 0.0)
+        contrast = getattr(section, "spectral_contrast", 0.0)
+        strongest = max(energy, vocals, contrast)
         self.analysis_energy.set_value(
-            energy_words(getattr(section, "relative_energy", 0.0)))
+            energy, energy_words(energy), leading=(energy == strongest))
         self.analysis_vocals.set_value(
-            vocal_words(getattr(section, "vocal_presence", 0.0)))
+            vocals, vocal_words(vocals),
+            leading=(vocals == strongest and vocals > energy))
         self.analysis_contrast.set_value(
-            contrast_words(getattr(section, "spectral_contrast", 0.0)))
+            contrast, contrast_words(contrast),
+            leading=(contrast == strongest and contrast > energy
+                     and contrast > vocals))
 
     def _refresh_inspector(self):
         """Load the selected part into the inspector editors."""
@@ -2366,13 +2956,14 @@ class StructureTab(BaseTab):
         """Re-read the active theme's tokens and push them into the
         widget-local (data-colored) chrome."""
         self._tokens = _active_tokens()
-        for tile in self._stat_tiles:
+        for tile in self._stat_tiles + (self.stat_colour,):
             tile.apply_tokens(self._tokens)
         for analysis_row in self._analysis_rows:
             analysis_row.apply_tokens(self._tokens)
         self._style_action_strip()
         self._style_master_grid_header()
         self._style_rail_chrome(self._tokens)
+        self._style_inspector_chrome(self._tokens)
         self._refresh_setlist_rail()
 
     def update_from_config(self):

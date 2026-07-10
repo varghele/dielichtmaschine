@@ -12,12 +12,21 @@ the mono meta line, the RENAME SONG / DELETE outline chips), the parts
 strip of 190px cards with 3px top color bars + the selected card's
 accent check, clickable "INSTANT ." transition chips and the dashed
 add tile, the master grid behind its 150px MASTER / AUDIO header
-column, the compact transport row and the snap-hint row, the 400px
-inspector and the mono status strip.
+column, the compact transport row and the snap-hint row, the 340px
+S2c inspector and the mono status strip.
 
 The open song is "Monsters" (first in the sorted combo, setlist entry
 02) carrying the reference's five parts: grey INTRO, cyan VERSE 1,
 accent-selected CHORUS 1, magenta DROP, grey OUTRO.
+
+The inspector pins all four sections populated: SONG · MONSTERS with
+the six-mode START TRIGGER segment (MIDI NOTE active), the note value
+editors (36 -> C2, CH 1), the disabled LEARN chip and the MTC/SMPTE
+micro hint; AFTER THE SONG with the WARM WHITE pause chip, the 20%
+level spin and the UNTIL TRIGGER/DURATION pair; the PART section's
+stat tiles + COLOUR swatch, editors and TRANSITION OUT; and AUDIO
+ANALYSIS meter bars from an injected generation report (energy 0.78
+leads in accent), with DELETE PART pinned at the bottom.
 
 Regenerate after intended changes with
 
@@ -88,7 +97,8 @@ def structure_config():
             SetlistEntry(
                 song="Monsters",
                 trigger=SongTrigger(mode="midi_note", value=36, channel=1),
-                pause_after=PauseLook(mode="hold_last", until="trigger")),
+                pause_after=PauseLook(mode="warm_white", level=20,
+                                      until="trigger")),
             SetlistEntry(
                 song="Schwarzes Gold",
                 trigger=SongTrigger(mode="follow"),
@@ -101,8 +111,9 @@ def structure_config():
 
 def test_structure_tab_golden(qapp, structure_config):
     """Structure tab (reference screens 05/05b): setlist rail, action
-    strip, part cards with transition chips over the master grid, 400px
-    inspector, status strip."""
+    strip, part cards with transition chips over the master grid, 340px
+    S2c inspector, status strip."""
+    from autogen.report import GenerationReport, SectionReport
     from gui.theme_manager import ThemeManager
     from gui.tabs.structure_tab import StructureTab
 
@@ -111,6 +122,13 @@ def test_structure_tab_golden(qapp, structure_config):
         tab = StructureTab(structure_config, parent=None)
     try:
         tab.update_from_config()
+        # A session generation report for the selected part so the
+        # AUDIO ANALYSIS meter bars render (energy leads -> accent
+        # fill; vocals/contrast in the secondary tone).
+        tab._autogen_report = GenerationReport(sections=[
+            SectionReport(name="Chorus 1", relative_energy=0.78,
+                          vocal_presence=0.45, spectral_contrast=0.62),
+        ])
         # The sorted combo opens Monsters (setlist entry 02): its rail
         # card carries the accent border + OPEN tag. Chorus 1 is the
         # selected part (accent border + accent title), matching the

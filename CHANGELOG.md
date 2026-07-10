@@ -74,6 +74,15 @@ verbatim as the GitHub Release notes (see [docs/releasing.md](docs/releasing.md)
   rows show a quiet placeholder. The selected block gets an accent
   border, glow and a check; labels elide instead of painting outside
   narrow blocks.
+- **The Structure tab inspector edits triggers and pause looks.** For
+  the open song's setlist entry: a start-trigger selector across all
+  six modes (manual, MIDI PC, MIDI note with note names, MTC, SMPTE,
+  follow) with per-mode value editors and timecode validation, a
+  disabled LEARN chip until the v1.7 sync engine, and an after-the-song
+  pause-look editor (mode, warm-white level, until trigger or a
+  duration). Edits update the setlist rail live. The audio-analysis
+  rows became real bars fed by the autogen report (session-only), with
+  an honest empty state before a run.
 - **The Structure tab centre is a song editor.** The open song's name
   heads the page with a BPM · signature · bars · duration line and
   rename/delete chips; part cards are tinted in their part colour with
