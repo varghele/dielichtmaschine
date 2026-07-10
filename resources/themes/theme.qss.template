@@ -754,6 +754,25 @@ QPushButton[role="output-select"]:checked {
     color: $accent_line$;
 }
 
+/* -- Timeline lane header chips (M / S / TARGETS / + BLOCK) ------------- */
+/* Mono family must be pinned here: the app-wide QWidget font-family rule
+   beats setFont() (docs/qt-gotchas.md), and the 260px header column needs
+   compact padding that output-select does not have. */
+QPushButton[role="lane-chip"] {
+    background-color: transparent;
+    border: 1px solid $border$;
+    color: $text_secondary$;
+    font-family: $font_mono$;
+    font-size: 9px;
+    padding: 2px 6px;
+    min-height: 0;
+}
+QPushButton[role="lane-chip"]:hover { color: $text$; }
+QPushButton[role="lane-chip"]:checked {
+    border-color: $accent$;
+    color: $accent_line$;
+}
+
 /* -- Playback time readout (Shows + Structure tabs) --------------------- */
 QLabel#TimeReadout {
     font-family: $font_mono$;

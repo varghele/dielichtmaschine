@@ -29,32 +29,38 @@ def _make_lane_widget(config, targets):
 
 
 class TestMuteSoloChips:
-    """Mute/Solo are the shared output-select toggle-chip role (same as the
-    toolbar SNAP/SWING chips), with no per-chip inline stylesheet - so every
-    toggle chip in the timeline reads as one family. Assert the role and the
-    theme rule, never widget.styleSheet()."""
+    """Mute/Solo are the lane-chip role: the mono family and compact
+    padding are pinned in the theme (the app-wide QWidget font-family
+    rule beats setFont, docs/qt-gotchas.md), accent outline when
+    checked - so every chip in the lane header reads as one family.
+    Assert the role and the theme rule, never widget.styleSheet()."""
 
-    def test_mute_chip_is_output_select(self, qapp, sample_configuration):
+    def test_mute_chip_is_lane_chip(self, qapp, sample_configuration):
         widget = _make_lane_widget(sample_configuration, ["TestGroup"])
         try:
-            assert widget.mute_button.property("role") == "output-select"
+            assert widget.mute_button.property("role") == "lane-chip"
             # No leftover per-chip inline stylesheet (Material red is gone).
             assert widget.mute_button.styleSheet() == ""
         finally:
             widget.deleteLater()
 
-    def test_solo_chip_is_output_select(self, qapp, sample_configuration):
+    def test_solo_chip_is_lane_chip(self, qapp, sample_configuration):
         widget = _make_lane_widget(sample_configuration, ["TestGroup"])
         try:
-            assert widget.solo_button.property("role") == "output-select"
+            assert widget.solo_button.property("role") == "lane-chip"
             assert widget.solo_button.styleSheet() == ""
         finally:
             widget.deleteLater()
 
-    def test_output_select_checked_uses_accent(self):
+    def test_lane_chip_theme_rule(self):
+        """Checked = accent outline; the mono family is pinned in the
+        rule itself so the chips survive the app-wide font rule."""
         from gui.theme_tokens import render_theme
         qss = render_theme("dark")
-        assert 'QPushButton[role="output-select"]:checked' in qss
+        assert 'QPushButton[role="lane-chip"]:checked' in qss
+        body = qss.split('QPushButton[role="lane-chip"] {', 1)[1]
+        body = body.split("}", 1)[0]
+        assert "font-family" in body
         assert THEMES["dark"]["accent"] in qss
 
 
@@ -113,7 +119,7 @@ class TestLaneHeaderStructure:
         try:
             for chip in (widget.mute_button, widget.solo_button,
                          widget.targets_chip, widget.add_block_button):
-                assert chip.property("role") == "output-select"
+                assert chip.property("role") == "lane-chip"
             assert widget.mute_button.text() == "M"
             assert widget.solo_button.text() == "S"
             # U+2193 drop indicator: the mock's ▾ is not in the brand

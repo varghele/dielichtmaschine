@@ -180,8 +180,9 @@ class LightLaneWidget(QFrame):
         layout.addLayout(name_layout)
 
         # Row 2: chip row M · S · TARGETS · + BLOCK. All four share the
-        # output-select chip role (same family as the toolbar SNAP/SWING
-        # chips): bordered raised chips, accent outline when checked.
+        # lane-chip role: mono family + compact padding pinned in the
+        # theme (setFont alone loses to the app-wide QWidget font rule),
+        # accent outline when checked.
         chips_layout = QHBoxLayout()
         chips_layout.setSpacing(4)
 
@@ -190,7 +191,7 @@ class LightLaneWidget(QFrame):
         self.mute_button.setCheckable(True)
         self.mute_button.setChecked(self.lane.muted)
         self.mute_button.setProperty("density", "compact")
-        self.mute_button.setProperty("role", "output-select")
+        self.mute_button.setProperty("role", "lane-chip")
         self.mute_button.toggled.connect(self.on_mute_toggled)
         chips_layout.addWidget(self.mute_button)
 
@@ -199,7 +200,7 @@ class LightLaneWidget(QFrame):
         self.solo_button.setCheckable(True)
         self.solo_button.setChecked(self.lane.solo)
         self.solo_button.setProperty("density", "compact")
-        self.solo_button.setProperty("role", "output-select")
+        self.solo_button.setProperty("role", "lane-chip")
         self.solo_button.toggled.connect(self.on_solo_toggled)
         chips_layout.addWidget(self.solo_button)
 
@@ -212,7 +213,7 @@ class LightLaneWidget(QFrame):
         self.targets_chip.setFixedHeight(20)
         self.targets_chip.setFont(mono_font(8, tracking_em=0.08))
         self.targets_chip.setProperty("density", "compact")
-        self.targets_chip.setProperty("role", "output-select")
+        self.targets_chip.setProperty("role", "lane-chip")
         self.targets_chip.clicked.connect(self.open_target_selection)
         chips_layout.addWidget(self.targets_chip)
         # Legacy alias: e2e drives the targets entry point by this name.
@@ -223,7 +224,7 @@ class LightLaneWidget(QFrame):
         self.add_block_button.setFixedHeight(20)
         self.add_block_button.setFont(mono_font(8, tracking_em=0.08))
         self.add_block_button.setProperty("density", "compact")
-        self.add_block_button.setProperty("role", "output-select")
+        self.add_block_button.setProperty("role", "lane-chip")
         self.add_block_button.clicked.connect(self.add_light_block)
         chips_layout.addWidget(self.add_block_button)
 

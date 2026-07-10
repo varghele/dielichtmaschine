@@ -479,14 +479,15 @@ class TestButtonCoherence:
             assert btn.property("role") == "pane-icon"
             assert btn.text() == ""
 
-    def test_lane_and_audio_chips_are_output_select(self, shows_tab):
+    def test_lane_and_audio_chips_carry_chip_roles(self, shows_tab):
         from timeline.light_lane import LightLane
         shows_tab._add_lane_widget(LightLane("L1"))
         lane = shows_tab.lane_widgets[0]
-        assert lane.mute_button.property("role") == "output-select"
-        assert lane.solo_button.property("role") == "output-select"
-        # Timeline v3 (stage T2): + BLOCK joined the header chip family.
-        assert lane.add_block_button.property("role") == "output-select"
+        # Timeline v3 (stage T2): the header chips share the lane-chip
+        # role (mono family + compact padding pinned in the theme).
+        assert lane.mute_button.property("role") == "lane-chip"
+        assert lane.solo_button.property("role") == "lane-chip"
+        assert lane.add_block_button.property("role") == "lane-chip"
         assert lane.remove_button.property("role") == "destructive"
         assert shows_tab.audio_lane.mute_button.property("role") == \
             "output-select"
