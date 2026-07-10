@@ -999,9 +999,11 @@ class LiveTab(BaseTab):
         # the reference tempo for the rate-based controls (strobe rate, the
         # rudiment "1/4"); this pass only surfaces and stores it.
         hbox.addWidget(MicroLabel("Tempo", point_size=8, tracking_em=0.12))
+        # The BPM is the live reference number: it wears the LED-readout
+        # treatment (#TimeReadout - bold mono, readout green on its dark
+        # well), same voice as the transport timecodes.
         self._bpm_display = QLabel(f"{self.state.bpm:.1f} BPM")
-        self._bpm_display.setProperty("role", "micro")
-        self._bpm_display.setFont(mono_font(10, QFont.Weight.DemiBold))
+        self._bpm_display.setObjectName("TimeReadout")
         self._bpm_display.setToolTip("Tempo reference for rate controls "
                                      "(strobe rate, rudiments)")
         hbox.addWidget(self._bpm_display)
