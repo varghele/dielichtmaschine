@@ -65,6 +65,15 @@ verbatim as the GitHub Release notes (see [docs/releasing.md](docs/releasing.md)
   with `shows` load forever and get a setlist synthesized. Editing UI
   and the trigger engine follow in later passes; workspace export is
   byte-identical.
+- **Timeline blocks read like clips, not debug output.** Blocks are
+  tinted in their part's colour (group colour when they cross parts) at
+  a muted alpha, carry a header strip with the block name and its bar
+  range (BARS 3-5), and render each sub-lane as a labelled segment:
+  effect + rate (PULSE 1/2), colour with the real gradient painted
+  (COL #E17126 -> MAGENTA), movement shapes, honest specials; empty
+  rows show a quiet placeholder. The selected block gets an accent
+  border, glow and a check; labels elide instead of painting outside
+  narrow blocks.
 - **The Structure tab grew a setlist rail.** A left rail lists the
   setlist: numbered song cards with duration, colour edge and the
   song's start trigger (MIDI PC/note with channel, timecode, "Follows

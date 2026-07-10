@@ -1,6 +1,7 @@
 """North Star lane visuals: token-derived Mute/Solo chips, group-color
-sublane fills, and the header fixture count (items 1 and 2 of
-docs/timeline-styling-review.md).
+sublane fills, the header fixture count (items 1 and 2 of
+docs/timeline-styling-review.md), and the timeline v3 stage T3 block
+label/format helpers (docs/timeline-v3-plan.md).
 
 These assert token-derived colors and QColors, never widget.styleSheet()
 font families, per the styling brief.
@@ -16,9 +17,15 @@ from PyQt6.QtGui import QColor
 
 from config.models import (
     ColourBlock, DimmerBlock, FixtureGroupCapabilities, LightBlock,
+    ShowPart,
 )
 from gui.theme_tokens import THEMES
 from timeline.light_lane import LightLane
+from timeline_ui.light_block_widget import (
+    EMPTY_SUBROW_TEXT, bar_index_at, bar_range_label, block_header_label,
+    block_kind_label, colour_segment_label, dimmer_segment_label, elided,
+    movement_segment_label, part_containing_span, special_segment_label,
+)
 
 
 def _make_lane_widget(config, targets):
@@ -262,3 +269,261 @@ class TestSublaneFillDerivesFromGroup:
                 THEMES["dark"]["text_secondary"])
         finally:
             widget.deleteLater()
+
+
+# ── Timeline v3 stage T3: block label/format helpers ─────────────────────
+
+
+def _structure():
+    """VERSE (2 bars, gold) + CHORUS (8 bars, purple), 4/4 @ 120 BPM:
+    bars are 2s each, the part boundary sits at 4s."""
+    from timeline.song_structure import SongStructure
+
+    structure = SongStructure()
+    structure.load_from_show_parts([
+        ShowPart(name="VERSE", color="#D9A441", signature="4/4",
+                 bpm=120.0, num_bars=2, transition="instant"),
+        ShowPart(name="CHORUS", color="#C95FD0", signature="4/4",
+                 bpm=120.0, num_bars=8, transition="instant"),
+    ])
+    return structure
+
+
+class TestSegmentLabels:
+    """Compact mono sub-row labels ("PULSE 1/2", "FADE 208",
+    "COL #E17126 → MAGENTA", "MOV · FIGURE-8", honest SPC)."""
+
+    def test_dimmer_default_speed_shows_intensity(self):
+        assert dimmer_segment_label("fade", "1", 208.0) == "FADE 208"
+        assert dimmer_segment_label("static", "1", 255.0) == "STATIC 255"
+
+    def test_dimmer_non_default_speed_shows_rate(self):
+        assert dimmer_segment_label("pulse", "1/2", 208.0) == "PULSE 1/2"
+        assert dimmer_segment_label("strobe", "4", 213.0) == "STROBE 4"
+
+    def test_dimmer_effect_name_shortening(self):
+        assert dimmer_segment_label(
+            "ping_pong_smooth", "1", 100.0) == "PING PONG 100"
+
+    def test_movement_label(self):
+        assert movement_segment_label("figure_8") == "MOV · FIGURE-8"
+        assert movement_segment_label("static") == "MOV · STATIC"
+
+    def test_special_label_is_honest(self):
+        assert special_segment_label(0, False) == "SPC · BEAM"
+        assert special_segment_label(2, False) == "SPC · GOBO 2"
+        assert special_segment_label(0, True) == "SPC · PRISM"
+        assert special_segment_label(2, True) == "SPC · GOBO 2 + PRISM"
+
+    def test_colour_label_hex(self):
+        assert colour_segment_label((225, 113, 38, 0)) == "COL #E17126"
+
+    def test_colour_label_named(self):
+        assert colour_segment_label((255, 0, 0, 0)) == "COL RED"
+        # White channel counts as white when RGB is dark.
+        assert colour_segment_label((0, 0, 0, 255)) == "COL WHITE"
+
+    def test_colour_label_gradient(self):
+        assert colour_segment_label(
+            (225, 113, 38, 0), (255, 0, 255, 0)) == "COL #E17126 → MAGENTA"
+
+    def test_empty_subrow_placeholder(self):
+        assert EMPTY_SUBROW_TEXT == "- · -"
+
+
+class TestBlockHeaderLabel:
+    """Header strip left text: "BASE · PULSE" style, "*" when modified,
+    check when selected."""
+
+    def test_default_name_and_kind(self):
+        assert block_header_label(None, "PULSE") == "BASE · PULSE"
+
+    def test_custom_name_uppercased(self):
+        assert block_header_label("Chorus", "FADE") == "CHORUS · FADE"
+
+    def test_no_kind_is_name_only(self):
+        assert block_header_label(None, "") == "BASE"
+
+    def test_modified_and_selected_marks(self):
+        assert block_header_label("Chorus", "FADE",
+                                  modified=True) == "CHORUS · FADE *"
+        assert block_header_label("Chorus", "FADE",
+                                  selected=True) == "CHORUS · FADE ✓"
+
+    def test_kind_from_first_dimmer_effect(self):
+        block = LightBlock(
+            start_time=0.0, end_time=1.0, effect_name="verse.wash",
+            dimmer_blocks=[DimmerBlock(start_time=0.0, end_time=1.0,
+                                       effect_type="pulse")])
+        assert block_kind_label(block) == "PULSE"
+
+    def test_kind_falls_back_to_effect_name_function(self):
+        block = LightBlock(start_time=0.0, end_time=1.0,
+                           effect_name="verse.wash")
+        assert block_kind_label(block) == "WASH"
+
+
+class TestBarRangeLabel:
+    """Bar range derivation: 1-based bars accumulated across parts,
+    end bar = last bar the block reaches into."""
+
+    def test_bar_index_accumulates_across_parts(self):
+        structure = _structure()
+        assert bar_index_at(structure, 0.0) == 1
+        assert bar_index_at(structure, 2.1) == 2
+        assert bar_index_at(structure, 4.0) == 3  # first CHORUS bar
+        assert bar_index_at(structure, 19.9) == 10
+
+    def test_span_across_parts(self):
+        assert bar_range_label(_structure(), 0.0, 5.0) == "BARS 1-3"
+
+    def test_span_within_part(self):
+        assert bar_range_label(_structure(), 5.5, 8.5) == "BARS 3-5"
+
+    def test_block_ending_on_bar_line_does_not_claim_next_bar(self):
+        assert bar_range_label(_structure(), 0.0, 2.0) == "BAR 1"
+
+    def test_no_structure_is_empty(self):
+        assert bar_range_label(None, 0.0, 5.0) == ""
+        assert bar_index_at(None, 0.0) is None
+
+
+class TestPartContainment:
+    """The block-tint rule: part colour only when the block sits fully
+    inside one part region."""
+
+    def test_block_inside_part(self):
+        part = part_containing_span(_structure(), 5.5, 8.5)
+        assert part is not None and part.name == "CHORUS"
+
+    def test_block_crossing_parts_has_no_part(self):
+        assert part_containing_span(_structure(), 0.0, 5.0) is None
+
+    def test_exact_part_span_counts_as_inside(self):
+        part = part_containing_span(_structure(), 4.0, 20.0)
+        assert part is not None and part.name == "CHORUS"
+
+    def test_no_structure(self):
+        assert part_containing_span(None, 0.0, 1.0) is None
+
+
+class TestBlockBaseColor:
+    """Widget-level colour source: part colour inside a part, group
+    colour otherwise (deterministic, mock 06b rule)."""
+
+    def _widget_with_block(self, config, start, end, structure=None):
+        config.groups["TestGroup"].color = "#4ECBD4"
+        widget = _make_lane_widget(config, ["TestGroup"])
+        widget.capabilities = FixtureGroupCapabilities(
+            has_dimmer=True, has_colour=True,
+            has_movement=False, has_special=False)
+        if structure is not None:
+            widget.timeline_widget.set_song_structure(structure)
+        block = LightBlock(
+            start_time=start, end_time=end, effect_name="x",
+            dimmer_blocks=[DimmerBlock(start_time=start, end_time=end)])
+        widget.lane.light_blocks.append(block)
+        widget.create_light_block_widget(block)
+        return widget, widget.light_block_widgets[-1]
+
+    def test_part_colour_when_inside_part(self, qapp, sample_configuration):
+        widget, bw = self._widget_with_block(
+            sample_configuration, 5.5, 8.5, structure=_structure())
+        try:
+            assert bw.block_base_color() == QColor("#C95FD0")
+            # Non-colour sub-row fills follow the same source.
+            assert bw.sublane_fill_color("dimmer") == QColor("#C95FD0")
+        finally:
+            widget.deleteLater()
+
+    def test_group_colour_when_crossing_parts(self, qapp,
+                                              sample_configuration):
+        widget, bw = self._widget_with_block(
+            sample_configuration, 0.0, 5.0, structure=_structure())
+        try:
+            assert bw.block_base_color() == QColor("#4ECBD4")
+        finally:
+            widget.deleteLater()
+
+    def test_group_colour_without_structure(self, qapp,
+                                            sample_configuration):
+        widget, bw = self._widget_with_block(sample_configuration, 0.0, 2.0)
+        try:
+            assert bw.block_base_color() == QColor("#4ECBD4")
+        finally:
+            widget.deleteLater()
+
+
+class TestColourGradientTarget:
+    """A colour segment gradients into the next colour block only when
+    they meet seamlessly and differ in colour."""
+
+    def _widget(self, config, colour_blocks):
+        widget = _make_lane_widget(config, ["TestGroup"])
+        widget.capabilities = FixtureGroupCapabilities(
+            has_dimmer=True, has_colour=True,
+            has_movement=False, has_special=False)
+        block = LightBlock(start_time=0.0, end_time=4.0, effect_name="x",
+                           colour_blocks=colour_blocks)
+        widget.lane.light_blocks.append(block)
+        widget.create_light_block_widget(block)
+        return widget, widget.light_block_widgets[-1]
+
+    def test_contiguous_different_colours_gradient(self, qapp,
+                                                   sample_configuration):
+        first = ColourBlock(start_time=0.0, end_time=2.0, red=255)
+        second = ColourBlock(start_time=2.0, end_time=4.0, blue=255)
+        widget, bw = self._widget(sample_configuration, [first, second])
+        try:
+            assert bw._colour_gradient_target(first) is second
+            assert bw._colour_gradient_target(second) is None  # last block
+            assert bw._sublane_segment_text(first, "colour") == \
+                "COL RED → BLUE"
+        finally:
+            widget.deleteLater()
+
+    def test_gap_breaks_the_gradient(self, qapp, sample_configuration):
+        first = ColourBlock(start_time=0.0, end_time=1.5, red=255)
+        second = ColourBlock(start_time=2.0, end_time=4.0, blue=255)
+        widget, bw = self._widget(sample_configuration, [first, second])
+        try:
+            assert bw._colour_gradient_target(first) is None
+            assert bw._sublane_segment_text(first, "colour") == "COL RED"
+        finally:
+            widget.deleteLater()
+
+    def test_same_colour_has_no_gradient(self, qapp, sample_configuration):
+        first = ColourBlock(start_time=0.0, end_time=2.0, red=255)
+        second = ColourBlock(start_time=2.0, end_time=4.0, red=255)
+        widget, bw = self._widget(sample_configuration, [first, second])
+        try:
+            assert bw._colour_gradient_target(first) is None
+        finally:
+            widget.deleteLater()
+
+
+class TestElision:
+    """Labels elide with "…" instead of painting outside their segment."""
+
+    def _metrics(self):
+        from PyQt6.QtGui import QFontMetrics
+        from gui.typography import mono_font
+        return QFontMetrics(mono_font(7))
+
+    def test_long_text_elides_within_width(self, qapp):
+        metrics = self._metrics()
+        text = "COL #E17126 → MAGENTA"
+        assert metrics.horizontalAdvance(text) > 60
+        out = elided(metrics, text, 60)
+        assert out.endswith("…")
+        assert metrics.horizontalAdvance(out) <= 60
+
+    def test_fitting_text_is_unchanged(self, qapp):
+        metrics = self._metrics()
+        assert elided(metrics, "FADE 208", 500) == "FADE 208"
+
+    def test_nothing_fits_returns_empty(self, qapp):
+        metrics = self._metrics()
+        assert elided(metrics, "FADE 208", 2) == ""
+        assert elided(metrics, "", 100) == ""
+        assert elided(metrics, "FADE 208", 0) == ""
