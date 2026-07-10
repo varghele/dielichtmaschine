@@ -6,7 +6,7 @@ from PyQt6.QtWidgets import (QWidget, QHBoxLayout, QVBoxLayout, QLabel,
                              QScrollArea, QStyle, QStyleOption)
 from PyQt6.QtCore import Qt, pyqtSignal, QPoint, QRectF
 from PyQt6.QtGui import QPainter, QPen, QColor, QPolygon, QBrush
-from .timeline_widget import TimelineWidget, iter_grid_steps
+from .timeline_widget import TimelineWidget, iter_grid_steps, HEADER_COLUMN_WIDTH
 
 
 # Grid interval choices. First tuple element is the LABEL (grid interval in
@@ -266,7 +266,7 @@ class MasterTimelineContainer(QWidget):
 
         # Timeline label (matches lane control width)
         timeline_label = QWidget()
-        timeline_label.setFixedWidth(320)
+        timeline_label.setFixedWidth(HEADER_COLUMN_WIDTH)
         label_layout = QHBoxLayout(timeline_label)
         master_label = QLabel("Master Timeline")
         master_label.setStyleSheet("font-weight: bold; font-size: 13px;")
@@ -293,7 +293,7 @@ class MasterTimelineContainer(QWidget):
 
         # Empty space to align with lane controls
         spacer_widget = QWidget()
-        spacer_widget.setFixedWidth(320)
+        spacer_widget.setFixedWidth(HEADER_COLUMN_WIDTH)
 
         # Scrollable timeline area
         self.timeline_scroll = QScrollArea()
@@ -371,10 +371,11 @@ class MasterTimelineContainer(QWidget):
     def detach_pieces(self):
         """Return (header_widget, stripe_widget) for embedding in TimelineGrid.
 
-        Inside TimelineGrid the header is constrained to a 320 px column to
-        match the lane controls. The header is a 2-row stack:
+        Inside TimelineGrid the header is constrained to the shared
+        HEADER_COLUMN_WIDTH column to match the lane controls. The
+        header is a 2-row stack:
 
-            ┌─ MasterTimelineHeader (320 px wide) ───────────┐
+            ┌─ MasterTimelineHeader (header-column wide) ────┐
             │ Master                                         │  ← title
             │ Time: 0.00s | BPM: 120.0 | Zoom: 1.0x          │  ← info
             └────────────────────────────────────────────────┘

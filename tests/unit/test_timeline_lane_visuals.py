@@ -58,6 +58,137 @@ class TestMuteSoloChips:
         assert THEMES["dark"]["accent"] in qss
 
 
+class TestLaneHeaderStructure:
+    """Timeline v3 lane header (stage T2): 260px column, name + N FIX
+    row, chip row M / S / TARGETS / + BLOCK, and the DIM/COL/... label
+    column stacked under the chips."""
+
+    def _pinned(self, config, **caps):
+        from config.models import FixtureGroupCapabilities
+        widget = _make_lane_widget(config, ["TestGroup"])
+        widget.capabilities = FixtureGroupCapabilities(
+            has_dimmer=caps.get("dimmer", True),
+            has_colour=caps.get("colour", True),
+            has_movement=caps.get("movement", False),
+            has_special=caps.get("special", False))
+        widget.num_sublanes = widget._count_sublanes()
+        widget.refresh_sublane_labels()
+        return widget
+
+    def test_header_column_is_260px(self, qapp, sample_configuration):
+        from timeline_ui.timeline_widget import HEADER_COLUMN_WIDTH
+        widget = _make_lane_widget(sample_configuration, ["TestGroup"])
+        try:
+            assert HEADER_COLUMN_WIDTH == 260
+            assert widget.controls_widget.width() == 260
+        finally:
+            widget.deleteLater()
+
+    def test_shared_width_constant_used_everywhere(self):
+        """Audio lane, master timeline and the grid all import the one
+        constant so every track's canvas stays column-aligned."""
+        from timeline_ui import (
+            audio_lane_widget, master_timeline_widget, timeline_grid,
+            timeline_widget,
+        )
+        assert audio_lane_widget.HEADER_COLUMN_WIDTH is \
+            timeline_widget.HEADER_COLUMN_WIDTH
+        assert master_timeline_widget.HEADER_COLUMN_WIDTH is \
+            timeline_widget.HEADER_COLUMN_WIDTH
+        assert timeline_grid._HEADER_COLUMN_WIDTH is \
+            timeline_widget.HEADER_COLUMN_WIDTH
+
+    def test_row1_name_and_fix_count(self, qapp, sample_configuration):
+        widget = _make_lane_widget(sample_configuration, ["TestGroup"])
+        try:
+            assert widget.name_edit.text() == "Test Lane"
+            expected = len(sample_configuration.groups["TestGroup"].fixtures)
+            assert widget.fix_count_label.text() == f"{expected} FIX"
+            assert widget.fix_count_label.property("role") == "micro"
+        finally:
+            widget.deleteLater()
+
+    def test_chip_row_roles_and_texts(self, qapp, sample_configuration):
+        widget = _make_lane_widget(sample_configuration, ["TestGroup"])
+        try:
+            for chip in (widget.mute_button, widget.solo_button,
+                         widget.targets_chip, widget.add_block_button):
+                assert chip.property("role") == "output-select"
+            assert widget.mute_button.text() == "M"
+            assert widget.solo_button.text() == "S"
+            # U+2193 drop indicator: the mock's ▾ is not in the brand
+            # fonts (tofu on offscreen), the arrow is.
+            assert widget.targets_chip.text() == "TARGETS ↓"
+            assert widget.add_block_button.text() == "+ BLOCK"
+            # Only M/S toggle; TARGETS and + BLOCK are plain actions.
+            assert widget.mute_button.isCheckable()
+            assert widget.solo_button.isCheckable()
+            assert not widget.targets_chip.isCheckable()
+            assert not widget.add_block_button.isCheckable()
+            # Legacy alias kept for callers that drive the old name.
+            assert widget.edit_targets_btn is widget.targets_chip
+        finally:
+            widget.deleteLater()
+
+    def test_header_sublane_labels_match_lane_sublanes(self, qapp,
+                                                       sample_configuration):
+        widget = self._pinned(sample_configuration,
+                              dimmer=True, colour=True, movement=True)
+        try:
+            assert widget.num_sublanes == 3
+            assert len(widget.sublane_labels) == widget.num_sublanes
+            assert [l.text() for l in widget.sublane_labels] == \
+                ["DIM", "COL", "MOV"]
+            # Column order matches the stripe row order.
+            for row, label in enumerate(widget.sublane_labels):
+                assert row == widget.get_sublane_index(
+                    label.property("sublane_type"))
+        finally:
+            widget.deleteLater()
+
+    def test_lane_without_movement_has_no_mov_label(self, qapp,
+                                                    sample_configuration):
+        widget = self._pinned(sample_configuration,
+                              dimmer=True, colour=True, movement=False)
+        try:
+            assert "MOV" not in [l.text() for l in widget.sublane_labels]
+        finally:
+            widget.deleteLater()
+
+    def test_setting_toggle_hides_header_labels(self, qapp,
+                                                sample_configuration):
+        from utils.app_settings import app_settings
+        key = "timeline/show_sublane_labels"
+        app_settings().remove(key)
+        widget = self._pinned(sample_configuration)
+        try:
+            assert not widget.sublane_labels_widget.isHidden()
+            app_settings().setValue(key, False)
+            widget.timeline_widget.update()  # shows-tab refresh path
+            assert widget.sublane_labels_widget.isHidden()
+        finally:
+            app_settings().remove(key)
+            widget.deleteLater()
+
+    def test_canvas_label_path_removed(self):
+        from timeline_ui.timeline_widget import TimelineWidget
+        assert not hasattr(TimelineWidget, "draw_sublane_labels")
+
+    def test_snap_state_still_syncs_without_visible_checkbox(
+            self, qapp, sample_configuration):
+        """The per-lane snap checkbox is hidden (the toolbar SNAP chip is
+        the single visible control) but keeps driving the timeline."""
+        widget = _make_lane_widget(sample_configuration, ["TestGroup"])
+        try:
+            assert widget.snap_checkbox.isHidden()
+            widget.snap_checkbox.setChecked(False)
+            assert widget.timeline_widget.snap_to_grid is False
+            widget.snap_checkbox.setChecked(True)
+            assert widget.timeline_widget.snap_to_grid is True
+        finally:
+            widget.deleteLater()
+
+
 class TestFixtureCount:
     def test_counts_all_fixtures_in_group(self, qapp, sample_configuration):
         widget = _make_lane_widget(sample_configuration, ["TestGroup"])

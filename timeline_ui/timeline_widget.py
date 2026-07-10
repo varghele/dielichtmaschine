@@ -9,6 +9,12 @@ from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtGui import QPainter, QPen, QColor, QWheelEvent, QBrush
 
 
+# Shared width of the header column to the left of every timeline row
+# (master ruler, audio lane, light lanes). Timeline v3 (screen 06b)
+# pins it at 260 px; TimelineGrid and every lane header import this so
+# all track canvases stay column-aligned.
+HEADER_COLUMN_WIDTH = 260
+
 # Standard triplet-swing ratio: the off-beat lands at 2/3 of the beat.
 SWING_RATIO = 2.0 / 3.0
 # Epsilon guards. Subdivision is now a float (steps per beat): coarse grids
@@ -149,7 +155,11 @@ class TimelineWidget(QWidget):
         # Sublane support
         self.num_sublanes = 1  # Number of sublanes (1-4)
         self.sublane_height = 60  # Height per sublane in pixels
-        self.capabilities = None  # FixtureGroupCapabilities (for label drawing)
+        self.capabilities = None  # FixtureGroupCapabilities (for sublane layout)
+        # Optional callable, set by the owning LightLaneWidget: re-applies
+        # the timeline/show_sublane_labels setting to the header label
+        # column whenever update() runs (see update()).
+        self.sublane_labels_setting_hook = None
 
         # Drag-drop support for riffs
         self.setAcceptDrops(True)
@@ -489,66 +499,21 @@ class TimelineWidget(QWidget):
             y = i * self.sublane_height
             painter.drawLine(0, int(y), width, int(y))
 
-    def draw_sublane_labels(self, painter, width, height):
-        """Draw the faint sub-lane purpose labels at the start of each row.
+    def update(self, *args):
+        """QWidget.update plus the sub-lane-label setting sync hook.
 
-        Restyled to the brand: a faint low-alpha neutral chip with hard
-        corners (radius 0) and disabled-text mono caps, colors sniffed from
-        the active theme (custom painters can't reach a QSS role). These are
-        distinct from the DIM/COL/MOV/SPC micro-label column in the lane
-        header; a hidden deep setting
-        (``timeline/show_sublane_labels``, default True) suppresses them
-        while keeping the code path.
+        The canvas no longer paints sub-lane purpose labels (timeline v3
+        moved them into the lane header column), but the Settings toggle
+        path (`ShowsTab.refresh_sublane_labels_setting`) still reaches
+        each lane by calling ``timeline_widget.update()``. The owning
+        LightLaneWidget registers ``sublane_labels_setting_hook`` so that
+        same call re-applies the ``timeline/show_sublane_labels`` setting
+        to its header label column - no shows-tab change needed.
         """
-        if self.num_sublanes <= 1 or not self.capabilities:
-            return
-
-        from utils.app_settings import app_settings
-        if not app_settings().value(
-                "timeline/show_sublane_labels", True, type=bool):
-            return
-
-        from PyQt6.QtCore import QRect
-        from gui.typography import mono_font
-        from .light_block_widget import token_qcolor
-
-        # Sub-lane purpose names in row order.
-        sublane_types = []
-        if self.capabilities.has_dimmer:
-            sublane_types.append("Dimmer")
-        if self.capabilities.has_colour:
-            sublane_types.append("Colour")
-        if self.capabilities.has_movement:
-            sublane_types.append("Movement")
-        if self.capabilities.has_special:
-            sublane_types.append("Special")
-
-        painter.setFont(mono_font(7, tracking_em=0.08))
-        metrics = painter.fontMetrics()
-
-        # Faint neutral chip + disabled-text glyphs, both from brand tokens.
-        chip_fill = token_qcolor("raised", 40)
-        chip_border = token_qcolor("border", 90)
-        text_color = token_qcolor("text_disabled")
-
-        for i, label in enumerate(sublane_types):
-            y_offset = i * self.sublane_height
-            text_width = metrics.horizontalAdvance(label)
-            text_height = metrics.height()
-
-            x_pos = 4
-            y_pos = y_offset + (self.sublane_height + text_height) // 2 - 3
-            padding = 3
-
-            # Hard-corner faint chip (radius 0).
-            bg_rect = QRect(x_pos - padding, y_offset + 2,
-                            text_width + 2 * padding, text_height + padding)
-            painter.setBrush(chip_fill)
-            painter.setPen(QPen(chip_border, 1))
-            painter.drawRect(bg_rect)
-
-            painter.setPen(QPen(text_color))
-            painter.drawText(x_pos, y_pos, label)
+        hook = getattr(self, "sublane_labels_setting_hook", None)
+        if hook is not None:
+            hook()
+        super().update(*args)
 
     def paintEvent(self, event):
         """Draw the timeline."""
@@ -566,11 +531,10 @@ class TimelineWidget(QWidget):
         # Draw grid
         self.draw_grid(painter, width, height)
 
-        # Draw sublane separators
+        # Draw sublane separators. (Sub-lane purpose labels are no longer
+        # painted on the canvas - timeline v3 lists DIM/COL/MOV/SPC in the
+        # lane header column instead.)
         self.draw_sublane_separators(painter, width, height)
-
-        # Draw sublane labels
-        self.draw_sublane_labels(painter, width, height)
 
         # Draw drag preview (if dragging a riff)
         self.draw_drag_preview(painter, width, height)

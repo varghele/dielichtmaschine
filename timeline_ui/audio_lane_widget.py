@@ -6,7 +6,7 @@ from PyQt6.QtWidgets import (QWidget, QHBoxLayout, QVBoxLayout, QLabel,
                              QPushButton, QSlider, QFrame, QScrollArea,
                              QFileDialog, QLineEdit)
 from PyQt6.QtCore import Qt, pyqtSignal
-from .timeline_widget import TimelineWidget
+from .timeline_widget import TimelineWidget, HEADER_COLUMN_WIDTH
 
 # Try to import audio components - may not be available in all installations
 try:
@@ -147,7 +147,7 @@ class AudioLaneWidget(QFrame):
         # controls widget is detached and re-parented into TimelineGrid.
         widget.setObjectName("AudioLaneHeader")
         widget.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
-        widget.setFixedWidth(320)
+        widget.setFixedWidth(HEADER_COLUMN_WIDTH)
         layout = QVBoxLayout(widget)
         layout.setSpacing(4)
         layout.setContentsMargins(8, 8, 8, 8)

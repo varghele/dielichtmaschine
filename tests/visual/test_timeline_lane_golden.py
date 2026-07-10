@@ -1,9 +1,10 @@
-"""Golden screenshot for the timeline lane visuals (North Star lane
-anatomy, items 1 and 2 of docs/timeline-styling-review.md).
+"""Golden screenshot for the timeline lane visuals (timeline v3,
+stage T2 - docs/timeline-v3-plan.md).
 
-Renders a populated LightLaneWidget: the header (group-color left
-border, Barlow Condensed name, N FIX count, DIM/COL sublane labels,
-Mute/Solo chips) plus two effect blocks in the timeline, one with a
+Renders a populated LightLaneWidget: the 260px header column
+(group-color left edge, Barlow Condensed name, N FIX count, the
+M / S / TARGETS / + BLOCK chip row, DIM/COL sub-lane labels stacked
+under the chips) plus two effect blocks in the timeline, one with a
 selected sublane block. Colors, geometry and layout are pinned; text
 content is not (offscreen QPA font caveat, see harness).
 
@@ -52,9 +53,10 @@ def lane_config():
 
 
 def test_timeline_lane_golden(qapp, lane_config):
-    """Full lane: group-color header border, name + N FIX count,
-    sublane label column, Mute/Solo chips, and two group-tinted effect
-    blocks (one with a selected colour sublane)."""
+    """Full lane: 260px header with group-color left edge, name + N FIX
+    count, M / S / TARGETS / + BLOCK chip row, DIM/COL label column,
+    and two group-tinted effect blocks (one with a selected colour
+    sublane)."""
     from gui.theme_manager import ThemeManager
     from timeline.light_lane import LightLane
     from timeline_ui.light_lane_widget import LightLaneWidget

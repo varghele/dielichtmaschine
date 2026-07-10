@@ -64,6 +64,13 @@ verbatim as the GitHub Release notes (see [docs/releasing.md](docs/releasing.md)
   with `shows` load forever and get a setlist synthesized. Editing UI
   and the trigger engine follow in later passes; workspace export is
   byte-identical.
+- **Timeline lane headers carry everything.** Each light lane's header
+  column (now 260px, shared across all track types so the canvases stay
+  aligned) shows the group-coloured edge, the lane name with a fixture
+  count, a compact chip row (M · S · TARGETS · + BLOCK) and the
+  dimmer/colour/movement/special sub-lane labels aligned to their rows.
+  The labels are no longer painted on the canvas; the Settings toggle
+  now shows/hides them in the header.
 - **Live and Auto share one LIVE section.** The topbar nav is SETUP ·
   SHOW · LIVE; the LIVE section hosts the Live busking surface and the
   Auto pilot as sibling sub-tabs (like Setup and Show), remembering

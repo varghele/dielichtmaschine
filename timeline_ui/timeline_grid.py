@@ -34,7 +34,9 @@ from PyQt6.QtWidgets import (
 )
 
 
-_HEADER_COLUMN_WIDTH = 320  # Must match LightLaneWidget / AudioLaneWidget header widths.
+# Shared with LightLaneWidget / AudioLaneWidget / MasterTimelineContainer so
+# every track's canvas stays column-aligned (timeline v3: 260 px).
+from .timeline_widget import HEADER_COLUMN_WIDTH as _HEADER_COLUMN_WIDTH
 
 
 class TimelineGrid(QWidget):
