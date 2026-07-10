@@ -280,24 +280,16 @@ class LightLaneWidget(QFrame):
         """Number of distinct fixtures this lane targets.
 
         Whole-group targets count every fixture in the group; indexed
-        targets (``Group:2``) count that one fixture. Deduped per group
-        so a mixed target list does not double-count."""
+        targets (``Group:2``) count that one fixture. Deduped by fixture
+        IDENTITY, not per group: a multi-group fixture reached through
+        two of its groups' targets (or two indexed targets) still counts
+        once, and an out-of-range index counts nothing - the count
+        matches what resolve_targets_unique addresses at export/playback."""
         if not self.config or not self.lane.fixture_targets:
             return 0
-        from utils.target_resolver import parse_target
-        per_group = {}
-        for target in self.lane.fixture_targets:
-            group_name, index = parse_target(target)
-            group = self.config.groups.get(group_name) if self.config.groups else None
-            if not group:
-                continue
-            fixtures = getattr(group, "fixtures", None) or []
-            slot = per_group.setdefault(group_name, set())
-            if index is None:
-                slot.update(range(len(fixtures)))
-            else:
-                slot.add(index)
-        return sum(len(slot) for slot in per_group.values())
+        from utils.target_resolver import resolve_targets_unique
+        return len(resolve_targets_unique(self.lane.fixture_targets,
+                                          self.config))
 
     def _fixture_count_text(self) -> str:
         """`N FIX` label text for the lane header."""

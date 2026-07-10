@@ -464,6 +464,281 @@ class TestLiveStateGroups:
         assert len(config.groups["Warm"].fixtures) == 1
 
 
+# ---------------------------------------------------------------------------
+# Stage 4: timeline group-centric lanes (lane targets, indexed targets,
+# lane capabilities, FIX count, autogen generator lanes)
+# ---------------------------------------------------------------------------
+
+def _shared_fixture_config(temp_dir):
+    """Three fixtures in patch order: 'Solo A' (Front only), 'Shared'
+    (Front AND Warm), 'Solo B' (Warm only). Loaded through
+    Configuration.load so the derived FixtureGroup.fixtures lists are
+    exactly what lanes see at runtime:
+
+        Front = [Solo A, Shared]   (Shared at index 1)
+        Warm  = [Shared, Solo B]   (Shared at index 0)
+    """
+    path = os.path.join(temp_dir, "lanes.yaml")
+    _write_config_yaml(path, [
+        _fixture_yaml_dict("Solo A", groups=["Front"]),
+        _fixture_yaml_dict("Shared", groups=["Front", "Warm"]),
+        _fixture_yaml_dict("Solo B", groups=["Warm"]),
+    ], groups=["Front", "Warm"])
+    return Configuration.load(path)
+
+
+class TestLaneTargetResolution:
+    """The core stage-4 promise: two lanes targeting groups A and B, a
+    fixture in both groups resolves into BOTH lanes (the lane-level path
+    every timeline/export/playback consumer uses)."""
+
+    def test_shared_fixture_resolves_into_both_lanes(self, temp_dir):
+        from utils.target_resolver import resolve_targets
+
+        config = _shared_fixture_config(temp_dir)
+        shared = next(f for f in config.fixtures if f.name == "Shared")
+
+        lane_a_targets = ["Front"]  # autogen-style: one lane per group
+        lane_b_targets = ["Warm"]
+        resolved_a = resolve_targets(lane_a_targets, config)
+        resolved_b = resolve_targets(lane_b_targets, config)
+
+        assert any(f is shared for f in resolved_a)
+        assert any(f is shared for f in resolved_b)
+        assert [f.name for f in resolved_a] == ["Solo A", "Shared"]
+        assert [f.name for f in resolved_b] == ["Shared", "Solo B"]
+
+    def test_resolve_targets_unique_dedups_shared_fixture_in_one_lane(
+            self, temp_dir):
+        """A single lane targeting BOTH groups addresses the shared
+        fixture once (this is the export path: shows_to_xml and the
+        ArtNet controllers resolve per lane via resolve_targets_unique)."""
+        from utils.target_resolver import resolve_targets, resolve_targets_unique
+
+        config = _shared_fixture_config(temp_dir)
+        targets = ["Front", "Warm"]
+        # Raw resolution sees the fixture once per membership...
+        assert [f.name for f in resolve_targets(targets, config)] == \
+            ["Solo A", "Shared", "Shared", "Solo B"]
+        # ...the unique path collapses it to one instance per lane.
+        unique = resolve_targets_unique(targets, config)
+        assert [f.name for f in unique] == ["Solo A", "Shared", "Solo B"]
+        assert len(unique) == len({id(f) for f in unique})
+
+
+class TestIndexedTargetSemantics:
+    """`Group:N` means position N in that group's DERIVED fixture list
+    (config.fixtures patch order filtered by membership). A shared
+    fixture's index therefore differs per group; each resolves to the
+    same fixture object."""
+
+    def test_shared_fixture_index_differs_per_group(self, temp_dir):
+        from utils.target_resolver import resolve_target
+
+        config = _shared_fixture_config(temp_dir)
+        shared = next(f for f in config.fixtures if f.name == "Shared")
+
+        front_hit = resolve_target("Front:1", config)
+        warm_hit = resolve_target("Warm:0", config)
+        assert len(front_hit) == 1 and front_hit[0] is shared
+        assert len(warm_hit) == 1 and warm_hit[0] is shared
+        # And the non-shared neighbours stay addressable around it.
+        assert resolve_target("Front:0", config)[0].name == "Solo A"
+        assert resolve_target("Warm:1", config)[0].name == "Solo B"
+
+    def test_indexed_target_validation_uses_derived_length(self, temp_dir):
+        from utils.target_resolver import validate_targets
+
+        config = _shared_fixture_config(temp_dir)
+        assert validate_targets(["Front:1", "Warm:0"], config) == []
+        warnings = validate_targets(["Warm:2"], config)
+        assert len(warnings) == 1 and "out of range" in warnings[0]
+
+    def test_display_name_resolves_per_group_index(self, temp_dir):
+        from utils.target_resolver import get_target_display_name
+
+        config = _shared_fixture_config(temp_dir)
+        assert get_target_display_name("Front:1", config) == "Front: Shared"
+        assert get_target_display_name("Warm:0", config) == "Warm: Shared"
+
+    def test_derivation_order_is_patch_order_in_both_paths(self, temp_dir,
+                                                           qapp):
+        """Indexed targets are only stable if every derivation path
+        orders a group's fixtures identically: config.fixtures (patch)
+        order. Configuration.load and fixtures_tab._update_groups must
+        agree."""
+        from gui.theme_manager import ThemeManager
+        from gui.tabs.fixtures_tab import FixturesTab
+
+        config = _shared_fixture_config(temp_dir)
+        loaded_order = {
+            name: [f.name for f in group.fixtures]
+            for name, group in config.groups.items()
+        }
+        assert loaded_order == {"Front": ["Solo A", "Shared"],
+                                "Warm": ["Shared", "Solo B"]}
+
+        ThemeManager().apply(qapp, "dark")
+        tab = FixturesTab(config, parent=None)
+        try:
+            tab._update_groups()
+            rebuilt_order = {
+                name: [f.name for f in group.fixtures]
+                for name, group in config.groups.items()
+            }
+            assert rebuilt_order == loaded_order
+        finally:
+            tab.deleteLater()
+
+
+class TestLaneCapabilitiesSharedFixture:
+    """Lane capability detection (detect_targets_capabilities is what
+    LightLaneWidget._detect_group_capabilities calls) must include the
+    shared fixture's capabilities in EVERY lane that targets one of its
+    groups."""
+
+    DEFS = {
+        "TestMfr_TestModel": {
+            "channels": [
+                {"name": "Dimmer", "preset": "IntensityDimmer"},
+                {"name": "Red", "preset": "IntensityRed"},
+            ],
+        },
+    }
+
+    def test_both_lanes_detect_shared_fixture_capabilities(self, temp_dir):
+        from utils.target_resolver import detect_targets_capabilities
+
+        config = _multi_group_config(temp_dir)  # one fixture, two groups
+        for lane_targets in (["Front"], ["Warm"]):
+            caps = detect_targets_capabilities(
+                lane_targets, config, self.DEFS)
+            assert caps.has_dimmer, f"lane {lane_targets} lost the dimmer"
+            assert caps.has_colour, f"lane {lane_targets} lost the colour"
+
+
+class TestLaneFixtureCountSharedFixture:
+    """The lane header's N FIX label counts DISTINCT fixtures the lane
+    targets (LightLaneWidget._fixture_count docstring). A multi-group
+    fixture counts once in each of its groups' lanes, and once per lane
+    even when one lane reaches it through several of its groups."""
+
+    def _lane_widget(self, config, targets, qapp):
+        from timeline.light_lane import LightLane
+        from timeline_ui.light_lane_widget import LightLaneWidget
+        lane = LightLane(name="Lane", fixture_targets=list(targets))
+        return LightLaneWidget(
+            lane=lane, fixture_groups=list(config.groups.keys()),
+            config=config)
+
+    def test_counts_once_in_each_groups_lane(self, temp_dir, qapp):
+        config = _shared_fixture_config(temp_dir)
+        for targets, expected in ((["Front"], 2), (["Warm"], 2)):
+            widget = self._lane_widget(config, targets, qapp)
+            try:
+                assert widget._fixture_count() == expected
+                assert widget.fix_count_label.text() == f"{expected} FIX"
+            finally:
+                widget.deleteLater()
+
+    def test_lane_targeting_both_groups_counts_shared_once(self, temp_dir,
+                                                           qapp):
+        """3 distinct fixtures across Front+Warm; the shared one must
+        not be double-counted just because both its groups are
+        targeted."""
+        config = _shared_fixture_config(temp_dir)
+        widget = self._lane_widget(config, ["Front", "Warm"], qapp)
+        try:
+            assert widget._fixture_count() == 3
+        finally:
+            widget.deleteLater()
+
+    def test_indexed_targets_to_same_fixture_count_once(self, temp_dir,
+                                                        qapp):
+        config = _shared_fixture_config(temp_dir)
+        widget = self._lane_widget(config, ["Front:1", "Warm:0"], qapp)
+        try:
+            assert widget._fixture_count() == 1
+        finally:
+            widget.deleteLater()
+
+    def test_out_of_range_indexed_target_counts_nothing(self, temp_dir,
+                                                        qapp):
+        config = _shared_fixture_config(temp_dir)
+        widget = self._lane_widget(config, ["Warm:9"], qapp)
+        try:
+            assert widget._fixture_count() == 0
+        finally:
+            widget.deleteLater()
+
+
+class TestGeneratorLanesSharedFixture:
+    """generate_show builds one lane per classified group; a shared
+    fixture must land in BOTH groups' lanes' resolved targets (audio
+    analysis is stubbed - lane construction is what is under test)."""
+
+    def test_generator_lanes_cover_every_membership(self, temp_dir,
+                                                    monkeypatch):
+        import autogen.generator as generator
+        from audio.spectral_analysis import SectionAnalysis, SongAnalysis
+        from config.models import ShowPart
+        from timeline.song_structure import SongStructure
+        from utils.target_resolver import resolve_targets
+
+        config = _shared_fixture_config(temp_dir)
+        shared = next(f for f in config.fixtures if f.name == "Shared")
+
+        structure = SongStructure()
+        structure.load_from_show_parts([
+            ShowPart(name="Verse 1", color="#123456", signature="4/4",
+                     bpm=120.0, num_bars=4, transition="instant"),
+        ])
+
+        def fake_analyze(audio_path, song_structure):
+            sections = [
+                SectionAnalysis(
+                    name=part.name, start_time=part.start_time,
+                    end_time=part.start_time + part.duration,
+                    spectral_flux_avg=0.5, transient_sharpness=0.5,
+                    spectral_richness=0.8, vocal_presence=0.2,
+                    spectral_centroid_avg=2000.0, rms_energy=0.7,
+                    spectral_contrast_avg=0.5,
+                )
+                for part in song_structure.parts
+            ]
+            last = song_structure.parts[-1]
+            return SongAnalysis(
+                sections=sections,
+                duration=last.start_time + last.duration)
+
+        monkeypatch.setattr(generator, "analyze_song", fake_analyze)
+
+        # The inspector frame features are best-effort (try/except in
+        # generate_show); stub them so no real librosa load is attempted.
+        def fake_frame_features(audio_path):
+            raise FileNotFoundError(audio_path)
+
+        import audio.spectral_analysis as spectral_analysis
+        monkeypatch.setattr(spectral_analysis, "compute_frame_features",
+                            fake_frame_features)
+
+        lanes, _report = generator.generate_show(
+            "nonexistent.wav", structure, config)
+
+        by_group = {}
+        for lane in lanes:
+            assert lane.fixture_targets, f"lane {lane.name} untargeted"
+            by_group[lane.fixture_targets[0]] = lane
+        assert {"Front", "Warm"} <= set(by_group)
+
+        for group in ("Front", "Warm"):
+            resolved = resolve_targets(by_group[group].fixture_targets,
+                                       config)
+            assert any(f is shared for f in resolved), (
+                f"shared fixture missing from the {group} lane's "
+                "resolved targets")
+
+
 class TestWorkspaceExportMultiGroup:
     """Export decision (plan stage 3): groups reach the .qxw as
     per-capability ChannelsGroup lists, VC group controls and preset

@@ -85,6 +85,13 @@ verbatim as the GitHub Release notes (see [docs/releasing.md](docs/releasing.md)
   reports). The directory hint still self-maintains for import/export
   dialogs and the legacy audiofiles fallback, and old configs load
   unchanged. The dead CSV auto-save/auto-load code went with it.
+- **Multi-group fixtures work end to end.** A fixture in several groups
+  shows up in each group's timeline lane, contributes its capabilities
+  to every lane, appears in each group's exported channel groups and
+  preset scenes, and answers every group's Live submaster. Indexed lane
+  targets (Group:2) count positions within that group's own fixture
+  order. The lane header's FIX count now counts distinct fixtures (a
+  lane targeting two overlapping groups counted shared fixtures twice).
 - **Fixtures can belong to multiple groups.** A fixture carries an
   ordered list of group memberships; the first is its primary (drives
   data colour, orientation defaults and role). Assigning a group from

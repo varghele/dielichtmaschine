@@ -117,6 +117,43 @@ several consumers.
   simultaneous blocks is pre-existing semantics owned by the arbiter;
   stage 3 only guarantees membership completeness.
 
+### Stage 4 findings (2026-07-10)
+
+- Verification pass, not a rebuild: lane target resolution
+  (`utils/target_resolver.py`) already reads the derived
+  `FixtureGroup.fixtures`, so a fixture in groups A and B resolves into
+  both lanes, both lanes' capability detection
+  (`detect_targets_capabilities`) includes it, and a single lane
+  targeting both groups addresses it once via `resolve_targets_unique`
+  (the export/ArtNet/offline-render path). All pinned in
+  `tests/unit/test_multi_group_fixtures.py` (stage 4 section).
+- **Indexed-target semantics pinned:** `Group:N` means position N in
+  that group's DERIVED fixture list, which is `config.fixtures` (patch)
+  order filtered by membership. A shared fixture's index therefore
+  differs per group (`Front:1` and `Warm:0` can be the same fixture);
+  parse/resolve/validate/display-name all honor the per-group index.
+  Derivation order is deterministic in every path
+  (`Configuration.load`, `Configuration.from_workspace`,
+  `fixtures_tab._update_groups`, `fixture_io.apply_fixture_list` - all
+  iterate `config.fixtures` in order); the load and tab paths are
+  asserted to agree.
+- **One real bug found and fixed:** the lane header's N FIX count
+  (`timeline_ui/light_lane_widget.py _fixture_count`) deduped per
+  GROUP, so a lane targeting two groups that share a fixture counted it
+  twice, and an out-of-range indexed target counted as a fixture. Now
+  counts `len(resolve_targets_unique(...))` - distinct fixtures, the
+  same set the lane addresses at export/playback.
+- Other timeline touch-points verified clean: the lane group subtitle
+  lists lane TARGETS (membership-agnostic), the group border color uses
+  the first target's group, riff-drop compatibility and color-wheel
+  options read the derived `group.fixtures` (shared fixture included).
+- Generator lane flow: `generate_show` (audio analysis stubbed) builds
+  one lane per classified group and the shared fixture is in both
+  lanes' resolved targets. Layering/conflicts between the two lanes'
+  blocks stay with the output arbiter (todo.md), per stage 3.
+- Left for stage 5: remove the `group` compat property + legacy save
+  field (waits a release, unchanged).
+
 ## Staging (each its own commit, tests + goldens)
 
 1. Model + `groups` list + `group` compat property + load/save migration
@@ -124,7 +161,13 @@ several consumers.
    working).
 2. Fixtures tab: membership add/remove UI + GROUP column display.
 3. Autogen + stage precedence rule + export decision.
-4. Timeline group-centric lanes on top of the new model.
+4. Timeline group-centric lanes on top of the new model. Done: shipped
+   as a verification + gap-closing pass (see "Stage 4 findings") - lane
+   resolution/capabilities/generator lanes proven membership-complete,
+   indexed-target semantics pinned (index = position in the group's
+   derived, patch-ordered list), and the one proven bug fixed (N FIX
+   count now dedupes by fixture identity). Tests in
+   tests/unit/test_multi_group_fixtures.py, stage 4 section.
 5. Remove the `group` compat property and the legacy save field.
 
 Build started 2026-07-10 (stage 1 first); stage 5 (compat removal)
