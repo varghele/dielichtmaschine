@@ -493,20 +493,48 @@ class FixtureItem(QGraphicsItem):
 
 
 class SpotItem(QGraphicsItem):
+    """A spike mark: the taped stage position marker (screen 04 asset
+    resources/stageplot/spike-mark.svg - X through a circle). Labels
+    render in the brand mono voice, centered under the mark; colors
+    come from the active theme tokens (accent when selected)."""
+
+    SYMBOL = "spike-mark"
+
     def __init__(self, name: str, parent=None):
         super().__init__(parent)
         self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsMovable)
         self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsSelectable)
         self.setAcceptHoverEvents(True)
-        self.size = 20  # Size of the X
+        self.size = 24  # Symbol box (the SVG spans the whole box)
         self.name = name
         self.z_height = 0.0  # Z height in meters (for 3D targeting)
         self.last_pos = self.pos()  # Store last position for snapping
 
+    @staticmethod
+    def _tokens() -> dict:
+        """Active theme tokens; safe fallback for bare-item tests."""
+        try:
+            from gui.tabs.stage_tab import _active_tokens
+            return _active_tokens()
+        except Exception:
+            from gui.theme_tokens import THEMES
+            return THEMES["dark"]
+
+    def _label_fonts(self):
+        from gui.typography import mono_font
+        return mono_font(8), mono_font(7)
+
     def boundingRect(self):
-        text_width = max(len(self.name) * 8, 60)  # Approximate width of text
-        return QRectF(-self.size/2 - 2, -self.size/2 - 2,
-                     max(self.size + 4, text_width), self.size + 35)  # Extra space for Z-height
+        name_font, z_font = self._label_fonts()
+        name_w = QFontMetrics(name_font).horizontalAdvance(self.name)
+        z_w = QFontMetrics(z_font).horizontalAdvance(
+            f"Z: {self.z_height:.1f}m")
+        half_w = max(self.size / 2 + 2, name_w / 2, z_w / 2)
+        # Symbol box + two centered label lines below.
+        label_h = (QFontMetrics(name_font).height()
+                   + QFontMetrics(z_font).height() + 6)
+        return QRectF(-half_w, -self.size / 2 - 2,
+                      half_w * 2, self.size + 4 + label_h)
 
     def mouseMoveEvent(self, event):
         view = self.scene().views()[0]  # Get the main view
@@ -557,31 +585,47 @@ class SpotItem(QGraphicsItem):
             event.ignore()
 
     def paint(self, painter, option, widget):
-        if self.isSelected():
-            painter.setPen(QPen(Qt.GlobalColor.blue, 2))
-            painter.setBrush(Qt.BrushStyle.NoBrush)
-            painter.drawEllipse(QRectF(-self.size/2 - 2, -self.size/2 - 2,
-                                     self.size + 4, self.size + 4))
-            painter.setPen(QPen(Qt.GlobalColor.blue, 5))
-        else:
-            painter.setPen(QPen(Qt.GlobalColor.black, 5))
+        from gui.widgets.fixture_icons import _paint_symbol_icon
 
-        # Draw X
-        painter.drawLine(QPointF(-self.size/2, -self.size/2),
-                        QPointF(self.size/2, self.size/2))
-        painter.drawLine(QPointF(-self.size/2, self.size/2),
-                        QPointF(self.size/2, -self.size/2))
+        tokens = self._tokens()
+        selected = self.isSelected()
+        ink = QColor(tokens["accent"] if selected
+                     else tokens["text_secondary"])
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
 
-        # Draw name below the X
-        painter.setPen(QPen(Qt.GlobalColor.black, 1))
-        painter.setFont(QFont("Arial", 10))
-        painter.drawText(QPointF(-self.size/2, self.size + 5), self.name)
+        # The spike-mark symbol (SVG recolored to the ink), with the old
+        # primitive X as the fallback if the asset is missing.
+        painter.save()
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.setBrush(QBrush(ink))
+        drew_symbol = _paint_symbol_icon(painter, self.SYMBOL, self.size)
+        painter.restore()
+        if not drew_symbol:
+            painter.setPen(QPen(ink, 2))
+            painter.drawLine(QPointF(-self.size / 2, -self.size / 2),
+                             QPointF(self.size / 2, self.size / 2))
+            painter.drawLine(QPointF(-self.size / 2, self.size / 2),
+                             QPointF(self.size / 2, -self.size / 2))
 
-        # Draw Z-height below the name
-        font = painter.font()
-        font.setBold(True)
-        painter.setFont(font)
-        painter.drawText(QPointF(-self.size/2, self.size + 18), f"Z: {self.z_height:.1f}m")
+        # Labels: name + Z height, brand mono, centered under the mark.
+        name_font, z_font = self._label_fonts()
+        name_metrics = QFontMetrics(name_font)
+        z_metrics = QFontMetrics(z_font)
+
+        painter.setPen(QPen(QColor(tokens["text"]), 1))
+        painter.setFont(name_font)
+        name_y = self.size / 2 + 3 + name_metrics.ascent()
+        painter.drawText(
+            QPointF(-name_metrics.horizontalAdvance(self.name) / 2, name_y),
+            self.name)
+
+        z_text = f"Z: {self.z_height:.1f}m"
+        painter.setPen(QPen(QColor(tokens["text_secondary"]), 1))
+        painter.setFont(z_font)
+        painter.drawText(
+            QPointF(-z_metrics.horizontalAdvance(z_text) / 2,
+                    name_y + z_metrics.height()),
+            z_text)
 
 
 

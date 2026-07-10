@@ -26,7 +26,8 @@ from typing import List, Optional
 
 from PyQt6.QtCore import QMarginsF, QRectF, Qt
 from PyQt6.QtGui import (
-    QColor, QFont, QImage, QPageLayout, QPageSize, QPainter, QPdfWriter, QPen,
+    QBrush, QColor, QFont, QImage, QPageLayout, QPageSize, QPainter,
+    QPdfWriter, QPen,
 )
 
 from utils.fixture_capabilities import chassis_from_legacy_type
@@ -163,7 +164,9 @@ class StagePlotRenderer:
     # ── Layout + drawing ──────────────────────────────────────────────
 
     def _font(self, mm_size: float, px_per_mm: float, bold: bool = False) -> QFont:
-        font = QFont("Arial")
+        # Brand family (registered by gui.fonts at app start / the visual
+        # test conftest); Qt falls back to a system sans if unregistered.
+        font = QFont("Barlow")
         font.setPixelSize(max(4, int(mm_size * px_per_mm)))
         font.setBold(bold)
         return font
@@ -260,7 +263,7 @@ class StagePlotRenderer:
         painter.drawText(
             QRectF(margin, margin, page_w - 2 * margin, 6 * mm),
             int(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter),
-            f"{self.title} — Stage Plot",
+            f"{self.title} · Stage Plot",
         )
         painter.setFont(self._font(2.6, mm))
         painter.setPen(QPen(QColor(80, 80, 80), 0.2 * mm))
@@ -437,14 +440,31 @@ class StagePlotRenderer:
 
     def _draw_spots(self, painter, ox, oy, ppm, mm, black,
                     occupied: List[QRectF]) -> None:
-        painter.setPen(QPen(QColor(90, 90, 90), 0.3 * mm))
+        from gui.widgets.fixture_icons import _paint_symbol_icon
+
+        ink = QColor(90, 90, 90)
+        painter.setPen(QPen(ink, 0.3 * mm))
         painter.setFont(self._font(2.0, mm))
         size = 1.6 * mm
+        box = 3.2 * mm  # spike-mark symbol box (same span as the old X)
         for name, spot in getattr(self.config, 'spots', {}).items():
             x = ox + spot.x * ppm
             y = oy - spot.y * ppm
-            painter.drawLine(int(x - size), int(y - size), int(x + size), int(y + size))
-            painter.drawLine(int(x - size), int(y + size), int(x + size), int(y - size))
+            # The spike-mark symbol (screen 04 asset); primitive X as
+            # the fallback if the SVG is missing.
+            painter.save()
+            painter.translate(x, y)
+            painter.setPen(Qt.PenStyle.NoPen)
+            painter.setBrush(QBrush(ink))
+            drew = _paint_symbol_icon(painter, "spike-mark", box)
+            painter.restore()
+            if not drew:
+                painter.setPen(QPen(ink, 0.3 * mm))
+                painter.drawLine(int(x - size), int(y - size),
+                                 int(x + size), int(y + size))
+                painter.drawLine(int(x - size), int(y + size),
+                                 int(x + size), int(y - size))
+            painter.setPen(QPen(ink, 0.3 * mm))
             anchor = QRectF(x - size, y - size, 2 * size, 2 * size)
             rect = choose_label_rect(anchor, len(name) * 1.4 * mm, 3 * mm,
                                      occupied, gap=0.6 * mm)

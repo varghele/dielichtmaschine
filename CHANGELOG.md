@@ -56,6 +56,13 @@ verbatim as the GitHub Release notes (see [docs/releasing.md](docs/releasing.md)
 
 ### Fixed
 
+- **Stage spots are spike marks in the brand voice.** The stage marker
+  renders the spike-mark symbol (X through a circle, the screen 04
+  asset) on the stage canvas and the printed plot, replacing the plain
+  black X; the marker labels left Arial for the brand mono, centered
+  under the mark, and the selected mark reads in the accent. The whole
+  printed stage plot now sets its text in Barlow, and its title uses
+  the brand separator.
 - **Lane names no longer clip, and lanes show their fixture group.**
   The lane-name field sizes from its font instead of a hardcoded
   height, and a quiet subtitle under the name lists the targeted

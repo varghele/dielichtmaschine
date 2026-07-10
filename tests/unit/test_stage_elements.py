@@ -181,3 +181,48 @@ class TestStagePlot:
         b = qimage_to_array(QImage(empty_path)).astype(int)
         assert not (np.abs(a - b) > 20).any(), (
             "hidden-layer element painted on the plot")
+
+
+class TestSpikeMark:
+    """The stage spot renders the spike-mark symbol (screen 04 asset)
+    with brand-mono labels, replacing the Arial-labelled primitive X."""
+
+    def test_spike_mark_asset_renders(self, qapp):
+        from PyQt6.QtGui import QColor
+        from gui.widgets.fixture_icons import (
+            _symbol_pixmap, stageplot_symbol_path)
+        assert os.path.exists(stageplot_symbol_path("spike-mark"))
+        pixmap = _symbol_pixmap("spike-mark", QColor("#8d9299"), 48)
+        assert pixmap is not None and not pixmap.isNull()
+
+    def test_bounding_rect_fits_label_metrics(self, qapp):
+        from PyQt6.QtGui import QFontMetrics
+        from gui.stage_items import SpotItem
+        item = SpotItem(name="A Rather Long Spike Name")
+        name_font, _z = item._label_fonts()
+        needed = QFontMetrics(name_font).horizontalAdvance(item.name)
+        assert item.boundingRect().width() >= needed
+
+    def test_paint_smoke_both_selection_states(self, qapp):
+        """Painting must not crash and must leave ink (offscreen)."""
+        from PyQt6.QtGui import QImage, QPainter
+        from PyQt6.QtCore import Qt as QtCore_Qt
+        from PyQt6.QtWidgets import QGraphicsScene
+        from gui.stage_items import SpotItem
+        import numpy as np
+        from tests.visual.harness import qimage_to_array
+
+        scene = QGraphicsScene()
+        item = SpotItem(name="Spot1")
+        scene.addItem(item)
+        for selected in (False, True):
+            item.setSelected(selected)
+            image = QImage(120, 120,
+                           QImage.Format.Format_ARGB32_Premultiplied)
+            image.fill(QtCore_Qt.GlobalColor.transparent)
+            painter = QPainter(image)
+            painter.translate(60, 40)
+            item.paint(painter, None, None)
+            painter.end()
+            alpha = qimage_to_array(image)[..., 3]
+            assert (alpha > 0).any(), f"no ink (selected={selected})"

@@ -68,10 +68,13 @@ def scene_config():
 
 
 def test_stage_plot_golden(qapp, scene_config, tmp_path):
-    """The whole printable plot: symbols, tint, labels, legend, scale."""
+    """The whole printable plot: symbols, tint, labels, legend, scale,
+    and a spike mark (the stage-spot symbol from screen 04)."""
     from PyQt6.QtGui import QImage
+    from config.models import Spot
     from gui.stage_plot import StagePlotRenderer
 
+    scene_config.spots = {"DS Centre": Spot(name="DS Centre", x=0.0, y=-2.5)}
     path = str(tmp_path / "plot.png")
     StagePlotRenderer(scene_config, title="golden").render(path, paper="A4", dpi=100)
     compare_to_golden(QImage(path), "stage_plot_a4_100dpi")
