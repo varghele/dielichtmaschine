@@ -56,6 +56,11 @@ verbatim as the GitHub Release notes (see [docs/releasing.md](docs/releasing.md)
 
 ### Fixed
 
+- **Lane names no longer clip, and lanes show their fixture group.**
+  The lane-name field sizes from its font instead of a hardcoded
+  height, and a quiet subtitle under the name lists the targeted
+  fixture group(s), eliding when long and disappearing when the lane
+  has no targets.
 - **The block header strip no longer covers the dimmer bar.** The
   "BASE · ..." strip on every timeline block now has its own 16px zone
   at the top of the lane; the dimmer band and its drag handle sit fully

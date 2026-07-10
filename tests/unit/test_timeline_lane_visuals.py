@@ -123,6 +123,39 @@ class TestLaneHeaderStructure:
         assert timeline_grid._HEADER_COLUMN_WIDTH is \
             timeline_widget.HEADER_COLUMN_WIDTH
 
+    def test_name_field_fits_its_font(self, qapp, sample_configuration):
+        """User report: 'Lane 1' was cut off - the field was a
+        hardcoded 24px, shorter than the 13pt condensed metrics + the
+        theme's 4px QLineEdit padding. Height must come from the font."""
+        from PyQt6.QtGui import QFontMetrics
+        widget = _make_lane_widget(sample_configuration, ["TestGroup"])
+        try:
+            needed = QFontMetrics(widget.name_edit.font()).height() + 10
+            assert widget.name_edit.height() >= needed
+        finally:
+            widget.deleteLater()
+
+    def test_group_label_shows_target_groups(self, qapp,
+                                             sample_configuration):
+        """Row 1.5: the targeted group name(s) render as a subtitle;
+        indexed targets collapse to their group; no targets hides it."""
+        widget = _make_lane_widget(sample_configuration, ["TestGroup"])
+        try:
+            assert widget.group_label.isVisibleTo(widget.controls_widget)
+            assert "TestGroup".upper() in widget.group_label.text().upper()
+            # Indexed target of the same group does not duplicate it.
+            widget.lane.fixture_targets = ["TestGroup", "TestGroup:1"]
+            widget._update_targets_display()
+            assert widget.group_label.text().upper().count(
+                "TESTGROUP") == 1
+            # Untargeted lane: the subtitle disappears.
+            widget.lane.fixture_targets = []
+            widget._update_targets_display()
+            assert not widget.group_label.isVisibleTo(
+                widget.controls_widget)
+        finally:
+            widget.deleteLater()
+
     def test_row1_name_and_fix_count(self, qapp, sample_configuration):
         widget = _make_lane_widget(sample_configuration, ["TestGroup"])
         try:

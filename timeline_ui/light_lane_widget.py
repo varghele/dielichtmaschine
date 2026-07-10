@@ -161,8 +161,13 @@ class LightLaneWidget(QFrame):
         name_layout.setSpacing(6)
 
         self.name_edit = QLineEdit(self.lane.name)
-        self.name_edit.setFixedHeight(24)
-        self.name_edit.setFont(display_font(13))
+        name_font = display_font(13)
+        self.name_edit.setFont(name_font)
+        # Height from the font's own metrics + the theme's QLineEdit
+        # padding (4px top/bottom) + 1px borders: a hardcoded 24px
+        # clipped descenders at 13pt condensed.
+        from PyQt6.QtGui import QFontMetrics
+        self.name_edit.setFixedHeight(QFontMetrics(name_font).height() + 10)
         self.name_edit.textChanged.connect(self.on_name_changed)
         name_layout.addWidget(self.name_edit, 1)
 
@@ -180,6 +185,14 @@ class LightLaneWidget(QFrame):
         name_layout.addWidget(self.remove_button)
 
         layout.addLayout(name_layout)
+
+        # Row 1.5: the targeted fixture group(s), as a quiet mono
+        # subtitle under the lane name. Hidden when the lane has no
+        # targets; elided to the column when the list is long.
+        self.group_label = MicroLabel("", point_size=7, tracking_em=0.08)
+        self.group_label.setObjectName("LaneGroupLabel")
+        layout.addWidget(self.group_label)
+        self.group_label.hide()
 
         # Row 2: chip row M · S · TARGETS · + BLOCK. All four share the
         # lane-chip role: mono family + compact padding pinned in the
@@ -609,13 +622,46 @@ class LightLaneWidget(QFrame):
             f"QWidget#LightLaneHeader {{ border-left: 3px solid {color}; }}"
         )
 
+    def _target_group_names(self) -> list:
+        """The distinct fixture-group names this lane targets, in
+        target order (indexed targets like ``Group:2`` collapse to
+        their group)."""
+        from utils.target_resolver import parse_target
+        names = []
+        for target in self.lane.fixture_targets or []:
+            group_name, _index = parse_target(target)
+            if group_name and group_name not in names:
+                names.append(group_name)
+        return names
+
+    def _refresh_group_label(self):
+        """Row 1.5: the targeted group name(s) as a quiet subtitle,
+        elided to the header column, hidden when the lane is untargeted."""
+        label = getattr(self, "group_label", None)
+        if label is None:
+            return
+        names = self._target_group_names()
+        if not names:
+            label.hide()
+            label.setText("")
+            return
+        text = " · ".join(names)
+        from PyQt6.QtGui import QFontMetrics
+        metrics = QFontMetrics(label.font())
+        available = HEADER_COLUMN_WIDTH - 40  # margins + slack
+        label.setText(metrics.elidedText(
+            text, Qt.TextElideMode.ElideRight, available))
+        label.setToolTip(text)
+        label.show()
+
     def _update_targets_display(self):
         """Refresh everything derived from the lane's targets: group
-        border, fixture count, and the TARGETS chip tooltip (the chip
-        text stays constant; the resolved target list rides in the
-        tooltip)."""
+        border, fixture count, the group-name subtitle, and the TARGETS
+        chip tooltip (the chip text stays constant; the resolved target
+        list rides in the tooltip)."""
         self._apply_group_border()
         self._refresh_fixture_count()
+        self._refresh_group_label()
         chip = getattr(self, "targets_chip", None)
         if chip is None:
             return
