@@ -189,9 +189,25 @@ scenes section in the riff rail (drag mime application/x-lm-scene,
 drop deferred), song selector numbered by setlist (itemData carries
 the raw name - never read currentText for the key). Plans with status
 + commit hashes: docs/timeline-v3-plan.md, docs/setlist-plan.md.
-Theme roles added: lane-chip (+ QComboBox variant), segment/card
-groups, destructive-outline, QLineEdit[state="invalid"], accent tint
-on output-select:checked. The Live tab (3b busking surface, earlier
+Theme roles added: lane-chip (+ QComboBox variant + lane-chip-accent),
+segment/card groups, destructive-outline, QLineEdit[state="invalid"],
+accent tint on output-select:checked.
+
+**Multi-group fixtures shipped (2026-07-10, same branch, stages 1-4 of
+docs/multi-group-fixtures-plan.md):** `Fixture.groups: List[str]` is
+the membership source of truth; `fixture.group` is a compat PROPERTY
+whose setter REPLACES the whole list (UI add/remove paths must mutate
+`fixture.groups` directly - the number one trap). groups[0] = primary
+(drives data colour, orientation, role, export intensity - locked
+first-group-wins). Legacy `group:` YAML loads forever; save dual-writes
+both keys until plan stage 5 (NOT done - waits a release). Group
+derivation puts a fixture in every listed group; indexed targets
+(Group:N) index into that group's derived order. Export emits
+per-group ChannelsGroups (QLC+ tolerates shared channels), patch
+elements once, show tracks bucket under the primary. Conflicting
+simultaneous blocks from two groups' lanes = the output arbiter's
+problem (todo.md, which also carries the output/sync architecture
+agenda and roadmap pull-in candidates). The Live tab (3b busking surface, earlier
 in the pass) has BPM/TAP, SHOW/LIVE mode, 5 palette pools (effects =
 riff library, scenes = scenes/scene_library.py), dual queue - all
 in-memory, no output engine yet. Tests: pytest-xdist is set up -
