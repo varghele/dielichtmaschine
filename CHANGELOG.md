@@ -74,6 +74,14 @@ verbatim as the GitHub Release notes (see [docs/releasing.md](docs/releasing.md)
   rows show a quiet placeholder. The selected block gets an accent
   border, glow and a check; labels elide instead of painting outside
   narrow blocks.
+- **The Structure tab centre is a song editor.** The open song's name
+  heads the page with a BPM · signature · bars · duration line and
+  rename/delete chips; part cards are tinted in their part colour with
+  the selected card checked; the transition between parts is an inline
+  chip menu; the master grid gained a header column (MASTER · N BARS,
+  AUDIO + file + load) and a compact transport beneath. The legacy
+  show/trigger/pause-show rows are gone - song creation lives in the
+  setlist rail, triggers and pause looks on the setlist entries.
 - **The Structure tab grew a setlist rail.** A left rail lists the
   setlist: numbered song cards with duration, colour edge and the
   song's start trigger (MIDI PC/note with channel, timecode, "Follows

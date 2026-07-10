@@ -170,12 +170,14 @@ def step3_place_on_stage(window, dialogs, inputs, menus):
 
 
 def step4_create_show_structure(window, inputs):
-    """Show > Structure: create a show, edit part 1, add part 2."""
+    """Show > Structure: create a song, edit part 1, add part 2."""
     goto_tab(window, TAB_STRUCTURE)
     tab = window.structure_tab
 
-    inputs.answer("Create New Show", SHOW_NAME)
-    tab.new_show_btn.click()
+    # Song creation is the setlist rail's + SONG tile (S2b removed the
+    # old "+ New" toolbar button).
+    inputs.answer("Create New Song", SHOW_NAME)
+    tab.add_song_tile.click()
 
     tab._cards[0].clicked.emit(0)  # select part 1 the way PartCard does
 
@@ -568,17 +570,17 @@ class TestStep3Stage:
 # Step 4: show structure
 # ===========================================================================
 class TestStep4Structure:
-    def test_new_show_button_actually_creates_the_show(self, main_window, inputs):
-        """Regression: '+ New' returned silently behind a dead
+    def test_add_song_tile_actually_creates_the_song(self, main_window, inputs):
+        """Regression: song creation once returned silently behind a dead
         `_ensure_shows_directory()` gate, so config.songs stayed empty."""
         goto_tab(main_window, TAB_STRUCTURE)
         assert main_window.config.songs == {}
 
-        inputs.answer("Create New Show", SHOW_NAME)
-        main_window.structure_tab.new_show_btn.click()
+        inputs.answer("Create New Song", SHOW_NAME)
+        main_window.structure_tab.add_song_tile.click()
 
         assert SHOW_NAME in main_window.config.songs, \
-            "'+ New' must create the show even with no shows_directory set"
+            "'+ SONG' must create the song even with no shows_directory set"
         show = main_window.config.songs[SHOW_NAME]
         assert [p.name for p in show.parts] == ["Intro"]
         assert main_window.structure_tab.show_combo.currentText() == SHOW_NAME

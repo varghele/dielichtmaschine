@@ -1,12 +1,14 @@
 # gui/tabs/structure_tab.py
 """Show > Structure, rebuilt to the reference screen
-design_handoff_lichtmaschine_app/screens/05-show-structure.html.
+design_handoff_lichtmaschine_app/screens/05b-show-structure-v2-setlist.html.
 
 Anatomy (top to bottom):
 
 - a slim 38px action strip: no tab title (the shell subnav names the
-  screen); the mono audio readout ("neon_ruinen.wav . 03:42 ANALYZED",
-  the status word in green) and a bordered display-caps
+  screen); a small "SHOW DIRECTORY..." outline chip on the left (the
+  import/export directory hint, evicted from the old show row), then
+  the mono audio readout ("neon_ruinen.wav . 03:42 ANALYZED", the
+  status word in green) and a bordered display-caps
   "AUTOGENERATE SHOW..." button on the right.
 - a 330px setlist rail on the left (reference screen 05b): header with
   "SETLIST . NAME", "N SONGS . MM MIN" and the SYNC segment row
@@ -15,26 +17,35 @@ Anatomy (top to bottom):
   trigger line, accent border + OPEN tag on the open song) with dashed
   pause-look rows between them, a dashed "+ SONG" tile, a defensive
   UNLISTED section for songs missing from the setlist, and a wrapping
-  mono footer hint. Clicking a card drives the existing song combo, so
+  mono footer hint. Clicking a card drives the (hidden) song combo, so
   the centre editor and sibling tabs stay in sync.
-- the main column (28px padding, 28px gaps): the show-management row,
-  the "PARTS" caption over the horizontal strip of 190px part cards
-  (3px top bar + tint in the part color, transition chips between the
-  cards, a dashed 44x44 add tile at the end), then the
-  "MASTER GRID . N BARS . mm:ss" caption over the master timeline grid
-  and the mono snap-hint row.
+- the centre song editor (28px padding, 28px gaps): the song title row
+  (name in condensed display caps, the mono meta line "120.0 BPM . 4/4
+  . 48 BARS . 01:33", RENAME SONG / DELETE outline chips), the "PARTS"
+  caption over the horizontal strip of 190px part cards (3px top bar +
+  tint in the part color, clickable "INSTANT ." transition chips
+  between the cards, a dashed 44x44 add tile at the end), then the
+  master grid with its own 150px header column ("MASTER . N BARS" for
+  the parts band, "AUDIO" + filename + LOAD for the waveform row), a
+  compact transport row and the mono snap-hint row.
 - a 400px inspector: the part name in display caps *in the part color*,
   a 2x2 grid of bordered stat tiles (BPM / TIME SIG / BARS / DURATION),
   the editors (name, BPM, time signature, bars, color, reorder), the
   TRANSITION OUT combo, the AUDIO ANALYSIS read-out rows, and a
   destructive Delete Part footer.
-- transport + Pause Show rows (features with no home in the reference
-  screen; kept reachable directly above the status strip).
 - a mono status strip: "N PARTS . N BARS . mm:ss".
+
+Gone since S2b: the SHOW combo row (the setlist rail is the selector;
+the combo object stays alive but hidden because rail cards and gui.py
+still drive song switching through it), the per-show TRIGGER + CH row
+(triggers live on the setlist entries, edited in the S2c inspector),
+and the bottom "Pause Show" group (replaced by the per-entry pause
+looks in the rail; the PauseShowConfig model is untouched).
 
 The part cards are display-only; every edit goes through the inspector,
 writes straight into the ShowPart model, and refreshes the cards, the
-stat tiles, the grid caption, the timelines and the status strip.
+title row, the stat tiles, the grid caption, the timelines and the
+status strip.
 """
 
 import os
@@ -45,11 +56,10 @@ from PyQt6.QtWidgets import (QVBoxLayout, QHBoxLayout, QWidget, QLabel,
                              QLineEdit, QSpinBox, QDoubleSpinBox, QColorDialog,
                              QMessageBox, QSplitter, QInputDialog, QSlider,
                              QGridLayout, QButtonGroup,
-                             QSizePolicy, QMenu, QFileDialog, QProgressDialog,
-                             QGroupBox, QCheckBox)
+                             QSizePolicy, QMenu, QFileDialog, QProgressDialog)
 from PyQt6.QtCore import Qt, QTimer, pyqtSignal, QRectF, QPointF, QMimeData
 from PyQt6.QtGui import (QPainter, QColor, QPen, QBrush, QFont, QAction,
-                         QFontMetrics, QDrag)
+                         QFontMetrics, QDrag, QCursor)
 import shutil
 
 
@@ -59,7 +69,7 @@ PART_MIME_TYPE = "application/x-lichtmaschine-part"
 # Same contract for reordering setlist entries in the left rail.
 SETLIST_MIME_TYPE = "application/x-lichtmaschine-setlist-entry"
 from config.models import (Configuration, Song, ShowPart, TimelineData,
-                           MidiInputDevice, PauseShowConfig, SetlistEntry)
+                           SetlistEntry)
 from gui.typography import DisplayLabel, MicroLabel, display_font, mono_font
 from gui.widgets.chip import Chip
 from timeline.song_structure import SongStructure
@@ -391,8 +401,10 @@ class ColorButton(QPushButton):
 class PartCard(QWidget):
     """One song part as a reference card: 190px wide, 14px/16px padding,
     a 3px top bar and a low-alpha tint in the part's data color, the
-    name in condensed caps, then the mono "8 BARS . 4/4" line and a
-    "<bpm> BPM" line whose number is bright and whose unit is secondary.
+    name in condensed caps (a small accent check top-right when
+    selected, like the mock), then the mono "8 BARS . 4/4" line and a
+    "<bpm> BPM . <duration> s" line whose number is bright and whose
+    tail is secondary.
 
     Display-only; editing happens in the part inspector. Emits
     ``clicked(index)`` on press.
@@ -424,11 +436,24 @@ class PartCard(QWidget):
         layout.setContentsMargins(16, 14, 16, 12)
         layout.setSpacing(0)
 
+        name_row = QHBoxLayout()
+        name_row.setContentsMargins(0, 0, 0, 0)
+        name_row.setSpacing(6)
         self.name_label = DisplayLabel("", point_size=15,
                                        weight=QFont.Weight.Bold,
                                        tracking_em=0.06)
         self.name_label.setObjectName("PartCardName")
-        layout.addWidget(self.name_label)
+        name_row.addWidget(self.name_label)
+        name_row.addStretch(1)
+        # Small accent check on the selected card (mock top-right; the
+        # glyph exists in Plex Mono, same as the home screen's marker).
+        self.check_label = QLabel("✓")
+        self.check_label.setObjectName("PartCardCheck")
+        self.check_label.setFont(mono_font(9))
+        self.check_label.hide()
+        name_row.addWidget(self.check_label, 0,
+                           Qt.AlignmentFlag.AlignTop)
+        layout.addLayout(name_row)
 
         layout.addSpacing(8)
 
@@ -437,8 +462,9 @@ class PartCard(QWidget):
         self.meta_label.setFont(mono_font(9))
         layout.addWidget(self.meta_label)
 
-        # "<value> BPM": value in $text$, unit in $text_secondary$ (the
-        # reference splits the line into two colors).
+        # "<value> BPM . <duration> s": value in $text$, tail in
+        # $text_secondary$ (the reference splits the line into two
+        # colors).
         bpm_row = QHBoxLayout()
         bpm_row.setContentsMargins(0, 4, 0, 0)
         bpm_row.setSpacing(5)
@@ -460,6 +486,9 @@ class PartCard(QWidget):
         self.name_label.setText(part.name)
         self.meta_label.setText(f"{part.num_bars} BARS · {part.signature}")
         self.bpm_label.setText(f"{part.bpm:.1f}")
+        self.bpm_unit_label.setText(
+            f"BPM · {getattr(part, 'duration', 0.0):.1f} s")
+        self.check_label.setVisible(selected)
         self._apply_part_style(part.color, selected, playing,
                                tokens or _active_tokens())
 
@@ -489,9 +518,12 @@ class PartCard(QWidget):
         ]
         # Selection reads as accent everywhere in the design system: the
         # theme paints the 1px accent border via [selected="true"], the
-        # title follows it.
+        # title and the small check follow it.
         title_color = tokens["accent_line"] if selected else tokens["text"]
         rules.append(f"QLabel#PartCardName {{ color: {title_color};"
+                     " background: transparent; }")
+        rules.append(f"QLabel#PartCardCheck {{"
+                     f" color: {tokens['accent_line']};"
                      " background: transparent; }")
         self.setStyleSheet("\n".join(rules))
         self.setProperty("selected", "true" if selected else "false")
@@ -544,6 +576,28 @@ class PartCard(QWidget):
         if source >= 0 and source != self.index:
             self.reorder_requested.emit(source, self.index)
             event.acceptProposedAction()
+
+
+class TransitionChip(Chip):
+    """The mono chip between two part cards ("INSTANT ↓"): shows the
+    preceding part's transition out and opens the transition menu on
+    click. The ↓ is the established dropdown indicator (the mock's ▾ is
+    tofu in the brand fonts). ``index`` is the part whose transition
+    the chip carries."""
+
+    clicked = pyqtSignal(int)
+
+    def __init__(self, index: int, parent=None):
+        super().__init__("", variant="neutral", point_size=8,
+                         parent=parent)
+        self.index = index
+        self.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.setToolTip("Transition out of this part")
+
+    def mousePressEvent(self, event):
+        if event.button() == Qt.MouseButton.LeftButton:
+            self.clicked.emit(self.index)
+        event.accept()
 
 
 class PauseLookRow(QLabel):
@@ -728,17 +782,20 @@ class SetlistSongCard(QWidget):
 
 
 class StructureTab(BaseTab):
-    """Tab for editing show structure (reference screen 05).
+    """Tab for editing song structure (reference screen 05b).
 
     Features:
+    - Setlist rail (left) + song title row with rename/delete chips
     - Song parts as colored cards (3px top bar + tint in the part color)
-      with transition chips between them and a dashed add tile
-    - Master grid (master timeline + audio waveform) below the strip
+      with clickable transition chips between them and a dashed add tile
+    - Master grid (master timeline + audio waveform) behind a 150px
+      MASTER / AUDIO header column, with a compact transport row
     - Part inspector on the right: stat tiles, all editing (name, BPM,
       signature, bars, transition, color, reorder, delete) and the
       AUDIO ANALYSIS read-outs
-    - Action-strip audio readout + "AUTOGENERATE SHOW..." entry point
-    - CSV import/export, MIDI triggers, Pause Show, audio playback
+    - Action-strip directory chip, audio readout + "AUTOGENERATE
+      SHOW..." entry point
+    - CSV import/export, audio playback
     """
 
     #: Emitted with the current show name when the action strip's
@@ -794,9 +851,9 @@ class StructureTab(BaseTab):
         super().__init__(config, parent)
 
     def setup_ui(self):
-        """Build the reference screen: action strip, main column (show
-        row, parts strip, master grid + hint), 400px part inspector,
-        transport + Pause Show rows, mono status strip."""
+        """Build the reference screen: action strip, centre song editor
+        (title row, parts strip, master grid + transport + hint), 400px
+        part inspector, mono status strip."""
         self._tokens = _active_tokens()
 
         main_layout = QVBoxLayout(self)
@@ -809,12 +866,12 @@ class StructureTab(BaseTab):
         self.song_structure = None
 
         # Build order matters: the parts strip refreshes the inspector,
-        # the grid caption, the status strip and the setlist rail while
-        # it populates, so all four must exist before _create_parts_strip
-        # runs.
+        # the title row, the grid caption, the status strip and the
+        # setlist rail while it populates, so all of them must exist
+        # before _create_parts_strip runs.
         inspector = self._build_inspector()
         setlist_rail = self._build_setlist_rail()
-        self.grid_caption = MicroLabel("Master grid", point_size=8,
+        self.grid_caption = MicroLabel("Master", point_size=8,
                                        tracking_em=0.12)
         status_strip = self._create_status_strip()
 
@@ -827,9 +884,8 @@ class StructureTab(BaseTab):
         left_column.setContentsMargins(28, 28, 28, 28)
         left_column.setSpacing(28)
 
-        # Show management + trigger assignment (no home in the reference
-        # screen, which only shows one song; kept as a compact row).
-        left_column.addLayout(self._create_show_row())
+        # Song title row: name + meta line + rename/delete chips.
+        left_column.addLayout(self._create_title_row())
 
         # Parts strip: micro caption + horizontal card row.
         parts_section = QVBoxLayout()
@@ -840,12 +896,12 @@ class StructureTab(BaseTab):
         parts_section.addWidget(self._create_parts_strip())
         left_column.addLayout(parts_section)
 
-        # Master grid: micro caption + shared master/audio grid.
+        # Master grid: shared master/audio grid behind this tab's own
+        # 150px header column (the mock's MASTER / AUDIO cells).
         # Master + audio share a single horizontal scrollbar inside
         # TimelineGrid. Lane references stay so signal/method dispatch works.
         grid_section = QVBoxLayout()
         grid_section.setSpacing(12)
-        grid_section.addWidget(self.grid_caption)
         self.master_timeline = MasterTimelineContainer()
         self.audio_lane = AudioLaneWidget()
         self.timeline_grid = TimelineGrid()
@@ -869,7 +925,26 @@ class StructureTab(BaseTab):
         # builds, with belt-and-braces headroom in case row metrics shift.
         self.timeline_grid.setMinimumHeight(200)
         self.timeline_grid.setMaximumHeight(240)
-        grid_section.addWidget(self.timeline_grid)
+        # The grid's built-in header column (timeline lane controls) has
+        # no place in the mock's structure screen: hide it and show this
+        # tab's own 150px MASTER / AUDIO header cells instead. Audio
+        # loading stays reachable through the LOAD chip in the AUDIO
+        # cell; mute/volume are Timeline-tab concerns.
+        self.timeline_grid.headers_scroll.hide()
+        grid_host = QWidget()
+        grid_host.setObjectName("MasterGridFrame")
+        grid_host.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
+        self._grid_frame = grid_host
+        grid_row = QHBoxLayout(grid_host)
+        grid_row.setContentsMargins(1, 1, 1, 1)
+        grid_row.setSpacing(0)
+        grid_row.addWidget(self._build_master_grid_header())
+        grid_row.addWidget(self.timeline_grid, 1)
+        grid_section.addWidget(grid_host)
+        # Compact transport: the only way to audition a song from this
+        # tab (it drives audio playback, the playheads and the playing
+        # card highlight), so it stays, right under the grid it scrubs.
+        grid_section.addLayout(self._create_playback_controls())
         grid_section.addLayout(self._create_grid_hint_row())
         left_column.addLayout(grid_section)
         left_column.addStretch(1)
@@ -879,20 +954,11 @@ class StructureTab(BaseTab):
         body.addWidget(inspector)
         main_layout.addLayout(body, 1)
 
-        # Transport + Pause Show: no home in the reference screen, kept
-        # reachable in a footer block above the status strip.
-        footer = QWidget()
-        footer_column = QVBoxLayout(footer)
-        footer_column.setContentsMargins(28, 0, 28, 10)
-        footer_column.setSpacing(8)
-        footer_column.addWidget(self._create_pause_show_section())
-        footer_column.addLayout(self._create_playback_controls())
-        main_layout.addWidget(footer)
-
         main_layout.addWidget(status_strip)
 
     def _create_action_strip(self) -> QWidget:
-        """38px strip: mono audio readout + AUTOGENERATE SHOW button.
+        """38px strip: the SHOW DIRECTORY chip on the left, mono audio
+        readout + AUTOGENERATE SHOW button on the right.
 
         No tab title - the shell subnav already names the screen.
         """
@@ -902,6 +968,25 @@ class StructureTab(BaseTab):
         row = QHBoxLayout(strip)
         row.setContentsMargins(16, 0, 16, 0)
         row.setSpacing(10)
+
+        # The shows-directory hint (default location for File -> Import /
+        # Export Show Structure) lost its toolbar row to the title row:
+        # it lives on as a small outline chip in the action strip.
+        self.set_directory_btn = QPushButton("SHOW DIRECTORY...")
+        self.set_directory_btn.setObjectName("ShowDirectoryChip")
+        self.set_directory_btn.setProperty("role", "cta-outline")
+        directory_font = display_font(9, QFont.Weight.DemiBold,
+                                      tracking_em=0.08)
+        self.set_directory_btn.setFont(directory_font)
+        self.set_directory_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.set_directory_btn.setToolTip(
+            "Set the default directory for File > Import / Export "
+            "Show Structure")
+        self.set_directory_btn.setFixedWidth(
+            QFontMetrics(directory_font).horizontalAdvance(
+                self.set_directory_btn.text()) + 40)
+        row.addWidget(self.set_directory_btn)
+
         row.addStretch()
 
         # "neon_ruinen.wav · 03:42 · " + green "ANALYZED". Two labels
@@ -1439,217 +1524,201 @@ class StructureTab(BaseTab):
 
         return panel
 
-    def _create_show_row(self):
-        """Compact show-management block: selector + new/rename/delete on
-        one line, the MIDI trigger assignment + shows-directory hint
-        button on a second. Two lines because the 330px setlist rail
-        shrank the centre column: a single line overflowed and clipped
-        its buttons at 1600x900."""
-        block = QVBoxLayout()
-        block.setContentsMargins(0, 0, 0, 0)
-        block.setSpacing(8)
+    def _create_title_row(self) -> QHBoxLayout:
+        """The song title row (mock centre column, top): the open
+        song's name in condensed display caps, the mono meta line
+        ("120.0 BPM · 4/4 · 48 BARS · 01:33"), a stretch, then the
+        RENAME SONG and DELETE outline chips.
 
-        toolbar = QHBoxLayout()
-        toolbar.setContentsMargins(0, 0, 0, 0)
-        toolbar.setSpacing(8)
+        The old SHOW combo row is gone: the setlist rail is the song
+        selector. The combo object itself stays alive but hidden - it
+        remains the single source of song-switching truth (rail cards
+        call setCurrentText, gui.py rebinds through it)."""
+        self.show_combo = QComboBox(self)
+        self.show_combo.hide()
 
-        toolbar.addWidget(MicroLabel("Show", point_size=8, tracking_em=0.12))
+        row = QHBoxLayout()
+        row.setContentsMargins(0, 0, 0, 0)
+        row.setSpacing(14)
 
-        self.show_combo = QComboBox()
-        self.show_combo.setMinimumWidth(200)
-        toolbar.addWidget(self.show_combo)
+        self.song_title = DisplayLabel("No song", point_size=19,
+                                       weight=QFont.Weight.ExtraBold,
+                                       tracking_em=0.04)
+        self.song_title.setObjectName("SongTitle")
+        row.addWidget(self.song_title)
 
-        # New show button
-        self.new_show_btn = QPushButton("+ New")
-        self.new_show_btn.setProperty("role", "success")
-        toolbar.addWidget(self.new_show_btn)
+        self.song_meta = QLabel("")
+        self.song_meta.setObjectName("SongMeta")
+        self.song_meta.setFont(mono_font(9))
+        self.song_meta.setProperty("role", "micro")
+        row.addWidget(self.song_meta)
+        row.addStretch(1)
 
-        # Rename show button (default neutral styling — non-destructive secondary action)
-        self.rename_show_btn = QPushButton("Rename")
-        toolbar.addWidget(self.rename_show_btn)
+        self.rename_show_btn = QPushButton("RENAME SONG")
+        self.rename_show_btn.setObjectName("RenameSongChip")
+        self.rename_show_btn.setProperty("role", "cta-outline")
+        self.rename_show_btn.setToolTip("Rename this song")
+        self.delete_show_btn = QPushButton("DELETE")
+        self.delete_show_btn.setObjectName("DeleteSongChip")
+        self.delete_show_btn.setToolTip(
+            "Delete this song and its setlist entries")
+        chip_font = display_font(10, QFont.Weight.DemiBold,
+                                 tracking_em=0.08)
+        metrics = QFontMetrics(chip_font)
+        for chip in (self.rename_show_btn, self.delete_show_btn):
+            chip.setFont(chip_font)
+            chip.setCursor(Qt.CursorShape.PointingHandCursor)
+            # Width from the font's own metrics (+ theme padding slack)
+            # so the caps never clip inside the content rect.
+            chip.setFixedWidth(
+                metrics.horizontalAdvance(chip.text()) + 40)
+            row.addWidget(chip)
 
-        # Delete show button
-        self.delete_show_btn = QPushButton("Delete Show")
-        self.delete_show_btn.setProperty("role", "destructive")
-        toolbar.addWidget(self.delete_show_btn)
+        self._style_title_row()
+        return row
 
-        toolbar.addStretch()
-        block.addLayout(toolbar)
+    def _style_title_row(self):
+        """DELETE is a destructive-outline chip; the theme has no such
+        role yet (only the filled role="destructive"), so its chrome is
+        widget-local from the destructive tokens - the tab's sanctioned
+        pattern for chrome the template lacks."""
+        tokens = self._tokens or _active_tokens()
+        self.delete_show_btn.setStyleSheet(
+            f"QPushButton#DeleteSongChip {{"
+            f" background-color: transparent;"
+            f" border: 1px solid {tokens['destructive']};"
+            f" color: {tokens['destructive']}; }}"
+            f"QPushButton#DeleteSongChip:hover {{"
+            f" border-color: {tokens['destructive_hover']};"
+            f" color: {tokens['destructive_hover']}; }}"
+            f"QPushButton#DeleteSongChip:disabled {{"
+            f" border-color: {tokens['border']};"
+            f" color: {tokens['text_disabled']}; }}")
 
-        trigger_row = QHBoxLayout()
-        trigger_row.setContentsMargins(0, 0, 0, 0)
-        trigger_row.setSpacing(8)
-
-        # Trigger assignment
-        trigger_row.addWidget(MicroLabel("Trigger", point_size=8,
-                                         tracking_em=0.12))
-
-        self.trigger_device_combo = QComboBox()
-        self.trigger_device_combo.setMinimumWidth(160)
-        self.trigger_device_combo.addItem("No Trigger")
-        self.trigger_device_combo.addItem("None")  # Generic MIDI (no profile)
-        # Populate with discovered MIDI profiles
-        self._midi_profiles = []
-        try:
-            from utils.midi_utils import discover_midi_profiles
-            self._midi_profiles = discover_midi_profiles()
-            for profile in self._midi_profiles:
-                self.trigger_device_combo.addItem(profile['name'])
-        except Exception:
-            pass
-        trigger_row.addWidget(self.trigger_device_combo)
-
-        trigger_row.addWidget(MicroLabel("Ch", point_size=8,
-                                         tracking_em=0.12))
-
-        self.trigger_channel_spin = QSpinBox()
-        self.trigger_channel_spin.setRange(1, 512)
-        self.trigger_channel_spin.setValue(1)
-        self.trigger_channel_spin.setEnabled(False)
-        self.trigger_channel_spin.setFixedWidth(70)
-        trigger_row.addWidget(self.trigger_channel_spin)
-
-        trigger_row.addSpacing(16)
-
-        # Set directory button (primary action for the show toolbar)
-        self.set_directory_btn = QPushButton("Set Show Directory")
-        self.set_directory_btn.setProperty("role", "primary")
-        trigger_row.addWidget(self.set_directory_btn)
-
-        trigger_row.addStretch()
-        block.addLayout(trigger_row)
-
-        return block
-
-    def _create_pause_show_section(self):
-        """Create the Pause Show configuration section. Box styling comes
-        from the active theme's QGroupBox rules."""
-        group_box = QGroupBox("Pause Show")
-
-        layout = QHBoxLayout()
-        layout.setSpacing(10)
-
-        # Enable checkbox
-        self.pause_enable_cb = QCheckBox("Enable")
-        layout.addWidget(self.pause_enable_cb)
-
-        layout.addSpacing(10)
-
-        # Color picker
-        color_label = QLabel("Color:")
-        layout.addWidget(color_label)
-
-        self.pause_color_btn = ColorButton("#0000FF")
-        self.pause_color_btn.setFixedWidth(80)
-        self.pause_color_btn.setEnabled(False)
-        layout.addWidget(self.pause_color_btn)
-
-        layout.addSpacing(10)
-
-        # MIDI trigger device
-        trigger_label = QLabel("Trigger:")
-        layout.addWidget(trigger_label)
-
-        self.pause_trigger_device_combo = QComboBox()
-        self.pause_trigger_device_combo.setMinimumWidth(160)
-        self.pause_trigger_device_combo.addItem("No Trigger")
-        self.pause_trigger_device_combo.addItem("None")  # Generic MIDI
-        for profile in self._midi_profiles:
-            self.pause_trigger_device_combo.addItem(profile['name'])
-        self.pause_trigger_device_combo.setEnabled(False)
-        layout.addWidget(self.pause_trigger_device_combo)
-
-        # MIDI channel
-        ch_label = QLabel("Ch:")
-        layout.addWidget(ch_label)
-
-        self.pause_trigger_channel_spin = QSpinBox()
-        self.pause_trigger_channel_spin.setRange(1, 512)
-        self.pause_trigger_channel_spin.setValue(1)
-        self.pause_trigger_channel_spin.setEnabled(False)
-        self.pause_trigger_channel_spin.setFixedWidth(70)
-        layout.addWidget(self.pause_trigger_channel_spin)
-
-        layout.addStretch()
-
-        group_box.setLayout(layout)
-
-        # Connect signals
-        self.pause_enable_cb.toggled.connect(self._on_pause_enable_changed)
-        self.pause_color_btn.colorChanged.connect(self._on_pause_color_changed)
-        self.pause_trigger_device_combo.currentTextChanged.connect(self._on_pause_trigger_device_changed)
-        self.pause_trigger_channel_spin.valueChanged.connect(self._on_pause_trigger_channel_changed)
-
-        return group_box
-
-    def _on_pause_enable_changed(self, enabled):
-        """Handle pause show enable/disable toggle."""
-        self.config.pause_show.enabled = enabled
-        self.pause_color_btn.setEnabled(enabled)
-        self.pause_trigger_device_combo.setEnabled(enabled)
-        has_device = enabled and self.pause_trigger_device_combo.currentText() not in ("No Trigger", "")
-        self.pause_trigger_channel_spin.setEnabled(has_device)
-        self._auto_save()
-
-    def _on_pause_color_changed(self, color):
-        """Handle pause show color change."""
-        self.config.pause_show.color = color
-        self._auto_save()
-
-    def _on_pause_trigger_device_changed(self, device_name):
-        """Handle pause show trigger device change."""
-        if device_name == "No Trigger" or not device_name:
-            self.config.pause_show.trigger_device = ""
-            self.config.pause_show.trigger_channel = -1
-            self.pause_trigger_channel_spin.setEnabled(False)
-            self.pause_trigger_channel_spin.setValue(1)
+    def _update_title_row(self):
+        """Song name + the mono meta line: the leading part's tempo and
+        signature, then the song totals (the S2a duration math)."""
+        has_song = self.current_show is not None
+        self.rename_show_btn.setEnabled(has_song)
+        self.delete_show_btn.setEnabled(has_song)
+        if not has_song:
+            self.song_title.setText("No song")
+            self.song_meta.setText("no song loaded")
+            return
+        self.song_title.setText(self.current_song_name)
+        parts = self.current_show.parts
+        count, total_bars, total = self._total_bars_and_duration()
+        if parts:
+            lead = parts[0]
+            self.song_meta.setText(
+                f"{lead.bpm:.1f} BPM · {lead.signature} · "
+                f"{total_bars} BARS · {format_clock(total)}")
         else:
-            self.config.pause_show.trigger_device = device_name
-            self.pause_trigger_channel_spin.setEnabled(True)
-            if self.config.pause_show.trigger_channel < 0:
-                self.config.pause_show.trigger_channel = 1
-            self._ensure_midi_device(device_name)
-        self._auto_save()
+            self.song_meta.setText("0 BARS · 00:00")
 
-    def _on_pause_trigger_channel_changed(self, channel):
-        """Handle pause show trigger channel change."""
-        self.config.pause_show.trigger_channel = channel
-        self._auto_save()
+    MASTER_HEADER_WIDTH = 150
 
-    def _update_pause_show_widgets(self):
-        """Update pause show widgets from config."""
-        self.pause_enable_cb.blockSignals(True)
-        self.pause_color_btn.blockSignals(True)
-        self.pause_trigger_device_combo.blockSignals(True)
-        self.pause_trigger_channel_spin.blockSignals(True)
+    def _build_master_grid_header(self) -> QWidget:
+        """The mock's 150px header column beside the master grid:
+        a "MASTER · N BARS" cell for the parts band and an "AUDIO" +
+        filename + LOAD cell for the waveform row.
 
-        ps = self.config.pause_show
-        self.pause_enable_cb.setChecked(ps.enabled)
-        self.pause_color_btn.set_color(ps.color)
-        self.pause_color_btn.setEnabled(ps.enabled)
-        self.pause_trigger_device_combo.setEnabled(ps.enabled)
+        Cell heights mirror the row heights TimelineGrid just fixed on
+        the master/audio stripes, so the cells stay row-aligned without
+        touching timeline_ui. Must run after set_master/set_audio_lane.
+        """
+        host = QWidget()
+        host.setObjectName("MasterGridHeaderCol")
+        host.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
+        host.setFixedWidth(self.MASTER_HEADER_WIDTH)
+        self._grid_header_col = host
+        column = QVBoxLayout(host)
+        column.setContentsMargins(0, 0, 0, 0)
+        column.setSpacing(2)   # TimelineGrid's row spacing
 
-        if ps.trigger_device:
-            idx = self.pause_trigger_device_combo.findText(ps.trigger_device)
-            if idx >= 0:
-                self.pause_trigger_device_combo.setCurrentIndex(idx)
-            else:
-                self.pause_trigger_device_combo.addItem(ps.trigger_device)
-                self.pause_trigger_device_combo.setCurrentText(ps.trigger_device)
-            self.pause_trigger_channel_spin.setEnabled(ps.enabled)
-            self.pause_trigger_channel_spin.setValue(max(1, ps.trigger_channel))
-        else:
-            self.pause_trigger_device_combo.setCurrentIndex(0)
-            self.pause_trigger_channel_spin.setEnabled(False)
-            self.pause_trigger_channel_spin.setValue(1)
+        self._master_header_cell = QWidget()
+        self._master_header_cell.setFixedHeight(
+            max(self.master_timeline.timeline_widget.maximumHeight(), 26))
+        master_layout = QVBoxLayout(self._master_header_cell)
+        master_layout.setContentsMargins(10, 8, 10, 8)
+        master_layout.setSpacing(0)
+        master_layout.addWidget(self.grid_caption)   # "MASTER · N BARS"
+        master_layout.addStretch(1)
+        column.addWidget(self._master_header_cell)
 
-        self.pause_enable_cb.blockSignals(False)
-        self.pause_color_btn.blockSignals(False)
-        self.pause_trigger_device_combo.blockSignals(False)
-        self.pause_trigger_channel_spin.blockSignals(False)
+        self._audio_header_cell = QWidget()
+        self._audio_header_cell.setFixedHeight(
+            max(self.audio_lane.timeline_widget.maximumHeight(), 26))
+        audio_layout = QVBoxLayout(self._audio_header_cell)
+        audio_layout.setContentsMargins(10, 8, 10, 8)
+        audio_layout.setSpacing(4)
+        audio_layout.addWidget(MicroLabel("Audio", point_size=8,
+                                          tracking_em=0.12))
+        self.audio_header_file = QLabel("-")
+        self.audio_header_file.setObjectName("AudioHeaderFile")
+        self.audio_header_file.setFont(mono_font(8))
+        self.audio_header_file.setProperty("role", "micro")
+        audio_layout.addWidget(self.audio_header_file)
+        self.load_audio_btn = QPushButton("LOAD...")
+        self.load_audio_btn.setObjectName("LoadAudioChip")
+        self.load_audio_btn.setProperty("role", "cta-outline")
+        self.load_audio_btn.setProperty("density", "compact")
+        load_font = display_font(8, QFont.Weight.DemiBold,
+                                 tracking_em=0.08)
+        self.load_audio_btn.setFont(load_font)
+        self.load_audio_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.load_audio_btn.setToolTip("Load an audio file for this song")
+        self.load_audio_btn.setFixedWidth(
+            QFontMetrics(load_font).horizontalAdvance(
+                self.load_audio_btn.text()) + 24)
+        audio_layout.addWidget(self.load_audio_btn, 0,
+                               Qt.AlignmentFlag.AlignLeft)
+        audio_layout.addStretch(1)
+        column.addWidget(self._audio_header_cell)
+
+        column.addStretch(1)
+        self._style_master_grid_header()
+        return host
+
+    def _style_master_grid_header(self):
+        """Hairline chrome of the master grid frame + header column
+        (token-read, so it follows theme switches)."""
+        tokens = self._tokens or _active_tokens()
+        self._grid_frame.setStyleSheet(
+            f"QWidget#MasterGridFrame {{"
+            f" border: 1px solid {tokens['border']}; }}")
+        self._grid_header_col.setStyleSheet(
+            f"QWidget#MasterGridHeaderCol {{"
+            f" background-color: {tokens['panel']};"
+            f" border-right: 1px solid {tokens['border']}; }}")
+
+    def _set_audio_header_file(self, name: str):
+        """Filename readout in the AUDIO header cell, middle-elided to
+        the cell width (QLabel does not elide on its own); the tooltip
+        carries the full name."""
+        name = name or "-"
+        metrics = QFontMetrics(self.audio_header_file.font())
+        self.audio_header_file.setText(metrics.elidedText(
+            name, Qt.TextElideMode.ElideMiddle,
+            self.MASTER_HEADER_WIDTH - 24))
+        self.audio_header_file.setToolTip("" if name == "-" else name)
+
+    def _on_load_audio_clicked(self):
+        """LOAD... in the AUDIO header cell: same flow as the audio
+        lane's own (hidden) load button - file dialog, background load,
+        then the grid-level audio_file_changed signal bundles the file
+        next to the config."""
+        file_path, _ = QFileDialog.getOpenFileName(
+            self, "Select Audio File", "",
+            "Audio Files (*.wav *.mp3 *.flac *.ogg);;All Files (*)")
+        if file_path:
+            self.audio_lane.load_audio_file(file_path)
 
     def _create_playback_controls(self):
-        """Create bottom playback control bar."""
+        """Compact transport row under the master grid: play/stop, the
+        time readout and the position slider. Kept (the reference
+        screen has no transport) because it is the only way to audition
+        a song from this tab."""
         controls = QHBoxLayout()
         controls.setSpacing(10)
 
@@ -1666,10 +1735,12 @@ class StructureTab(BaseTab):
 
         controls.addSpacing(20)
 
-        # Time display — styled by `#TimeReadout` rule in the active theme.
+        # Time display — styled by `#TimeReadout` rule in the active theme
+        # (16px mono + 8px padding per side: 100px clipped the last digit
+        # on Windows metrics, 120px fits "00:00.00" with slack).
         self.time_label = QLabel("00:00.00")
         self.time_label.setObjectName("TimeReadout")
-        self.time_label.setFixedWidth(100)
+        self.time_label.setFixedWidth(120)
         controls.addWidget(self.time_label)
 
         controls.addSpacing(10)
@@ -1689,19 +1760,19 @@ class StructureTab(BaseTab):
 
     def connect_signals(self):
         """Connect widget signals."""
-        # Show selection
+        # Song switching (hidden combo: rail cards + gui.py drive it)
         self.show_combo.currentTextChanged.connect(self._on_show_changed)
 
-        # Toolbar buttons
-        self.new_show_btn.clicked.connect(self._create_new_show)
+        # Title row chips
         self.rename_show_btn.clicked.connect(self._rename_show)
         self.delete_show_btn.clicked.connect(self._delete_show)
-        self.set_directory_btn.clicked.connect(self._set_show_directory)
-        self.trigger_device_combo.currentTextChanged.connect(self._on_trigger_device_changed)
-        self.trigger_channel_spin.valueChanged.connect(self._on_trigger_channel_changed)
 
         # Action strip
+        self.set_directory_btn.clicked.connect(self._set_show_directory)
         self.autogen_btn.clicked.connect(self._on_autogenerate)
+
+        # Master grid header
+        self.load_audio_btn.clicked.connect(self._on_load_audio_clicked)
 
         # Parts strip buttons
         self.add_part_tile.clicked.connect(self._add_new_part)
@@ -1785,7 +1856,10 @@ class StructureTab(BaseTab):
 
         for i in range(len(parts)):
             if i > 0:
-                chip = Chip("", variant="neutral", point_size=8)
+                # The chip between cards i-1 and i carries part i-1's
+                # transition out and opens the transition menu on click.
+                chip = TransitionChip(i - 1)
+                chip.clicked.connect(self._on_transition_chip_clicked)
                 self._chips.append(chip)
                 self.parts_row.addSpacing(6)
                 self.parts_row.addWidget(
@@ -1817,8 +1891,9 @@ class StructureTab(BaseTab):
         for i, chip in enumerate(self._chips):
             if i < len(parts):
                 # The chip after card N carries part N's transition out.
-                # Literal model value, no invented crossfade lengths.
-                chip.setText(parts[i].transition)
+                # Literal model value + the ↓ menu indicator.
+                chip.setText(f"{parts[i].transition} ↓")
+        self._update_title_row()
         self._update_grid_caption()
         self._update_status_strip()
         # Part edits change song durations; keep the rail readouts live.
@@ -1832,12 +1907,13 @@ class StructureTab(BaseTab):
         return len(parts), total_bars, total
 
     def _update_grid_caption(self):
+        """The MASTER header cell ("MASTER · N BARS"); the total
+        duration lives in the title row's meta line now."""
         count, total_bars, total = self._total_bars_and_duration()
         if not count:
-            self.grid_caption.setText("Master grid")
+            self.grid_caption.setText("Master")
             return
-        self.grid_caption.setText(
-            f"Master grid · {total_bars} bars · {format_clock(total)}")
+        self.grid_caption.setText(f"Master · {total_bars} bars")
 
     def _update_status_strip(self):
         count, total_bars, total = self._total_bars_and_duration()
@@ -1883,6 +1959,7 @@ class StructureTab(BaseTab):
         if not path:
             self.audio_readout.setText("no audio loaded")
             self.audio_status.hide()
+            self._set_audio_header_file("-")
             self._style_action_strip()
             return
 
@@ -1896,6 +1973,7 @@ class StructureTab(BaseTab):
         self.audio_readout.setText(
             f"{os.path.basename(path)} · {format_clock(duration)} ·")
         self.audio_status.setVisible(self._generation_report() is not None)
+        self._set_audio_header_file(os.path.basename(path))
         self._style_action_strip()
 
     def _shows_tab_delegate(self):
@@ -1916,8 +1994,8 @@ class StructureTab(BaseTab):
         write the lanes into the show's timeline data.
         """
         if not self.current_show:
-            QMessageBox.warning(self, "No Show Selected",
-                                "Please select a show first.")
+            QMessageBox.warning(self, "No Song Selected",
+                                "Please select a song first.")
             return
 
         delegate = self._shows_tab_delegate()
@@ -2109,7 +2187,7 @@ class StructureTab(BaseTab):
     def _add_new_part(self):
         """Add a new part to the current show."""
         if not self.current_show:
-            QMessageBox.warning(self, "No Show", "Please create or select a show first.")
+            QMessageBox.warning(self, "No Song", "Please create or select a song first.")
             return
 
         # Create new part with default values
@@ -2200,6 +2278,47 @@ class StructureTab(BaseTab):
         self._refresh_selected_card()  # chip between cards shows it
         self._auto_save()
 
+    def _transition_options(self) -> list:
+        """The transition values on offer - read from the inspector
+        combo so chip menu and combo can never drift apart."""
+        return [self.transition_combo.itemText(i)
+                for i in range(self.transition_combo.count())]
+
+    def _build_transition_menu(self, index: int) -> QMenu:
+        """The menu a transition chip opens: one checkable action per
+        transition value, the part's current one checked."""
+        menu = QMenu(self)
+        parts = self.current_show.parts if self.current_show else []
+        current = parts[index].transition if 0 <= index < len(parts) else ""
+        for value in self._transition_options():
+            action = menu.addAction(value.upper())
+            action.setCheckable(True)
+            action.setChecked(value == current)
+            action.triggered.connect(
+                lambda checked, v=value, i=index:
+                self._set_transition_out(i, v))
+        return menu
+
+    def _on_transition_chip_clicked(self, index: int):
+        """Open the transition menu under the cursor (popup, not exec:
+        non-blocking, and tests can drive the actions directly)."""
+        menu = self._build_transition_menu(index)
+        menu.popup(QCursor.pos())
+
+    def _set_transition_out(self, index: int, transition: str):
+        """Write a transition picked from a chip menu into the model
+        (same write path as the inspector combo)."""
+        parts = self.current_show.parts if self.current_show else []
+        if not (0 <= index < len(parts)):
+            return
+        parts[index].transition = transition
+        if index == self._selected_index:
+            self.transition_combo.blockSignals(True)
+            self.transition_combo.setCurrentText(transition)
+            self.transition_combo.blockSignals(False)
+        self._refresh_cards()
+        self._auto_save()
+
     def _on_color_changed(self, color: str):
         """Handle color button change."""
         part = self._selected_part()
@@ -2270,6 +2389,8 @@ class StructureTab(BaseTab):
         for analysis_row in self._analysis_rows:
             analysis_row.apply_tokens(self._tokens)
         self._style_action_strip()
+        self._style_title_row()
+        self._style_master_grid_header()
         self._style_rail_chrome(self._tokens)
         self._refresh_setlist_rail()
 
@@ -2297,76 +2418,13 @@ class StructureTab(BaseTab):
         # Load the current show
         self._load_show(self.show_combo.currentText())
 
-        # Update pause show widgets
-        self._update_pause_show_widgets()
-
     def _on_show_changed(self, show_name):
         """Handle show selection change."""
         self._load_show(show_name)
 
-        # Update trigger widgets for the new show
-        self._update_trigger_widgets()
-
         # Notify parent to sync with other tabs
         if self.parent() and hasattr(self.parent(), 'on_show_selected'):
             self.parent().on_show_selected(show_name, 'structure')
-
-    def _update_trigger_widgets(self):
-        """Update trigger device combo and channel spinbox for the current show."""
-        self.trigger_device_combo.blockSignals(True)
-        self.trigger_channel_spin.blockSignals(True)
-
-        if self.current_show and self.current_show.trigger_device:
-            # Find the device in the combo
-            idx = self.trigger_device_combo.findText(self.current_show.trigger_device)
-            if idx >= 0:
-                self.trigger_device_combo.setCurrentIndex(idx)
-            else:
-                # Device not in list — add it
-                self.trigger_device_combo.addItem(self.current_show.trigger_device)
-                self.trigger_device_combo.setCurrentText(self.current_show.trigger_device)
-            self.trigger_channel_spin.setEnabled(True)
-            self.trigger_channel_spin.setValue(max(1, self.current_show.trigger_channel))
-        else:
-            self.trigger_device_combo.setCurrentIndex(0)  # "No Trigger"
-            self.trigger_channel_spin.setEnabled(False)
-            self.trigger_channel_spin.setValue(1)
-
-        self.trigger_device_combo.blockSignals(False)
-        self.trigger_channel_spin.blockSignals(False)
-
-    def _on_trigger_device_changed(self, device_name):
-        """Handle trigger device selection change."""
-        if not self.current_show:
-            return
-
-        if device_name == "No Trigger" or not device_name:
-            self.current_show.trigger_device = ""
-            self.current_show.trigger_channel = -1
-            self.trigger_channel_spin.setEnabled(False)
-            self.trigger_channel_spin.setValue(1)
-        else:
-            self.current_show.trigger_device = device_name
-            self.trigger_channel_spin.setEnabled(True)
-            if self.current_show.trigger_channel < 0:
-                self.current_show.trigger_channel = 1
-
-            # Auto-create MIDI input device in config if not already present
-            self._ensure_midi_device(device_name)
-
-        self._auto_save()
-
-    def _on_trigger_channel_changed(self, channel):
-        """Handle trigger channel change."""
-        if not self.current_show:
-            return
-        self.current_show.trigger_channel = channel
-        self._auto_save()
-
-    def _ensure_midi_device(self, profile_name):
-        """Ensure a MidiInputDevice exists in config for the given profile name."""
-        from utils.midi_utils import ensure_midi_device_in_config
-        ensure_midi_device_in_config(self.config, profile_name, self._midi_profiles)
 
     def _create_new_show(self):
         """Create a new show with a dialog.
@@ -2378,9 +2436,9 @@ class StructureTab(BaseTab):
         """
         name, ok = QInputDialog.getText(
             self,
-            "Create New Show",
-            "Enter show name:",
-            text="New Show"
+            "Create New Song",
+            "Enter song name:",
+            text="New Song"
         )
 
         if ok and name:
@@ -2389,7 +2447,7 @@ class StructureTab(BaseTab):
                 QMessageBox.warning(
                     self,
                     "Name Exists",
-                    f"A show named '{name}' already exists. Please choose a different name.",
+                    f"A song named '{name}' already exists. Please choose a different name.",
                     QMessageBox.StandardButton.Ok
                 )
                 return
@@ -2436,9 +2494,9 @@ class StructureTab(BaseTab):
                 self.parent().on_show_selected(name, 'structure')
 
     def _rename_show(self):
-        """Rename the current show."""
+        """Rename the current song."""
         if not self.current_song_name:
-            QMessageBox.warning(self, "No Show Selected", "Please select a show to rename.")
+            QMessageBox.warning(self, "No Song Selected", "Please select a song to rename.")
             return
 
         old_name = self.current_song_name
@@ -2446,8 +2504,8 @@ class StructureTab(BaseTab):
         # Get new name from user
         new_name, ok = QInputDialog.getText(
             self,
-            "Rename Show",
-            "Enter new show name:",
+            "Rename Song",
+            "Enter new song name:",
             text=old_name
         )
 
@@ -2457,7 +2515,7 @@ class StructureTab(BaseTab):
                 QMessageBox.warning(
                     self,
                     "Name Exists",
-                    f"A show named '{new_name}' already exists. Please choose a different name."
+                    f"A song named '{new_name}' already exists. Please choose a different name."
                 )
                 return
 
@@ -2494,11 +2552,15 @@ class StructureTab(BaseTab):
             self.show_combo.setCurrentText(new_name)
             self.show_combo.blockSignals(False)
 
+            # The title row reads current_song_name; the combo above is
+            # signal-blocked, so refresh it directly.
+            self._update_title_row()
+
             # Notify parent to sync
             if self.parent() and hasattr(self.parent(), 'on_show_selected'):
                 self.parent().on_show_selected(new_name, 'structure')
 
-            QMessageBox.information(self, "Success", f"Show renamed from '{old_name}' to '{new_name}'.")
+            QMessageBox.information(self, "Success", f"Song renamed from '{old_name}' to '{new_name}'.")
 
     def _set_show_directory(self):
         """Manually set/change the shows directory."""
@@ -2542,18 +2604,17 @@ class StructureTab(BaseTab):
         )
 
     def _delete_show(self):
-        """Delete the current show (from config and disk)."""
+        """Delete the current song (from config and disk)."""
         if not self.current_song_name:
-            QMessageBox.warning(self, "No Show Selected", "Please select a show to delete.")
+            QMessageBox.warning(self, "No Song Selected", "Please select a song to delete.")
             return
 
         reply = QMessageBox.question(
             self,
             "Confirm Delete",
-            f"Are you sure you want to delete show '{self.current_song_name}'?\n\n"
+            f"Are you sure you want to delete song '{self.current_song_name}'?\n\n"
             f"This will delete:\n"
-            f"- The show configuration\n"
-            f"- The CSV file\n"
+            f"- The song and its setlist entries\n"
             f"- Associated audio files\n\n"
             f"This action cannot be undone.",
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
@@ -2606,7 +2667,7 @@ class StructureTab(BaseTab):
         else:
             self._clear_timeline()
 
-        QMessageBox.information(self, "Success", "Show deleted successfully.")
+        QMessageBox.information(self, "Success", "Song deleted successfully.")
 
     def _auto_load_shows(self):
         """Automatically load all shows from the configured directory."""

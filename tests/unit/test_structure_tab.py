@@ -1,12 +1,18 @@
 # tests/unit/test_structure_tab.py
-"""Structure tab (reference screen 05): action strip with the audio
-readout + AUTOGENERATE button, song parts as colored cards with
-transition chips, master grid below, 400px part inspector on the right
-(stat tiles + editors + AUDIO ANALYSIS rows), mono status strip.
+"""Structure tab (reference screen 05b): action strip with the
+directory chip, audio readout + AUTOGENERATE button; the song title
+row (condensed caps name, mono meta line, RENAME SONG / DELETE
+chips); song parts as colored cards with clickable transition chips;
+the master grid behind its 150px MASTER / AUDIO header column with a
+compact transport row; 400px part inspector on the right (stat tiles
++ editors + AUDIO ANALYSIS rows); mono status strip; 330px setlist
+rail on the left.
 
 Covers the card strip anatomy, click-to-select, every inspector editor
 writing through to the ShowPart model, add/delete/reorder, the playback
-card highlight, the read-out strips and the autogenerate wiring.
+card highlight, the read-out strips, the autogenerate wiring, the
+setlist rail, and the S2b contracts (title row, transition chip menu,
+master grid header, legacy chrome gone).
 """
 
 import os
@@ -135,11 +141,16 @@ class TestPartsStrip:
         assert tab._cards[0].meta_label.text() == "4 BARS · 4/4"
         assert tab._cards[1].meta_label.text() == "8 BARS · 4/4"
 
-    def test_card_shows_bpm_readout(self, tab):
-        # Value and unit are separate labels (two colors in the reference).
+    def test_card_shows_bpm_and_duration_readout(self, tab):
+        # Value and tail are separate labels (two colors in the
+        # reference); the tail carries the part duration from the same
+        # SongStructure math the master grid uses.
         assert tab._cards[0].bpm_label.text() == "120.0"
-        assert tab._cards[0].bpm_unit_label.text() == "BPM"
+        assert tab._cards[0].bpm_unit_label.text() == "BPM · 8.0 s"
         assert tab._cards[1].bpm_label.text() == "140.0"
+        verse = tab.current_show.parts[1]
+        assert tab._cards[1].bpm_unit_label.text() == \
+            f"BPM · {verse.duration:.1f} s"
 
     def test_card_width_matches_mockup(self, tab):
         assert all(card.width() == 190 for card in tab._cards)
@@ -167,9 +178,18 @@ class TestPartsStrip:
 
     def test_transition_chip_between_cards(self, tab):
         # Chip after card N shows part N's transition (transition out),
-        # literally from the model - no invented crossfade lengths.
+        # literally from the model, plus the ↓ menu indicator.
         assert len(tab._chips) == 1
-        assert tab._chips[0].text() == "INSTANT"
+        assert tab._chips[0].text() == "INSTANT ↓"
+        assert tab._chips[0].index == 0
+
+    def test_selected_card_shows_accent_check(self, tab):
+        # The mock's small accent check top-right on the selected card.
+        assert not tab._cards[0].check_label.isHidden()
+        assert tab._cards[1].check_label.isHidden()
+        tab._select_part(1)
+        assert tab._cards[0].check_label.isHidden()
+        assert not tab._cards[1].check_label.isHidden()
 
     def test_micro_caption_present(self, tab):
         assert tab.parts_caption.text().startswith("PARTS")
@@ -179,8 +199,9 @@ class TestPartsStrip:
         assert "DRAG" in tab.parts_caption.text()
 
     def test_grid_caption_totals(self, tab):
-        # 4 + 8 bars; 4 bars @ 120 = 8 s, 8 bars @ 140 ~ 13.7 s -> 00:21
-        assert tab.grid_caption.text().startswith("MASTER GRID · 12 BARS ·")
+        # The MASTER header cell: bars only, the duration lives in the
+        # title row's meta line now.
+        assert tab.grid_caption.text() == "MASTER · 12 BARS"
 
     def test_grid_hint_row(self, tab):
         # Sentence case survives (plain QLabel, not a caps MicroLabel).
@@ -272,7 +293,7 @@ class TestAutogenerate:
             QMessageBox, "warning",
             staticmethod(lambda *a, **k: warnings.append(a[1])))
         empty_tab.autogen_btn.click()
-        assert warnings == ["No Show Selected"]
+        assert warnings == ["No Song Selected"]
 
 
 # ---------------------------------------------------------------------------
@@ -392,7 +413,7 @@ class TestEditing:
         tab.transition_combo.setCurrentText("gradual")
         part = tab.current_show.parts[0]
         assert part.transition == "gradual"
-        assert tab._chips[0].text() == "GRADUAL"
+        assert tab._chips[0].text() == "GRADUAL ↓"
 
     def test_color_edit_updates_part_and_card(self, tab):
         tab.part_color_btn.colorChanged.emit("#1234AB")
@@ -544,13 +565,226 @@ class TestPlaybackAndLifecycle:
         assert len(tab._cards) == 2
         assert tab._selected_index == 0
 
-    def test_show_management_and_transport_stay_reachable(self, tab):
-        for widget in (tab.show_combo, tab.new_show_btn, tab.rename_show_btn,
-                       tab.delete_show_btn, tab.set_directory_btn,
-                       tab.trigger_device_combo, tab.trigger_channel_spin,
-                       tab.pause_enable_cb, tab.pause_color_btn,
-                       tab.play_btn, tab.stop_btn, tab.position_slider):
+    def test_transport_stays_reachable(self, tab):
+        # The transport is the only way to audition a song from this
+        # tab (it drives audio, playheads, the playing-card highlight):
+        # kept, compact, under the master grid.
+        for widget in (tab.play_btn, tab.stop_btn, tab.time_label,
+                       tab.position_slider, tab.total_time_label):
             assert widget is not None
+
+
+# ---------------------------------------------------------------------------
+# S2b: song title row
+# ---------------------------------------------------------------------------
+class TestSongTitleRow:
+    def test_title_shows_open_song_in_caps(self, setlist_tab):
+        assert setlist_tab.song_title.text() == "MONSTERS"
+
+    def test_meta_line_composition(self, setlist_tab):
+        # Leading part's BPM/signature + total bars + total duration
+        # (Monsters: one 4-bar 4/4 part at 120 BPM = 8 s).
+        assert setlist_tab.song_meta.text() == \
+            "120.0 BPM · 4/4 · 4 BARS · 00:08"
+
+    def test_meta_line_follows_part_edits(self, setlist_tab):
+        setlist_tab.bars_spin.setValue(8)
+        assert setlist_tab.song_meta.text() == \
+            "120.0 BPM · 4/4 · 8 BARS · 00:16"
+
+    def test_title_follows_rail_selection(self, setlist_tab):
+        setlist_tab._rail_cards[2].clicked.emit("Schwarzes Gold")
+        assert setlist_tab.song_title.text() == "SCHWARZES GOLD"
+
+    def test_rename_chip_wired_to_rename_flow(self, setlist_tab,
+                                              monkeypatch):
+        from PyQt6.QtWidgets import QInputDialog, QMessageBox
+        monkeypatch.setattr(
+            QInputDialog, "getText",
+            staticmethod(lambda *a, **k: ("Renamed", True)))
+        monkeypatch.setattr(
+            QMessageBox, "information",
+            staticmethod(lambda *a, **k: None))
+        setlist_tab.rename_show_btn.click()
+        assert "Renamed" in setlist_tab.config.songs
+        assert setlist_tab.song_title.text() == "RENAMED"
+
+    def test_delete_chip_wired_to_delete_flow(self, setlist_tab,
+                                              monkeypatch):
+        from PyQt6.QtWidgets import QMessageBox
+        monkeypatch.setattr(
+            QMessageBox, "question",
+            staticmethod(lambda *a, **k: QMessageBox.StandardButton.Yes))
+        monkeypatch.setattr(
+            QMessageBox, "information",
+            staticmethod(lambda *a, **k: None))
+        setlist_tab.delete_show_btn.click()
+        assert "Monsters" not in setlist_tab.config.songs
+
+    def test_chips_disabled_without_song(self, empty_tab):
+        assert empty_tab.song_title.text() == "NO SONG"
+        assert empty_tab.song_meta.text() == "no song loaded"
+        assert not empty_tab.rename_show_btn.isEnabled()
+        assert not empty_tab.delete_show_btn.isEnabled()
+
+    def test_delete_chip_is_a_destructive_outline(self, tab):
+        # No theme role for destructive outlines yet: chrome is
+        # widget-local, hooked on the objectName.
+        assert tab.delete_show_btn.objectName() == "DeleteSongChip"
+        assert tab.rename_show_btn.property("role") == "cta-outline"
+
+    def test_song_combo_alive_but_hidden(self, setlist_tab):
+        # gui.py and the rail cards still drive song switching through
+        # the combo; the visible selector is the setlist rail.
+        assert setlist_tab.show_combo.isHidden()
+        assert setlist_tab.show_combo.count() == 3
+        setlist_tab.show_combo.setCurrentText("Neon Ruinen")
+        assert setlist_tab.current_song_name == "Neon Ruinen"
+
+
+# ---------------------------------------------------------------------------
+# S2b: transition chip menu
+# ---------------------------------------------------------------------------
+class TestTransitionChipMenu:
+    def test_chip_click_emits_its_part_index(self, tab):
+        got = []
+        tab._chips[0].clicked.connect(got.append)
+        from PyQt6.QtCore import QPointF, Qt as QtNS
+        from PyQt6.QtGui import QMouseEvent
+        event = QMouseEvent(
+            QMouseEvent.Type.MouseButtonPress, QPointF(2, 2),
+            QtNS.MouseButton.LeftButton, QtNS.MouseButton.LeftButton,
+            QtNS.KeyboardModifier.NoModifier)
+        tab._chips[0].mousePressEvent(event)
+        assert got == [0]
+
+    def test_menu_lists_the_combo_options_with_current_checked(self, tab):
+        menu = tab._build_transition_menu(0)
+        actions = menu.actions()
+        assert [a.text() for a in actions] == ["INSTANT", "GRADUAL"]
+        assert [a.isChecked() for a in actions] == [True, False]
+
+    def test_menu_action_writes_through_to_the_model(self, tab):
+        menu = tab._build_transition_menu(0)
+        gradual = menu.actions()[1]
+        gradual.trigger()
+        assert tab.current_show.parts[0].transition == "gradual"
+        assert tab._chips[0].text() == "GRADUAL ↓"
+        # Part 0 is the selected part: the inspector combo follows.
+        assert tab.transition_combo.currentText() == "gradual"
+
+    def test_set_transition_out_of_range_is_noop(self, tab):
+        tab._set_transition_out(5, "gradual")
+        assert [p.transition for p in tab.current_show.parts] == \
+            ["instant", "gradual"]
+
+
+# ---------------------------------------------------------------------------
+# S2b: master grid header column
+# ---------------------------------------------------------------------------
+class TestMasterGridHeader:
+    def test_grid_builtin_header_column_is_hidden(self, tab):
+        # The mock's 150px MASTER / AUDIO cells replace the grid's own
+        # timeline lane controls on this tab.
+        assert tab.timeline_grid.headers_scroll.isHidden()
+
+    def test_header_column_width_matches_mock(self, tab):
+        assert tab._grid_header_col.width() == 150
+
+    def test_cells_mirror_the_grid_row_heights(self, tab):
+        master_stripe = tab.master_timeline.timeline_widget
+        audio_stripe = tab.audio_lane.timeline_widget
+        assert tab._master_header_cell.height() == \
+            master_stripe.maximumHeight()
+        assert tab._audio_header_cell.height() == \
+            audio_stripe.maximumHeight()
+
+    def test_master_cell_carries_the_bars_caption(self, tab):
+        assert tab.grid_caption.text() == "MASTER · 12 BARS"
+        assert tab.grid_caption.parent() is tab._master_header_cell
+
+    def test_audio_cell_placeholder_without_audio(self, tab):
+        assert tab.audio_header_file.text() == "-"
+
+    def test_audio_cell_shows_the_filename(self, tab):
+        # Long names middle-elide to the 150px cell (keeping start and
+        # extension); the tooltip carries the full name.
+        tab.current_show.timeline_data.audio_file_path = "neon_ruinen.wav"
+        tab._update_audio_readout()
+        text = tab.audio_header_file.text()
+        assert text.startswith("neon")
+        assert text.endswith(".wav")
+        assert tab.audio_header_file.toolTip() == "neon_ruinen.wav"
+
+    def test_load_chip_opens_dialog_and_loads(self, tab, monkeypatch):
+        from PyQt6.QtWidgets import QFileDialog
+        monkeypatch.setattr(
+            QFileDialog, "getOpenFileName",
+            staticmethod(lambda *a, **k: ("C:/tmp/song.wav", "")))
+        loaded = []
+        monkeypatch.setattr(tab.audio_lane, "load_audio_file",
+                            loaded.append)
+        tab.load_audio_btn.click()
+        assert loaded == ["C:/tmp/song.wav"]
+
+    def test_load_chip_cancel_is_a_noop(self, tab, monkeypatch):
+        from PyQt6.QtWidgets import QFileDialog
+        monkeypatch.setattr(
+            QFileDialog, "getOpenFileName",
+            staticmethod(lambda *a, **k: ("", "")))
+        loaded = []
+        monkeypatch.setattr(tab.audio_lane, "load_audio_file",
+                            loaded.append)
+        tab.load_audio_btn.click()
+        assert loaded == []
+
+
+# ---------------------------------------------------------------------------
+# S2b: legacy chrome is gone, its functions moved
+# ---------------------------------------------------------------------------
+class TestLegacyChromeGone:
+    def test_pause_show_group_is_gone(self, tab):
+        from PyQt6.QtWidgets import QGroupBox
+        assert not hasattr(tab, "pause_enable_cb")
+        assert not hasattr(tab, "pause_color_btn")
+        assert not hasattr(tab, "pause_trigger_device_combo")
+        assert not hasattr(tab, "pause_trigger_channel_spin")
+        assert tab.findChildren(QGroupBox) == []
+
+    def test_per_show_trigger_row_is_gone(self, tab):
+        # Triggers live on the setlist entries now (rail lines, S2c
+        # inspector); the old per-show device/channel row is gone.
+        assert not hasattr(tab, "trigger_device_combo")
+        assert not hasattr(tab, "trigger_channel_spin")
+
+    def test_new_show_button_is_gone(self, tab):
+        # Song creation is the rail's + SONG tile.
+        assert not hasattr(tab, "new_show_btn")
+
+    def test_directory_action_moved_to_the_action_strip(self, tab,
+                                                        monkeypatch):
+        from PyQt6.QtWidgets import QFileDialog, QMessageBox
+        assert tab.set_directory_btn.text() == "SHOW DIRECTORY..."
+        monkeypatch.setattr(
+            QFileDialog, "getExistingDirectory",
+            staticmethod(lambda *a, **k: "C:/shows"))
+        infos = []
+        monkeypatch.setattr(
+            QMessageBox, "information",
+            staticmethod(lambda *a, **k: infos.append(a[1])))
+        tab.set_directory_btn.click()
+        assert tab.config.shows_directory == "C:/shows"
+        assert infos == ["Directory Set"]
+
+    def test_directory_dialog_cancel_keeps_the_hint(self, tab,
+                                                    monkeypatch):
+        from PyQt6.QtWidgets import QFileDialog
+        tab.config.shows_directory = "C:/keep"
+        monkeypatch.setattr(
+            QFileDialog, "getExistingDirectory",
+            staticmethod(lambda *a, **k: ""))
+        tab.set_directory_btn.click()
+        assert tab.config.shows_directory == "C:/keep"
 
 
 # ---------------------------------------------------------------------------
@@ -569,7 +803,7 @@ class TestThemeContract:
                      'QLabel[role="hint-box"]',
                      'QPushButton[role="segment"]',
                      'QPushButton[role="destructive"]',
-                     'QPushButton[role="primary"]'):
+                     'QPushButton[role="cta-outline"]'):
             assert rule in qss
 
     def test_ui_text_has_no_glyphs_barlow_lacks(self, tab):
@@ -578,7 +812,13 @@ class TestThemeContract:
                  tab.parts_caption.text(), tab.grid_caption.text(),
                  tab.grid_hint.text(), tab.status_summary.text(),
                  tab.audio_readout.text(), tab.audio_status.text(),
-                 tab.delete_part_btn.text()]
+                 tab.delete_part_btn.text(),
+                 tab.song_title.text(), tab.song_meta.text(),
+                 tab.rename_show_btn.text(), tab.delete_show_btn.text(),
+                 tab.set_directory_btn.text(), tab.load_audio_btn.text(),
+                 tab.audio_header_file.text()]
+        texts += [chip.text() for chip in tab._chips]
+        texts += [card.check_label.text() for card in tab._cards]
         for text in texts:
             assert not any(ch in text for ch in forbidden), text
 
