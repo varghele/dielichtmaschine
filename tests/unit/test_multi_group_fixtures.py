@@ -379,3 +379,163 @@ class TestFixtureListJson:
             config, [make_fixture("Par 1", groups=["Front", "Warm"])])
         assert [f.name for f in config.groups["Front"].fixtures] == ["Par 1"]
         assert [f.name for f in config.groups["Warm"].fixtures] == ["Par 1"]
+
+
+# ---------------------------------------------------------------------------
+# Stage 3: group consumers (capabilities, autogen, live state, export)
+# ---------------------------------------------------------------------------
+
+def _multi_group_config(temp_dir, groups=("Front", "Warm")):
+    """A config whose single fixture is a member of every listed group,
+    loaded through Configuration.load so the derived FixtureGroup.fixtures
+    lists are exactly what every consumer sees at runtime."""
+    path = os.path.join(temp_dir, "consumers.yaml")
+    _write_config_yaml(path, [
+        _fixture_yaml_dict("Par 1", groups=list(groups)),
+    ], groups=list(groups))
+    return Configuration.load(path)
+
+
+class TestCapabilityDetectionPerGroup:
+    """create_workspace builds capabilities_map per group from the derived
+    FixtureGroup.fixtures. A shared fixture must contribute its channels
+    to EVERY group it is in, not only the primary."""
+
+    DEFS = {
+        "TestMfr_TestModel": {
+            "channels": [
+                {"name": "Dimmer", "preset": "IntensityDimmer"},
+                {"name": "Red", "preset": "IntensityRed"},
+            ],
+        },
+    }
+
+    def test_shared_fixture_contributes_to_both_groups(self, temp_dir):
+        from utils.fixture_utils import detect_fixture_group_capabilities
+
+        config = _multi_group_config(temp_dir)
+        # "Warm" contains ONLY the shared fixture: any capability seen
+        # there can only have come from the secondary membership.
+        for name in ("Front", "Warm"):
+            fixtures = config.groups[name].fixtures
+            assert [f.name for f in fixtures] == ["Par 1"]
+            caps = detect_fixture_group_capabilities(fixtures, self.DEFS)
+            assert caps.has_dimmer, f"{name} lost the shared fixture's dimmer"
+            assert caps.has_colour, f"{name} lost the shared fixture's colour"
+
+
+class TestAutogenBucketing:
+    """classify_fixture_groups drives lane creation (one lane per group).
+    A fixture in two groups must make BOTH groups classifiable, so both
+    get an autogen lane and the fixture receives blocks from each."""
+
+    def test_shared_fixture_classifies_both_groups(self, temp_dir):
+        from autogen.spatial import classify_fixture_groups
+
+        config = _multi_group_config(temp_dir)
+        classifications = classify_fixture_groups(config)
+
+        assert "Front" in classifications
+        assert "Warm" in classifications, (
+            "secondary group was skipped as empty: the shared fixture did "
+            "not contribute to it")
+        # Both classifications are computed from the same (single) fixture,
+        # so their spatial zone must match.
+        assert classifications["Front"].zone == classifications["Warm"].zone
+
+
+class TestLiveStateGroups:
+    """The Live tab rebuilds its SELECT tiles and submaster bank from
+    config.groups; a shared fixture's secondary group must get a
+    submaster and resolve a level like any other group."""
+
+    def test_update_from_config_seeds_every_membership_group(self, temp_dir,
+                                                              qapp):
+        from gui.tabs.live_tab import LiveState
+
+        config = _multi_group_config(temp_dir)
+        state = LiveState()
+        state.update_from_config(config.groups.keys())
+
+        assert set(state.submasters) == {"Front", "Warm"}
+        assert state.group_level("Front") == 1.0
+        assert state.group_level("Warm") == 1.0
+        # Tile counts come from the derived membership.
+        assert len(config.groups["Warm"].fixtures) == 1
+
+
+class TestWorkspaceExportMultiGroup:
+    """Export decision (plan stage 3): groups reach the .qxw as
+    per-capability ChannelsGroup lists, VC group controls and preset
+    scenes, all built from the derived membership; the exporter never
+    writes QLC+ <FixtureGroup> elements. QLC+ accepts the same fixture
+    channel in any number of ChannelsGroups, so a multi-group fixture is
+    emitted per-group while staying patched exactly once."""
+
+    VC_OPTIONS = {
+        "generate_vc": True,
+        "group_controls": True,
+        "scene_presets": False,
+        "movement_presets": False,
+        "show_buttons": False,
+        "speed_dial": False,
+        "master_presets": False,
+        "dark_mode": False,
+    }
+
+    def _export_club_band_with_shared_fixture(self, tmp_path):
+        import xml.etree.ElementTree as ET
+        from utils.create_workspace import create_qlc_workspace
+
+        repo_root = os.path.abspath(
+            os.path.join(os.path.dirname(__file__), "..", ".."))
+        config = Configuration.load(
+            os.path.join(repo_root, "demos", "rigs", "club_band.yaml"))
+        shared = next(f for f in config.fixtures if f.name == "Front PARs 1")
+        assert shared.groups == ["Front PARs"]
+        shared.groups.append("Back Wash")
+
+        # Round-trip through save/load so the derived FixtureGroup lists
+        # are rebuilt exactly the way a user-edited config would be.
+        path = str(tmp_path / "club_band_multi.yaml")
+        config.save(path)
+        config = Configuration.load(path)
+        assert "Front PARs 1" in [
+            f.name for f in config.groups["Back Wash"].fixtures]
+
+        out = str(tmp_path / "workspace.qxw")
+        create_qlc_workspace(config, self.VC_OPTIONS, output_path=out)
+
+        tree = ET.parse(out)  # parse-back: the export is well-formed XML
+        root = tree.getroot()
+        for el in root.iter():
+            if "}" in el.tag:
+                el.tag = el.tag.split("}", 1)[1]
+        return config, root
+
+    def test_shared_fixture_patched_once_and_in_both_groups(self, tmp_path):
+        config, root = self._export_club_band_with_shared_fixture(tmp_path)
+        engine = root.find("Engine")
+
+        # Patched exactly once: <Fixture> elements come from
+        # config.fixtures, not from group membership.
+        fixture_elems = engine.findall("Fixture")
+        assert len(fixture_elems) == len(config.fixtures)
+        shared_ids = [fe.find("ID").text for fe in fixture_elems
+                      if fe.find("Name").text == "Front PARs 1"]
+        assert len(shared_ids) == 1
+        shared_id = shared_ids[0]
+
+        # The shared fixture's channels appear in the ChannelsGroups of
+        # BOTH groups (per-group emission through derived membership).
+        groups_containing = set()
+        for cg in engine.findall("ChannelsGroup"):
+            group_name = cg.get("Name", "").rsplit(" - ", 1)[0]
+            ids = (cg.text or "").split(",")[0::2]
+            if shared_id in ids:
+                groups_containing.add(group_name)
+        assert {"Front PARs", "Back Wash"} <= groups_containing
+
+        # And no QLC+ <FixtureGroup> elements are emitted at all (the
+        # single-membership-shaped structure we deliberately avoid).
+        assert engine.findall("FixtureGroup") == []

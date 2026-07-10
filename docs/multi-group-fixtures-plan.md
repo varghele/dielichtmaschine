@@ -71,9 +71,51 @@ several consumers.
 - **GROUP column display:** the joined group list (" · " separator),
   elided to the column with the full list in the tooltip - same
   language as the timeline lane subtitle.
-- **Export** target (primary vs. per-group): decided during stage 3 by
-  reading the exporter; the gate either way is byte-identical `.qxw`
-  export for single-group configs (scripts/export_hash_check.py).
+- **Export: per-group emission (decided 2026-07-10, stage 3).** The
+  exporter never writes QLC+ `<FixtureGroup>` elements; groups reach the
+  `.qxw` as per-capability `<ChannelsGroup>` lists, VC group controls and
+  per-group preset scenes, all built from the derived
+  `FixtureGroup.fixtures`. QLC+ accepts the same fixture channel in any
+  number of ChannelsGroups, so a multi-group fixture simply appears in
+  each of its groups' structures while `<Fixture>` patch elements keep
+  coming from `config.fixtures` (patched exactly once). Show tracks keep
+  deduplicating a fixture per lane (`resolve_targets_unique`) and bucket
+  the deduped fixture under its PRIMARY group: that bucket is what
+  applies the group export intensity, so it implements the locked
+  first-group-wins precedence (the track name follows the bucket).
+  Gate held: byte-identical single-group export for all five demo rigs
+  (scripts/export_hash_check.py vs a pristine `git archive HEAD`
+  baseline); parse-back test in tests/unit/test_multi_group_fixtures.py.
+
+### Stage 3 audit findings (2026-07-10)
+
+- Every bucketing consumer already flows through the derived
+  `FixtureGroup.fixtures` (stage 1): autogen classification/lanes
+  (`autogen/spatial.py`, `autogen/generator.py`), capability detection
+  buckets (`utils/create_workspace.py`), lane target resolution
+  (`utils/target_resolver.py`), live/auto tab group rebuilds, TCP
+  groups message, stage plot legend counts, pause show generator, VC
+  and preset-scene generation. No production change was needed.
+- Defaults reads (data color, orientation, Z, lighting role, export
+  intensity) stay on the compat `fixture.group` primary per the locked
+  rule: `autogen/spatial.py` max-Z, `utils/artnet/dmx_manager.py` and
+  `utils/to_xml/unified_sequence.py` spot targeting,
+  `utils/tcp/protocol.py` fixture payload, `gui/stage_plot.py` symbol
+  color, `gui/StageView.py`, the stage tab selection inspector, and the
+  apply-to-group-default propagation (`config_fixture.group ==` in
+  `gui/tabs/stage_tab.py` is correct: only fixtures whose PRIMARY group
+  changed resolve new defaults).
+- Known lossy spot: the CSV rig sheet (`utils/fixture_io.py`) writes a
+  single `group` column (the primary); secondary memberships do not
+  survive a CSV round-trip. Deliberate for now: the sheet is documented
+  as flat/resolved (it flattens orientation overrides too) and JSON is
+  the lossless interchange. Revisit if users hit it.
+- Layering question (deferred to the output arbiter, todo.md): a
+  fixture in two groups gets blocks from BOTH groups' lanes; at export
+  that is two QLC+ tracks writing the same channels, natively two
+  registered lanes in the DMX manager. Conflict resolution between
+  simultaneous blocks is pre-existing semantics owned by the arbiter;
+  stage 3 only guarantees membership completeness.
 
 ## Staging (each its own commit, tests + goldens)
 
