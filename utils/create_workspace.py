@@ -11,7 +11,8 @@ from utils.to_xml.virtual_console_to_xml import build_virtual_console
 from utils.fixture_utils import load_fixture_definitions_from_qlc, detect_fixture_group_capabilities
 
 
-def create_qlc_workspace(config: Configuration, vc_options: Optional[Dict[str, bool]] = None):
+def create_qlc_workspace(config: Configuration, vc_options: Optional[Dict[str, bool]] = None,
+                         output_path: Optional[str] = None):
     """
     Create QLC+ workspace file using Configuration data
 
@@ -29,10 +30,13 @@ def create_qlc_workspace(config: Configuration, vc_options: Optional[Dict[str, b
             - qlc_target_version: str - Version stamped into <Creator><Version>.
               Cosmetic only; the workspace XML schema is identical between
               QLC+ 4.x and 5.x. Default: "4.14.4".
+        output_path: Where to write the .qxw. Default keeps the historical
+            behaviour (workspace.qxw in the repo/app root); tests pass a
+            tmp path so parallel runs don't fight over one file.
     """
     # Set up base dir
     base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    workspace_path = os.path.join(base_dir, 'workspace.qxw')
+    workspace_path = output_path or os.path.join(base_dir, 'workspace.qxw')
 
     # Get set of models we need definitions for
     models_in_config = {(fixture.manufacturer, fixture.model)

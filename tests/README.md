@@ -1,13 +1,30 @@
 # Tests
 
 ```bash
-python -m pytest tests/unit -q          # the main suite (fast, offscreen)
+python -m pytest tests/unit -n auto -q  # the main suite, parallel (~2 min)
 python -m pytest tests/visual -q        # visual/pixel regression tests
 python -m pytest tests/integration -q   # network/hardware-adjacent tests
 ```
 
 Everything runs headless via `QT_QPA_PLATFORM=offscreen` (set at the top
 of each Qt-touching test module).
+
+## Parallel runs (pytest-xdist)
+
+`-n auto` runs the unit tier across all cores (~2 minutes vs ~1 hour
+serial as of 2026-07; needs `pip install pytest-xdist`). Each worker is
+its own process with its own QApplication, so the Qt fixtures are safe.
+Rules of thumb:
+
+- `tests/unit` parallelizes cleanly. Tests that write files must use
+  `tmp_path` (never a shared repo-root path - `test_vc_layout.py` was
+  the one offender and is fixed).
+- Keep `tests/visual` serial, and NEVER regenerate goldens
+  (`QLC_REGEN_GOLDENS=1`) under `-n` - concurrent writers to the same
+  golden PNG race.
+- A parallel failure that passes serially usually means shared mutable
+  state (a shared output file, QSettings cross-talk); fix the isolation,
+  don't drop xdist.
 
 ## Layout
 
