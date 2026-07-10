@@ -186,10 +186,11 @@ class LightLaneWidget(QFrame):
 
         layout.addLayout(name_layout)
 
-        # Row 1.5: the targeted fixture group(s), as a quiet mono
-        # subtitle under the lane name. Hidden when the lane has no
-        # targets; elided to the column when the list is long.
-        self.group_label = MicroLabel("", point_size=7, tracking_em=0.08)
+        # Row 1.5: the targeted fixture group(s), as a mono subtitle
+        # under the lane name - deliberately prominent (10pt, close to
+        # the name's weight in the hierarchy). Hidden when the lane has
+        # no targets; elided to the column when the list is long.
+        self.group_label = MicroLabel("", point_size=10, tracking_em=0.08)
         self.group_label.setObjectName("LaneGroupLabel")
         layout.addWidget(self.group_label)
         self.group_label.hide()
