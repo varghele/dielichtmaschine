@@ -752,6 +752,7 @@ QPushButton[role="output-select"] {
 QPushButton[role="output-select"]:checked {
     border-color: $accent$;
     color: $accent_line$;
+    background-color: $accent_tint$;
 }
 
 /* -- Timeline lane header chips (M / S / TARGETS / + BLOCK) ------------- */
@@ -771,6 +772,17 @@ QPushButton[role="lane-chip"]:hover { color: $text$; }
 QPushButton[role="lane-chip"]:checked {
     border-color: $accent$;
     color: $accent_line$;
+}
+/* The timeline SONG selector carries the same chip language; QComboBox
+   needs its own rule (the QPushButton selector above cannot match it). */
+QComboBox[role="lane-chip"] {
+    background-color: $window$;
+    border: 1px solid $border$;
+    color: $text$;
+    font-family: $font_mono$;
+    font-size: 11px;
+    padding: 3px 8px;
+    min-height: 0;
 }
 
 /* -- Playback time readout (Shows + Structure tabs) --------------------- */
