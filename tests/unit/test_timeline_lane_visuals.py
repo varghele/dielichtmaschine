@@ -13,6 +13,7 @@ import pytest
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
+from PyQt6.QtCore import QPoint, Qt
 from PyQt6.QtGui import QColor
 
 from config.models import (
@@ -70,6 +71,17 @@ class TestMuteSoloChips:
         assert "font-family" in body
         assert THEMES["dark"]["accent"] in qss
 
+    def test_lane_chip_accent_theme_rule(self):
+        """+ BLOCK's accent variant: accent border + ink with the same
+        pinned mono family (same metrics as lane-chip)."""
+        from gui.theme_tokens import render_theme
+        qss = render_theme("dark")
+        body = qss.split('QPushButton[role="lane-chip-accent"] {', 1)[1]
+        body = body.split("}", 1)[0]
+        assert "font-family" in body
+        assert THEMES["dark"]["accent"] in body
+        assert 'QPushButton[role="lane-chip-accent"]:hover' in qss
+
 
 class TestLaneHeaderStructure:
     """Timeline v3 lane header (stage T2): 260px column, name + N FIX
@@ -125,8 +137,12 @@ class TestLaneHeaderStructure:
         widget = _make_lane_widget(sample_configuration, ["TestGroup"])
         try:
             for chip in (widget.mute_button, widget.solo_button,
-                         widget.targets_chip, widget.add_block_button):
+                         widget.targets_chip):
                 assert chip.property("role") == "lane-chip"
+            # + BLOCK is the lane's primary action: the accent chip
+            # variant (accent border + ink, same metrics).
+            assert widget.add_block_button.property("role") == \
+                "lane-chip-accent"
             assert widget.mute_button.text() == "M"
             assert widget.solo_button.text() == "S"
             # U+2193 drop indicator: the mock's ▾ is not in the brand
@@ -527,3 +543,207 @@ class TestElision:
         assert elided(metrics, "FADE 208", 2) == ""
         assert elided(metrics, "", 100) == ""
         assert elided(metrics, "FADE 208", 0) == ""
+
+
+# ── Shared sublane band geometry (strip zone above the dimmer band) ──────
+#
+# timeline_widget.sublane_band_geometry is the single definition of the
+# lane's vertical anatomy: a strip zone at the top for the block header
+# strip, then the sublane bands. All three consumers - canvas
+# separators, block widget (painting + hit-tests), header label column
+# - derive from it, asserted below so they cannot drift.
+
+
+class TestSublaneBandGeometry:
+    def test_bands_start_below_strip_and_fill_the_lane(self):
+        from timeline_ui.timeline_widget import (
+            STRIP_ZONE_HEIGHT, sublane_band_geometry)
+        strip, bands = sublane_band_geometry(3, 50)
+        assert strip == STRIP_ZONE_HEIGHT == 16
+        assert len(bands) == 3
+        expected_h = (150 - 16) / 3
+        for i, (y, h) in enumerate(bands):
+            assert y == pytest.approx(16 + i * expected_h)
+            assert h == pytest.approx(expected_h)
+        # Overall lane height unchanged: bands compress, nothing grows.
+        assert bands[-1][0] + bands[-1][1] == pytest.approx(150)
+
+    def test_single_band_lane_still_reserves_the_strip(self):
+        from timeline_ui.timeline_widget import sublane_band_geometry
+        strip, bands = sublane_band_geometry(1, 50)
+        assert strip == 16
+        assert bands == [(16.0, 34.0)]
+
+    def test_degenerate_height_clamps_strip_to_half(self):
+        from timeline_ui.timeline_widget import sublane_band_geometry
+        strip, bands = sublane_band_geometry(1, 10)
+        assert strip == pytest.approx(5.0)
+        assert bands[0][1] == pytest.approx(5.0)
+
+    def test_canvas_uses_shared_geometry_when_lane_has_sublanes(self, qapp):
+        from timeline_ui.timeline_widget import (
+            TimelineWidget, sublane_band_geometry)
+        tw = TimelineWidget()
+        try:
+            tw.num_sublanes = 3
+            tw.sublane_height = 50
+            tw.capabilities = FixtureGroupCapabilities(
+                has_dimmer=True, has_colour=True,
+                has_movement=True, has_special=False)
+            assert tw.band_geometry() == sublane_band_geometry(3, 50)
+        finally:
+            tw.deleteLater()
+
+    def test_audio_master_geometry_is_unshifted(self, qapp):
+        """Rows without sublane content (capabilities is None: master
+        ruler, audio lane) reserve no strip zone - their geometry must
+        not shift."""
+        from timeline_ui.timeline_widget import TimelineWidget
+        tw = TimelineWidget()
+        try:
+            assert tw.capabilities is None
+            strip, bands = tw.band_geometry()
+            assert strip == 0.0
+            assert bands[0] == (0.0, float(tw.sublane_height))
+        finally:
+            tw.deleteLater()
+
+
+class TestBlockStripAboveDimmerBand:
+    """Fix 1 regression: the block header strip renders in its own zone
+    on top of the lane; the first sub-row (dimmer band) starts at/below
+    the strip bottom, so the dimmer bar stays fully visible and fully
+    mouse-accessible."""
+
+    def _widget(self, config):
+        widget = _make_lane_widget(config, ["TestGroup"])
+        widget.capabilities = FixtureGroupCapabilities(
+            has_dimmer=True, has_colour=True,
+            has_movement=True, has_special=False)
+        widget.num_sublanes = widget._count_sublanes()
+        block = LightBlock(
+            start_time=0.0, end_time=4.0, effect_name="x",
+            dimmer_blocks=[DimmerBlock(start_time=0.0, end_time=4.0,
+                                       intensity=255.0)])
+        widget.lane.light_blocks.append(block)
+        widget.create_light_block_widget(block)
+        return widget, widget.light_block_widgets[-1]
+
+    def test_strip_does_not_overlap_first_band(self, qapp,
+                                               sample_configuration):
+        widget, bw = self._widget(sample_configuration)
+        try:
+            strip_rect = bw.header_strip_rect()
+            band_y, _band_h = bw.sublane_band_rect("dimmer")
+            assert strip_rect.bottom() <= band_y
+        finally:
+            widget.deleteLater()
+
+    def test_block_bands_match_shared_helper(self, qapp,
+                                             sample_configuration):
+        from timeline_ui.timeline_widget import sublane_band_geometry
+        widget, bw = self._widget(sample_configuration)
+        try:
+            strip, bands = sublane_band_geometry(
+                widget.num_sublanes, widget.sublane_height)
+            assert bw.band_geometry() == (strip, bands)
+            for i, sublane_type in enumerate(
+                    ("dimmer", "colour", "movement")):
+                assert bw.sublane_band_rect(sublane_type) == bands[i]
+        finally:
+            widget.deleteLater()
+
+    def test_full_intensity_handle_is_below_strip_and_hit_tests(
+            self, qapp, sample_configuration):
+        """At intensity 255 the handle sits at the very top of the
+        dimmer band - the exact spot the old strip painted over. It
+        must lie below the strip zone and hit-test there."""
+        widget, bw = self._widget(sample_configuration)
+        try:
+            band_y, _band_h = bw.sublane_band_rect("dimmer")
+            strip, _bands = bw.band_geometry()
+            margin = 2
+            handle_y = band_y + margin  # intensity 255 -> band top
+            assert handle_y >= strip
+            dimmer = bw.block.dimmer_blocks[0]
+            assert bw._is_on_intensity_handle(
+                QPoint(10, int(handle_y)), "dimmer", dimmer)
+        finally:
+            widget.deleteLater()
+
+    def test_strip_zone_hits_no_sublane_row(self, qapp,
+                                            sample_configuration):
+        """A click in the strip zone belongs to the whole-effect drag
+        handle, never to a sublane row."""
+        widget, bw = self._widget(sample_configuration)
+        try:
+            strip, _bands = bw.band_geometry()
+            assert bw._get_sublane_row_at_y(int(strip) // 2) is None
+            assert bw._get_sublane_row_at_y(int(strip)) == "dimmer"
+            assert int(strip) == bw.HEADER_HEIGHT  # drag zone == strip
+        finally:
+            widget.deleteLater()
+
+
+class TestSublaneLabelsRowAligned:
+    """Fix 2: DIM / COL / MOV labels sit in the header column,
+    vertically centered on their own bands (same shared geometry as the
+    canvas and the blocks)."""
+
+    def _pinned(self, config, **caps):
+        widget = _make_lane_widget(config, ["TestGroup"])
+        widget.capabilities = FixtureGroupCapabilities(
+            has_dimmer=caps.get("dimmer", True),
+            has_colour=caps.get("colour", True),
+            has_movement=caps.get("movement", True),
+            has_special=caps.get("special", False))
+        widget.num_sublanes = widget._count_sublanes()
+        widget.refresh_sublane_labels()
+        return widget
+
+    def test_labels_center_on_their_bands(self, qapp, sample_configuration):
+        from timeline_ui.timeline_widget import sublane_band_geometry
+        widget = self._pinned(sample_configuration)
+        try:
+            strip, bands = sublane_band_geometry(
+                widget.num_sublanes, widget.sublane_height)
+            assert len(widget.sublane_labels) == 3
+            for i, label in enumerate(widget.sublane_labels):
+                y, h = bands[i]
+                center = label.geometry().center().y()
+                assert abs(center - (y + h / 2)) <= 2  # rounding only
+                assert y <= center <= y + h  # inside its own band
+                assert label.geometry().top() >= strip - 1
+        finally:
+            widget.deleteLater()
+
+    def test_labels_track_sublane_count_changes(self, qapp,
+                                                sample_configuration):
+        """Dropping to a 2-row lane re-centers the labels on the new
+        band grid via the same refresh path."""
+        from timeline_ui.timeline_widget import sublane_band_geometry
+        widget = self._pinned(sample_configuration)
+        try:
+            widget.capabilities = FixtureGroupCapabilities(
+                has_dimmer=True, has_colour=True,
+                has_movement=False, has_special=False)
+            widget.num_sublanes = widget._count_sublanes()
+            widget.refresh_sublane_labels()
+            _strip, bands = sublane_band_geometry(2, widget.sublane_height)
+            assert [l.text() for l in widget.sublane_labels] == ["DIM", "COL"]
+            for i, label in enumerate(widget.sublane_labels):
+                y, h = bands[i]
+                assert abs(label.geometry().center().y() - (y + h / 2)) <= 2
+        finally:
+            widget.deleteLater()
+
+    def test_label_overlay_is_mouse_transparent(self, qapp,
+                                                sample_configuration):
+        """The label layer overlays the header, so it must not swallow
+        clicks meant for the M / S / TARGETS / + BLOCK chips."""
+        widget = self._pinned(sample_configuration)
+        try:
+            assert widget.sublane_labels_widget.testAttribute(
+                Qt.WidgetAttribute.WA_TransparentForMouseEvents)
+        finally:
+            widget.deleteLater()

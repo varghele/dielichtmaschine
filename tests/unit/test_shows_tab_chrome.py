@@ -675,7 +675,8 @@ class TestButtonCoherence:
         # role (mono family + compact padding pinned in the theme).
         assert lane.mute_button.property("role") == "lane-chip"
         assert lane.solo_button.property("role") == "lane-chip"
-        assert lane.add_block_button.property("role") == "lane-chip"
+        # + BLOCK is the lane's primary action: accent chip variant.
+        assert lane.add_block_button.property("role") == "lane-chip-accent"
         assert lane.remove_button.property("role") == "destructive"
         assert shows_tab.audio_lane.mute_button.property("role") == \
             "output-select"

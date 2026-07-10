@@ -7,7 +7,8 @@ from PyQt6.QtWidgets import (QWidget, QHBoxLayout, QVBoxLayout,
                              QScrollArea, QMessageBox)
 from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtGui import QUndoStack
-from .timeline_widget import TimelineWidget, HEADER_COLUMN_WIDTH
+from .timeline_widget import (TimelineWidget, HEADER_COLUMN_WIDTH,
+                              sublane_band_geometry)
 from .light_block_widget import LightBlockWidget
 from .undo_commands import InsertRiffCommand, DeleteBlockCommand, AddBlockCommand
 from timeline.light_lane import LightLane
@@ -132,9 +133,10 @@ class LightLaneWidget(QFrame):
 
         260 px wide with a 3px group-color left edge, carrying:
         row 1 - lane name (condensed display voice) + "N FIX" count +
-        remove; row 2 - the chip row M / S / TARGETS / + BLOCK; then a
-        left-aligned stacked column of DIM / COL / MOV / SPC micro-labels
-        for the lane's active sub-rows.
+        remove; row 2 - the chip row M / S / TARGETS / + BLOCK (accent);
+        plus DIM / COL / MOV / SPC micro-labels for the lane's active
+        sub-rows, each row-aligned with its sublane band (right edge of
+        the column, shared band geometry).
         """
         widget = QWidget()
         # Object-name + WA_StyledBackground so the theme's
@@ -219,12 +221,14 @@ class LightLaneWidget(QFrame):
         # Legacy alias: e2e drives the targets entry point by this name.
         self.edit_targets_btn = self.targets_chip
 
-        # + BLOCK chip: the existing add-block action.
+        # + BLOCK chip: the existing add-block action. As the lane's
+        # primary action it carries the accent chip role (accent border
+        # + accent ink, same metrics as lane-chip).
         self.add_block_button = QPushButton("+ BLOCK")
         self.add_block_button.setFixedHeight(20)
         self.add_block_button.setFont(mono_font(8, tracking_em=0.08))
         self.add_block_button.setProperty("density", "compact")
-        self.add_block_button.setProperty("role", "lane-chip")
+        self.add_block_button.setProperty("role", "lane-chip-accent")
         self.add_block_button.clicked.connect(self.add_light_block)
         chips_layout.addWidget(self.add_block_button)
 
@@ -239,15 +243,17 @@ class LightLaneWidget(QFrame):
         self.snap_checkbox.toggled.connect(self.on_snap_toggled)
         self.snap_checkbox.hide()
 
-        # Sub-lane micro-label column: DIM / COL / MOV / SPC stacked
-        # under the chips, left-aligned, one row per active sublane in
-        # stripe row order (timeline v3 moved these off the canvas).
+        # Sub-lane micro-labels: DIM / COL / MOV / SPC, one per active
+        # sublane, each vertically centered on its own band (shared
+        # geometry from sublane_band_geometry, below the block strip
+        # zone). The container overlays the whole header with absolute
+        # geometry (NOT in the vbox layout) and is mouse-transparent so
+        # the chips underneath stay clickable;
+        # refresh_sublane_labels() places every label.
         self.sublane_labels_widget = QWidget(widget)
         self.sublane_labels_widget.setObjectName("LaneSublaneLabels")
-        self._sublane_labels_layout = QVBoxLayout(self.sublane_labels_widget)
-        self._sublane_labels_layout.setContentsMargins(0, 2, 0, 0)
-        self._sublane_labels_layout.setSpacing(0)
-        layout.addWidget(self.sublane_labels_widget)
+        self.sublane_labels_widget.setAttribute(
+            Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
         layout.addStretch()
 
         self.sublane_labels = []
@@ -380,39 +386,54 @@ class LightLaneWidget(QFrame):
             rows.append(("special", "SPC"))
         return rows
 
+    # Height of one DIM/COL/MOV/SPC micro-label row in the header.
+    SUBLANE_LABEL_HEIGHT = 16
+
     def refresh_sublane_labels(self):
-        """Rebuild the DIM / COL / MOV / SPC micro-label column from the
+        """Rebuild the DIM / COL / MOV / SPC micro-labels from the
         current capabilities (timeline v3 lane header). Called at
         construction and whenever capabilities are re-detected
-        (on_targets_changed / update_fixture_groups).
+        (on_targets_changed / update_fixture_groups) - the same path
+        that tracks lane height / sublane count changes.
 
-        The labels stack under the chip row, left-aligned, one 16px row
-        per active sublane in the same top-to-bottom order the stripe
-        rows use (get_sublane_index). The
-        ``timeline/show_sublane_labels`` deep setting (default on) shows
-        or hides the whole column."""
-        layout = getattr(self, "_sublane_labels_layout", None)
-        if layout is None:
+        Each label sits in the 260px header column vertically centered
+        on its own sublane band (the shared sublane_band_geometry the
+        canvas stripes and block sub-rows use, i.e. below the block
+        strip zone), right-aligned at the canvas edge so it reads next
+        to its band. One label per active sublane, in stripe row order
+        (get_sublane_index). The ``timeline/show_sublane_labels`` deep
+        setting (default on) shows or hides the whole column."""
+        container = getattr(self, "sublane_labels_widget", None)
+        if container is None:
             return
         # Deferred import: the gui package imports timeline_ui at module
         # load, so a top-level import here would be circular.
         from gui.typography import MicroLabel
 
-        while layout.count():
-            item = layout.takeAt(0)
-            child = item.widget()
-            if child is not None:
-                child.deleteLater()
-
+        for label in getattr(self, "sublane_labels", None) or []:
+            label.deleteLater()
         self.sublane_labels = []
-        for sublane_type, text in self.sublane_label_rows():
-            label = MicroLabel(text)
+
+        # Same geometry the lane's canvas and block widgets use: the
+        # header rows in TimelineGrid are pinned to the stripe height,
+        # so header-local y equals canvas-local y.
+        strip, bands = sublane_band_geometry(self.num_sublanes,
+                                             self.sublane_height)
+        total_height = int(strip + sum(h for _y, h in bands))
+        container.setGeometry(0, 0, HEADER_COLUMN_WIDTH, total_height)
+
+        label_h = self.SUBLANE_LABEL_HEIGHT
+        for i, (sublane_type, text) in enumerate(self.sublane_label_rows()):
+            y, h = bands[min(i, len(bands) - 1)]
+            label = MicroLabel(text, parent=container)
             label.setProperty("sublane_type", sublane_type)
-            label.setAlignment(Qt.AlignmentFlag.AlignLeft
+            label.setAlignment(Qt.AlignmentFlag.AlignRight
                                | Qt.AlignmentFlag.AlignVCenter)
-            label.setFixedHeight(16)
-            layout.addWidget(label)
+            label.setGeometry(0, round(y + h / 2 - label_h / 2),
+                              HEADER_COLUMN_WIDTH - 8, label_h)
+            label.show()
             self.sublane_labels.append(label)
+        container.raise_()
         self._apply_sublane_labels_setting()
 
     def _apply_sublane_labels_setting(self):

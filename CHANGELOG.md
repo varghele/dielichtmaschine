@@ -56,6 +56,14 @@ verbatim as the GitHub Release notes (see [docs/releasing.md](docs/releasing.md)
 
 ### Fixed
 
+- **The block header strip no longer covers the dimmer bar.** The
+  "BASE · ..." strip on every timeline block now has its own 16px zone
+  at the top of the lane; the dimmer band and its drag handle sit fully
+  below it, visible and clickable along their whole height. One shared
+  band-geometry helper drives the canvas stripes, the block rows and
+  the header labels so they can no longer drift apart. The DIM / COL /
+  MOV / SPC labels are each aligned with their own sublane row in the
+  lane header, and + BLOCK is an accent chip.
 - **The fixture-loading dialog no longer runs a modal event loop.** On a
   cold fixture-capabilities cache, adding fixtures from a definition
   showed its progress dialog via a blocking exec; it now waits on the

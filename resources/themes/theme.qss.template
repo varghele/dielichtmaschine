@@ -792,6 +792,19 @@ QPushButton[role="lane-chip"]:checked {
     border-color: $accent$;
     color: $accent_line$;
 }
+/* The lane's primary action (+ BLOCK): same chip metrics, accent ink. */
+QPushButton[role="lane-chip-accent"] {
+    background-color: transparent;
+    border: 1px solid $accent$;
+    color: $accent_line$;
+    font-family: $font_mono$;
+    font-size: 9px;
+    padding: 2px 6px;
+    min-height: 0;
+}
+QPushButton[role="lane-chip-accent"]:hover {
+    background-color: $accent_tint$;
+}
 /* The timeline SONG selector carries the same chip language; QComboBox
    needs its own rule (the QPushButton selector above cannot match it). */
 QComboBox[role="lane-chip"] {

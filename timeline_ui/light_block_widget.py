@@ -8,6 +8,7 @@ from PyQt6.QtGui import (
     QPainter, QColor, QPen, QBrush, QMouseEvent, QFont, QLinearGradient,
 )
 from config.models import LightBlock
+from .timeline_widget import STRIP_ZONE_HEIGHT, sublane_band_geometry
 
 # Glutorange, the brand accent (gui/theme_tokens.py); selection marks in
 # this custom-painted widget follow the theme's selection color. Same
@@ -62,10 +63,12 @@ def _tinted(base: QColor, alpha: int) -> QColor:
 # sub-row in compact mono. The label helpers below are pure functions,
 # unit-tested in tests/unit/test_timeline_lane_visuals.py.
 
-# Painted height of the block header strip. It sits inside the
-# HEADER_HEIGHT (24px) envelope-drag zone, so drawing it changes no
-# hit-testing.
-HEADER_STRIP_HEIGHT = 16
+# Painted height of the block header strip. It fills the shared strip
+# zone (timeline_widget.sublane_band_geometry) that the lane reserves
+# ABOVE the sublane bands, so the strip stacks on top of the dimmer
+# band instead of covering it - the dimmer bar and its intensity
+# handle stay fully visible and mouse-accessible.
+HEADER_STRIP_HEIGHT = STRIP_ZONE_HEIGHT
 
 # Quiet placeholder for a sub-row the block leaves empty (mock 06b shows
 # a dim "- · -" instead of a bare band).
@@ -310,7 +313,11 @@ class LightBlockWidget(QWidget):
     block_edited = pyqtSignal()  # Emitted when block content is edited (for auto-save)
 
     RESIZE_HANDLE_WIDTH = 8  # Pixels for resize handle area
-    HEADER_HEIGHT = 24  # Pixels reserved for header/handle area (drag entire effect)
+    # The strip zone doubles as the whole-effect drag handle. It must
+    # not reach below the strip: the sublane bands start right under it
+    # and their full height (dimmer handle included) belongs to sublane
+    # interactions.
+    HEADER_HEIGHT = STRIP_ZONE_HEIGHT
     # Minimum duration for a sublane block created by drag — anything shorter
     # is treated as an accidental mouse slip and rejected.
     MIN_SUBLANE_BLOCK_DURATION = 0.05  # seconds
@@ -449,6 +456,36 @@ class LightBlockWidget(QWidget):
         absolute_pixel = envelope_start_pixel + pixel_x
         return self.timeline_widget.pixel_to_time(absolute_pixel)
 
+    # ── Shared band geometry (timeline_widget.sublane_band_geometry) ──────
+    #
+    # Everything vertical in this widget - strip painting, sub-row
+    # painting, hit-testing (dimmer handle, sublane blocks, marquee) -
+    # derives from the one shared helper, the same one the canvas
+    # separators and the lane header labels use.
+
+    def band_geometry(self):
+        """``(strip, bands)`` for this block's lane.
+
+        The band count prefers the lane's ``num_sublanes``; lane stubs
+        without one fall back to the rows this block renders."""
+        lane = self.lane_widget
+        num = getattr(lane, "num_sublanes", 0) or \
+            len(self._visible_sublane_rows())
+        return sublane_band_geometry(num, lane.sublane_height)
+
+    def sublane_band_rect(self, sublane_type) -> tuple:
+        """``(y, height)`` of the band for ``sublane_type`` - always
+        below the strip zone."""
+        _strip, bands = self.band_geometry()
+        index = self.lane_widget.get_sublane_index(sublane_type)
+        return bands[min(index, len(bands) - 1)]
+
+    def header_strip_rect(self) -> QRect:
+        """The painted header-strip rect (inside the 1px frame). Its
+        bottom never reaches the first band: ``bottom() < bands[0].y``."""
+        strip, _bands = self.band_geometry()
+        return QRect(1, 1, self.width() - 2, max(0, int(strip) - 1))
+
     def paintEvent(self, event):
         """Draw the effect envelope and sublane blocks."""
         painter = QPainter(self)
@@ -566,11 +603,13 @@ class LightBlockWidget(QWidget):
 
         painter.fillRect(1, 1, w - 2, h - 2, _tinted(base, BODY_TINT_ALPHA))
 
-        # Sub-row hairlines at the interior band boundaries.
+        # Sub-row hairlines at the interior band boundaries (shared
+        # geometry: bands sit below the strip zone).
         rows = self._visible_sublane_rows()
+        _strip, bands = self.band_geometry()
         painter.setPen(QPen(_tinted(base, ROW_HAIRLINE_ALPHA), 1))
         for i in range(1, len(rows)):
-            y = int(i * self.lane_widget.sublane_height)
+            y = int(bands[min(i, len(bands) - 1)][0])
             painter.drawLine(1, y, w - 2, y)
 
         if not self._is_multi_selected:
@@ -583,16 +622,16 @@ class LightBlockWidget(QWidget):
         """16px header strip: block label left ("BASE · PULSE"), bar
         range right ("BARS 3-8"). Fill = block colour at the stronger
         strip alpha; a selected block tints the strip with the accent
-        and its label carries the check."""
+        and its label carries the check. The strip renders in the
+        dedicated strip zone ABOVE the first sublane band - it never
+        covers the dimmer band or its intensity handle."""
         from gui.typography import mono_font
 
-        w = self.width()
-        strip = QRect(1, 1, w - 2, HEADER_STRIP_HEIGHT)
-        if strip.width() <= 0:
+        strip = self.header_strip_rect()
+        if strip.width() <= 0 or strip.height() <= 0:
             return
-        # Opaque lane-surface backing first: the strip sits over the
-        # first sub-row band (segment fills, dimmer intensity handle),
-        # and its labels must not read struck-through.
+        # Opaque lane-surface backing keeps the strip tone constant
+        # regardless of the body tint underneath (mock 06b reading).
         painter.fillRect(strip, token_qcolor("timeline_lane_bg"))
         if self._is_multi_selected:
             painter.fillRect(strip, token_qcolor("accent", STRIP_TINT_ALPHA + 8))
@@ -710,7 +749,6 @@ class LightBlockWidget(QWidget):
         (painted as a real gradient when two colour blocks meet). A row
         the block leaves empty gets a quiet "- · -" placeholder.
         """
-        sublane_height = self.lane_widget.sublane_height
         base = self.block_base_color()
 
         for sublane_type, sublane_blocks in self._visible_sublane_rows():
@@ -727,7 +765,6 @@ class LightBlockWidget(QWidget):
                     sublane_block,
                     sublane_type,
                     color,
-                    sublane_height,
                     border_color=QColor(base),
                 )
 
@@ -759,8 +796,7 @@ class LightBlockWidget(QWidget):
         empty (dim disabled-text tone, never a bare band)."""
         from gui.typography import mono_font
 
-        sublane_height = self.lane_widget.sublane_height
-        y = self.lane_widget.get_sublane_index(sublane_type) * sublane_height
+        y, sublane_height = self.sublane_band_rect(sublane_type)
 
         painter.setFont(mono_font(7))
         metrics = painter.fontMetrics()
@@ -776,13 +812,11 @@ class LightBlockWidget(QWidget):
             text)
 
     def _draw_sublane_block(self, painter, sublane_block, sublane_type, color,
-                            sublane_height, border_color=None):
+                            border_color=None):
         """Draw a single sublane block."""
-        # Get sublane row index
-        sublane_index = self.lane_widget.get_sublane_index(sublane_type)
-
-        # Calculate y position for this sublane
-        y_offset = sublane_index * sublane_height
+        # Band position/height from the shared geometry (below the
+        # strip zone).
+        y_offset, sublane_height = self.sublane_band_rect(sublane_type)
 
         # Calculate x position and width based on block times relative to envelope
         block_start_pixel = self.timeline_widget.time_to_pixel(sublane_block.start_time)
@@ -1143,11 +1177,8 @@ class LightBlockWidget(QWidget):
 
     def _draw_create_preview(self, painter):
         """Draw preview of block being created."""
-        sublane_height = self.lane_widget.sublane_height
-
-        # Get sublane row index
-        sublane_index = self.lane_widget.get_sublane_index(self.creating_sublane)
-        y_offset = sublane_index * sublane_height
+        # Band position/height from the shared geometry.
+        y_offset, sublane_height = self.sublane_band_rect(self.creating_sublane)
 
         # Calculate x position and width
         start_pixel = self.timeline_widget.time_to_pixel(self.create_start_time)
@@ -1212,8 +1243,6 @@ class LightBlockWidget(QWidget):
         Returns:
             Sublane type string ("dimmer", "colour", "movement", "special") or None
         """
-        sublane_height = self.lane_widget.sublane_height
-
         # Check each sublane row based on capabilities
         sublane_types = []
         # Show dimmer sublane if has dimmer OR colour (dimmer controls RGB for no-dimmer fixtures)
@@ -1226,10 +1255,12 @@ class LightBlockWidget(QWidget):
         if self.lane_widget.capabilities.has_special:
             sublane_types.append("special")
 
+        # Band bounds from the shared geometry: rows start below the
+        # strip zone, so a y inside the strip hits no sublane row.
+        _strip, bands = self.band_geometry()
         for i, sublane_type in enumerate(sublane_types):
-            y_min = i * sublane_height
-            y_max = (i + 1) * sublane_height
-            if y_min <= y_pos < y_max:
+            y_min, band_h = bands[min(i, len(bands) - 1)]
+            if y_min <= y_pos < y_min + band_h:
                 return sublane_type
 
         return None
@@ -1243,8 +1274,6 @@ class LightBlockWidget(QWidget):
         Returns:
             Tuple of (sublane_type, sublane_block) or (None, None)
         """
-        sublane_height = self.lane_widget.sublane_height
-
         # Build list of sublane types based on fixture capabilities
         # This must match the rendering logic exactly
         sublane_block_lists = []
@@ -1261,12 +1290,10 @@ class LightBlockWidget(QWidget):
             sublane_block_lists.append(("special", self.block.special_blocks))
 
         for sublane_type, sublane_blocks in sublane_block_lists:
-            # Get sublane row index
-            sublane_index = self.lane_widget.get_sublane_index(sublane_type)
-
-            # Calculate y bounds for this sublane row
-            y_min = sublane_index * sublane_height
-            y_max = (sublane_index + 1) * sublane_height
+            # Band bounds for this sublane row (shared geometry, below
+            # the strip zone)
+            y_min, band_h = self.sublane_band_rect(sublane_type)
+            y_max = y_min + band_h
 
             # Check if Y position is in this sublane row
             if not (y_min <= pos.y() <= y_max):
@@ -1316,12 +1343,10 @@ class LightBlockWidget(QWidget):
             return False
 
         try:
-            sublane_height = self.lane_widget.sublane_height
             margin = 2
 
-            # Get sublane row index
-            sublane_index = self.lane_widget.get_sublane_index(sublane_type)
-            y_offset = sublane_index * sublane_height
+            # Band position/height from the shared geometry
+            y_offset, sublane_height = self.sublane_band_rect(sublane_type)
 
             # Calculate handle Y position
             intensity = getattr(sublane_block, 'intensity', 255.0)
@@ -1697,12 +1722,12 @@ class LightBlockWidget(QWidget):
 
             # Get sublane info
             sublane_type = "dimmer"  # Intensity handle only for dimmer blocks
-            sublane_height = self.lane_widget.sublane_height
             margin = 2
 
-            # Get sublane row index
-            sublane_index = self.lane_widget.get_sublane_index(sublane_type)
-            y_offset = sublane_index * sublane_height
+            # Band position/height from the shared geometry (below the
+            # strip zone), matching _is_on_intensity_handle and the
+            # painted handle exactly
+            y_offset, sublane_height = self.sublane_band_rect(sublane_type)
 
             # Calculate new intensity from Y position
             usable_height = sublane_height - 2 * margin
@@ -2138,7 +2163,6 @@ class LightBlockWidget(QWidget):
         Returns:
             List of (sublane_type, sublane_block) tuples.
         """
-        sublane_height = self.lane_widget.sublane_height
         caps = self.lane_widget.capabilities
 
         sublane_lists = []
@@ -2155,9 +2179,9 @@ class LightBlockWidget(QWidget):
         results = []
 
         for sublane_type, sublane_blocks in sublane_lists:
-            sublane_index = self.lane_widget.get_sublane_index(sublane_type)
-            row_top = sublane_index * sublane_height
-            row_bottom = row_top + sublane_height
+            # Band bounds from the shared geometry
+            row_top, band_h = self.sublane_band_rect(sublane_type)
+            row_bottom = row_top + band_h
             # Vertical overlap with marquee rect.
             if rect.bottom() < row_top or rect.top() > row_bottom:
                 continue

@@ -15,6 +15,42 @@ from PyQt6.QtGui import QPainter, QPen, QColor, QWheelEvent, QBrush
 # all track canvases stay column-aligned.
 HEADER_COLUMN_WIDTH = 260
 
+# Height of the block header-strip zone reserved at the TOP of every
+# light lane's content area. The block's "BASE · ..." strip renders
+# inside this zone and the sublane bands all start below it, so the
+# strip stacks on top of the dimmer band instead of painting over it
+# (and over the dimmer intensity handle). Lanes without sublane
+# content (master ruler, audio lane) reserve no strip zone - see
+# TimelineWidget.band_geometry.
+STRIP_ZONE_HEIGHT = 16
+
+
+def sublane_band_geometry(num_sublanes, sublane_height,
+                          strip_height=STRIP_ZONE_HEIGHT):
+    """Shared vertical geometry of a light lane's content area.
+
+    Returns ``(strip, bands)``: ``strip`` is the height of the header
+    strip zone at the top, ``bands`` a list of ``(y, height)`` float
+    pairs, one per sublane row, all starting below the strip zone. The
+    overall height stays ``num_sublanes * sublane_height``; the bands
+    compress evenly to make room for the strip zone.
+
+    This is the single source of truth for lane band geometry. All
+    three consumers derive from it so they cannot drift: the canvas
+    sublane separators (TimelineWidget.band_geometry), the block
+    widget's header strip / sub-rows / hit-tests (LightBlockWidget
+    band helpers), and the DIM/COL/MOV/SPC header-column labels
+    (LightLaneWidget.refresh_sublane_labels).
+    """
+    num = max(1, int(num_sublanes))
+    total = num * float(sublane_height)
+    # Degenerate safety: never let the strip eat more than half the
+    # lane, so every band keeps a usable height.
+    strip = max(0.0, min(float(strip_height), total / 2.0))
+    band_height = (total - strip) / num
+    bands = [(strip + i * band_height, band_height) for i in range(num)]
+    return strip, bands
+
 # Full triplet-swing ratio: at swing amount 1.0 the off-beat lands at 2/3
 # of the beat. Amounts between 0 and 1 interpolate linearly from the
 # straight 1/2 (see swing_ratio).
@@ -538,16 +574,30 @@ class TimelineWidget(QWidget):
         except Exception as e:
             print(f"Error drawing song structure background: {e}")
 
+    def band_geometry(self):
+        """``(strip, bands)`` for this canvas via sublane_band_geometry.
+
+        Only lanes with sublane content reserve the strip zone: the
+        master ruler and the audio lane leave ``capabilities`` unset
+        (None) and keep the legacy full-height geometry, so their rows
+        do not shift.
+        """
+        if self.capabilities is None:
+            h = float(self.sublane_height)
+            return 0.0, [(i * h, h) for i in range(max(1, self.num_sublanes))]
+        return sublane_band_geometry(self.num_sublanes, self.sublane_height)
+
     def draw_sublane_separators(self, painter, width, height):
-        """Draw horizontal lines separating sublanes."""
+        """Draw horizontal lines separating sublanes (at the shared
+        band boundaries, below the block header-strip zone)."""
         if self.num_sublanes <= 1:
             return
 
         separator_pen = QPen(QColor(127, 127, 127, 200), 1, Qt.PenStyle.DashLine)
         painter.setPen(separator_pen)
 
-        for i in range(1, self.num_sublanes):
-            y = i * self.sublane_height
+        _strip, bands = self.band_geometry()
+        for y, _h in bands[1:]:
             painter.drawLine(0, int(y), width, int(y))
 
     def update(self, *args):
