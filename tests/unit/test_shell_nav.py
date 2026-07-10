@@ -50,8 +50,11 @@ class TestShellNav:
         ui.topbar._buttons["show"].click()
         assert ui.tabWidget.currentIndex() == 3  # Structure
         assert ui.subnav.tab_indices() == [3, 4]
-        ui.topbar._buttons["auto"].click()
-        assert ui.tabWidget.currentIndex() == 5
+        # LIVE's first screen is the Live surface (tab 6), with Auto
+        # (tab 5) as its sibling screen.
+        ui.topbar._buttons["live"].click()
+        assert ui.tabWidget.currentIndex() == 6
+        assert ui.subnav.tab_indices() == [5, 6]
 
     def test_subnav_switches_screen_within_section(self, shell_window):
         _, ui = shell_window
@@ -69,11 +72,22 @@ class TestShellNav:
     def test_external_index_change_syncs_chrome(self, shell_window):
         """Ctrl+L path: setCurrentIndex from outside the shell."""
         _, ui = shell_window
-        ui.tabWidget.setCurrentIndex(5)
-        assert ui.topbar.active_section() == "auto"
-        assert ui.subnav.tab_indices() == [5]
+        ui.tabWidget.setCurrentIndex(5)  # Auto lives under LIVE now
+        assert ui.topbar.active_section() == "live"
+        assert ui.subnav.tab_indices() == [5, 6]
         ui.tabWidget.setCurrentIndex(4)
         assert ui.topbar.active_section() == "show"
+
+    def test_live_section_remembers_auto_screen(self, shell_window):
+        """LIVE and AUTO are sibling screens of one section: leaving
+        from Auto and clicking LIVE again returns to Auto."""
+        _, ui = shell_window
+        ui.topbar._buttons["live"].click()
+        ui.subnav._buttons[5].click()          # Live > Auto
+        ui.topbar._buttons["show"].click()     # away
+        ui.topbar._buttons["live"].click()     # back
+        assert ui.tabWidget.currentIndex() == 5
+        assert ui.topbar.active_section() == "live"
 
     def test_status_widgets_keep_their_contract(self, shell_window):
         """gui.py's _update_toolbar_status drives these by attribute

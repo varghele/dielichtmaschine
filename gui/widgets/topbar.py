@@ -2,9 +2,10 @@
 
 Anatomy (design_handoff_lichtmaschine_app/README.md, "App-Struktur"):
 left the rotor glyph + DIE LICHTMASCHINE wordmark, then the section
-tabs (SETUP · SHOW · AUTO; LIVE arrives with v1.7/v1.8), on the right
-30x30 icon buttons, the config filename in mono, and the output status
-chips. Below it a subnav row lists the active section's screens.
+tabs (SETUP · SHOW · LIVE), on the right 30x30 icon buttons, the
+config filename in mono, and the output status chips. Below it a
+subnav row lists the active section's screens (LIVE hosts the Live
+busking surface and the Auto tab as sibling screens).
 
 The shell drives the existing (tab-bar-hidden) QTabWidget by index and
 syncs back on ``currentChanged``, so external navigation such as the
@@ -62,11 +63,12 @@ def default_sections():
             ("timeline",
              QCoreApplication.translate("Shell", "Timeline"), 4),
         ]),
-        Section("auto", QCoreApplication.translate("Shell", "Auto"), [
-            ("auto", QCoreApplication.translate("Shell", "Auto"), 5),
-        ]),
+        # LIVE hosts the busking surface and the Auto pilot as sibling
+        # screens (like SETUP/SHOW). Screen order is display order; the
+        # tab indices need not be ascending.
         Section("live", QCoreApplication.translate("Shell", "Live"), [
             ("live", QCoreApplication.translate("Shell", "Live"), 6),
+            ("auto", QCoreApplication.translate("Shell", "Auto"), 5),
         ]),
     ]
 
@@ -312,7 +314,10 @@ class ShellNav:
         self._last_screen[key] = index
         section = self.sections[key]
         self.topbar.set_active_section(key)
-        if self.subnav.tab_indices() != section.tab_indices():
+        # subnav.tab_indices() is sorted; the section's screens are in
+        # display order (LIVE lists tab 6 before 5), so sort both sides
+        # or the row would be torn down and rebuilt on every tab change.
+        if self.subnav.tab_indices() != sorted(section.tab_indices()):
             self.subnav.show_section(section)
         self.subnav.set_active_tab(index)
 

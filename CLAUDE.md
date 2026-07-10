@@ -152,9 +152,10 @@ needing a non-Barlow family must pin it in their own stylesheet.
 
 **Shell pass shipped (2026-07-07, same branch,
 docs/shell-pass-plan.md):** there is NO QMenuBar anymore - the 48px
-topbar (gui/widgets/topbar.py) carries wordmark, SETUP/SHOW/AUTO nav
-+ subnav row driving the tab-bar-hidden QTabWidget by index (Ctrl+L
-etc. unchanged), icon buttons, a MENU overflow QMenu (gui.py inserts
+topbar (gui/widgets/topbar.py) carries wordmark, SETUP/SHOW/LIVE nav
+(LIVE hosts the Live busking surface and Auto as sibling subnav
+screens) + subnav row driving the tab-bar-hidden QTabWidget by index
+(Ctrl+L etc. unchanged), icon buttons, a MENU overflow QMenu (gui.py inserts
 Edit/Render into `overflow_menu`, not `menubar`), filename readout,
 and the status chips. Shortcuts only work because
 register_menu_shortcuts re-adds them to the window - keep that in

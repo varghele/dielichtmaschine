@@ -55,6 +55,10 @@ verbatim as the GitHub Release notes (see [docs/releasing.md](docs/releasing.md)
 
 ### Changed
 
+- **Live and Auto share one LIVE section.** The topbar nav is SETUP ·
+  SHOW · LIVE; the LIVE section hosts the Live busking surface and the
+  Auto pilot as sibling sub-tabs (like Setup and Show), remembering
+  which of the two you last used. Ctrl+L still jumps straight to Auto.
 - **Timeline snap is per-lane again.** The master timeline no longer has
   its own Snap and Grid controls (they overrode the individual lane
   snaps); the per-lane snap checkboxes plus the toolbar's global
