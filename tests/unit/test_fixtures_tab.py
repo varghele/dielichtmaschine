@@ -802,7 +802,8 @@ def test_duplicate_group_copies_role_into_a_new_empty_group(qapp):
         tab._duplicate_group("Wash")
         assert "Wash copy" in tab.config.groups
         assert tab.config.groups["Wash copy"].lighting_role == "wash"
-        # Membership is not copied (a fixture belongs to one group).
+        # Membership is deliberately not copied - the duplicate is an
+        # empty group ready for its own members.
         assert tab.config.groups["Wash copy"].fixtures == []
         # A second duplicate gets a distinct name.
         tab._duplicate_group("Wash")
@@ -837,6 +838,285 @@ def test_group_row_right_click_offers_duplicate(qapp):
             tab._show_group_context_menu("Wash", QPoint(0, 0))
         assert any(a.text() == "Duplicate group"
                    for a in captured.get("actions", []))
+    finally:
+        tab.deleteLater()
+
+
+# ---------------------------------------------------------------------------
+# Multi-group membership (plan stage 2, docs/multi-group-fixtures-plan.md)
+#
+# The Assign submenu is MEMBERSHIP editing: checkable entries reflect
+# the selection ("all selected have it"), clicking an unchecked group
+# APPENDS the membership (never touching existing ones), clicking a
+# checked group removes it. The GROUP column shows the full " · "-joined
+# list (primary first) with the un-elided list in the tooltip; the
+# inspector combo edits the PRIMARY slot only.
+# ---------------------------------------------------------------------------
+
+def _membership_config():
+    """P1 in Wash, P2 ungrouped, P3 in Wash + Spots (Wash primary)."""
+    from config.models import (Configuration, Fixture, FixtureGroup,
+                               FixtureMode, Universe)
+
+    def mk(name, address, groups=()):
+        return Fixture(universe=0, address=address, manufacturer="M",
+                       model="X", name=name, groups=list(groups),
+                       current_mode="Std",
+                       available_modes=[FixtureMode(name="Std", channels=4)],
+                       type="PAR")
+
+    fixtures = [mk("P1", 1, ["Wash"]), mk("P2", 5),
+                mk("P3", 9, ["Wash", "Spots"])]
+    groups = {
+        "Wash": FixtureGroup("Wash", [fixtures[0], fixtures[2]],
+                             lighting_role="wash"),
+        "Spots": FixtureGroup("Spots", [fixtures[2]]),
+    }
+    return Configuration(
+        fixtures=fixtures, groups=groups,
+        universes={0: Universe(id=0, name="U0", output={})})
+
+
+def _assign_submenu(tab):
+    menu = tab._build_table_context_menu()
+    submenus = [a.menu() for a in menu.actions() if a.menu() is not None]
+    return next(m for m in submenus if m.title().startswith("Assign"))
+
+
+def test_assign_adds_membership_keeps_existing(qapp):
+    """The user's bug: assigning a grouped fixture to a second group must
+    ADD the membership, not replace the first one. Primary stays first."""
+    tab = _make_tab(qapp, _membership_config())
+    try:
+        _select_rows(tab, [0])  # P1, already in Wash
+        tab._assign_selected_to_group("Spots")
+        fixture = tab.config.fixtures[0]
+        assert fixture.groups == ["Wash", "Spots"]
+        assert fixture.group == "Wash"  # primary unchanged
+        assert tab.table.item(0, COL_GROUP).text() == "WASH · SPOTS"
+    finally:
+        tab.deleteLater()
+
+
+def test_assign_removes_membership_when_selection_has_it(qapp):
+    tab = _make_tab(qapp, _membership_config())
+    try:
+        _select_rows(tab, [2])  # P3 in Wash + Spots
+        tab._assign_selected_to_group("Spots")
+        assert tab.config.fixtures[2].groups == ["Wash"]
+        assert tab.table.item(2, COL_GROUP).text() == "WASH"
+    finally:
+        tab.deleteLater()
+
+
+def test_multi_select_partial_membership_adds_to_missing(qapp):
+    """P1 (Wash) + P3 (Wash, Spots) selected, click Spots: only P1 gains
+    it; P3's memberships stay exactly as they were."""
+    tab = _make_tab(qapp, _membership_config())
+    try:
+        _select_rows(tab, [0, 2])
+        tab._assign_selected_to_group("Spots")
+        assert tab.config.fixtures[0].groups == ["Wash", "Spots"]
+        assert tab.config.fixtures[2].groups == ["Wash", "Spots"]
+    finally:
+        tab.deleteLater()
+
+
+def test_assign_menu_checkstate_reflects_membership(qapp):
+    tab = _make_tab(qapp, _membership_config())
+    try:
+        _select_rows(tab, [0, 2])
+        assign = _assign_submenu(tab)
+        actions = {a.text(): a for a in assign.actions() if a.text()}
+        # Both selected fixtures are in Wash -> checked.
+        assert actions["Wash"].isCheckable()
+        assert actions["Wash"].isChecked()
+        # Only P3 is in Spots -> partial membership shows unchecked
+        # (clicking would add to the missing ones).
+        assert actions["Spots"].isCheckable()
+        assert not actions["Spots"].isChecked()
+    finally:
+        tab.deleteLater()
+
+
+def test_make_primary_reorders_membership(qapp):
+    tab = _make_tab(qapp, _membership_config())
+    try:
+        _select_rows(tab, [2])
+        tab._make_selected_primary("Spots")
+        fixture = tab.config.fixtures[2]
+        assert fixture.groups == ["Spots", "Wash"]
+        assert fixture.group == "Spots"
+        assert tab.table.item(2, COL_GROUP).text() == "SPOTS · WASH"
+        # The row visuals follow the new primary group's color.
+        fg = tab.table.item(2, COL_GROUP).foreground().color()
+        assert fg.name() == tab._ensure_group_color("Spots")
+    finally:
+        tab.deleteLater()
+
+
+def test_make_primary_submenu_only_for_multi_group_single_selection(qapp):
+    tab = _make_tab(qapp, _membership_config())
+    try:
+        _select_rows(tab, [2])  # P3 has two groups
+        assign = _assign_submenu(tab)
+        primary = next((a.menu() for a in assign.actions()
+                        if a.menu() is not None
+                        and a.menu().title() == "Make primary"), None)
+        assert primary is not None
+        entries = {a.text(): a for a in primary.actions()}
+        assert list(entries) == ["Wash", "Spots"]
+        assert entries["Wash"].isChecked()       # current primary
+        assert not entries["Spots"].isChecked()
+
+        _select_rows(tab, [0])  # single-group fixture: no reorder to offer
+        assign = _assign_submenu(tab)
+        assert all(a.menu() is None or a.menu().title() != "Make primary"
+                   for a in assign.actions())
+    finally:
+        tab.deleteLater()
+
+
+def test_group_column_joined_text_and_tooltip(qapp):
+    tab = _make_tab(qapp, _membership_config())
+    try:
+        item = tab.table.item(2, COL_GROUP)
+        assert item.text() == "WASH · SPOTS"
+        assert item.toolTip() == "Wash (primary) · Spots"
+        # Single-group rows keep the plain name; no primary flag needed.
+        assert tab.table.item(0, COL_GROUP).text() == "WASH"
+        assert tab.table.item(0, COL_GROUP).toolTip() == "Wash"
+        assert tab.table.item(1, COL_GROUP).text() == ""
+        assert tab.table.item(1, COL_GROUP).toolTip() == ""
+    finally:
+        tab.deleteLater()
+
+
+def test_duplicate_copies_full_membership(qapp):
+    tab = _make_tab(qapp, _membership_config())
+    try:
+        _select_rows(tab, [2])
+        tab._duplicate_fixture()
+        copy = tab.config.fixtures[-1]
+        assert copy.name == "P3 (Copy)"
+        assert copy.groups == ["Wash", "Spots"]
+        # Independent list: editing the copy must not touch the original.
+        assert copy.groups is not tab.config.fixtures[2].groups
+        assert copy in tab.config.groups["Wash"].fixtures
+        assert copy in tab.config.groups["Spots"].fixtures
+    finally:
+        tab.deleteLater()
+
+
+def test_delete_group_removes_membership_not_fixtures(qapp):
+    tab = _make_tab(qapp, _membership_config())
+    try:
+        tab._delete_group("Wash")
+        assert "Wash" not in tab.config.groups
+        # Fixtures survive; only the membership is gone. P3's remaining
+        # group is promoted to primary.
+        names = [f.name for f in tab.config.fixtures]
+        assert names == ["P1", "P2", "P3"]
+        assert tab.config.fixtures[0].groups == []
+        assert tab.config.fixtures[2].groups == ["Spots"]
+        assert tab.config.fixtures[2].group == "Spots"
+        assert tab.table.item(2, COL_GROUP).text() == "SPOTS"
+    finally:
+        tab.deleteLater()
+
+
+def test_group_row_menu_offers_delete(qapp, sample_configuration,
+                                      monkeypatch):
+    from PyQt6 import QtCore
+    tab = _make_tab(qapp, sample_configuration)
+    try:
+        captured = {}
+
+        def fake_exec(self, *a):
+            captured["labels"] = [x.text() for x in self.actions() if x.text()]
+            return None
+        monkeypatch.setattr(QtWidgets.QMenu, "exec", fake_exec)
+        tab._show_group_context_menu("TestGroup", QtCore.QPoint(0, 0))
+        assert "Delete group" in captured["labels"]
+    finally:
+        monkeypatch.undo()
+        tab.deleteLater()
+
+
+def test_after_group_assignment_refreshes_full_membership_text(qapp):
+    """The multi-assign refresh path must rewrite the GROUP cells from the
+    FULL membership list, not just the primary group."""
+    tab = _make_tab(qapp, _membership_config())
+    try:
+        tab.config.fixtures[1].groups.append("Wash")
+        tab.config.fixtures[1].groups.append("Spots")
+        tab._after_group_assignment("Spots")
+        item = tab.table.item(1, COL_GROUP)
+        assert item.text() == "WASH · SPOTS"
+        assert item.toolTip() == "Wash (primary) · Spots"
+    finally:
+        tab.deleteLater()
+
+
+def test_new_group_flow_adds_membership(qapp):
+    from unittest.mock import patch
+    tab = _make_tab(qapp, _membership_config())
+    try:
+        _select_rows(tab, [0])  # P1 in Wash
+        with patch.object(QtWidgets.QInputDialog, "getText",
+                          return_value=("Fresh", True)):
+            tab._assign_selected_to_new_group()
+        assert tab.config.fixtures[0].groups == ["Wash", "Fresh"]
+        assert "Fresh" in tab.config.groups
+    finally:
+        tab.deleteLater()
+
+
+def test_ungroup_clears_all_memberships(qapp):
+    tab = _make_tab(qapp, _membership_config())
+    try:
+        _select_rows(tab, [2])
+        tab._assign_selected_to_group("")
+        assert tab.config.fixtures[2].groups == []
+        assert tab.table.item(2, COL_GROUP).text() == ""
+    finally:
+        tab.deleteLater()
+
+
+def test_inspector_primary_combo_keeps_secondaries(qapp):
+    """The inspector's group combo (labelled "Primary group") edits
+    groups[0] only: switching P3's primary from Wash to a third group
+    leaves the Spots membership alone."""
+    tab = _make_tab(qapp, _membership_config())
+    try:
+        tab._create_group("Third")
+        _select_rows(tab, [2])
+        tab.insp_group.setCurrentText("Third")
+        assert tab.config.fixtures[2].groups == ["Third", "Spots"]
+    finally:
+        tab.deleteLater()
+
+
+def test_inspector_primary_combo_blank_promotes_next_group(qapp):
+    tab = _make_tab(qapp, _membership_config())
+    try:
+        _select_rows(tab, [2])
+        tab.insp_group.setCurrentText("")
+        # Primary membership dropped; Spots is promoted.
+        assert tab.config.fixtures[2].groups == ["Spots"]
+    finally:
+        tab.deleteLater()
+
+
+def test_inspector_primary_combo_promotes_existing_secondary(qapp):
+    """Picking a group the fixture is already a secondary member of makes
+    it the sole primary (the old primary membership is what the primary-
+    slot edit replaces; the pick is deduped, not doubled)."""
+    tab = _make_tab(qapp, _membership_config())
+    try:
+        _select_rows(tab, [2])
+        tab.insp_group.setCurrentText("Spots")
+        assert tab.config.fixtures[2].groups == ["Spots"]
     finally:
         tab.deleteLater()
 

@@ -14,13 +14,17 @@ Anatomy (left to right, top to bottom):
 - the display-styled patch table: # / FIXTURE / TYPE / MODE / UNI /
   ADDRESS / GROUP. Plain read-only items, group-tinted rows (low-alpha
   background brushes - allowed because the theme has no
-  QTableView::item rule, see docs/qt-gotchas.md #1), group names in the
-  group color, red UNI/ADDRESS cells on DMX conflicts.
+  QTableView::item rule, see docs/qt-gotchas.md #1), red UNI/ADDRESS
+  cells on DMX conflicts. GROUP shows the fixture's FULL membership
+  (" · "-joined, primary first, elided with the full list in the
+  tooltip) in the PRIMARY group's color; the row tint is the primary
+  group's too. Membership add/remove/make-primary happens in the
+  table's right-click Assign menu.
 - a 380px inspector: display-caps fixture name + mono provenance,
   CAPABILITIES chip row, CHANNEL MAP mono list (both derived from the
   fixture-definition cache), the editors (name / universe / address /
-  mode / group / role), position readout, and a Duplicate / Remove
-  footer.
+  mode / primary group / role), position readout, and a Duplicate /
+  Remove footer.
 - a mono status strip: "N FIXTURES · M GROUPS" and per-universe usage
   ("U1 92/512 · U2 58/512").
 
@@ -221,6 +225,27 @@ def channel_map_rows(channels) -> list:
         qualifier = "fine" if "fine" in _channel_blob(channel) else ""
         rows.append((f"{i:02d} {name}", qualifier))
     return rows
+
+
+def group_column_text(fixture) -> str:
+    """The GROUP cell text: the fixture's FULL membership joined with
+    " · " (same language as the timeline lane subtitle), primary group
+    first (list order). The view elides it to the column width; the
+    full list lives in the tooltip (group_column_tooltip)."""
+    return " · ".join(g.upper() for g in fixture.groups if g)
+
+
+def group_column_tooltip(fixture) -> str:
+    """The un-elided membership list for the GROUP cell tooltip.
+
+    Verbatim group names; the first is flagged as primary once the
+    fixture is in more than one group."""
+    names = [g for g in fixture.groups if g]
+    if not names:
+        return ""
+    if len(names) == 1:
+        return names[0]
+    return " · ".join([f"{names[0]} (primary)"] + names[1:])
 
 
 def group_tint_color(group_color: QtGui.QColor,
@@ -600,6 +625,13 @@ class FixturesTab(BaseTab):
         # alternating colors would never show anyway.
         self.table.setAlternatingRowColors(False)
 
+        # Single-line cells: without this, a long GROUP membership list
+        # word-wraps into the fixed row height instead of right-eliding
+        # (QTableView wraps by default and only elides what still
+        # overflows a line). Every column is single-line content, so
+        # ElideRight + tooltip is the contract.
+        self.table.setWordWrap(False)
+
         # Display-only: all editing happens in the inspector.
         self.table.setEditTriggers(
             QtWidgets.QAbstractItemView.EditTrigger.NoEditTriggers)
@@ -734,7 +766,10 @@ class FixturesTab(BaseTab):
         group_role_row.setSpacing(8)
         group_col = QtWidgets.QVBoxLayout()
         group_col.setSpacing(4)
-        group_col.addWidget(MicroLabel("Group", point_size=8,
+        # Edits the PRIMARY group slot only (labelled so): secondary
+        # memberships are untouched; membership add/remove lives in the
+        # table's right-click menu.
+        group_col.addWidget(MicroLabel("Primary group", point_size=8,
                                        tracking_em=0.1))
         self.insp_group = QtWidgets.QComboBox()
         self.insp_group.currentTextChanged.connect(self._on_inspector_group)
@@ -799,7 +834,7 @@ class FixturesTab(BaseTab):
         for f in self.config.fixtures:
             parts.append(f"{f.name}:{f.universe}:{f.address}:"
                          f"{f.manufacturer}:{f.model}:{f.current_mode}:"
-                         f"{f.group}")
+                         f"{','.join(f.groups)}")
         parts.append("groups:" + ",".join(
             f"{name}:{group.color}:{group.lighting_role}"
             for name, group in sorted(self.config.groups.items())))
@@ -888,6 +923,7 @@ class FixturesTab(BaseTab):
             if font is not None:
                 item.setFont(font)
             self.table.setItem(row, col, item)
+            return item
 
         name_font = self.table.font()
         name_font.setWeight(QFont.Weight.Medium)
@@ -901,7 +937,10 @@ class FixturesTab(BaseTab):
         make(COL_UNI, f"U{fixture.universe}", mono)
         make(COL_ADDRESS, format_address_range(fixture.address, channels),
              mono)
-        make(COL_GROUP, (fixture.group or "").upper(), group_font)
+        # Full membership, primary first; the view elides to the column
+        # width, the tooltip carries the whole list.
+        group_item = make(COL_GROUP, group_column_text(fixture), group_font)
+        group_item.setToolTip(group_column_tooltip(fixture))
 
     def _refresh_all_row_visuals(self):
         for row in range(min(self.table.rowCount(),
@@ -1462,17 +1501,29 @@ class FixturesTab(BaseTab):
         self._notify_main_window()
 
     def _on_inspector_group(self, text: str):
+        """The inspector's "Primary group" combo: edits groups[0] ONLY.
+
+        Secondary memberships survive (never `fixture.group = text` -
+        the compat setter would REPLACE the whole list). Picking a group
+        the fixture is already a secondary member of promotes it to
+        primary (the old primary membership is what the edit replaces);
+        picking "" drops the primary membership and promotes the next
+        group, matching the old clear behavior for single-group
+        fixtures. Membership add/remove lives in the table context menu.
+        """
         row = self._selected_fixture_row()
         if row < 0 or self._is_rebuilding:
             return
         fixture = self.config.fixtures[row]
         if fixture.group == text:
             return
-        fixture.group = text
+        rest = [g for g in fixture.groups[1:] if g != text]
+        fixture.groups = ([text] + rest) if text else rest
         self._update_groups()
         item = self.table.item(row, COL_GROUP)
         if item is not None:
-            item.setText(text.upper())
+            item.setText(group_column_text(fixture))
+            item.setToolTip(group_column_tooltip(fixture))
         self._refresh_all_row_visuals()
         self._update_conflict_indicators()
         if self._selected_group not in self.config.groups:
@@ -1556,34 +1607,91 @@ class FixturesTab(BaseTab):
         remove_action = menu.addAction("Remove")
         remove_action.triggered.connect(self._remove_fixture)
 
-        # Assign to group: acts on every selected row, so several fixtures
-        # can join a group in one go.
+        # Assign to group: MEMBERSHIP editing over every selected row.
+        # Entries are checkable and reflect the selection's membership
+        # (checked = every selected fixture has the group). Clicking an
+        # unchecked group ADDS the membership to the fixtures missing it
+        # (append - existing memberships are never touched); clicking a
+        # checked one REMOVES that membership from the whole selection.
         rows = self._selected_fixture_rows()
+        selected = [self.config.fixtures[r] for r in rows]
         assign_menu = menu.addMenu("Assign to group")
         if len(rows) > 1:
             assign_menu.setTitle(f"Assign {len(rows)} to group")
         for name in self.config.groups:
             act = assign_menu.addAction(name)
+            act.setCheckable(True)
+            act.setChecked(bool(selected)
+                           and all(name in f.groups for f in selected))
             act.triggered.connect(
                 lambda _checked, g=name: self._assign_selected_to_group(g))
         if self.config.groups:
             assign_menu.addSeparator()
         new_group_action = assign_menu.addAction("New group...")
         new_group_action.triggered.connect(self._assign_selected_to_new_group)
-        # Ungroup is just assigning the empty group.
+        # Ungroup clears the selection's whole membership list.
         assign_menu.addSeparator()
         clear_action = assign_menu.addAction("Ungroup")
         clear_action.triggered.connect(
             lambda: self._assign_selected_to_group(""))
+
+        # Make primary: reorder a single fixture's membership so the
+        # picked group becomes groups[0] ("first group wins" for data
+        # color, orientation defaults, role and export intensity). Only
+        # meaningful for one multi-group fixture.
+        if len(selected) == 1 and len(selected[0].groups) > 1:
+            assign_menu.addSeparator()
+            primary_menu = assign_menu.addMenu("Make primary")
+            for name in selected[0].groups:
+                act = primary_menu.addAction(name)
+                act.setCheckable(True)
+                act.setChecked(name == selected[0].groups[0])
+                act.triggered.connect(
+                    lambda _checked, g=name: self._make_selected_primary(g))
         return menu
 
     def _assign_selected_to_group(self, group_name: str):
-        """Assign every selected fixture to ``group_name`` ("" ungroups)."""
+        """Toggle ``group_name`` membership on every selected fixture.
+
+        Membership editing, not replacement: when at least one selected
+        fixture lacks the group, it is APPENDED to those fixtures'
+        `groups` (their existing memberships stay untouched - a fixture
+        already in another group keeps it and gains this one as a
+        secondary). When every selected fixture already has the group,
+        the click removes that membership instead (the menu entry shows
+        checked in that state). "" is Ungroup: clears the whole
+        membership list. Always mutate `fixture.groups`; the compat
+        `fixture.group` setter would replace the list.
+        """
         rows = self._selected_fixture_rows()
         if not rows:
             return
-        for row in rows:
-            self.config.fixtures[row].group = group_name
+        fixtures = [self.config.fixtures[r] for r in rows]
+        if not group_name:
+            for fixture in fixtures:
+                fixture.groups = []
+        elif all(group_name in f.groups for f in fixtures):
+            for fixture in fixtures:
+                fixture.groups[:] = [g for g in fixture.groups
+                                     if g != group_name]
+        else:
+            for fixture in fixtures:
+                if group_name not in fixture.groups:
+                    fixture.groups.append(group_name)
+        self._after_group_assignment(group_name)
+
+    def _make_selected_primary(self, group_name: str):
+        """Move ``group_name`` to groups[0] of the selected fixture
+        (first group wins: data color, orientation defaults, role and
+        export intensity follow the primary group)."""
+        row = self._selected_fixture_row()
+        if row < 0:
+            return
+        fixture = self.config.fixtures[row]
+        if group_name not in fixture.groups:
+            return
+        fixture.groups[:] = ([group_name]
+                             + [g for g in fixture.groups if g != group_name])
         self._after_group_assignment(group_name)
 
     def _assign_selected_to_new_group(self):
@@ -1603,14 +1711,17 @@ class FixturesTab(BaseTab):
         """Shared refresh after fixtures change group (mirrors the inspector
         group-change path but for a multi-row assignment)."""
         # Sync the GROUP column text from the model: the assignment changed
-        # several fixtures' group, and _refresh_all_row_visuals only recolors
-        # cells - it does not rewrite their text (that is why the group name
-        # looked stale after a multi-select assign).
+        # several fixtures' membership, and _refresh_all_row_visuals only
+        # recolors cells - it does not rewrite their text (that is why the
+        # group name looked stale after a multi-select assign). Text is the
+        # FULL membership list, not just the primary group.
         for row in range(min(self.table.rowCount(),
                              len(self.config.fixtures))):
             item = self.table.item(row, COL_GROUP)
             if item is not None:
-                item.setText((self.config.fixtures[row].group or "").upper())
+                fixture = self.config.fixtures[row]
+                item.setText(group_column_text(fixture))
+                item.setToolTip(group_column_tooltip(fixture))
         self._update_groups()
         self._refresh_all_row_visuals()
         self._update_conflict_indicators()
@@ -1626,13 +1737,29 @@ class FixturesTab(BaseTab):
 
     def _duplicate_group(self, name: str):
         """Duplicate a group's settings (lighting role) into a new, empty
-        group. A fixture belongs to one group, so membership is not copied;
-        the copy is ready to receive its own fixtures."""
+        group. Membership is deliberately not copied; the copy is ready
+        to receive its own fixtures (add them via the table's Assign
+        menu - fixtures can belong to several groups)."""
         source = self.config.groups.get(name)
         if source is None:
             return
         new_name = self._unique_group_name(f"{name} copy")
         self._create_group(new_name, getattr(source, "lighting_role", ""))
+
+    def _delete_group(self, name: str):
+        """Delete a group: remove that MEMBERSHIP from every fixture that
+        lists it (the fixtures themselves survive, keeping their other
+        memberships; the next listed group becomes primary where this
+        was groups[0]), then drop the group itself."""
+        for fixture in self.config.fixtures:
+            if name in fixture.groups:
+                fixture.groups[:] = [g for g in fixture.groups if g != name]
+        self._manual_groups.discard(name)
+        self.config.groups.pop(name, None)
+        self.group_colors.pop(name, None)
+        if self._selected_group == name:
+            self._selected_group = None
+        self._after_group_assignment("")
 
     def _unique_group_name(self, base: str) -> str:
         if base not in self.config.groups:
@@ -1649,6 +1776,9 @@ class FixturesTab(BaseTab):
         duplicate_action = menu.addAction("Duplicate group")
         duplicate_action.triggered.connect(
             lambda: self._duplicate_group(name))
+        delete_action = menu.addAction("Delete group")
+        delete_action.triggered.connect(
+            lambda: self._delete_group(name))
         menu.exec(global_pos)
 
     def _show_groups_panel_menu(self, panel, pos):
@@ -1980,7 +2110,10 @@ class FixturesTab(BaseTab):
             manufacturer=original_fixture.manufacturer,
             model=original_fixture.model,
             name=new_name,
-            group=original_fixture.group,
+            # Full membership, not the compat `group=` keyword (which
+            # would keep only the primary group). Copy the list so the
+            # twins don't share one mutable membership.
+            groups=list(original_fixture.groups),
             current_mode=original_fixture.current_mode,
             available_modes=[
                 FixtureMode(name=mode.name, channels=mode.channels)
@@ -2004,9 +2137,10 @@ class FixturesTab(BaseTab):
         # Add to configuration
         self.config.fixtures.append(new_fixture)
 
-        # Add to group
-        if new_fixture.group and new_fixture.group in self.config.groups:
-            self.config.groups[new_fixture.group].fixtures.append(new_fixture)
+        # Add to every group it is a member of (derived lists).
+        for group_name in new_fixture.groups:
+            if group_name in self.config.groups:
+                self.config.groups[group_name].fixtures.append(new_fixture)
 
         # Refresh table
         self.update_from_config(force=True)

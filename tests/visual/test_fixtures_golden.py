@@ -4,7 +4,8 @@ Pins the rebuilt "Setup Fixtures" anatomy: slim action strip (conflict
 chip + accent "+ ADD FIXTURE" CTA), the 280px GROUPS panel (color-coded
 rows + dashed hint box), the display-styled read-only patch table
 (# / FIXTURE / TYPE / MODE / UNI / ADDRESS / GROUP with low-alpha group
-tints, colored group names, red conflict cells), the AUTO-PATCH footer,
+tints, colored group names, the " · "-joined multi-group membership
+list elided to the GROUP column, red conflict cells), the AUTO-PATCH footer,
 the inspector (capabilities + channel map + editors + Duplicate/Remove
 footer) and the mono status strip.
 
@@ -32,11 +33,12 @@ from tests.visual.harness import compare_to_golden
 
 
 def make_fixture(name, group, address, ftype="PAR", channels=8,
-                 universe=1, x=0.0, y=0.0):
+                 universe=1, x=0.0, y=0.0, groups=None):
     return Fixture(
         universe=universe, address=address,
         manufacturer="TestMfr", model="TestModel",
         name=name, group=group,
+        groups=list(groups) if groups else [],
         current_mode="Standard",
         available_modes=[FixtureMode(name="Standard", channels=channels)],
         type=ftype, x=x, y=y,
@@ -46,7 +48,10 @@ def make_fixture(name, group, address, ftype="PAR", channels=8,
 @pytest.fixture
 def scene_config():
     """Deterministic reference-flavoured rig: amber pars, magenta
-    movers, cyan wash, one DMX conflict."""
+    movers, cyan wash, one DMX conflict, and one multi-group fixture
+    (MHX-50 · R in Movers + Rear Wash + Front Pars) so the GROUP column
+    pins the " · "-joined membership display AND its right-elision at
+    the column width (the three names overflow the 150px column)."""
     fixtures = [
         make_fixture("LED PAR 64 · A", "Front Pars", 1, x=-2.0, y=-1.5),
         make_fixture("LED PAR 64 · B", "Front Pars", 5, x=-1.0, y=-1.5),  # conflict
@@ -54,16 +59,18 @@ def scene_config():
         make_fixture("MHX-50 · L", "Movers", 33, ftype="MH", channels=16,
                      x=-2.5, y=1.0),
         make_fixture("MHX-50 · R", "Movers", 49, ftype="MH", channels=16,
-                     x=2.5, y=1.0),
+                     x=2.5, y=1.0,
+                     groups=["Movers", "Rear Wash", "Front Pars"]),
         make_fixture("TMH-X4 · 1", "Rear Wash", 1, ftype="WASH",
                      channels=14, universe=2, x=0.0, y=2.0),
     ]
     groups = {
-        "Front Pars": FixtureGroup("Front Pars", fixtures[:3],
+        "Front Pars": FixtureGroup("Front Pars",
+                                   fixtures[:3] + [fixtures[4]],
                                    color="#D9A441", lighting_role="wash"),
         "Movers": FixtureGroup("Movers", fixtures[3:5],
                                color="#C95FD0", lighting_role="accent"),
-        "Rear Wash": FixtureGroup("Rear Wash", [fixtures[5]],
+        "Rear Wash": FixtureGroup("Rear Wash", [fixtures[4], fixtures[5]],
                                   color="#4ECBD4", lighting_role="texture"),
     }
     return Configuration(
