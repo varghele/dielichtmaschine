@@ -16,7 +16,8 @@ import pytest
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-from config.models import Configuration, Song, ShowPart, TimelineData
+from config.models import (Configuration, Song, ShowPart, TimelineData,
+                           Setlist, SetlistEntry, SongTrigger, PauseLook)
 
 
 def make_config():
@@ -32,6 +33,50 @@ def make_config():
         ],
         effects=[],
         timeline_data=TimelineData(),
+    )
+    return config
+
+
+def one_part_song(name, bars=8, color="#4ECBD4"):
+    """A song of one 4/4 part at 120 BPM: duration = bars * 2 seconds."""
+    return Song(
+        name=name,
+        parts=[ShowPart(name="Intro", color=color, signature="4/4",
+                        bpm=120.0, num_bars=bars, transition="instant")],
+        effects=[],
+        timeline_data=TimelineData(),
+    )
+
+
+def make_setlist_config():
+    """Three songs in a named setlist with mixed triggers and distinct
+    pause looks (the S2a scenario)."""
+    config = Configuration()
+    config.songs["Neon Ruinen"] = one_part_song("Neon Ruinen", bars=8,
+                                                color="#4ECBD4")   # 16 s
+    config.songs["Monsters"] = one_part_song("Monsters", bars=4,
+                                             color="#8D9299")      # 8 s
+    config.songs["Schwarzes Gold"] = one_part_song("Schwarzes Gold", bars=8,
+                                                   color="#C95FD0")  # 16 s
+    config.setlist = Setlist(
+        name="Demo Tour",
+        sync_mode="midi",
+        entries=[
+            SetlistEntry(
+                song="Neon Ruinen",
+                trigger=SongTrigger(mode="midi_pc", value=5, channel=1),
+                pause_after=PauseLook(mode="warm_white", level=20,
+                                      until="trigger")),
+            SetlistEntry(
+                song="Monsters",
+                trigger=SongTrigger(mode="midi_note", value=36, channel=1),
+                pause_after=PauseLook(mode="hold_last", until="trigger")),
+            SetlistEntry(
+                song="Schwarzes Gold",
+                trigger=SongTrigger(mode="follow"),
+                pause_after=PauseLook(mode="blackout", until="duration",
+                                      duration_s=30.0)),
+        ],
     )
     return config
 
@@ -55,6 +100,20 @@ def empty_tab(qapp):
 
     with patch("utils.midi_utils.discover_midi_profiles", return_value=[]):
         tab = StructureTab(Configuration(), parent=None)
+    tab.update_from_config()
+    yield tab
+    tab.cleanup()
+    tab.deleteLater()
+
+
+@pytest.fixture
+def setlist_tab(qapp):
+    """Tab on the three-song setlist config. The combo sorts song names,
+    so the open song on load is "Monsters" (setlist entry 2)."""
+    from gui.tabs.structure_tab import StructureTab
+
+    with patch("utils.midi_utils.discover_midi_profiles", return_value=[]):
+        tab = StructureTab(make_setlist_config(), parent=None)
     tab.update_from_config()
     yield tab
     tab.cleanup()
@@ -507,6 +566,8 @@ class TestThemeContract:
                      'QWidget[role="inspector"]',
                      'QLabel[role="chip-label"]',
                      'QLabel[role="micro"]',
+                     'QLabel[role="hint-box"]',
+                     'QPushButton[role="segment"]',
                      'QPushButton[role="destructive"]',
                      'QPushButton[role="primary"]'):
             assert rule in qss
@@ -520,3 +581,390 @@ class TestThemeContract:
                  tab.delete_part_btn.text()]
         for text in texts:
             assert not any(ch in text for ch in forbidden), text
+
+    def test_rail_text_has_no_glyphs_barlow_lacks(self, setlist_tab):
+        forbidden = "▾▸⏸⚙＋½¼—–"
+        texts = [setlist_tab.rail_title.text(),
+                 setlist_tab.rail_summary.text(),
+                 setlist_tab.sync_device_hint.text(),
+                 setlist_tab.add_song_tile.text(),
+                 setlist_tab.rail_footer_hint.text()]
+        texts += [b.text() for b in setlist_tab.sync_buttons.values()]
+        for card in setlist_tab._rail_cards:
+            texts += [card.title_label.text(), card.duration_label.text(),
+                      card.trigger_label.text(), card.open_tag.text(),
+                      card.unlisted_tag.text()]
+        texts += [row.text() for row in setlist_tab._rail_pause_rows]
+        for text in texts:
+            assert not any(ch in text for ch in forbidden), text
+
+
+# ---------------------------------------------------------------------------
+# Setlist rail: trigger / pause-look text helpers
+# ---------------------------------------------------------------------------
+class TestRailTextHelpers:
+    def test_midi_note_names(self):
+        from gui.tabs.structure_tab import midi_note_name
+
+        assert midi_note_name(36) == "C2"     # the reference's NOTE C2
+        assert midi_note_name(60) == "C4"     # middle C convention
+        assert midi_note_name(61) == "C#4"
+        assert midi_note_name(35) == "B1"
+
+    def test_trigger_lines_per_mode(self):
+        from gui.tabs.structure_tab import trigger_line
+
+        assert trigger_line(SongTrigger(mode="manual")) == "Manual start"
+        assert trigger_line(SongTrigger(mode="follow")) == \
+            "Follows automatically"
+        assert trigger_line(SongTrigger(mode="midi_pc", value=5,
+                                        channel=1)) == "PC#5 · CH 1"
+        assert trigger_line(SongTrigger(mode="midi_note", value=36,
+                                        channel=2)) == "NOTE C2 · CH 2"
+        assert trigger_line(SongTrigger(mode="mtc",
+                                        timecode="00:14:32:00")) == \
+            "00:14:32:00"
+        assert trigger_line(SongTrigger(mode="smpte",
+                                        timecode="01:00:00:00")) == \
+            "01:00:00:00"
+        # Timecode not set yet: fall back to the mode name.
+        assert trigger_line(SongTrigger(mode="smpte")) == "SMPTE"
+
+    def test_pause_look_lines_per_mode(self):
+        from gui.tabs.structure_tab import pause_look_line
+
+        assert pause_look_line(PauseLook(mode="blackout", until="duration",
+                                         duration_s=30.0)) == \
+            "PAUSE LOOK · Blackout · 30s"
+        assert pause_look_line(PauseLook(mode="warm_white", level=20,
+                                         until="trigger")) == \
+            "PAUSE LOOK · Warm white 20% · until trigger"
+        assert pause_look_line(PauseLook(mode="hold_last",
+                                         until="trigger")) == \
+            "PAUSE LOOK · Hold last look · until trigger"
+        assert pause_look_line(PauseLook(mode="ambient_loop",
+                                         until="trigger")) == \
+            "PAUSE LOOK · Ambient loop · until trigger"
+
+    def test_song_edge_color_prefers_first_part_color(self):
+        from gui.tabs.structure_tab import song_edge_color
+
+        song = one_part_song("X", color="#4ECBD4")
+        assert song_edge_color("X", song).lower() == "#4ecbd4"
+
+    def test_song_edge_color_falls_back_to_stable_palette_pick(self):
+        from gui.tabs.structure_tab import song_edge_color, \
+            SONG_COLOR_PALETTE
+
+        empty = Song(name="X", parts=[], effects=[], timeline_data=None)
+        color = song_edge_color("X", empty)
+        assert color in SONG_COLOR_PALETTE
+        assert color == song_edge_color("X", None)     # name-stable
+        assert song_edge_color("X") == song_edge_color("X")
+
+
+# ---------------------------------------------------------------------------
+# Setlist rail: anatomy
+# ---------------------------------------------------------------------------
+class TestSetlistRailAnatomy:
+    def entry_cards(self, tab):
+        return [c for c in tab._rail_cards if c.entry_index >= 0]
+
+    def test_rail_width_matches_mockup(self, setlist_tab):
+        assert setlist_tab.setlist_rail.width() == 330
+
+    def test_one_card_per_entry_in_setlist_order(self, setlist_tab):
+        cards = self.entry_cards(setlist_tab)
+        assert [c.song_name for c in cards] == \
+            ["Neon Ruinen", "Monsters", "Schwarzes Gold"]
+
+    def test_card_numbering_two_digits(self, setlist_tab):
+        cards = self.entry_cards(setlist_tab)
+        assert cards[0].title_label.text() == "01 · Neon Ruinen"
+        assert cards[1].title_label.text() == "02 · Monsters"
+        assert cards[2].title_label.text() == "03 · Schwarzes Gold"
+
+    def test_card_durations_from_part_math(self, setlist_tab):
+        # 8 bars of 4/4 at 120 BPM = 16 s; 4 bars = 8 s.
+        cards = self.entry_cards(setlist_tab)
+        assert cards[0].duration_label.text() == "00:16"
+        assert cards[1].duration_label.text() == "00:08"
+        assert cards[2].duration_label.text() == "00:16"
+
+    def test_card_trigger_lines(self, setlist_tab):
+        cards = self.entry_cards(setlist_tab)
+        assert cards[0].trigger_label.text() == "PC#5 · CH 1"
+        assert cards[1].trigger_label.text() == "NOTE C2 · CH 1"
+        assert cards[2].trigger_label.text() == "Follows automatically"
+
+    def test_card_colour_edge_uses_first_part_colour(self, setlist_tab):
+        cards = self.entry_cards(setlist_tab)
+        assert "border-left: 3px solid #4ecbd4" in cards[0].styleSheet()
+        assert "border-left: 3px solid #c95fd0" in cards[2].styleSheet()
+
+    def test_pause_rows_between_cards_show_preceding_pause(self,
+                                                           setlist_tab):
+        rows = setlist_tab._rail_pause_rows
+        assert len(rows) == 2   # between 3 cards, never after the last
+        assert rows[0].text() == \
+            "PAUSE LOOK · Warm white 20% · until trigger"
+        assert rows[1].text() == "PAUSE LOOK · Hold last look · until trigger"
+
+    def test_pause_rows_are_display_only_dashed_hints(self, setlist_tab):
+        for row in setlist_tab._rail_pause_rows:
+            assert row.property("role") == "hint-box"
+
+    def test_header_caption_and_totals(self, setlist_tab):
+        # MicroLabels render caps; total = 16 + 8 + 16 s -> 1 min.
+        assert setlist_tab.rail_title.text() == "SETLIST · DEMO TOUR"
+        assert setlist_tab.rail_summary.text() == "3 SONGS · 1 MIN"
+
+    def test_header_falls_back_to_config_name(self, setlist_tab):
+        setlist_tab.config.setlist.name = ""
+        setlist_tab.config._loaded_from = "/tmp/demo_tour.yaml"
+        setlist_tab._refresh_setlist_rail()
+        assert setlist_tab.rail_title.text() == "SETLIST · DEMO_TOUR"
+
+    def test_device_hint_placeholder(self, setlist_tab):
+        assert setlist_tab.sync_device_hint.text() == "Device: -"
+
+    def test_add_song_tile_is_dashed(self, setlist_tab):
+        assert setlist_tab.add_song_tile.text() == "+ SONG"
+        assert setlist_tab.add_song_tile.property("role") == "add-tile"
+
+    def test_footer_hint_wraps_and_names_the_contract(self, setlist_tab):
+        hint = setlist_tab.rail_footer_hint
+        assert hint.wordWrap()
+        assert hint.text() == (
+            "Order = setlist. Triggers per song (MIDI PC/NOTE, MTC/SMPTE "
+            "time) · 'Follows automatically' chains without a trigger.")
+
+    def test_part_edit_refreshes_rail_durations(self, setlist_tab):
+        # Open song is Monsters (4 bars): doubling its bars doubles the
+        # card duration readout.
+        assert setlist_tab.current_song_name == "Monsters"
+        setlist_tab.bars_spin.setValue(8)
+        cards = self.entry_cards(setlist_tab)
+        assert cards[1].duration_label.text() == "00:16"
+
+
+# ---------------------------------------------------------------------------
+# Setlist rail: open state follows the existing song-switching path
+# ---------------------------------------------------------------------------
+class TestSetlistRailSelection:
+    def test_open_card_is_the_combo_selection(self, setlist_tab):
+        # The sorted combo opens "Monsters" first = setlist entry 2.
+        assert setlist_tab.current_song_name == "Monsters"
+        cards = setlist_tab._rail_cards
+        assert cards[1].property("selected") == "true"
+        assert cards[1].property("open") == "true"
+        assert not cards[1].open_tag.isHidden()
+        assert cards[0].property("selected") == "false"
+        assert cards[0].open_tag.isHidden()
+
+    def test_open_card_drops_the_colour_edge_for_the_accent_border(
+            self, setlist_tab):
+        # The mock's open card has the accent border + tint, no edge.
+        assert "border-left" not in setlist_tab._rail_cards[1].styleSheet()
+
+    def test_clicking_a_card_opens_that_song(self, setlist_tab):
+        setlist_tab._rail_cards[2].clicked.emit("Schwarzes Gold")
+        assert setlist_tab.current_song_name == "Schwarzes Gold"
+        assert setlist_tab.show_combo.currentText() == "Schwarzes Gold"
+        assert setlist_tab.current_show is \
+            setlist_tab.config.songs["Schwarzes Gold"]
+        assert setlist_tab._rail_cards[2].property("selected") == "true"
+        assert setlist_tab._rail_cards[1].property("selected") == "false"
+
+    def test_clicking_opens_in_the_centre_editor(self, setlist_tab):
+        setlist_tab._rail_cards[0].clicked.emit("Neon Ruinen")
+        # The centre parts strip now shows Neon Ruinen's parts.
+        assert len(setlist_tab._cards) == 1
+        assert setlist_tab._cards[0].name_label.text() == "INTRO"
+        assert setlist_tab.stat_bars.value_label.text() == "8"
+
+    def test_clicking_unknown_song_is_a_noop(self, setlist_tab):
+        setlist_tab._rail_cards[0].clicked.emit("does not exist")
+        assert setlist_tab.current_song_name == "Monsters"
+
+
+# ---------------------------------------------------------------------------
+# Setlist rail: SYNC segment
+# ---------------------------------------------------------------------------
+class TestSyncSegment:
+    def test_initial_state_from_model(self, setlist_tab):
+        assert setlist_tab.sync_buttons["midi"].isChecked()
+        for mode in ("mtc", "smpte", "manual"):
+            assert not setlist_tab.sync_buttons[mode].isChecked()
+
+    def test_segment_click_writes_sync_mode(self, setlist_tab):
+        setlist_tab.sync_buttons["mtc"].click()
+        assert setlist_tab.config.setlist.sync_mode == "mtc"
+        assert not setlist_tab.sync_buttons["midi"].isChecked()
+
+    def test_segments_are_exclusive(self, setlist_tab):
+        setlist_tab.sync_buttons["manual"].click()
+        checked = [m for m, b in setlist_tab.sync_buttons.items()
+                   if b.isChecked()]
+        assert checked == ["manual"]
+
+    def test_segments_use_the_theme_segment_role(self, setlist_tab):
+        for btn in setlist_tab.sync_buttons.values():
+            assert btn.property("role") == "segment"
+
+
+# ---------------------------------------------------------------------------
+# Setlist rail: + SONG, unlisted songs, reorder
+# ---------------------------------------------------------------------------
+class TestSetlistRailMutations:
+    def test_add_song_tile_appends_song_and_entry(self, setlist_tab,
+                                                  monkeypatch):
+        from PyQt6.QtWidgets import QInputDialog
+        monkeypatch.setattr(
+            QInputDialog, "getText",
+            staticmethod(lambda *a, **k: ("Encore", True)))
+        setlist_tab.add_song_tile.click()
+
+        assert "Encore" in setlist_tab.config.songs
+        entries = setlist_tab.config.setlist.entries
+        assert entries[-1].song == "Encore"
+        assert entries[-1].trigger.mode == "manual"
+        assert entries[-1].pause_after.mode == "hold_last"
+        # The rail grew a numbered card (not an unlisted one).
+        card = setlist_tab._rail_cards[-1]
+        assert card.song_name == "Encore"
+        assert card.entry_index == 3
+        assert card.title_label.text() == "04 · Encore"
+        # And it opened in the centre editor.
+        assert setlist_tab.current_song_name == "Encore"
+
+    def test_unlisted_songs_render_after_a_divider(self, setlist_tab):
+        setlist_tab.config.songs["Ghost"] = one_part_song("Ghost")
+        setlist_tab.update_from_config()
+
+        unlisted = [c for c in setlist_tab._rail_cards
+                    if c.entry_index < 0]
+        assert [c.song_name for c in unlisted] == ["Ghost"]
+        assert setlist_tab._unlisted_divider is not None
+        card = unlisted[0]
+        assert card.title_label.text() == "Ghost"   # no number
+        assert not card.unlisted_tag.isHidden()
+        assert card.unlisted_tag.text() == "UNLISTED"
+        assert card.trigger_label.isHidden()        # no entry, no trigger
+
+    def test_no_unlisted_divider_when_setlist_is_complete(self,
+                                                          setlist_tab):
+        assert setlist_tab._unlisted_divider is None
+
+    def test_song_without_setlist_lands_unlisted_not_crashing(self, tab):
+        # The legacy fixture has a song but an empty setlist.
+        assert tab.config.setlist.entries == []
+        unlisted = [c for c in tab._rail_cards if c.entry_index < 0]
+        assert [c.song_name for c in unlisted] == ["Demo"]
+        assert tab.rail_summary.text() == "0 SONGS · 0 MIN"
+
+    def test_clicking_an_unlisted_card_opens_the_song(self, setlist_tab):
+        setlist_tab.config.songs["Ghost"] = one_part_song("Ghost")
+        setlist_tab.update_from_config()
+        unlisted = [c for c in setlist_tab._rail_cards
+                    if c.entry_index < 0][0]
+        unlisted.clicked.emit("Ghost")
+        assert setlist_tab.current_song_name == "Ghost"
+        assert not unlisted.open_tag.isHidden()
+
+    def test_reorder_entry_moves_and_renumbers(self, setlist_tab):
+        setlist_tab._reorder_setlist_entry(0, 1)
+        entries = setlist_tab.config.setlist.entries
+        assert [e.song for e in entries] == \
+            ["Monsters", "Neon Ruinen", "Schwarzes Gold"]
+        cards = [c for c in setlist_tab._rail_cards if c.entry_index >= 0]
+        assert cards[0].title_label.text() == "01 · Monsters"
+        assert cards[1].title_label.text() == "02 · Neon Ruinen"
+        # Pause rows follow their entries.
+        assert setlist_tab._rail_pause_rows[0].text() == \
+            "PAUSE LOOK · Hold last look · until trigger"
+
+    def test_reorder_same_index_is_noop(self, setlist_tab):
+        setlist_tab._reorder_setlist_entry(1, 1)
+        assert [e.song for e in setlist_tab.config.setlist.entries] == \
+            ["Neon Ruinen", "Monsters", "Schwarzes Gold"]
+
+    def test_rail_card_drop_requests_reorder(self, setlist_tab):
+        from gui.tabs.structure_tab import SETLIST_MIME_TYPE
+        from PyQt6.QtCore import QMimeData
+
+        cards = setlist_tab._rail_cards
+        assert cards[0].acceptDrops()
+        got = []
+        cards[1].reorder_requested.connect(lambda s, t: got.append((s, t)))
+        mime = QMimeData()
+        mime.setData(SETLIST_MIME_TYPE, b"0")
+
+        class _Drop:
+            def mimeData(self):
+                return mime
+
+            def acceptProposedAction(self):
+                pass
+
+        cards[1].dropEvent(_Drop())
+        assert got == [(0, 1)]
+
+    def test_rail_card_ignores_part_strip_drags(self, setlist_tab):
+        from gui.tabs.structure_tab import PART_MIME_TYPE
+        from PyQt6.QtCore import QMimeData
+
+        got = []
+        cards = setlist_tab._rail_cards
+        cards[1].reorder_requested.connect(lambda s, t: got.append((s, t)))
+        mime = QMimeData()
+        mime.setData(PART_MIME_TYPE, b"0")
+
+        class _Drop:
+            def mimeData(self):
+                return mime
+
+            def acceptProposedAction(self):
+                pass
+
+        cards[1].dropEvent(_Drop())
+        assert got == []
+
+    def test_unlisted_cards_are_not_drop_targets(self, setlist_tab):
+        setlist_tab.config.songs["Ghost"] = one_part_song("Ghost")
+        setlist_tab.update_from_config()
+        unlisted = [c for c in setlist_tab._rail_cards
+                    if c.entry_index < 0][0]
+        assert not unlisted.acceptDrops()
+
+    def test_rename_song_follows_into_the_setlist(self, setlist_tab,
+                                                  monkeypatch):
+        from PyQt6.QtWidgets import QInputDialog, QMessageBox
+        setlist_tab._rail_cards[0].clicked.emit("Neon Ruinen")
+        monkeypatch.setattr(
+            QInputDialog, "getText",
+            staticmethod(lambda *a, **k: ("Neon Ruins", True)))
+        monkeypatch.setattr(
+            QMessageBox, "information",
+            staticmethod(lambda *a, **k: None))
+        setlist_tab.rename_show_btn.click()
+        assert setlist_tab.config.setlist.entries[0].song == "Neon Ruins"
+        cards = [c for c in setlist_tab._rail_cards if c.entry_index >= 0]
+        assert cards[0].title_label.text() == "01 · Neon Ruins"
+
+    def test_delete_song_removes_its_entry(self, setlist_tab, monkeypatch):
+        from PyQt6.QtWidgets import QMessageBox
+        monkeypatch.setattr(
+            QMessageBox, "question",
+            staticmethod(lambda *a, **k: QMessageBox.StandardButton.Yes))
+        monkeypatch.setattr(
+            QMessageBox, "information",
+            staticmethod(lambda *a, **k: None))
+        setlist_tab._rail_cards[1].clicked.emit("Monsters")
+        setlist_tab.delete_show_btn.click()
+        assert "Monsters" not in setlist_tab.config.songs
+        assert [e.song for e in setlist_tab.config.setlist.entries] == \
+            ["Neon Ruinen", "Schwarzes Gold"]
+        cards = [c for c in setlist_tab._rail_cards if c.entry_index >= 0]
+        assert len(cards) == 2
+        assert len(setlist_tab._rail_pause_rows) == 1

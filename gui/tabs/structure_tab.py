@@ -8,6 +8,15 @@ Anatomy (top to bottom):
   screen); the mono audio readout ("neon_ruinen.wav . 03:42 ANALYZED",
   the status word in green) and a bordered display-caps
   "AUTOGENERATE SHOW..." button on the right.
+- a 330px setlist rail on the left (reference screen 05b): header with
+  "SETLIST . NAME", "N SONGS . MM MIN" and the SYNC segment row
+  (MIDI / MTC / SMPTE / MANUAL writing setlist.sync_mode), then one
+  numbered song card per setlist entry (duration, colour edge, mono
+  trigger line, accent border + OPEN tag on the open song) with dashed
+  pause-look rows between them, a dashed "+ SONG" tile, a defensive
+  UNLISTED section for songs missing from the setlist, and a wrapping
+  mono footer hint. Clicking a card drives the existing song combo, so
+  the centre editor and sibling tabs stay in sync.
 - the main column (28px padding, 28px gaps): the show-management row,
   the "PARTS" caption over the horizontal strip of 190px part cards
   (3px top bar + tint in the part color, transition chips between the
@@ -30,11 +39,12 @@ stat tiles, the grid caption, the timelines and the status strip.
 
 import os
 import csv
+import zlib
 from PyQt6.QtWidgets import (QVBoxLayout, QHBoxLayout, QWidget, QLabel,
                              QPushButton, QComboBox, QScrollArea, QFrame,
                              QLineEdit, QSpinBox, QDoubleSpinBox, QColorDialog,
                              QMessageBox, QSplitter, QInputDialog, QSlider,
-                             QGridLayout,
+                             QGridLayout, QButtonGroup,
                              QSizePolicy, QMenu, QFileDialog, QProgressDialog,
                              QGroupBox, QCheckBox)
 from PyQt6.QtCore import Qt, QTimer, pyqtSignal, QRectF, QPointF, QMimeData
@@ -46,7 +56,10 @@ import shutil
 # Drag-and-drop contract for reordering song parts: the payload is the
 # dragged card's part index, UTF-8 encoded.
 PART_MIME_TYPE = "application/x-lichtmaschine-part"
-from config.models import Configuration, Song, ShowPart, TimelineData, MidiInputDevice, PauseShowConfig
+# Same contract for reordering setlist entries in the left rail.
+SETLIST_MIME_TYPE = "application/x-lichtmaschine-setlist-entry"
+from config.models import (Configuration, Song, ShowPart, TimelineData,
+                           MidiInputDevice, PauseShowConfig, SetlistEntry)
 from gui.typography import DisplayLabel, MicroLabel, display_font, mono_font
 from gui.widgets.chip import Chip
 from timeline.song_structure import SongStructure
@@ -95,6 +108,66 @@ def contrast_words(spectral_contrast: float) -> str:
 def vocal_words(vocal_presence: float) -> str:
     """'PRESENT' / 'ABSENT' - the reference's Vocals read-out."""
     return "PRESENT" if vocal_presence >= 0.5 else "ABSENT"
+
+
+# Data-colour fallback palette for song colour edges: the group palette
+# the Auto / Stage / Live screens share (gui/tabs/live_tab.py
+# GROUP_PALETTE). Used when a song has no parts to borrow a colour from.
+SONG_COLOR_PALETTE = ("#D9A441", "#4ECBD4", "#C95FD0", "#6F9E4C",
+                      "#5F86C9", "#C96A5F", "#9A7FD0", "#8D9299")
+
+_NOTE_NAMES = ("C", "C#", "D", "D#", "E", "F",
+               "F#", "G", "G#", "A", "A#", "B")
+
+
+def midi_note_name(note: int) -> str:
+    """MIDI note number as name + octave, middle C convention (60 = C4,
+    so the reference's NOTE C2 is note 36)."""
+    note = max(0, min(127, int(note)))
+    return f"{_NOTE_NAMES[note % 12]}{note // 12 - 1}"
+
+
+def trigger_line(trigger) -> str:
+    """The mono trigger read-out under a setlist song card."""
+    mode = trigger.mode
+    if mode == "follow":
+        return "Follows automatically"
+    if mode == "midi_pc":
+        return f"PC#{trigger.value} · CH {trigger.channel}"
+    if mode == "midi_note":
+        return (f"NOTE {midi_note_name(trigger.value)}"
+                f" · CH {trigger.channel}")
+    if mode in ("mtc", "smpte"):
+        # The timecode string is the trigger; fall back to the mode name
+        # while the start time is still unset.
+        return trigger.timecode or mode.upper()
+    return "Manual start"
+
+
+def pause_look_line(pause) -> str:
+    """The dashed pause row between two setlist cards."""
+    mode_texts = {
+        "blackout": "Blackout",
+        "warm_white": f"Warm white {pause.level}%",
+        "hold_last": "Hold last look",
+        "ambient_loop": "Ambient loop",
+    }
+    text = mode_texts.get(pause.mode, pause.mode)
+    tail = ("until trigger" if pause.until == "trigger"
+            else f"{pause.duration_s:g}s")
+    return f"PAUSE LOOK · {text} · {tail}"
+
+
+def song_edge_color(name: str, song=None) -> str:
+    """The 3px colour edge of a setlist card: the song's first part
+    colour when it has one, else a stable pick from the shared data
+    palette (crc32 of the name - Python's hash() is salted per run)."""
+    if song is not None and song.parts:
+        tint = QColor(song.parts[0].color)
+        if tint.isValid():
+            return tint.name()
+    index = zlib.crc32((name or "").encode("utf-8"))
+    return SONG_COLOR_PALETTE[index % len(SONG_COLOR_PALETTE)]
 
 
 class StatTile(QFrame):
@@ -473,6 +546,187 @@ class PartCard(QWidget):
             event.acceptProposedAction()
 
 
+class PauseLookRow(QLabel):
+    """The dashed mono row between two setlist cards: the preceding
+    entry's pause look ("PAUSE LOOK · Warm white 20% · until trigger").
+    Display-only this stage; editing arrives with the S2c inspector.
+    Dashed chrome comes from the theme's role="hint-box"."""
+
+    def __init__(self, text: str = "", parent=None):
+        super().__init__(text, parent)
+        self.setObjectName("PauseLookRow")
+        self.setProperty("role", "hint-box")
+        self.setFont(mono_font(8))
+        self.setWordWrap(True)
+
+
+class SetlistSongCard(QWidget):
+    """One setlist entry in the left rail: "NN · Name" with the duration
+    right-aligned, a 3px colour edge on the left, and the mono trigger
+    line below. The OPEN song swaps the colour edge for the accent
+    border (role="card" [selected="true"]) plus an OPEN tag, matching
+    the reference's GEOEFFNET marker. Unlisted songs (defensive: in
+    config.songs but missing from the setlist) render without a number
+    and carry an UNLISTED chip instead.
+
+    Emits ``clicked(song_name)`` on press; setlist cards are also drag
+    sources / drop targets for entry reordering (same pattern as
+    PartCard, its own mime type)."""
+
+    clicked = pyqtSignal(str)
+    # (source entry index, target entry index)
+    reorder_requested = pyqtSignal(int, int)
+
+    def __init__(self, entry_index: int, song_name: str, parent=None):
+        super().__init__(parent)
+        self.entry_index = entry_index   # -1 = unlisted (not in setlist)
+        self.song_name = song_name
+        self.setObjectName("SetlistSongCard")
+        self.setProperty("role", "card")
+        self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
+        self.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.setAcceptDrops(entry_index >= 0)
+        self._press_pos = None
+
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(12, 10, 12, 10)
+        layout.setSpacing(3)
+
+        top = QHBoxLayout()
+        top.setContentsMargins(0, 0, 0, 0)
+        top.setSpacing(8)
+        self.title_label = QLabel("")
+        self.title_label.setObjectName("SetlistCardTitle")
+        title_font = self.title_label.font()
+        title_font.setPointSize(10)
+        title_font.setWeight(QFont.Weight.DemiBold)
+        self.title_label.setFont(title_font)
+        top.addWidget(self.title_label)
+        top.addStretch(1)
+        self.unlisted_tag = Chip("Unlisted", variant="neutral")
+        self.unlisted_tag.setObjectName("SetlistCardUnlistedTag")
+        self.unlisted_tag.hide()
+        top.addWidget(self.unlisted_tag)
+        self.open_tag = MicroLabel("Open", point_size=7, tracking_em=0.1)
+        self.open_tag.setObjectName("SetlistCardOpenTag")
+        self.open_tag.hide()
+        top.addWidget(self.open_tag)
+        self.duration_label = QLabel("")
+        self.duration_label.setObjectName("SetlistCardDuration")
+        self.duration_label.setFont(mono_font(8))
+        top.addWidget(self.duration_label)
+        layout.addLayout(top)
+
+        self.trigger_label = QLabel("")
+        self.trigger_label.setObjectName("SetlistCardTrigger")
+        self.trigger_label.setFont(mono_font(8))
+        layout.addWidget(self.trigger_label)
+
+    def update_data(self, *, duration_text: str, trigger, color: str,
+                    is_open: bool, tokens: dict) -> None:
+        unlisted = self.entry_index < 0
+        if unlisted:
+            self.title_label.setText(self.song_name)
+        else:
+            self.title_label.setText(
+                f"{self.entry_index + 1:02d} · {self.song_name}")
+        self.duration_label.setText(duration_text)
+        self.open_tag.setVisible(is_open)
+        self.unlisted_tag.setVisible(unlisted)
+        armed = False
+        if trigger is None:
+            self.trigger_label.hide()
+        else:
+            self.trigger_label.setText(trigger_line(trigger))
+            self.trigger_label.show()
+            armed = trigger.mode in ("midi_pc", "midi_note", "mtc", "smpte")
+        self._apply_style(color, is_open, armed, tokens)
+
+    def _apply_style(self, color: str, is_open: bool, armed: bool,
+                     tokens: dict) -> None:
+        """Colour edge and trigger colour are data colours, widget-local
+        (the sanctioned pattern, same as PartCard). The 1px chrome border
+        and the accent open border stay with the theme's role="card"
+        rules; the open card only overrides the background tint."""
+        rules = []
+        if is_open:
+            rules.append(
+                f"QWidget#SetlistSongCard {{"
+                f" background-color: {tokens['accent_tint']}; }}")
+        else:
+            tint = QColor(color)
+            if not tint.isValid():
+                tint = QColor(tokens["text_secondary"])
+            rules.append(
+                f"QWidget#SetlistSongCard {{"
+                f" background-color: {tokens['raised']};"
+                f" border-left: 3px solid {tint.name()}; }}")
+        rules.append(f"QLabel#SetlistCardTitle {{ color: {tokens['text']};"
+                     " background: transparent; }")
+        rules.append("QLabel#SetlistCardDuration"
+                     f" {{ color: {tokens['text_disabled']};"
+                     " background: transparent; }")
+        trigger_color = (tokens["accent_line"] if armed
+                         else tokens["text_secondary"])
+        rules.append(f"QLabel#SetlistCardTrigger {{ color: {trigger_color};"
+                     " background: transparent; }")
+        rules.append("QLabel#SetlistCardOpenTag"
+                     f" {{ color: {tokens['accent_line']};"
+                     " background: transparent; }")
+        self.setStyleSheet("\n".join(rules))
+        self.setProperty("selected", "true" if is_open else "false")
+        self.setProperty("open", "true" if is_open else "false")
+        style = self.style()
+        if style:
+            style.unpolish(self)
+            style.polish(self)
+
+    def mousePressEvent(self, event):
+        if event.button() == Qt.MouseButton.LeftButton:
+            self._press_pos = event.position().toPoint()
+        self.clicked.emit(self.song_name)   # press opens; a drag may follow
+        event.accept()
+
+    def mouseMoveEvent(self, event):
+        from PyQt6.QtWidgets import QApplication
+        if (self.entry_index < 0 or self._press_pos is None
+                or not (event.buttons() & Qt.MouseButton.LeftButton)):
+            return
+        if ((event.position().toPoint() - self._press_pos).manhattanLength()
+                < QApplication.startDragDistance()):
+            return
+        mime = QMimeData()
+        mime.setData(SETLIST_MIME_TYPE,
+                     str(self.entry_index).encode("utf-8"))
+        drag = QDrag(self)
+        drag.setMimeData(mime)
+        drag.setPixmap(self.grab())
+        drag.exec(Qt.DropAction.MoveAction)
+        self._press_pos = None
+
+    def _source_index(self, mime) -> int:
+        if mime is None or not mime.hasFormat(SETLIST_MIME_TYPE):
+            return -1
+        try:
+            return int(bytes(mime.data(SETLIST_MIME_TYPE)).decode("utf-8"))
+        except ValueError:
+            return -1
+
+    def dragEnterEvent(self, event):
+        if self._source_index(event.mimeData()) >= 0:
+            event.acceptProposedAction()
+
+    def dragMoveEvent(self, event):
+        if self._source_index(event.mimeData()) >= 0:
+            event.acceptProposedAction()
+
+    def dropEvent(self, event):
+        source = self._source_index(event.mimeData())
+        if source >= 0 and source != self.entry_index:
+            self.reorder_requested.emit(source, self.entry_index)
+            event.acceptProposedAction()
+
+
 class StructureTab(BaseTab):
     """Tab for editing show structure (reference screen 05).
 
@@ -504,6 +758,12 @@ class StructureTab(BaseTab):
         self._playing_index = -1
         self._cards = []
         self._chips = []
+
+        # Setlist rail state (built in setup_ui; guarded until then)
+        self._rail_host = None
+        self._rail_cards = []
+        self._rail_pause_rows = []
+        self._unlisted_divider = None
 
         # Generation report from this tab's own autogen run (the sibling
         # Shows tab's report is used when we have none of our own).
@@ -549,9 +809,11 @@ class StructureTab(BaseTab):
         self.song_structure = None
 
         # Build order matters: the parts strip refreshes the inspector,
-        # the grid caption and the status strip while it populates, so
-        # all three must exist before _create_parts_strip runs.
+        # the grid caption, the status strip and the setlist rail while
+        # it populates, so all four must exist before _create_parts_strip
+        # runs.
         inspector = self._build_inspector()
+        setlist_rail = self._build_setlist_rail()
         self.grid_caption = MicroLabel("Master grid", point_size=8,
                                        tracking_em=0.12)
         status_strip = self._create_status_strip()
@@ -612,6 +874,7 @@ class StructureTab(BaseTab):
         left_column.addLayout(grid_section)
         left_column.addStretch(1)
 
+        body.addWidget(setlist_rail)
         body.addWidget(left_host, 1)
         body.addWidget(inspector)
         main_layout.addLayout(body, 1)
@@ -715,6 +978,9 @@ class StructureTab(BaseTab):
         self.grid_hint.setObjectName("GridHint")
         self.grid_hint.setFont(mono_font(8))
         self.grid_hint.setProperty("role", "micro")
+        # The setlist rail narrowed the centre column: wrap instead of
+        # clipping at 1600x900.
+        self.grid_hint.setWordWrap(True)
         row.addWidget(self.grid_hint)
         row.addStretch()
         return row
@@ -766,6 +1032,304 @@ class StructureTab(BaseTab):
 
         self._rebuild_parts_strip()
         return self.parts_scroll
+
+    RAIL_WIDTH = 330
+
+    # ------------------------------------------------------------------
+    # Setlist rail (reference screen 05b, left column)
+    # ------------------------------------------------------------------
+    def _build_setlist_rail(self) -> QWidget:
+        """The 330px left rail: header (setlist name + totals + SYNC
+        segments + device hint), the scrolling card list, footer hint."""
+        tokens = self._tokens or _active_tokens()
+
+        rail = QWidget()
+        rail.setObjectName("SetlistRail")
+        rail.setProperty("role", "inspector")
+        rail.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
+        rail.setFixedWidth(self.RAIL_WIDTH)
+        self.setlist_rail = rail
+        column = QVBoxLayout(rail)
+        column.setContentsMargins(0, 0, 0, 0)
+        column.setSpacing(0)
+
+        # -- header ----------------------------------------------------
+        header = QWidget()
+        header_column = QVBoxLayout(header)
+        header_column.setContentsMargins(14, 10, 14, 10)
+        header_column.setSpacing(8)
+
+        title_row = QHBoxLayout()
+        title_row.setSpacing(8)
+        self.rail_title = MicroLabel("Setlist", point_size=8,
+                                     tracking_em=0.12)
+        title_row.addWidget(self.rail_title)
+        title_row.addStretch(1)
+        self.rail_summary = MicroLabel("0 songs · 0 min", point_size=8,
+                                       tracking_em=0.1)
+        title_row.addWidget(self.rail_summary)
+        header_column.addLayout(title_row)
+
+        sync_row = QHBoxLayout()
+        sync_row.setSpacing(8)
+        sync_row.addWidget(MicroLabel("Sync", point_size=8,
+                                      tracking_em=0.12))
+        segment_host = QWidget()
+        segment_host.setObjectName("SyncSegmentGroup")
+        # 1px box around the segment chips (the theme's segment role is
+        # borderless; the box border reads the theme token, same
+        # sanctioned pattern as the tab's other data-coloured chrome).
+        segment_host.setAttribute(Qt.WidgetAttribute.WA_StyledBackground,
+                                  True)
+        self._sync_segment_host = segment_host
+        segment_row = QHBoxLayout(segment_host)
+        segment_row.setContentsMargins(1, 1, 1, 1)
+        segment_row.setSpacing(0)
+        self.sync_buttons = {}
+        self._sync_group = QButtonGroup(self)
+        self._sync_group.setExclusive(True)
+        for i, (mode, label) in enumerate((("midi", "MIDI"),
+                                           ("mtc", "MTC"),
+                                           ("smpte", "SMPTE"),
+                                           ("manual", "MANUAL"))):
+            btn = QPushButton(label)
+            btn.setCheckable(True)
+            btn.setProperty("role", "segment")
+            btn.setProperty("divider", "true" if i else "false")
+            btn.setFont(mono_font(8))
+            btn.setCursor(Qt.CursorShape.PointingHandCursor)
+            btn.toggled.connect(
+                lambda checked, m=mode:
+                self._on_sync_mode_selected(m) if checked else None)
+            self._sync_group.addButton(btn)
+            segment_row.addWidget(btn)
+            self.sync_buttons[mode] = btn
+        sync_row.addWidget(segment_host)
+        sync_row.addStretch(1)
+        header_column.addLayout(sync_row)
+        # Plain QLabel: "Device: -" keeps its sentence case (a caps
+        # MicroLabel would shout it); the engine that fills it is v1.7.
+        # Own row: inline after four segments it overflows 330px and
+        # squeezes the SMPTE/MANUAL glyphs.
+        self.sync_device_hint = QLabel("Device: -")
+        self.sync_device_hint.setObjectName("SyncDeviceHint")
+        self.sync_device_hint.setFont(mono_font(8))
+        self.sync_device_hint.setProperty("role", "micro")
+        header_column.addWidget(self.sync_device_hint)
+        column.addWidget(header)
+        self._rail_static_dividers = [self._rail_divider(tokens)]
+        column.addWidget(self._rail_static_dividers[0])
+
+        # -- card list ---------------------------------------------------
+        self._rail_host = QWidget()
+        self._rail_layout = QVBoxLayout(self._rail_host)
+        self._rail_layout.setContentsMargins(10, 6, 10, 10)
+        self._rail_layout.setSpacing(4)
+
+        # Persistent "+ SONG" tile (re-attached on every rail rebuild).
+        self.add_song_tile = QPushButton("+ SONG")
+        self.add_song_tile.setObjectName("AddSongTile")
+        self.add_song_tile.setProperty("role", "add-tile")
+        self.add_song_tile.setFont(mono_font(9))
+        self.add_song_tile.setFixedHeight(32)
+        self.add_song_tile.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.add_song_tile.setToolTip(
+            "Add a song and append it to the setlist")
+
+        rail_scroll = QScrollArea()
+        rail_scroll.setWidgetResizable(True)
+        rail_scroll.setFrameShape(QFrame.Shape.NoFrame)
+        rail_scroll.setHorizontalScrollBarPolicy(
+            Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        rail_scroll.setWidget(self._rail_host)
+        column.addWidget(rail_scroll, 1)
+
+        # -- footer hint -------------------------------------------------
+        self._rail_static_dividers.append(self._rail_divider(tokens))
+        column.addWidget(self._rail_static_dividers[1])
+        footer = QWidget()
+        footer_column = QVBoxLayout(footer)
+        footer_column.setContentsMargins(14, 10, 14, 10)
+        footer_column.setSpacing(0)
+        self.rail_footer_hint = QLabel(
+            "Order = setlist. Triggers per song (MIDI PC/NOTE, MTC/SMPTE "
+            "time) · 'Follows automatically' chains without a trigger.")
+        self.rail_footer_hint.setObjectName("SetlistRailFooter")
+        self.rail_footer_hint.setFont(mono_font(8))
+        self.rail_footer_hint.setProperty("role", "micro")
+        self.rail_footer_hint.setWordWrap(True)
+        footer_column.addWidget(self.rail_footer_hint)
+        column.addWidget(footer)
+
+        self._style_rail_chrome(tokens)
+        self._rebuild_setlist_rail()
+        return rail
+
+    def _style_rail_chrome(self, tokens: dict) -> None:
+        """Token-read chrome of the rail that survives rebuilds: the
+        SYNC segment box and the header/footer hairlines."""
+        self._sync_segment_host.setStyleSheet(
+            f"QWidget#SyncSegmentGroup {{"
+            f" border: 1px solid {tokens['border']}; }}")
+        for divider in self._rail_static_dividers:
+            divider.setStyleSheet(
+                f"background-color: {tokens['border']}; border: none;")
+
+    @staticmethod
+    def _rail_divider(tokens: dict) -> QFrame:
+        """1px hairline between the rail's header / list / footer."""
+        divider = QFrame()
+        divider.setObjectName("SetlistRailDivider")
+        divider.setFixedHeight(1)
+        divider.setStyleSheet(f"background-color: {tokens['border']};"
+                              " border: none;")
+        return divider
+
+    def _config_display_name(self) -> str:
+        """Fallback rail title when the setlist has no name: the config
+        file's stem, or Untitled before the first save."""
+        loaded_from = getattr(self.config, "_loaded_from", None)
+        if loaded_from:
+            return os.path.splitext(os.path.basename(loaded_from))[0]
+        return "Untitled"
+
+    def _song_duration_seconds(self, song_name: str) -> float:
+        """A song's duration via the same SongStructure math the master
+        grid uses (bars * beats-per-bar / BPM, incl. gradual ramps)."""
+        song = self.config.songs.get(song_name)
+        if song is None or not song.parts:
+            return 0.0
+        structure = SongStructure()
+        structure.load_from_show_parts(song.parts)
+        return structure.get_total_duration()
+
+    def _rebuild_setlist_rail(self):
+        """Rebuild the rail's card/pause-row widgets from
+        config.setlist.entries (+ the defensive unlisted section)."""
+        if self._rail_host is None:
+            return
+
+        # Detach the persistent add tile, clear everything else.
+        while self._rail_layout.count():
+            item = self._rail_layout.takeAt(0)
+            widget = item.widget()
+            if widget is self.add_song_tile:
+                continue
+            if widget:
+                widget.hide()
+                widget.setParent(None)
+                widget.deleteLater()
+        self._rail_cards = []
+        self._rail_pause_rows = []
+        self._unlisted_divider = None
+
+        entries = self.config.setlist.entries
+        for i, entry in enumerate(entries):
+            if i > 0:
+                # The row above card N shows entry N-1's pause look.
+                row = PauseLookRow(pause_look_line(entries[i - 1].pause_after))
+                self._rail_pause_rows.append(row)
+                self._rail_layout.addWidget(row)
+            card = SetlistSongCard(i, entry.song)
+            card.clicked.connect(self._on_rail_card_clicked)
+            card.reorder_requested.connect(self._reorder_setlist_entry)
+            self._rail_cards.append(card)
+            self._rail_layout.addWidget(card)
+
+        self._rail_layout.addSpacing(4)
+        self._rail_layout.addWidget(self.add_song_tile)
+        self.add_song_tile.show()
+
+        # Defensive: songs that exist but are missing from the setlist.
+        listed = {entry.song for entry in entries}
+        unlisted = [name for name in sorted(self.config.songs)
+                    if name not in listed]
+        if unlisted:
+            tokens = self._tokens or _active_tokens()
+            self._unlisted_divider = self._rail_divider(tokens)
+            self._rail_layout.addSpacing(6)
+            self._rail_layout.addWidget(self._unlisted_divider)
+            self._rail_layout.addSpacing(2)
+            for name in unlisted:
+                card = SetlistSongCard(-1, name)
+                card.clicked.connect(self._on_rail_card_clicked)
+                self._rail_cards.append(card)
+                self._rail_layout.addWidget(card)
+
+        self._rail_layout.addStretch(1)
+        self._refresh_setlist_rail()
+
+    def _refresh_setlist_rail(self):
+        """Push header totals, sync state and per-card data into the
+        existing rail widgets (no rebuild: keeps a pressed card alive
+        for the drag that may follow the press)."""
+        if self._rail_host is None:
+            return
+        tokens = self._tokens or _active_tokens()
+        setlist = self.config.setlist
+
+        name = setlist.name or self._config_display_name()
+        self.rail_title.setText(f"Setlist · {name}")
+
+        entries = setlist.entries
+        total = sum(self._song_duration_seconds(e.song) for e in entries)
+        minutes = int(round(total / 60.0))
+        noun = "song" if len(entries) == 1 else "songs"
+        self.rail_summary.setText(
+            f"{len(entries)} {noun} · {minutes} min")
+
+        for mode, btn in self.sync_buttons.items():
+            btn.blockSignals(True)
+            btn.setChecked(mode == setlist.sync_mode)
+            btn.blockSignals(False)
+        self.sync_device_hint.setText(
+            f"Device: {setlist.sync_device or '-'}")
+
+        for card in self._rail_cards:
+            entry = (entries[card.entry_index]
+                     if 0 <= card.entry_index < len(entries) else None)
+            song = self.config.songs.get(card.song_name)
+            card.update_data(
+                duration_text=format_clock(
+                    self._song_duration_seconds(card.song_name)),
+                trigger=entry.trigger if entry else None,
+                color=song_edge_color(card.song_name, song),
+                is_open=(bool(card.song_name)
+                         and card.song_name == self.current_song_name),
+                tokens=tokens,
+            )
+        for i, row in enumerate(self._rail_pause_rows):
+            if i < len(entries):
+                row.setText(pause_look_line(entries[i].pause_after))
+
+    def _on_rail_card_clicked(self, song_name: str):
+        """Open the clicked song in the centre editor through the
+        existing song combo (single source of song-switching truth)."""
+        if song_name not in self.config.songs:
+            return
+        if song_name == self.current_song_name:
+            return
+        self.show_combo.setCurrentText(song_name)
+
+    def _on_sync_mode_selected(self, mode: str):
+        """SYNC segment writes setlist.sync_mode (the listening engine
+        is v1.7; this stage stores and edits the data)."""
+        if self.config.setlist.sync_mode == mode:
+            return
+        self.config.setlist.sync_mode = mode
+        self._auto_save()
+
+    def _reorder_setlist_entry(self, source: int, target: int):
+        """Move the entry at ``source`` to the slot of the card dropped
+        on (``target``). Driven by drag-and-drop between rail cards."""
+        entries = self.config.setlist.entries
+        if not (0 <= source < len(entries)) or source == target:
+            return
+        entry = entries.pop(source)
+        target = max(0, min(target, len(entries)))
+        entries.insert(target, entry)
+        self._rebuild_setlist_rail()
+        self._auto_save()
 
     INSPECTOR_WIDTH = 400
 
@@ -876,8 +1440,15 @@ class StructureTab(BaseTab):
         return panel
 
     def _create_show_row(self):
-        """Compact show-management row: selector, new/rename/delete, the
-        shows-directory hint button, and the MIDI trigger assignment."""
+        """Compact show-management block: selector + new/rename/delete on
+        one line, the MIDI trigger assignment + shows-directory hint
+        button on a second. Two lines because the 330px setlist rail
+        shrank the centre column: a single line overflowed and clipped
+        its buttons at 1600x900."""
+        block = QVBoxLayout()
+        block.setContentsMargins(0, 0, 0, 0)
+        block.setSpacing(8)
+
         toolbar = QHBoxLayout()
         toolbar.setContentsMargins(0, 0, 0, 0)
         toolbar.setSpacing(8)
@@ -902,11 +1473,16 @@ class StructureTab(BaseTab):
         self.delete_show_btn.setProperty("role", "destructive")
         toolbar.addWidget(self.delete_show_btn)
 
-        toolbar.addSpacing(16)
+        toolbar.addStretch()
+        block.addLayout(toolbar)
+
+        trigger_row = QHBoxLayout()
+        trigger_row.setContentsMargins(0, 0, 0, 0)
+        trigger_row.setSpacing(8)
 
         # Trigger assignment
-        toolbar.addWidget(MicroLabel("Trigger", point_size=8,
-                                     tracking_em=0.12))
+        trigger_row.addWidget(MicroLabel("Trigger", point_size=8,
+                                         tracking_em=0.12))
 
         self.trigger_device_combo = QComboBox()
         self.trigger_device_combo.setMinimumWidth(160)
@@ -921,27 +1497,29 @@ class StructureTab(BaseTab):
                 self.trigger_device_combo.addItem(profile['name'])
         except Exception:
             pass
-        toolbar.addWidget(self.trigger_device_combo)
+        trigger_row.addWidget(self.trigger_device_combo)
 
-        toolbar.addWidget(MicroLabel("Ch", point_size=8, tracking_em=0.12))
+        trigger_row.addWidget(MicroLabel("Ch", point_size=8,
+                                         tracking_em=0.12))
 
         self.trigger_channel_spin = QSpinBox()
         self.trigger_channel_spin.setRange(1, 512)
         self.trigger_channel_spin.setValue(1)
         self.trigger_channel_spin.setEnabled(False)
         self.trigger_channel_spin.setFixedWidth(70)
-        toolbar.addWidget(self.trigger_channel_spin)
+        trigger_row.addWidget(self.trigger_channel_spin)
 
-        toolbar.addSpacing(16)
+        trigger_row.addSpacing(16)
 
         # Set directory button (primary action for the show toolbar)
         self.set_directory_btn = QPushButton("Set Show Directory")
         self.set_directory_btn.setProperty("role", "primary")
-        toolbar.addWidget(self.set_directory_btn)
+        trigger_row.addWidget(self.set_directory_btn)
 
-        toolbar.addStretch()
+        trigger_row.addStretch()
+        block.addLayout(trigger_row)
 
-        return toolbar
+        return block
 
     def _create_pause_show_section(self):
         """Create the Pause Show configuration section. Box styling comes
@@ -1129,6 +1707,10 @@ class StructureTab(BaseTab):
         self.add_part_tile.clicked.connect(self._add_new_part)
         self.delete_part_btn.clicked.connect(self._delete_part)
 
+        # Setlist rail: + SONG reuses the new-song flow (which also
+        # appends the setlist entry).
+        self.add_song_tile.clicked.connect(self._create_new_show)
+
         # Part inspector editors (act on the selected part)
         self.part_name_edit.textEdited.connect(self._on_part_name_edited)
         self.bpm_spin.valueChanged.connect(self._on_bpm_changed)
@@ -1239,6 +1821,8 @@ class StructureTab(BaseTab):
                 chip.setText(parts[i].transition)
         self._update_grid_caption()
         self._update_status_strip()
+        # Part edits change song durations; keep the rail readouts live.
+        self._refresh_setlist_rail()
 
     def _total_bars_and_duration(self):
         parts = self.current_show.parts if self.current_show else []
@@ -1686,6 +2270,8 @@ class StructureTab(BaseTab):
         for analysis_row in self._analysis_rows:
             analysis_row.apply_tokens(self._tokens)
         self._style_action_strip()
+        self._style_rail_chrome(self._tokens)
+        self._refresh_setlist_rail()
 
     def update_from_config(self):
         """Refresh from configuration."""
@@ -1703,6 +2289,10 @@ class StructureTab(BaseTab):
             self.show_combo.setCurrentIndex(0)
 
         self.show_combo.blockSignals(False)
+
+        # Rebuild the setlist rail (entries/songs may have changed);
+        # _load_show then refreshes the OPEN marker.
+        self._rebuild_setlist_rail()
 
         # Load the current show
         self._load_show(self.show_combo.currentText())
@@ -1824,6 +2414,11 @@ class StructureTab(BaseTab):
             # Add to config
             self.config.songs[name] = new_show
 
+            # Append the setlist entry (manual trigger, hold-last pause
+            # look - the SetlistEntry defaults) and rebuild the rail.
+            self.config.setlist.entries.append(SetlistEntry(song=name))
+            self._rebuild_setlist_rail()
+
             # Update combo and select new show
             self.show_combo.blockSignals(True)
             self.show_combo.addItem(name)
@@ -1869,6 +2464,13 @@ class StructureTab(BaseTab):
             # Rename in config
             self.config.songs[new_name] = self.config.songs.pop(old_name)
             self.config.songs[new_name].name = new_name
+
+            # Setlist entries reference songs by name key: follow the
+            # rename so the rail cards stay bound.
+            for entry in self.config.setlist.entries:
+                if entry.song == old_name:
+                    entry.song = new_name
+            self._rebuild_setlist_rail()
 
             # Rename CSV file
             try:
@@ -1976,12 +2578,19 @@ class StructureTab(BaseTab):
                     except Exception as e:
                         print(f"Failed to delete audio file: {e}")
 
-        # Delete from config
-        del self.config.songs[self.current_song_name]
+        # Delete from config, including the song's setlist entries
+        # (a stale entry would render a ghost card in the rail).
+        deleted_name = self.current_song_name
+        del self.config.songs[deleted_name]
+        self.config.setlist.entries = [
+            entry for entry in self.config.setlist.entries
+            if entry.song != deleted_name
+        ]
 
         # Clear UI
         self.current_song_name = ""
         self.current_show = None
+        self._rebuild_setlist_rail()
 
         # Refresh dropdown
         self.show_combo.blockSignals(True)
@@ -2031,6 +2640,7 @@ class StructureTab(BaseTab):
             self.audio_lane.set_song_structure(None)
             self.master_timeline.timeline_widget.set_song_structure(None)
             self._update_audio_readout()
+            self._refresh_setlist_rail()
             return
 
         self.current_song_name = show_name
@@ -2077,6 +2687,8 @@ class StructureTab(BaseTab):
             self.audio_lane.clear_audio()
 
         self._update_audio_readout()
+        # Move the OPEN marker (accent border + tag) to this song's card.
+        self._refresh_setlist_rail()
 
     def _load_all_shows(self):
         """Load all shows from CSV files in the shows directory."""

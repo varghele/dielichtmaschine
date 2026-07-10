@@ -65,6 +65,15 @@ verbatim as the GitHub Release notes (see [docs/releasing.md](docs/releasing.md)
   with `shows` load forever and get a setlist synthesized. Editing UI
   and the trigger engine follow in later passes; workspace export is
   byte-identical.
+- **The Structure tab grew a setlist rail.** A left rail lists the
+  setlist: numbered song cards with duration, colour edge and the
+  song's start trigger (MIDI PC/note with channel, timecode, "Follows
+  automatically" or manual), the open song marked, pause looks shown
+  between songs, drag to reorder, a + SONG tile that also adds the
+  setlist entry, and a sync-mode selector (MIDI · MTC · SMPTE ·
+  MANUAL). Songs outside the setlist list separately as unlisted.
+  Trigger and pause-look editing arrives with the inspector pass; the
+  engine that obeys them is the v1.7 sync work.
 - **One compact timeline toolbar.** Song selector, lane/autogen/inspector
   actions, the transport with a bar-based readout (BAR n.m · mm:ss.s),
   the grid segment, snap, swing and save all live in a single row, with
