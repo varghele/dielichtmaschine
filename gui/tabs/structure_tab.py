@@ -1560,6 +1560,7 @@ class StructureTab(BaseTab):
         self.rename_show_btn.setToolTip("Rename this song")
         self.delete_show_btn = QPushButton("DELETE")
         self.delete_show_btn.setObjectName("DeleteSongChip")
+        self.delete_show_btn.setProperty("role", "destructive-outline")
         self.delete_show_btn.setToolTip(
             "Delete this song and its setlist entries")
         chip_font = display_font(10, QFont.Weight.DemiBold,
@@ -1574,26 +1575,7 @@ class StructureTab(BaseTab):
                 metrics.horizontalAdvance(chip.text()) + 40)
             row.addWidget(chip)
 
-        self._style_title_row()
         return row
-
-    def _style_title_row(self):
-        """DELETE is a destructive-outline chip; the theme has no such
-        role yet (only the filled role="destructive"), so its chrome is
-        widget-local from the destructive tokens - the tab's sanctioned
-        pattern for chrome the template lacks."""
-        tokens = self._tokens or _active_tokens()
-        self.delete_show_btn.setStyleSheet(
-            f"QPushButton#DeleteSongChip {{"
-            f" background-color: transparent;"
-            f" border: 1px solid {tokens['destructive']};"
-            f" color: {tokens['destructive']}; }}"
-            f"QPushButton#DeleteSongChip:hover {{"
-            f" border-color: {tokens['destructive_hover']};"
-            f" color: {tokens['destructive_hover']}; }}"
-            f"QPushButton#DeleteSongChip:disabled {{"
-            f" border-color: {tokens['border']};"
-            f" color: {tokens['text_disabled']}; }}")
 
     def _update_title_row(self):
         """Song name + the mono meta line: the leading part's tempo and
@@ -2389,7 +2371,6 @@ class StructureTab(BaseTab):
         for analysis_row in self._analysis_rows:
             analysis_row.apply_tokens(self._tokens)
         self._style_action_strip()
-        self._style_title_row()
         self._style_master_grid_header()
         self._style_rail_chrome(self._tokens)
         self._refresh_setlist_rail()

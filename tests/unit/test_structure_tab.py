@@ -628,10 +628,16 @@ class TestSongTitleRow:
         assert not empty_tab.delete_show_btn.isEnabled()
 
     def test_delete_chip_is_a_destructive_outline(self, tab):
-        # No theme role for destructive outlines yet: chrome is
-        # widget-local, hooked on the objectName.
-        assert tab.delete_show_btn.objectName() == "DeleteSongChip"
+        # The theme's destructive-outline role (red border, transparent
+        # fill); no widget-local stylesheet needed anymore.
+        assert tab.delete_show_btn.property("role") == "destructive-outline"
+        assert tab.delete_show_btn.styleSheet() == ""
         assert tab.rename_show_btn.property("role") == "cta-outline"
+
+    def test_destructive_outline_role_in_theme(self):
+        from gui.theme_tokens import render_theme
+        qss = render_theme("dark")
+        assert 'QPushButton[role="destructive-outline"]' in qss
 
     def test_song_combo_alive_but_hidden(self, setlist_tab):
         # gui.py and the rail cards still drive song switching through

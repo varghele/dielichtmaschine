@@ -179,6 +179,22 @@ QPushButton[role="destructive"] {
 }
 QPushButton[role="destructive"]:hover { background-color: $destructive_hover$; }
 
+/* Destructive-outline: red-bordered chip for delete actions that sit in
+   chrome rows (mock 05b's DELETE) - quieter than the filled destructive. */
+QPushButton[role="destructive-outline"] {
+    background-color: transparent;
+    border: 1px solid $destructive$;
+    color: $destructive$;
+}
+QPushButton[role="destructive-outline"]:hover {
+    border-color: $destructive_hover$;
+    color: $destructive_hover$;
+}
+QPushButton[role="destructive-outline"]:disabled {
+    border-color: $border$;
+    color: $text_disabled$;
+}
+
 /* -- Inputs ---------------------------------------------------------- */
 QLineEdit,
 QPlainTextEdit,
