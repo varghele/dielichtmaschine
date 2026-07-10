@@ -85,6 +85,13 @@ verbatim as the GitHub Release notes (see [docs/releasing.md](docs/releasing.md)
   reports). The directory hint still self-maintains for import/export
   dialogs and the legacy audiofiles fallback, and old configs load
   unchanged. The dead CSV auto-save/auto-load code went with it.
+- **Fixtures can belong to multiple groups (model).** A fixture now
+  carries an ordered list of group memberships; the first group is its
+  primary (drives data colour, orientation defaults and role). Old
+  configs with the single `group` field load unchanged and re-save in
+  both formats for one release; group membership derivation puts a
+  fixture in every group it lists. The editing UI for memberships
+  lands next; workspace export is byte-identical meanwhile.
 - **Shows became songs in a setlist.** What the app called a show (parts,
   BPM, audio) is now a song, and the show is the whole evening: an
   ordered setlist of songs, each entry carrying a start trigger (manual,

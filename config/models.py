@@ -1,6 +1,6 @@
 # config/models.py
 
-from dataclasses import dataclass, field, asdict
+from dataclasses import dataclass, field, asdict, InitVar
 from typing import Dict, List, Optional, Tuple
 import yaml
 import xml.etree.ElementTree as ET
@@ -20,9 +20,24 @@ class Fixture:
     manufacturer: str
     model: str
     name: str
-    group: str
     current_mode: str
     available_modes: List[FixtureMode]
+
+    # Group membership - the source of truth (multi-group plan stage 1,
+    # docs/multi-group-fixtures-plan.md). Order = the order the user
+    # added them; groups[0] is the PRIMARY group ("first group wins"):
+    # data color, orientation defaults, lighting role and export
+    # intensity all come from it. Empty list = ungrouped.
+    groups: List[str] = field(default_factory=list)
+
+    # Legacy single-group constructor keyword / YAML key. Consumed by
+    # __post_init__: Fixture(group="X") becomes groups=["X"] ("" -> [])
+    # unless `groups` was given too, in which case `groups` wins and
+    # this is ignored (dual-written files carry both). Reading/writing
+    # `fixture.group` goes through the compat property attached below
+    # the class (getter = primary group, setter REPLACES the list).
+    group: InitVar[Optional[str]] = None
+
     type: str = "PAR"  # Default type if none specified
     x: float = 0.0     # X position in meters
     y: float = 0.0     # Y position in meters
@@ -55,6 +70,15 @@ class Fixture:
     definition_source: str = "qxf"
     gdtf_fixture_type_id: Optional[str] = None
 
+    def __post_init__(self, group: Optional[str]):
+        # Defensive: a YAML `groups:` key that is present but null.
+        if self.groups is None:
+            self.groups = []
+        # Legacy migration: single `group` string -> one-element list
+        # ("" -> stays ungrouped). An explicit non-empty `groups` wins.
+        if not self.groups and group:
+            self.groups = [group]
+
     def get_effective_orientation(self, group: Optional['FixtureGroup'] = None) -> tuple:
         """
         Get effective orientation values, considering group defaults if applicable.
@@ -76,6 +100,39 @@ class Fixture:
         if self.z_uses_group_default and group is not None:
             return group.default_z_height
         return self.z
+
+
+def _fixture_group_get(self) -> str:
+    """Compat: the primary group (groups[0]), or "" when ungrouped."""
+    return self.groups[0] if self.groups else ""
+
+
+def _fixture_group_set(self, value: str) -> None:
+    """Compat: REPLACES the whole membership list with [value] ("" clears).
+
+    Existing single-group callers keep their replace semantics; multi-group
+    membership editing goes through `groups` directly (plan stage 2)."""
+    self.groups = [value] if value else []
+
+
+# Attached after the class body: the InitVar's class-level default (None)
+# must still be None when @dataclass generates __init__; a property named
+# `group` inside the body would be picked up as that default. Instances
+# never store a `group` attribute (InitVar), so this data descriptor
+# handles every read/write of `fixture.group`.
+Fixture.group = property(_fixture_group_get, _fixture_group_set)
+
+
+def fixture_asdict(fixture: Fixture) -> dict:
+    """asdict plus the legacy `group` key (= groups[0] or "").
+
+    Dual-write: saved configs carry `groups` (the source of truth) AND
+    the old single `group` string for one release so older builds still
+    open the file. Dropping the legacy key is stage 5 of
+    docs/multi-group-fixtures-plan.md."""
+    d = asdict(fixture)
+    d['group'] = fixture.group
+    return d
 
 
 @dataclass
@@ -1523,10 +1580,10 @@ class Configuration:
             )
             config.fixtures.append(fixture)
 
-            if fixture.group:
-                if fixture.group not in config.groups:
-                    config.groups[fixture.group] = FixtureGroup(fixture.group, [])
-                config.groups[fixture.group].fixtures.append(fixture)
+            for group_name in fixture.groups:
+                if group_name not in config.groups:
+                    config.groups[group_name] = FixtureGroup(group_name, [])
+                config.groups[group_name].fixtures.append(fixture)
 
         return config
 
@@ -1568,7 +1625,10 @@ class Configuration:
     def save(self, filename: str):
         """Save configuration to YAML file"""
         data = {
-            'fixtures': [asdict(f) for f in self.fixtures],
+            # fixture_asdict dual-writes `groups` (source of truth) and
+            # the legacy `group` key for older builds (plan stage 5
+            # removes it).
+            'fixtures': [fixture_asdict(f) for f in self.fixtures],
             'groups': {
                 name: {
                     'name': group.name,
@@ -1580,7 +1640,7 @@ class Configuration:
                     'default_z_height': group.default_z_height,
                     'lighting_role': group.lighting_role,
                     'export_intensity': group.export_intensity,
-                    'fixtures': [asdict(f) for f in group.fixtures]
+                    'fixtures': [fixture_asdict(f) for f in group.fixtures]
                 }
                 for name, group in self.groups.items()
             },
@@ -1673,8 +1733,10 @@ class Configuration:
         # Groups reference the same fixture objects as the top-level fixtures list
         groups = {}
         for name, group_data in data.get('groups', {}).items():
-            # Find fixtures that belong to this group from the top-level fixtures
-            group_fixtures = [f for f in fixtures if f.group == name]
+            # Find fixtures that belong to this group from the top-level
+            # fixtures. Membership is the full `groups` list, so a fixture
+            # appears in every group it lists.
+            group_fixtures = [f for f in fixtures if name in f.groups]
 
             groups[name] = FixtureGroup(
                 name=name,

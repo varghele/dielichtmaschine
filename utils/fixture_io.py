@@ -179,7 +179,11 @@ def write_fixture_list_json(path: str, config) -> None:
             'mode': fixture.current_mode,
             'universe': fixture.universe,
             'address': fixture.address,
+            # Dual-write: `groups` is the source of truth, the legacy
+            # single `group` (= primary) keeps older builds importing
+            # the file (removal is multi-group plan stage 5).
             'group': fixture.group,
+            'groups': list(fixture.groups),
             'layer': fixture.layer,
             'x': fixture.x,
             'y': fixture.y,
@@ -238,7 +242,10 @@ def read_fixture_list_json(path: str) -> Tuple[List[Fixture], Dict[str, dict], L
                 manufacturer=definition['manufacturer'],
                 model=definition['model'],
                 name=fd['name'],
+                # `groups` (newer files) wins; a legacy file with only
+                # `group` migrates to a one-element list in __post_init__.
                 group=fd.get('group', ''),
+                groups=[str(g) for g in (fd.get('groups') or [])],
                 layer=fd.get('layer', ''),
                 current_mode=fd['mode'],
                 available_modes=[
@@ -445,20 +452,21 @@ def apply_fixture_list(config, fixtures: List[Fixture],
             existing_layers.add(fixture.layer)
 
     # Rebuild group membership, preserving props of groups already present.
+    # A fixture joins EVERY group in its `groups` list (multi-group plan
+    # stage 1), not just the primary one.
     old_groups = config.groups
     config.groups = {}
     for fixture in config.fixtures:
-        if not fixture.group:
-            continue
-        if fixture.group not in config.groups:
-            if fixture.group in old_groups:
-                group = old_groups[fixture.group]
-                group.fixtures = []
-            else:
-                group = FixtureGroup(fixture.group, [])
-                for key, value in (group_props or {}).get(fixture.group, {}).items():
-                    setattr(group, key, value)
-            config.groups[fixture.group] = group
-        config.groups[fixture.group].fixtures.append(fixture)
+        for group_name in fixture.groups:
+            if group_name not in config.groups:
+                if group_name in old_groups:
+                    group = old_groups[group_name]
+                    group.fixtures = []
+                else:
+                    group = FixtureGroup(group_name, [])
+                    for key, value in (group_props or {}).get(group_name, {}).items():
+                        setattr(group, key, value)
+                config.groups[group_name] = group
+            config.groups[group_name].fixtures.append(fixture)
 
     config.ensure_universes_for_fixtures()

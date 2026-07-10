@@ -63,14 +63,17 @@ several consumers.
    multi-group a fixture naturally shows up in each of its groups' lanes.
    This is what makes the North Star "lane per group" honest.
 
-## Open decisions (resolve before stage 2)
+## Decisions (locked 2026-07-10, build started)
 
-- **Primary group / precedence** for data color, orientation defaults,
-  lighting role and export intensity when a fixture is in several groups.
-  Simplest: first in `groups` is primary; revisit if it feels wrong.
-- **GROUP column display** for many groups: inline chips vs. "N groups"
-  with a tooltip. Depends on column width.
-- **Export** target (primary vs. per-group) - needs the exporter read.
+- **Precedence: first group wins.** `groups[0]` is the primary group -
+  data color, orientation defaults, lighting role and export intensity
+  come from it; reordering the list changes precedence. No extra UI.
+- **GROUP column display:** the joined group list (" · " separator),
+  elided to the column with the full list in the tooltip - same
+  language as the timeline lane subtitle.
+- **Export** target (primary vs. per-group): decided during stage 3 by
+  reading the exporter; the gate either way is byte-identical `.qxw`
+  export for single-group configs (scripts/export_hash_check.py).
 
 ## Staging (each its own commit, tests + goldens)
 
@@ -82,4 +85,5 @@ several consumers.
 4. Timeline group-centric lanes on top of the new model.
 5. Remove the `group` compat property and the legacy save field.
 
-Nothing here is started; this is the plan.
+Build started 2026-07-10 (stage 1 first); stage 5 (compat removal)
+deliberately waits a release.

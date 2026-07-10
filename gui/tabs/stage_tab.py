@@ -1780,7 +1780,8 @@ class StageTab(BaseTab):
     # ── Library: fixture group rows ───────────────────────────────────
 
     def _fixtures_of_group(self, name):
-        return [f for f in self.config.fixtures if f.group == name]
+        # Membership spans the whole groups list (multi-group stage 1).
+        return [f for f in self.config.fixtures if name in f.groups]
 
     def _refresh_group_rows(self):
         """Rebuild the RIG · FIXTURES rows from config.groups."""

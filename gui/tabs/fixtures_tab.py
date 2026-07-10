@@ -1106,7 +1106,9 @@ class FixturesTab(BaseTab):
         selection = QtCore.QItemSelection()
         last_col = self.table.columnCount() - 1
         for row, fixture in enumerate(self.config.fixtures):
-            if fixture.group == name and row < self.table.rowCount():
+            # Membership check spans the whole groups list, so clicking a
+            # group row selects secondary members too.
+            if name in fixture.groups and row < self.table.rowCount():
                 selection.select(model.index(row, 0),
                                  model.index(row, last_col))
         selection_model.select(
@@ -1188,10 +1190,12 @@ class FixturesTab(BaseTab):
 
         self.config.groups = {}
         for fixture in self.config.fixtures:
-            if fixture.group:
-                if fixture.group not in self.config.groups:
-                    self.config.groups[fixture.group] = build_group(fixture.group)
-                self.config.groups[fixture.group].fixtures.append(fixture)
+            # Full membership: a fixture appears in EVERY group it lists
+            # (multi-group plan stage 1), not just its primary one.
+            for group_name in fixture.groups:
+                if group_name not in self.config.groups:
+                    self.config.groups[group_name] = build_group(group_name)
+                self.config.groups[group_name].fixtures.append(fixture)
 
         for name in list(self._manual_groups):
             if name in self.config.groups:
