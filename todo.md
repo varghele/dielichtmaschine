@@ -66,8 +66,31 @@ per-feature, last-writer-wins-by-accident.
   engine) and Live plan stage E (busk-on-top merge); this note should
   not invent a new milestone, just wire the existing ones together.
 
+## Pull-in candidates (roadmap items that fit the current polish phase)
+
+Discuss before pulling any of these in - order is by leverage:
+
+- [ ] **Headless export CLI** (v1.3): nearly free since
+      `create_qlc_workspace` gained `output_path`; just an argparse
+      shell + console-script entry.
+- [ ] **Configurable fixture library paths** (v1.2): user GDTF dir +
+      user `.qxf` dir in Settings, folded into `fixture_search_dirs()`;
+      prerequisite for GDTF Share Phase 4, and the packaged app needs
+      writable per-user defaults anyway.
+- [ ] **`.lms` project extension** (v1.3): file filters, recents,
+      packaging association; `.yaml` stays loadable.
+- [ ] **Fixtures table delegate editing** (v1.3): the last old-styling
+      holdout, fits the tab-polish pass.
+- [ ] **Riff tagging + search** (v1.3): rail search exists; tags are a
+      small model addition.
+
+Deliberately NOT pulled: Library topbar section (wants a Bibliothek
+screen design first), timeline undo/redo (big), MVR/OSC (own tracks).
+
 ## Before the backend build (user)
 
 - [ ] Tab polish pass on the individual tabs (in progress, user-led)
+- [ ] Discuss the output/sync logic (the six decisions above) - can
+      happen in any session with repo access; this file is the agenda
 - [ ] Review this file, then promote to docs/output-sync-plan.md with
       phases + tests
