@@ -766,13 +766,12 @@ class MainWindow(QMainWindow, Ui_MainWindow):
                 self.structure_tab.show_combo.blockSignals(False)
                 self.structure_tab._load_show(show_name)
         elif source_tab == 'structure':
-            # Update shows tab to match - refresh combo first so new shows appear
-            self.shows_tab.show_combo.blockSignals(True)
-            current = self.shows_tab.show_combo.currentText()
-            self.shows_tab.show_combo.clear()
-            self.shows_tab.show_combo.addItems(sorted(self.config.songs.keys()))
-            self.shows_tab.show_combo.setCurrentText(show_name)
-            self.shows_tab.show_combo.blockSignals(False)
+            # Update shows tab to match - refresh the combo first so new
+            # shows appear. The combo derives its "NN · Name" rows from
+            # config.setlist and carries the raw song name as itemData,
+            # so selection goes by data (findData inside the populate),
+            # never by display text.
+            self.shows_tab._populate_show_combo(select=show_name)
             # Use _load_show directly, not _on_show_changed: the latter would
             # call parent().on_show_selected('shows') and bounce right back
             # to update the Structure tab again, infinite loop.

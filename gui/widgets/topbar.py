@@ -336,7 +336,7 @@ def screen_hints():
         3: QCoreApplication.translate(
             "Shell", "Define parts, BPM and bars per song"),
         4: QCoreApplication.translate(
-            "Shell", "Drop riffs onto lanes · Ctrl+Z undo · Auto-Generate builds a show from audio"),
+            "Shell", "Drop riffs onto lanes · Ctrl+Z undo · Auto-Generate builds a song from audio"),
         5: QCoreApplication.translate(
             "Shell", "Pick an audio input and press Start · Ctrl+L jumps here"),
         6: QCoreApplication.translate(

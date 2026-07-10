@@ -327,7 +327,7 @@ class ShowsTab(BaseTab):
         # only accent-filled button in the strip.
         self.autogen_btn = QPushButton("AUTOGEN")
         self.autogen_btn.setProperty("role", "cta-accent")
-        self.autogen_btn.setToolTip("Automatically generate light show from audio analysis")
+        self.autogen_btn.setToolTip("Automatically generate the song from audio analysis")
         toolbar.addWidget(self.autogen_btn)
 
         # Inspector toggle - a bordered display-caps action so it reads
@@ -911,8 +911,10 @@ class ShowsTab(BaseTab):
 
     def connect_signals(self):
         """Connect widget signals to handlers."""
-        # Toolbar
-        self.show_combo.currentTextChanged.connect(self._on_show_changed)
+        # Toolbar. The song selector's display text is "NN · Name"
+        # (setlist numbering), NOT the song key - route through the
+        # index signal and read the raw name from itemData.
+        self.show_combo.currentIndexChanged.connect(self._on_show_index_changed)
         self.add_lane_btn.clicked.connect(self._add_new_lane)
         self.autogen_btn.clicked.connect(self._on_autogenerate)
         self.inspector_btn.toggled.connect(self._on_inspector_toggled)
@@ -965,21 +967,54 @@ class ShowsTab(BaseTab):
         # Keyboard shortcuts for selection operations
         self._setup_selection_shortcuts()
 
-    def update_from_config(self):
-        """Refresh timeline from configuration."""
-        # Update show combo
-        current = self.show_combo.currentText()
+    def _populate_show_combo(self, select: str = ""):
+        """Fill the SONG selector from ``config.setlist``: songs in
+        setlist order as "NN · Name" (2-digit position, matching the
+        Structure rail's card titles), then a separator, then any songs
+        not in the setlist, unnumbered.
+
+        The display text is NOT the song key anymore - the raw name
+        travels as itemData (Qt.ItemDataRole.UserRole). Read the current
+        song via ``currentData()``, select one via ``findData()``.
+        Signals stay blocked throughout; the caller decides whether to
+        load the resulting selection.
+        """
         self.show_combo.blockSignals(True)
         self.show_combo.clear()
-        self.show_combo.addItems(sorted(self.config.songs.keys()))
-        if current and current in self.config.songs:
-            self.show_combo.setCurrentText(current)
-        elif self.config.songs:
-            self.show_combo.setCurrentIndex(0)
+
+        setlist = getattr(self.config, "setlist", None)
+        listed = []
+        seen = set()
+        for entry in (setlist.entries if setlist else []):
+            if entry.song in self.config.songs and entry.song not in seen:
+                listed.append(entry.song)
+                seen.add(entry.song)
+        for position, name in enumerate(listed, start=1):
+            self.show_combo.addItem(f"{position:02d} · {name}", name)
+
+        unlisted = sorted(n for n in self.config.songs if n not in seen)
+        if listed and unlisted:
+            self.show_combo.insertSeparator(self.show_combo.count())
+        for name in unlisted:
+            self.show_combo.addItem(name, name)
+
+        # Index 0 is always a real song (the separator only ever sits
+        # between the two groups), so falling back there is safe.
+        index = self.show_combo.findData(select) if select else -1
+        if index < 0 and self.show_combo.count():
+            index = 0
+        self.show_combo.setCurrentIndex(index)
         self.show_combo.blockSignals(False)
 
+    def update_from_config(self):
+        """Refresh timeline from configuration."""
+        # Update show combo (setlist order + numbering); keep the
+        # selection by data - the display text carries the position.
+        current = self.show_combo.currentData()
+        self._populate_show_combo(select=current or "")
+
         # Load current show
-        self._load_show(self.show_combo.currentText())
+        self._load_show(self.show_combo.currentData() or "")
         self._config_dirty = False
 
     def on_tab_activated(self):
@@ -991,6 +1026,13 @@ class ShowsTab(BaseTab):
             if self._config_dirty:
                 self._config_dirty = False
                 self.update_from_config()
+            else:
+                # Setlist edits on the Structure tab (reorder, add,
+                # remove) don't dirty this tab's timeline data, but they
+                # do change the selector's numbering - refresh it
+                # cheaply, keeping the selected song by data.
+                self._populate_show_combo(
+                    select=self.show_combo.currentData() or "")
         finally:
             self._is_activating = False
 
@@ -1015,6 +1057,11 @@ class ShowsTab(BaseTab):
         # removed fixtures appear (or vanish) in the 3D preview too.
         if hasattr(self, "embedded_visualizer") and self.embedded_visualizer:
             self.embedded_visualizer.set_config(self.config)
+
+    def _on_show_index_changed(self, index: int):
+        """Combo index -> raw song name (itemData carries the key; the
+        display text is the numbered "NN · Name" label)."""
+        self._on_show_changed(self.show_combo.itemData(index) or "")
 
     def _on_show_changed(self, show_name: str):
         """Handle show selection change."""
@@ -2316,17 +2363,14 @@ class ShowsTab(BaseTab):
 
             imported_count += 1
 
-        # Update show combo box with newly imported shows
-        self.show_combo.blockSignals(True)
-        self.show_combo.clear()
-        self.show_combo.addItems(sorted(self.config.songs.keys()))
-        if self.config.songs:
-            self.show_combo.setCurrentIndex(0)
-        self.show_combo.blockSignals(False)
+        # Update show combo box with newly imported shows (setlist
+        # numbering + order; imported songs without an entry list after
+        # the separator).
+        self._populate_show_combo()
 
         # Load the first show if available
-        if self.show_combo.currentText():
-            self._load_show(self.show_combo.currentText())
+        if self.show_combo.currentData():
+            self._load_show(self.show_combo.currentData())
 
         print(f"Successfully imported {imported_count} show(s) from {shows_dir}")
 

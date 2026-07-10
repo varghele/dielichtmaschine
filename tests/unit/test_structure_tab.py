@@ -254,7 +254,7 @@ class TestStrips:
         assert THEMES["dark"]["success"] in tab.audio_status.styleSheet()
 
     def test_autogen_button_caps_label(self, tab):
-        assert tab.autogen_btn.text() == "AUTOGENERATE SHOW..."
+        assert tab.autogen_btn.text() == "AUTOGENERATE SONG..."
 
 
 # ---------------------------------------------------------------------------

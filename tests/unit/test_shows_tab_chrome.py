@@ -92,6 +92,20 @@ def _add_show(config, name="Demo Show"):
     )
 
 
+def _add_setlist(config):
+    """Three listed songs in a deliberately non-alphabetical setlist
+    order, plus one song ("Zugabe") that stays off the setlist. The
+    fixture's "Demo Show" is unlisted too."""
+    from config.models import Setlist, SetlistEntry
+    for name in ("Neon Ruinen", "Monsters", "Schwarzes Gold", "Zugabe"):
+        _add_show(config, name)
+    config.setlist = Setlist(name="Demo Tour", entries=[
+        SetlistEntry(song="Schwarzes Gold"),
+        SetlistEntry(song="Neon Ruinen"),
+        SetlistEntry(song="Monsters"),
+    ])
+
+
 @pytest.fixture
 def shows_tab(qapp, monkeypatch, sample_configuration):
     from PyQt6.QtCore import QEvent
@@ -684,7 +698,119 @@ class TestPreservedChrome:
 
     def test_show_loads_and_zoom_still_works(self, shows_tab):
         shows_tab.update_from_config()
+        # The song key lives in itemData now (display text is the
+        # numbered setlist label); an unlisted-only config shows the
+        # bare name.
+        assert shows_tab.show_combo.currentData() == "Demo Show"
         assert shows_tab.show_combo.currentText() == "Demo Show"
         shows_tab.zoom_slider.setValue(200)
         assert shows_tab.zoom_label.text() == "2.0x"
         assert shows_tab.master_timeline.timeline_widget.zoom_factor == 2.0
+
+
+def _separator_indices(combo):
+    """Indices of QComboBox separator rows (non-selectable model items)."""
+    from PyQt6.QtCore import Qt
+    model = combo.model()
+    return [i for i in range(combo.count())
+            if not (model.flags(model.index(i, 0))
+                    & Qt.ItemFlag.ItemIsSelectable)]
+
+
+class TestSongSelector:
+    """S3 (docs/setlist-plan.md): the toolbar SONG selector lists songs
+    in SETLIST order with "NN · Name" display text (same format as the
+    Structure rail cards); songs missing from the setlist follow after
+    a separator, unnumbered. The display text is no longer the song
+    key - the raw name travels as itemData (UserRole), so every read
+    and write goes through data, never text."""
+
+    def test_setlist_order_with_numbering_and_data(self, shows_tab):
+        _add_setlist(shows_tab.config)
+        shows_tab.update_from_config()
+        combo = shows_tab.show_combo
+        assert [combo.itemText(i) for i in range(3)] == [
+            "01 · Schwarzes Gold", "02 · Neon Ruinen", "03 · Monsters"]
+        assert [combo.itemData(i) for i in range(3)] == [
+            "Schwarzes Gold", "Neon Ruinen", "Monsters"]
+
+    def test_unlisted_songs_follow_after_a_separator(self, shows_tab):
+        _add_setlist(shows_tab.config)
+        shows_tab.update_from_config()
+        combo = shows_tab.show_combo
+        # 3 listed + separator + 2 unlisted (Demo Show, Zugabe; sorted).
+        assert combo.count() == 6
+        assert _separator_indices(combo) == [3]
+        assert [combo.itemText(i) for i in (4, 5)] == ["Demo Show", "Zugabe"]
+        assert [combo.itemData(i) for i in (4, 5)] == ["Demo Show", "Zugabe"]
+
+    def test_no_separator_without_setlist_entries(self, shows_tab):
+        # The fixture config carries only the unlisted "Demo Show".
+        shows_tab.update_from_config()
+        combo = shows_tab.show_combo
+        assert combo.count() == 1
+        assert combo.itemText(0) == "Demo Show"
+        assert _separator_indices(combo) == []
+
+    def test_no_separator_when_every_song_is_listed(self, shows_tab):
+        from config.models import SetlistEntry
+        _add_setlist(shows_tab.config)
+        shows_tab.config.setlist.entries += [
+            SetlistEntry(song="Zugabe"), SetlistEntry(song="Demo Show")]
+        shows_tab.update_from_config()
+        combo = shows_tab.show_combo
+        assert combo.count() == 5
+        assert _separator_indices(combo) == []
+        assert combo.itemText(4) == "05 · Demo Show"
+
+    def test_switching_via_the_combo_loads_by_data(self, shows_tab):
+        _add_setlist(shows_tab.config)
+        shows_tab.update_from_config()
+        assert shows_tab.current_song_name == "Schwarzes Gold"  # entry 01
+        shows_tab.show_combo.setCurrentIndex(2)  # "03 · Monsters"
+        assert shows_tab.current_song_name == "Monsters"
+
+    def test_repopulate_preserves_selection_by_data(self, shows_tab):
+        _add_setlist(shows_tab.config)
+        shows_tab.update_from_config()
+        combo = shows_tab.show_combo
+        combo.setCurrentIndex(combo.findData("Monsters"))
+        assert shows_tab.current_song_name == "Monsters"
+
+        # Structure-tab reorder: Monsters moves to the front. The usual
+        # config rebind must renumber AND keep the selected song.
+        entries = shows_tab.config.setlist.entries
+        entries.insert(0, entries.pop(2))
+        shows_tab.update_from_config()
+        assert combo.currentData() == "Monsters"
+        assert combo.currentText() == "01 · Monsters"
+        assert shows_tab.current_song_name == "Monsters"
+
+    def test_tab_activation_refreshes_numbering_without_reload(
+            self, shows_tab):
+        """A setlist reorder does not dirty the timeline config; plain
+        tab activation still refreshes the selector's order/numbering,
+        keeping the selection by data."""
+        _add_setlist(shows_tab.config)
+        shows_tab.update_from_config()
+        combo = shows_tab.show_combo
+        combo.setCurrentIndex(combo.findData("Neon Ruinen"))
+        assert combo.currentText() == "02 · Neon Ruinen"
+
+        entries = shows_tab.config.setlist.entries
+        entries.insert(0, entries.pop(1))  # Neon Ruinen first
+        assert not shows_tab._config_dirty
+        shows_tab.on_tab_activated()
+        assert combo.currentText() == "01 · Neon Ruinen"
+        assert combo.currentData() == "Neon Ruinen"
+        assert shows_tab.current_song_name == "Neon Ruinen"
+
+    def test_stale_selection_falls_back_to_the_first_entry(self, shows_tab):
+        _add_setlist(shows_tab.config)
+        shows_tab.update_from_config()
+        combo = shows_tab.show_combo
+        combo.setCurrentIndex(combo.findData("Zugabe"))
+        del shows_tab.config.songs["Zugabe"]
+        shows_tab.update_from_config()
+        assert combo.currentData() == "Schwarzes Gold"
+        assert combo.currentText() == "01 · Schwarzes Gold"

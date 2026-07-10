@@ -272,7 +272,7 @@ def test_audio_readout_warns_when_no_audio_is_known(empty_dialog):
 def test_structure_readout_counts_real_parts_and_bars(dialog):
     # 8 + 16 + 8 + 8 + 8 = 48 bars, matching the reference copy.
     assert dialog.structure_label.text() == \
-        "From show · Structure · 5 parts, 48 bars"
+        "From song · Structure · 5 parts, 48 bars"
 
 
 def test_structure_readout_without_a_show(empty_dialog):

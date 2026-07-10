@@ -338,7 +338,7 @@ class AutogenDialog(QDialog):
     def __init__(self, parent=None, *, audio_path=None, show=None,
                  report=None):
         super().__init__(parent)
-        self.setWindowTitle("Autogenerate Show")
+        self.setWindowTitle("Autogenerate Song")
         self.setMinimumSize(1180, 680)
 
         self._audio_path = audio_path if audio_path is not None \
@@ -406,9 +406,9 @@ class AutogenDialog(QDialog):
         row = QHBoxLayout(header)
         row.setContentsMargins(18, 0, 18, 0)
 
-        title = "Autogenerate show"
+        title = "Autogenerate song"
         if self._show is not None and getattr(self._show, "name", ""):
-            title = f"Autogenerate show · {self._show.name}"
+            title = f"Autogenerate song · {self._show.name}"
         self.title_label = DisplayLabel(title, point_size=12,
                                         weight=QFont.Weight.Bold,
                                         tracking_em=0.08)
@@ -504,7 +504,7 @@ class AutogenDialog(QDialog):
         bars = sum(int(getattr(p, "num_bars", 0) or 0) for p in parts)
         part_word = "part" if len(parts) == 1 else "parts"
         bar_word = "bar" if bars == 1 else "bars"
-        return (f"From show · Structure · {len(parts)} {part_word}, "
+        return (f"From song · Structure · {len(parts)} {part_word}, "
                 f"{bars} {bar_word}")
 
     def _build_palette_block(self) -> QWidget:

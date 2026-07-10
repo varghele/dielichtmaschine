@@ -9,7 +9,7 @@ Anatomy (top to bottom):
   import/export directory hint, evicted from the old show row), then
   the mono audio readout ("neon_ruinen.wav . 03:42 ANALYZED", the
   status word in green) and a bordered display-caps
-  "AUTOGENERATE SHOW..." button on the right.
+  "AUTOGENERATE SONG..." button on the right.
 - a 330px setlist rail on the left (reference screen 05b): header with
   "SETLIST . NAME", "N SONGS . MM MIN" and the SYNC segment row
   (MIDI / MTC / SMPTE / MANUAL writing setlist.sync_mode), then one
@@ -886,7 +886,7 @@ class StructureTab(BaseTab):
       signature, bars, transition, color, reorder, delete) and the
       AUDIO ANALYSIS meter bars
     - Action-strip directory chip, audio readout + "AUTOGENERATE
-      SHOW..." entry point
+      SONG..." entry point
     - CSV import/export, audio playback
     """
 
@@ -1051,7 +1051,7 @@ class StructureTab(BaseTab):
 
     def _create_action_strip(self) -> QWidget:
         """38px strip: the SHOW DIRECTORY chip on the left, mono audio
-        readout + AUTOGENERATE SHOW button on the right.
+        readout + AUTOGENERATE SONG button on the right.
 
         No tab title - the shell subnav already names the screen.
         """
@@ -1097,7 +1097,7 @@ class StructureTab(BaseTab):
 
         # Bordered display-caps CTA (the reference's outlined button:
         # transparent fill, 1px $border$, Barlow Condensed caps).
-        self.autogen_btn = QPushButton("AUTOGENERATE SHOW...")
+        self.autogen_btn = QPushButton("AUTOGENERATE SONG...")
         self.autogen_btn.setObjectName("AutogenButton")
         self._autogen_font = display_font(11, QFont.Weight.DemiBold,
                                           tracking_em=0.08)
@@ -2586,7 +2586,7 @@ class StructureTab(BaseTab):
         show = self.current_show
         if not show.parts:
             QMessageBox.warning(self, "No Song Structure",
-                                "Add song parts before generating a show.")
+                                "Add song parts before generating the song.")
             return
         if not self.config.groups:
             QMessageBox.warning(self, "No Fixture Groups",
@@ -2596,7 +2596,7 @@ class StructureTab(BaseTab):
         audio_path = self._autogen_audio_path()
         if not audio_path:
             QMessageBox.warning(self, "No Audio File",
-                                "Load an audio file for this show first.")
+                                "Load an audio file for this song first.")
             return
 
         dialog = AutogenDialog(self)
@@ -2618,7 +2618,7 @@ class StructureTab(BaseTab):
 
     def _reset_autogen_button(self):
         self.autogen_btn.setEnabled(True)
-        self.autogen_btn.setText("AUTOGENERATE SHOW...")
+        self.autogen_btn.setText("AUTOGENERATE SONG...")
 
     def _on_autogen_finished(self, lanes, report=None):
         """Store generated lanes on the show (the Timeline tab renders

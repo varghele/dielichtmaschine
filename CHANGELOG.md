@@ -65,6 +65,11 @@ verbatim as the GitHub Release notes (see [docs/releasing.md](docs/releasing.md)
   with `shows` load forever and get a setlist synthesized. Editing UI
   and the trigger engine follow in later passes; workspace export is
   byte-identical.
+- **The timeline knows the setlist.** Its song selector lists songs in
+  setlist order as "01 · Name", with songs outside the setlist after a
+  divider; reordering the setlist renumbers it. Autogen wording says
+  song instead of show throughout (button, dialog, hints), with the
+  German catalog updated.
 - **Timeline chrome finished the v3 pass.** The parts band is a slim
   tinted region row with part names and BPM tags behind a shared PARTS
   header cell; the audio track compacts to one 44px row (filename,

@@ -84,7 +84,8 @@ def chrome_tab(qapp, monkeypatch, sample_configuration):
     toolbar / transport widgets are exactly 1400px wide (10px margins)."""
     from PyQt6.QtCore import QEvent
     from PyQt6.QtWidgets import QApplication
-    from config.models import Song, ShowPart, TimelineData
+    from config.models import (Setlist, SetlistEntry, Song, ShowPart,
+                               TimelineData)
     from gui.theme_manager import ThemeManager
 
     _stub_heavy_widgets(monkeypatch)
@@ -100,6 +101,12 @@ def chrome_tab(qapp, monkeypatch, sample_configuration):
         ],
         effects=[],
         timeline_data=TimelineData(),
+    )
+    # On the setlist so the toolbar golden pins the S3 numbered
+    # selector label ("01 · Golden Show").
+    sample_configuration.setlist = Setlist(
+        name="Golden Tour",
+        entries=[SetlistEntry(song="Golden Show")],
     )
 
     from gui.tabs.shows_tab import ShowsTab
