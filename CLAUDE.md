@@ -167,3 +167,35 @@ see literals hidden behind wrapper functions or aliases;
 translations/lichtmaschine_de.ts is source of truth,
 scripts/update_translations.py refreshes it (compiling .qm needs an
 lrelease, not in the env).
+
+**Setlist + timeline v3 shipped (2026-07-10, same branch, second
+design pass against screens 05b/06b):** the data model is
+SHOW(SETLIST) -> SONGS -> PARTS. `Show` was renamed `Song`
+(config.songs); `Setlist`/`SetlistEntry`/`SongTrigger`/`PauseLook` are
+new in config/models.py; YAML writes `songs:` + `setlist:` and loads
+legacy `shows:` forever (synthesized setlist; demo YAMLs deliberately
+stay legacy as fixtures). Export is byte-identical (hash-checked).
+Structure tab = setlist rail (numbered cards, triggers, pause rows,
+sync segment, drag reorder) + song editor centre + trigger/pause-look
+inspector (LEARN disabled until the v1.7 engine; analysis bars read
+the session-only autogen GenerationReport). Timeline = compact single
+toolbar row (percentage swing 0-100), 260px shared lane headers
+(HEADER_COLUMN_WIDTH in timeline_widget.py, sub-lane labels in the
+header), blocks as tinted clips (part colour, header strip with bar
+range, labelled sub-rows), parts band + compact audio row + accent
+playhead (opt-in compact=True so the Structure tab's embedded copies
+are unchanged), block inspector rows (NO overlap row until v1.6),
+scenes section in the riff rail (drag mime application/x-lm-scene,
+drop deferred), song selector numbered by setlist (itemData carries
+the raw name - never read currentText for the key). Plans with status
++ commit hashes: docs/timeline-v3-plan.md, docs/setlist-plan.md.
+Theme roles added: lane-chip (+ QComboBox variant), segment/card
+groups, destructive-outline, QLineEdit[state="invalid"], accent tint
+on output-select:checked. The Live tab (3b busking surface, earlier
+in the pass) has BPM/TAP, SHOW/LIVE mode, 5 palette pools (effects =
+riff library, scenes = scenes/scene_library.py), dual queue - all
+in-memory, no output engine yet. Tests: pytest-xdist is set up -
+`pytest tests/unit -n auto` (~2 min); visual stays serial, never
+regen goldens under -n (tests/README.md). Known pre-existing failure:
+test_fixture_browser TestMultiAdd (modal-guard, tracked). Also new:
+main window nav is SETUP/SHOW/LIVE with Auto inside LIVE.

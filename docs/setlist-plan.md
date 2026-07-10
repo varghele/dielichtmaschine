@@ -126,3 +126,12 @@ marked honestly in the inspector copy.
   rail / full tab dark / full tab light if needed - decide at S2a).
 - Regression: full suite green at every stage; export hash check
   (`scripts/export_hash_check.py`) unchanged by the rename.
+
+## Status (2026-07-10): ALL STAGES SHIPPED
+
+S1 7c22b0b (model + rename, export byte-identical), S2a 9861894
+(setlist rail), S2b 26b0ebb (song editor centre, + destructive-outline
+role 8102d21), S2c 7ac6cff (trigger + pause-look inspector, + invalid
+state rule ca1b4d6), S3 f06bb8a (timeline song numbering + wording).
+Open: S4, the trigger/sync engine, lives in ROADMAP.md v1.7 ("Setlist
+trigger engine").

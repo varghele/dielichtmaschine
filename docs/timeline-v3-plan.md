@@ -102,3 +102,12 @@ snap, swing, zoom and save into a single 44px row.
 Each stage is one commit with tests + regenerated goldens; per-glyph
 clipping check on every golden before commit (bounced once on the Live
 tab pass; the check is not optional).
+
+## Status (2026-07-10): ALL STAGES SHIPPED
+
+T1 bbac5e7 (compact toolbar + percentage swing), T2 44cee4d (lane
+headers, + lane-chip role 4a3d232), T3 bc17eba (tinted clip blocks),
+T4+T5 70005b0 (parts band, compact audio row, accent playhead, block
+inspector rows, scenes section in the library rail). The deferred
+items above (overlap crossfade -> v1.6, cross-lane scene drop, song
+numbering -> landed via setlist S3 f06bb8a) remain the open tail.
