@@ -1014,7 +1014,7 @@ def create_shows(engine, config: Configuration, fixture_id_map: dict, fixture_de
     function_id_counter = 0
 
     # Process each show in the configuration
-    for show_name, show in config.shows.items():
+    for show_name, show in config.songs.items():
         # Debug info
         has_timeline = show.timeline_data is not None
         has_lanes = has_timeline and len(show.timeline_data.lanes) > 0 if has_timeline else False

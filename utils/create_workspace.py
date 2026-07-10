@@ -82,7 +82,7 @@ def create_qlc_workspace(config: Configuration, vc_options: Optional[Dict[str, b
         from utils.midi_utils import ensure_midi_device_in_config
         pause_show = generate_pause_show(config, fixture_definitions, capabilities_map)
         if pause_show:
-            config.shows["PAUSE"] = pause_show
+            config.songs["PAUSE"] = pause_show
             _injected_pause = True
             # Ensure MIDI device exists for the pause trigger
             if config.pause_show.trigger_device:
@@ -155,7 +155,7 @@ def create_qlc_workspace(config: Configuration, vc_options: Optional[Dict[str, b
 
     # Remove injected PAUSE show from config (it's ephemeral, only for export)
     if _injected_pause:
-        del config.shows["PAUSE"]
+        del config.songs["PAUSE"]
 
     # Create SimpleDesk section
     simple_desk = ET.SubElement(engine, "SimpleDesk")

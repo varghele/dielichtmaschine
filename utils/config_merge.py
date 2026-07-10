@@ -1,7 +1,7 @@
 """Cross-config show import: pull selected shows from another config.
 
 The "get last year's set into this venue's config" feature. Works on the
-object model (Configuration.load / Show.to_dict round-trip), never on raw
+object model (Configuration.load / Song.to_dict round-trip), never on raw
 YAML — v1.0's compact serializer keeps block templates in per-file
 top-level tables (block_defs / light_block_defs), so copying raw show
 dicts between files would re-point template refs into the wrong table.
@@ -28,10 +28,10 @@ import shutil
 from dataclasses import dataclass, field
 from typing import List, Optional
 
-from config.models import Configuration, Show
+from config.models import Configuration, Song
 
 
-def referenced_groups(show: Show) -> List[str]:
+def referenced_groups(show: Song) -> List[str]:
     """Every fixture-group name the show targets (timeline lanes plus the
     legacy effects table), sorted, without duplicates."""
     names = set()
@@ -58,7 +58,7 @@ class ShowImportCandidate:
 def list_import_candidates(source: Configuration,
                            target: Configuration) -> List[ShowImportCandidate]:
     candidates = []
-    for name, show in source.shows.items():
+    for name, show in source.songs.items():
         groups = referenced_groups(show)
         audio = None
         if show.timeline_data and show.timeline_data.audio_file_path:
@@ -69,7 +69,7 @@ def list_import_candidates(source: Configuration,
             groups=groups,
             missing_groups=[g for g in groups if g not in target.groups],
             audio_file=audio,
-            name_conflict=name in target.shows,
+            name_conflict=name in target.songs,
         ))
     return candidates
 
@@ -103,7 +103,7 @@ def _locate_source_audio(source: Configuration, audio_path: str) -> Optional[str
 
 
 def _copy_show_audio(source: Configuration, target: Configuration,
-                     show: Show) -> str:
+                     show: Song) -> str:
     """Copy the show's audio into the target bundle; returns the action.
     Always normalizes the show's stored path to the basename so it
     resolves via the target's bundle dir from now on."""
@@ -139,12 +139,12 @@ def merge_shows(target: Configuration, source: Configuration,
 
     results = []
     for name in show_names:
-        if name not in source.shows:
+        if name not in source.songs:
             raise KeyError(f"Source config has no show named {name!r}")
 
         action = 'added'
         final_name = name
-        if name in target.shows:
+        if name in target.songs:
             if on_conflict == 'skip':
                 results.append(ShowMergeResult(
                     source_name=name, final_name=None, action='skipped'))
@@ -152,12 +152,12 @@ def merge_shows(target: Configuration, source: Configuration,
             if on_conflict == 'overwrite':
                 action = 'overwritten'
             else:
-                final_name = _unique_show_name(name, target.shows)
+                final_name = _unique_show_name(name, target.songs)
                 action = 'renamed'
 
         # Deep copy through the dict round-trip so target edits never
         # write back into the source config's objects.
-        show = Show.from_dict(final_name, source.shows[name].to_dict())
+        show = Song.from_dict(final_name, source.songs[name].to_dict())
 
         audio_action = _copy_show_audio(source, target, show) if copy_audio else 'none'
 
@@ -169,6 +169,6 @@ def merge_shows(target: Configuration, source: Configuration,
                             if g not in target.groups],
             audio_action=audio_action,
         ))
-        target.shows[final_name] = show
+        target.songs[final_name] = show
 
     return results

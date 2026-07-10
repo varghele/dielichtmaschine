@@ -39,8 +39,8 @@ class TestNewShowButton:
             with patch("gui.tabs.structure_tab.QInputDialog.getText",
                        return_value=("My Show", True)):
                 tab._create_new_show()
-            assert "My Show" in config.shows
-            assert config.shows["My Show"].parts, "needs a default part"
+            assert "My Show" in config.songs
+            assert config.songs["My Show"].parts, "needs a default part"
         finally:
             tab.deleteLater()
 
@@ -53,7 +53,7 @@ class TestNewShowButton:
             with patch("gui.tabs.structure_tab.QInputDialog.getText",
                        return_value=("", False)):
                 tab._create_new_show()
-            assert config.shows == {}
+            assert config.songs == {}
         finally:
             tab.deleteLater()
 

@@ -507,7 +507,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
 
         # Only when nothing has been opened/edited yet this launch.
         if self.config_path or self.config.fixtures or self.config.universes \
-                or self.config.groups or self.config.shows:
+                or self.config.groups or self.config.songs:
             return
         last = app_settings().value("autosave/last_project", "", type=str)
         backup = find_recoverable(last or None, autosave_dir())
@@ -770,7 +770,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             self.shows_tab.show_combo.blockSignals(True)
             current = self.shows_tab.show_combo.currentText()
             self.shows_tab.show_combo.clear()
-            self.shows_tab.show_combo.addItems(sorted(self.config.shows.keys()))
+            self.shows_tab.show_combo.addItems(sorted(self.config.songs.keys()))
             self.shows_tab.show_combo.setCurrentText(show_name)
             self.shows_tab.show_combo.blockSignals(False)
             # Use _load_show directly, not _on_show_changed: the latter would
@@ -1091,10 +1091,10 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             traceback.print_exc()
 
     def _offer_legacy_csv_merge(self):
-        """Scan config.shows_directory for *.csv shows not in config.shows.
+        """Scan config.shows_directory for *.csv shows not in config.songs.
 
         If any are found, prompt once. On accept, read each via
-        ``utils.show_io.read_show`` and add to ``config.shows`` in memory.
+        ``utils.show_io.read_show`` and add to ``config.songs`` in memory.
         Skips silently if shows_directory is unset / missing / has no
         unrecognised CSVs.
         """
@@ -1108,7 +1108,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         candidates = []
         for csv_name in csv_files:
             stem = os.path.splitext(csv_name)[0]
-            if stem in self.config.shows:
+            if stem in self.config.songs:
                 continue
             candidates.append((stem, os.path.join(shows_dir, csv_name)))
         if not candidates:
@@ -1136,7 +1136,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
                 # Use the stem we derived from the filename in case the
                 # file's internal name disagrees.
                 show.name = stem
-                self.config.shows[stem] = show
+                self.config.songs[stem] = show
                 imported += 1
             except Exception as e:
                 print(f"Skipping {path}: {e}")
@@ -1284,7 +1284,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             )
             return
 
-        if show.name in self.config.shows:
+        if show.name in self.config.songs:
             reply = QMessageBox.question(
                 self, "Overwrite Show?",
                 f"A show named '{show.name}' already exists in the config.\n\n"
@@ -1294,7 +1294,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             if reply != QMessageBox.StandardButton.Yes:
                 return
 
-        self.config.shows[show.name] = show
+        self.config.songs[show.name] = show
         # Refresh the Structure tab so the imported show shows up + selects.
         self.structure_tab.update_from_config()
         if hasattr(self.structure_tab, 'show_combo'):
@@ -1318,8 +1318,8 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         by the extension of the chosen path.
         """
         from utils.show_io import write_show
-        current_name = getattr(self.structure_tab, 'current_show_name', '')
-        show = self.config.shows.get(current_name) if current_name else None
+        current_name = getattr(self.structure_tab, 'current_song_name', '')
+        show = self.config.songs.get(current_name) if current_name else None
         if not show:
             QMessageBox.warning(
                 self, "No Show Selected",
@@ -1392,7 +1392,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
                 f"Could not load {os.path.basename(file_path)}:\n{e}"
             )
             return
-        if not source.shows:
+        if not source.songs:
             QMessageBox.warning(
                 self, "No Shows",
                 f"{os.path.basename(file_path)} contains no shows."
@@ -1668,7 +1668,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
     def render_to_video(self):
         """Open the render-to-video dialog."""
         try:
-            if not self.config.shows:
+            if not self.config.songs:
                 QMessageBox.warning(self, "No Shows", "No shows available to render.")
                 return
 

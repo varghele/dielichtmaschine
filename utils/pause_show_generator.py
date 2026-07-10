@@ -4,7 +4,7 @@
 from typing import Optional, Dict
 
 from config.models import (
-    Configuration, Show, ShowPart, TimelineData, LightLane, LightBlock,
+    Configuration, Song, ShowPart, TimelineData, LightLane, LightBlock,
     DimmerBlock, ColourBlock, MovementBlock, FixtureGroupCapabilities,
 )
 
@@ -32,7 +32,7 @@ def generate_pause_show(
     config: Configuration,
     fixture_definitions: dict,
     capabilities_map: Dict[str, FixtureGroupCapabilities],
-) -> Optional[Show]:
+) -> Optional[Song]:
     """Generate the PAUSE show from config.pause_show settings.
 
     Returns a Show object ready to be exported, or None if not enabled / no groups.
@@ -128,7 +128,7 @@ def generate_pause_show(
 
     timeline = TimelineData(lanes=lanes)
 
-    return Show(
+    return Song(
         name="PAUSE",
         parts=[part],
         timeline_data=timeline,

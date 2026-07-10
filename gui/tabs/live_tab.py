@@ -1809,8 +1809,8 @@ class LiveTab(BaseTab):
     def _make_pinned_show_row(self) -> QWidget:
         """SHOW mode's pinned, non-killable show row. Honest: no output
         engine yet, so the show named here does not actually run."""
-        shows = getattr(self.config, "shows", {}) or {}
-        name = next(iter(shows), None)
+        songs = getattr(self.config, "songs", {}) or {}
+        name = next(iter(songs), None)
         row, hbox = self._row_shell()
         self._pinned_show_label, self._pinned_show_marker = self._row_text(
             hbox, name if name else "SHOW",

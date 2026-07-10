@@ -55,6 +55,15 @@ verbatim as the GitHub Release notes (see [docs/releasing.md](docs/releasing.md)
 
 ### Changed
 
+- **Shows became songs in a setlist.** What the app called a show (parts,
+  BPM, audio) is now a song, and the show is the whole evening: an
+  ordered setlist of songs, each entry carrying a start trigger (manual,
+  MIDI PC/note, MTC or SMPTE time, or "follows automatically") and a
+  pause look for after the song (blackout, warm white, hold last look,
+  ambient loop). Config files write `songs` and `setlist`; older files
+  with `shows` load forever and get a setlist synthesized. Editing UI
+  and the trigger engine follow in later passes; workspace export is
+  byte-identical.
 - **Live and Auto share one LIVE section.** The topbar nav is SETUP ·
   SHOW · LIVE; the LIVE section hosts the Live busking surface and the
   Auto pilot as sibling sub-tabs (like Setup and Show), remembering

@@ -570,23 +570,23 @@ class TestStep3Stage:
 class TestStep4Structure:
     def test_new_show_button_actually_creates_the_show(self, main_window, inputs):
         """Regression: '+ New' returned silently behind a dead
-        `_ensure_shows_directory()` gate, so config.shows stayed empty."""
+        `_ensure_shows_directory()` gate, so config.songs stayed empty."""
         goto_tab(main_window, TAB_STRUCTURE)
-        assert main_window.config.shows == {}
+        assert main_window.config.songs == {}
 
         inputs.answer("Create New Show", SHOW_NAME)
         main_window.structure_tab.new_show_btn.click()
 
-        assert SHOW_NAME in main_window.config.shows, \
+        assert SHOW_NAME in main_window.config.songs, \
             "'+ New' must create the show even with no shows_directory set"
-        show = main_window.config.shows[SHOW_NAME]
+        show = main_window.config.songs[SHOW_NAME]
         assert [p.name for p in show.parts] == ["Intro"]
         assert main_window.structure_tab.show_combo.currentText() == SHOW_NAME
 
     def test_part_edits_and_new_part_land_in_the_model(self, main_window, inputs):
         step4_create_show_structure(main_window, inputs)
 
-        parts = main_window.config.shows[SHOW_NAME].parts
+        parts = main_window.config.songs[SHOW_NAME].parts
         assert len(parts) == 2
 
         first = parts[0]
@@ -642,7 +642,7 @@ class TestStep5Timeline:
         assert (colour.red, colour.green, colour.blue) == (255.0, 0.0, 0.0)
 
         # save_btn -> save_to_config() writes the runtime lanes into the model.
-        saved = main_window.config.shows[SHOW_NAME].timeline_data.lanes
+        saved = main_window.config.songs[SHOW_NAME].timeline_data.lanes
         assert len(saved) == 1
         assert saved[0].fixture_targets == [WASH_GROUP]
         assert len(saved[0].light_blocks[0].colour_blocks) == 1
@@ -838,7 +838,7 @@ class TestFullWorkflow:
         assert any(e.kind == "drum-riser" for e in loaded.stage_elements)
 
         # show structure
-        show = loaded.shows[SHOW_NAME]
+        show = loaded.songs[SHOW_NAME]
         assert [p.name for p in show.parts] == ["Verse", "Part 2"]
         assert show.parts[0].bpm == pytest.approx(128.0)
         assert show.parts[0].signature == "3/4"
@@ -888,7 +888,7 @@ class TestFullWorkflow:
             fixture_definitions=load_fixture_definitions_from_qlc(models),
             song_structure=None,
         )
-        controller.set_light_lanes(loaded.shows[SHOW_NAME].timeline_data.lanes)
+        controller.set_light_lanes(loaded.songs[SHOW_NAME].timeline_data.lanes)
         controller.enable_output()
         try:
             base = PAR1_ADDR - 1

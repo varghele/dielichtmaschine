@@ -40,7 +40,7 @@ def test_autogen_dialog_golden(qapp):
     dialog = AutogenDialog(
         None,
         audio_path="/shows/audiofiles/neon_ruinen.wav",
-        show=config.shows["Neon Ruinen"],
+        show=config.songs["Neon Ruinen"],
         report=make_report(),
     )
     try:

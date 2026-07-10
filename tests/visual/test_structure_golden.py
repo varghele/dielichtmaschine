@@ -29,7 +29,7 @@ import pytest
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-from config.models import Configuration, Show, ShowPart, TimelineData
+from config.models import Configuration, Song, ShowPart, TimelineData
 from tests.visual.harness import compare_to_golden
 
 # Reference data colors: neutral grey, cyan, Glutorange accent, magenta.
@@ -48,7 +48,7 @@ def part(name, color, bpm, bars, transition):
 def structure_config():
     """The reference song: five parts of four different colors."""
     config = Configuration()
-    config.shows["Demo"] = Show(
+    config.songs["Demo"] = Song(
         name="Demo",
         parts=[
             part("Intro", GREY, 120.0, 8, "gradual"),

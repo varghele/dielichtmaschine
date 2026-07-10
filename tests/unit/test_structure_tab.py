@@ -16,13 +16,13 @@ import pytest
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-from config.models import Configuration, Show, ShowPart, TimelineData
+from config.models import Configuration, Song, ShowPart, TimelineData
 
 
 def make_config():
     """Config with one show: Intro (red) and Verse (green) parts."""
     config = Configuration()
-    config.shows["Demo"] = Show(
+    config.songs["Demo"] = Song(
         name="Demo",
         parts=[
             ShowPart(name="Intro", color="#FF0000", signature="4/4",

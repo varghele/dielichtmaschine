@@ -28,7 +28,7 @@ from PyQt6.QtWidgets import QDialog
 from autogen.color_generator import SongPalette, get_preset_names
 from autogen.matcher import AutogenConfig
 from autogen.report import GenerationReport, GroupSectionReport, SectionReport
-from config.models import Configuration, FixtureGroup, Show, ShowPart, TimelineData
+from config.models import Configuration, FixtureGroup, Song, ShowPart, TimelineData
 from gui.dialogs.autogen_dialog import (
     AUTO_KEY, LEFT_COLUMN_WIDTH, MODE_AUDIO, MODE_CUSTOM, MODE_PRESET,
     AutogenDialog, AutogenWorker, peak_section_index, section_envelope,
@@ -45,7 +45,7 @@ def make_config() -> Configuration:
     config.groups["Pars"] = FixtureGroup("Pars", [])
     config.groups["Wash"] = FixtureGroup("Wash", [])
     config.groups["Movers"] = FixtureGroup("Movers", [])
-    config.shows["Neon Ruinen"] = Show(
+    config.songs["Neon Ruinen"] = Song(
         name="Neon Ruinen",
         parts=[
             ShowPart("Intro", "#8D9299", "4/4", 120.0, 8, "gradual"),
@@ -108,7 +108,7 @@ def dialog(qapp):
     ThemeManager().apply(qapp, "dark")
     config = make_config()
     dlg = AutogenDialog(None, audio_path="/songs/neon_ruinen.wav",
-                        show=config.shows["Neon Ruinen"], report=make_report())
+                        show=config.songs["Neon Ruinen"], report=make_report())
     yield dlg
     dlg.deleteLater()
 
@@ -288,7 +288,7 @@ def test_context_is_read_off_the_parent_when_not_passed(qapp):
 
     class FakeTab:
         audio_lane = FakeAudioLane()
-        current_show = make_config().shows["Neon Ruinen"]
+        current_show = make_config().songs["Neon Ruinen"]
         _generation_report = make_report()
 
     tab = FakeTab()

@@ -1200,7 +1200,12 @@ class TimelineData:
 
 
 @dataclass
-class Show:
+class Song:
+    """A single song: parts, effects, timeline data, audio.
+
+    Formerly ``Show``. Since the setlist rework, a "show" is the whole
+    evening (see :class:`Setlist`); the parts + BPM + audio unit is a Song.
+    """
     name: str
     parts: List[ShowPart] = field(default_factory=list)
     effects: List[ShowEffect] = field(default_factory=list)  # Keep for backwards compatibility
@@ -1209,9 +1214,9 @@ class Show:
     trigger_channel: int = -1   # MIDI channel number (-1 = no trigger)
 
     def to_dict(self) -> Dict:
-        """Serialize this show's contents (excludes `name`; that's the key in
-        Configuration.shows). For a standalone show file, include the name
-        at the caller: ``{'name': show.name, **show.to_dict()}``."""
+        """Serialize this song's contents (excludes `name`; that's the key in
+        Configuration.songs). For a standalone song file, include the name
+        at the caller: ``{'name': song.name, **song.to_dict()}``."""
         return {
             'parts': [
                 {k: v for k, v in asdict(part).items() if k not in ('start_time', 'duration')}
@@ -1224,10 +1229,10 @@ class Show:
         }
 
     @classmethod
-    def from_dict(cls, name: str, data: Dict) -> 'Show':
-        """Deserialize a show. `name` is supplied externally (usually the
-        mapping key in Configuration.shows, or the `name:` field of a
-        standalone show YAML)."""
+    def from_dict(cls, name: str, data: Dict) -> 'Song':
+        """Deserialize a song. `name` is supplied externally (usually the
+        mapping key in Configuration.songs, or the `name:` field of a
+        standalone song YAML)."""
         parts = [
             ShowPart(
                 name=p['name'],
@@ -1266,6 +1271,142 @@ class Show:
                 if data.get('trigger_channel') is not None else -1
             ),
         )
+
+
+@dataclass
+class SongTrigger:
+    """How a setlist entry's song starts.
+
+    Modes: "manual" (operator hits go), "midi_pc" (MIDI program change,
+    ``value`` = program number), "midi_note" (``value`` = note number),
+    "mtc" / "smpte" (chase to ``timecode``, e.g. "00:14:32:00"), and
+    "follow" (chains automatically after the previous song's pause look).
+    The engine that listens is v1.7 work; until then this is stored and
+    edited data only.
+    """
+    mode: str = "manual"   # "manual" | "midi_pc" | "midi_note" | "mtc" | "smpte" | "follow"
+    value: int = 0         # program / note number (midi_pc, midi_note)
+    channel: int = 1       # MIDI channel (1-16)
+    timecode: str = ""     # "HH:MM:SS:FF" start time for mtc/smpte
+
+    def to_dict(self) -> Dict:
+        return {
+            "mode": self.mode,
+            "value": self.value,
+            "channel": self.channel,
+            "timecode": self.timecode,
+        }
+
+    @classmethod
+    def from_dict(cls, data: Dict) -> 'SongTrigger':
+        return cls(
+            mode=data.get("mode", "manual"),
+            value=data.get("value", 0),
+            channel=data.get("channel", 1),
+            timecode=data.get("timecode", ""),
+        )
+
+
+@dataclass
+class PauseLook:
+    """The look on stage between two setlist songs.
+
+    Modes: "blackout", "warm_white" (``level`` percent), "hold_last"
+    (freeze the previous song's last look), "ambient_loop" (reuses the
+    screensaver rig behaviour once the engine lands). ``until`` decides
+    how the pause ends: "trigger" (next song's start trigger) or
+    "duration" (``duration_s`` seconds, then follow on).
+    """
+    mode: str = "hold_last"   # "blackout" | "warm_white" | "hold_last" | "ambient_loop"
+    level: int = 20           # percent, used by warm_white
+    until: str = "trigger"    # "trigger" | "duration"
+    duration_s: float = 0.0   # used when until == "duration"
+
+    def to_dict(self) -> Dict:
+        return {
+            "mode": self.mode,
+            "level": self.level,
+            "until": self.until,
+            "duration_s": self.duration_s,
+        }
+
+    @classmethod
+    def from_dict(cls, data: Dict) -> 'PauseLook':
+        return cls(
+            mode=data.get("mode", "hold_last"),
+            level=data.get("level", 20),
+            until=data.get("until", "trigger"),
+            duration_s=data.get("duration_s", 0.0),
+        )
+
+
+@dataclass
+class SetlistEntry:
+    """One slot of the setlist: a song (by name key into
+    Configuration.songs), its start trigger, and the pause look that
+    plays after it ends."""
+    song: str
+    trigger: SongTrigger = field(default_factory=SongTrigger)
+    pause_after: PauseLook = field(default_factory=PauseLook)
+
+    def to_dict(self) -> Dict:
+        return {
+            "song": self.song,
+            "trigger": self.trigger.to_dict(),
+            "pause_after": self.pause_after.to_dict(),
+        }
+
+    @classmethod
+    def from_dict(cls, data: Dict) -> 'SetlistEntry':
+        return cls(
+            song=data.get("song", ""),
+            trigger=SongTrigger.from_dict(data.get("trigger") or {}),
+            pause_after=PauseLook.from_dict(data.get("pause_after") or {}),
+        )
+
+
+@dataclass
+class Setlist:
+    """The whole evening: an ordered list of songs with triggers and
+    pause looks, plus the sync source the triggers listen to.
+
+    One setlist per config file for now (the design shows one per show
+    file)."""
+    name: str = ""
+    entries: List[SetlistEntry] = field(default_factory=list)
+    sync_mode: str = "manual"   # "midi" | "mtc" | "smpte" | "manual"
+    sync_device: str = ""       # MIDI/LTC input device hint
+
+    def to_dict(self) -> Dict:
+        return {
+            "name": self.name,
+            "entries": [e.to_dict() for e in self.entries],
+            "sync_mode": self.sync_mode,
+            "sync_device": self.sync_device,
+        }
+
+    @classmethod
+    def from_dict(cls, data: Dict) -> 'Setlist':
+        return cls(
+            name=data.get("name", ""),
+            entries=[SetlistEntry.from_dict(e) for e in data.get("entries", []) or []],
+            sync_mode=data.get("sync_mode", "manual"),
+            sync_device=data.get("sync_device", ""),
+        )
+
+    @classmethod
+    def from_song_names(cls, names) -> 'Setlist':
+        """Synthesize a setlist for configs that predate setlists: the
+        given songs in sorted-name order, manual triggers, hold-last
+        pause looks that wait for the next trigger."""
+        return cls(entries=[
+            SetlistEntry(
+                song=name,
+                trigger=SongTrigger(mode="manual"),
+                pause_after=PauseLook(mode="hold_last", until="trigger"),
+            )
+            for name in sorted(names)
+        ])
 
 
 @dataclass
@@ -1309,7 +1450,8 @@ class UniverseOutput:
 class Configuration:
     fixtures: List[Fixture] = field(default_factory=list)
     groups: Dict[str, FixtureGroup] = field(default_factory=dict)
-    shows: Dict[str, Show] = field(default_factory=dict)
+    songs: Dict[str, Song] = field(default_factory=dict)
+    setlist: Setlist = field(default_factory=Setlist)
     universes: Dict[int, Universe] = field(default_factory=dict)
     spots: Dict[str, Spot] = field(default_factory=dict)
     workspace_path: Optional[str] = None
@@ -1449,10 +1591,11 @@ class Configuration:
                 }
                 for universe in self.universes.values()
             },
-            'shows': {
-                show.name: show.to_dict()
-                for show in self.shows.values()
+            'songs': {
+                song.name: song.to_dict()
+                for song in self.songs.values()
             },
+            'setlist': self.setlist.to_dict() if self.setlist else Setlist().to_dict(),
             'midi_input_devices': [asdict(d) for d in self.midi_input_devices] if self.midi_input_devices else None,
             'pause_show': asdict(self.pause_show) if self.pause_show and self.pause_show.enabled else None,
             'spots': {
@@ -1487,6 +1630,14 @@ class Configuration:
         """Load configuration from YAML file"""
         with open(filename, 'r') as f:
             data = yaml.safe_load(f)
+
+        # Legacy key migration: configs written before the setlist rework
+        # store the songs under a top-level `shows:` key. Accept it forever;
+        # the per-file block tables (block_defs / light_block_defs) are
+        # untouched by the rename, so expand_compact works on the migrated
+        # key exactly as before.
+        if 'songs' not in data and 'shows' in data:
+            data['songs'] = data.pop('shows')
 
         from config.compact_serializer import expand_compact
         data = expand_compact(data)
@@ -1539,11 +1690,20 @@ class Configuration:
                 export_intensity=group_data.get('export_intensity', 255),
             )
 
-        # Handle shows
-        shows = {}
-        if 'shows' in data:
-            for show_name, show_data in data['shows'].items():
-                shows[show_name] = Show.from_dict(show_name, show_data)
+        # Handle songs (legacy `shows:` was migrated to `songs` above)
+        songs = {}
+        if 'songs' in data:
+            for song_name, song_data in data['songs'].items():
+                songs[song_name] = Song.from_dict(song_name, song_data)
+
+        # Handle setlist. Configs that predate setlists (legacy `shows:`
+        # files) get one synthesized from the sorted song names: manual
+        # triggers, hold-last pause looks until the next trigger.
+        setlist_data = data.get('setlist')
+        if setlist_data:
+            setlist = Setlist.from_dict(setlist_data)
+        else:
+            setlist = Setlist.from_song_names(songs.keys())
 
         # Handle universes
         universes = {}
@@ -1585,7 +1745,8 @@ class Configuration:
             fixtures=fixtures,
             groups=groups,
             universes=universes,
-            shows=shows,
+            songs=songs,
+            setlist=setlist,
             spots=spots,
             midi_input_devices=midi_input_devices,
             pause_show=pause_show,

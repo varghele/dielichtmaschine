@@ -80,13 +80,13 @@ def chrome_tab(qapp, monkeypatch, sample_configuration):
     toolbar / transport widgets are exactly 1400px wide (10px margins)."""
     from PyQt6.QtCore import QEvent
     from PyQt6.QtWidgets import QApplication
-    from config.models import Show, ShowPart, TimelineData
+    from config.models import Song, ShowPart, TimelineData
     from gui.theme_manager import ThemeManager
 
     _stub_heavy_widgets(monkeypatch)
     ThemeManager().apply(qapp, "dark")
 
-    sample_configuration.shows["Golden Show"] = Show(
+    sample_configuration.songs["Golden Show"] = Song(
         name="Golden Show",
         parts=[
             ShowPart(name="Intro", color="#FF0000", signature="4/4",

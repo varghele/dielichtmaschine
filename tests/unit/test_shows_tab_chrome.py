@@ -76,8 +76,8 @@ def _stub_heavy_widgets(monkeypatch):
 
 
 def _add_show(config, name="Demo Show"):
-    from config.models import Show, ShowPart, TimelineData
-    config.shows[name] = Show(
+    from config.models import Song, ShowPart, TimelineData
+    config.songs[name] = Song(
         name=name,
         parts=[ShowPart(name="Intro", color="#FF0000", signature="4/4",
                         bpm=120.0, num_bars=4, transition="instant")],
@@ -485,7 +485,8 @@ class TestButtonCoherence:
         lane = shows_tab.lane_widgets[0]
         assert lane.mute_button.property("role") == "output-select"
         assert lane.solo_button.property("role") == "output-select"
-        assert lane.add_block_button.property("role") == "success"
+        # Timeline v3 (stage T2): + BLOCK joined the header chip family.
+        assert lane.add_block_button.property("role") == "output-select"
         assert lane.remove_button.property("role") == "destructive"
         assert shows_tab.audio_lane.mute_button.property("role") == \
             "output-select"

@@ -46,7 +46,7 @@ import shutil
 # Drag-and-drop contract for reordering song parts: the payload is the
 # dragged card's part index, UTF-8 encoded.
 PART_MIME_TYPE = "application/x-lichtmaschine-part"
-from config.models import Configuration, Show, ShowPart, TimelineData, MidiInputDevice, PauseShowConfig
+from config.models import Configuration, Song, ShowPart, TimelineData, MidiInputDevice, PauseShowConfig
 from gui.typography import DisplayLabel, MicroLabel, display_font, mono_font
 from gui.widgets.chip import Chip
 from timeline.song_structure import SongStructure
@@ -496,7 +496,7 @@ class StructureTab(BaseTab):
     autogenerate_requested = pyqtSignal(str)
 
     def __init__(self, config: Configuration, parent=None):
-        self.current_show_name = ""
+        self.current_song_name = ""
         self.current_show = None
 
         # Parts strip / inspector state (set before setup_ui runs)
@@ -1343,7 +1343,7 @@ class StructureTab(BaseTab):
             return
 
         if self.receivers(self.autogenerate_requested) > 0:
-            self.autogenerate_requested.emit(self.current_show_name)
+            self.autogenerate_requested.emit(self.current_song_name)
             return
 
         self._open_autogen_dialog()
@@ -1695,11 +1695,11 @@ class StructureTab(BaseTab):
         current = self.show_combo.currentText()
         self.show_combo.blockSignals(True)
         self.show_combo.clear()
-        self.show_combo.addItems(sorted(self.config.shows.keys()))
+        self.show_combo.addItems(sorted(self.config.songs.keys()))
 
-        if current and current in self.config.shows:
+        if current and current in self.config.songs:
             self.show_combo.setCurrentText(current)
-        elif self.config.shows:
+        elif self.config.songs:
             self.show_combo.setCurrentIndex(0)
 
         self.show_combo.blockSignals(False)
@@ -1795,7 +1795,7 @@ class StructureTab(BaseTab):
 
         if ok and name:
             # Check if name already exists
-            if name in self.config.shows:
+            if name in self.config.songs:
                 QMessageBox.warning(
                     self,
                     "Name Exists",
@@ -1805,7 +1805,7 @@ class StructureTab(BaseTab):
                 return
 
             # Create new show with default part
-            new_show = Show(
+            new_show = Song(
                 name=name,
                 parts=[
                     ShowPart(
@@ -1822,7 +1822,7 @@ class StructureTab(BaseTab):
             )
 
             # Add to config
-            self.config.shows[name] = new_show
+            self.config.songs[name] = new_show
 
             # Update combo and select new show
             self.show_combo.blockSignals(True)
@@ -1842,11 +1842,11 @@ class StructureTab(BaseTab):
 
     def _rename_show(self):
         """Rename the current show."""
-        if not self.current_show_name:
+        if not self.current_song_name:
             QMessageBox.warning(self, "No Show Selected", "Please select a show to rename.")
             return
 
-        old_name = self.current_show_name
+        old_name = self.current_song_name
 
         # Get new name from user
         new_name, ok = QInputDialog.getText(
@@ -1858,7 +1858,7 @@ class StructureTab(BaseTab):
 
         if ok and new_name and new_name != old_name:
             # Check if new name already exists
-            if new_name in self.config.shows:
+            if new_name in self.config.songs:
                 QMessageBox.warning(
                     self,
                     "Name Exists",
@@ -1867,8 +1867,8 @@ class StructureTab(BaseTab):
                 return
 
             # Rename in config
-            self.config.shows[new_name] = self.config.shows.pop(old_name)
-            self.config.shows[new_name].name = new_name
+            self.config.songs[new_name] = self.config.songs.pop(old_name)
+            self.config.songs[new_name].name = new_name
 
             # Rename CSV file
             try:
@@ -1883,12 +1883,12 @@ class StructureTab(BaseTab):
                 print(f"Failed to rename CSV file: {e}")
 
             # Update current show name
-            self.current_show_name = new_name
+            self.current_song_name = new_name
 
             # Update dropdown
             self.show_combo.blockSignals(True)
             self.show_combo.clear()
-            self.show_combo.addItems(sorted(self.config.shows.keys()))
+            self.show_combo.addItems(sorted(self.config.songs.keys()))
             self.show_combo.setCurrentText(new_name)
             self.show_combo.blockSignals(False)
 
@@ -1941,14 +1941,14 @@ class StructureTab(BaseTab):
 
     def _delete_show(self):
         """Delete the current show (from config and disk)."""
-        if not self.current_show_name:
+        if not self.current_song_name:
             QMessageBox.warning(self, "No Show Selected", "Please select a show to delete.")
             return
 
         reply = QMessageBox.question(
             self,
             "Confirm Delete",
-            f"Are you sure you want to delete show '{self.current_show_name}'?\n\n"
+            f"Are you sure you want to delete show '{self.current_song_name}'?\n\n"
             f"This will delete:\n"
             f"- The show configuration\n"
             f"- The CSV file\n"
@@ -1960,7 +1960,7 @@ class StructureTab(BaseTab):
         if reply != QMessageBox.StandardButton.Yes:
             return
 
-        show = self.config.shows.get(self.current_show_name)
+        show = self.config.songs.get(self.current_song_name)
 
         # Delete bundled audio file if it exists. CSVs on disk are now
         # user-managed (exported via File -> Export Show Structure), so
@@ -1977,17 +1977,17 @@ class StructureTab(BaseTab):
                         print(f"Failed to delete audio file: {e}")
 
         # Delete from config
-        del self.config.shows[self.current_show_name]
+        del self.config.songs[self.current_song_name]
 
         # Clear UI
-        self.current_show_name = ""
+        self.current_song_name = ""
         self.current_show = None
 
         # Refresh dropdown
         self.show_combo.blockSignals(True)
         self.show_combo.clear()
-        self.show_combo.addItems(sorted(self.config.shows.keys()))
-        if self.config.shows:
+        self.show_combo.addItems(sorted(self.config.songs.keys()))
+        if self.config.songs:
             self.show_combo.setCurrentIndex(0)
         self.show_combo.blockSignals(False)
 
@@ -2008,7 +2008,7 @@ class StructureTab(BaseTab):
         print(f"DEBUG: Auto-loading shows from {self.config.shows_directory}")
         try:
             self._import_all_shows_from_csv()
-            print(f"DEBUG: Import completed, shows: {list(self.config.shows.keys())}")
+            print(f"DEBUG: Import completed, shows: {list(self.config.songs.keys())}")
         except Exception as e:
             print(f"Failed to auto-load shows: {e}")
             import traceback
@@ -2023,8 +2023,8 @@ class StructureTab(BaseTab):
 
     def _load_show(self, show_name):
         """Load a show for editing."""
-        if not show_name or show_name not in self.config.shows:
-            self.current_show_name = ""
+        if not show_name or show_name not in self.config.songs:
+            self.current_song_name = ""
             self.current_show = None
             self._selected_index = -1
             self._rebuild_parts_strip()
@@ -2033,8 +2033,8 @@ class StructureTab(BaseTab):
             self._update_audio_readout()
             return
 
-        self.current_show_name = show_name
-        self.current_show = self.config.shows[show_name]
+        self.current_song_name = show_name
+        self.current_show = self.config.songs[show_name]
 
         # Rebuild the parts strip; select the first part so the
         # inspector opens on something useful.
@@ -2088,7 +2088,7 @@ class StructureTab(BaseTab):
             self.update_from_config()
 
             # Show success message
-            show_count = len(self.config.shows)
+            show_count = len(self.config.songs)
             QMessageBox.information(
                 self,
                 "Success",
@@ -2149,19 +2149,19 @@ class StructureTab(BaseTab):
 
     def _import_from_csv(self):
         """Import show structure from CSV file."""
-        if not self.current_show_name:
+        if not self.current_song_name:
             QMessageBox.warning(self, "No Show Selected", "Please select a show first.")
             return
 
         # Use the existing import functionality
         project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-        csv_path = os.path.join(project_root, "shows", f"{self.current_show_name}.csv")
+        csv_path = os.path.join(project_root, "shows", f"{self.current_song_name}.csv")
 
         if not os.path.exists(csv_path):
             QMessageBox.warning(
                 self,
                 "CSV Not Found",
-                f"No CSV file found for show '{self.current_show_name}' at:\n{csv_path}"
+                f"No CSV file found for show '{self.current_song_name}' at:\n{csv_path}"
             )
             return
 
@@ -2198,7 +2198,7 @@ class StructureTab(BaseTab):
     def _auto_save(self):
         """Hook called after in-memory edits. No-op today.
 
-        Edits already mutate self.config.shows in place, so nothing needs to
+        Edits already mutate self.config.songs in place, so nothing needs to
         happen here for the YAML round-trip. The user persists via
         ``File -> Save Configuration``. Previously this also wrote a CSV per
         show on every edit, which created the parallel-filesystem problem
@@ -2216,7 +2216,7 @@ class StructureTab(BaseTab):
         if not self._ensure_shows_directory():
             return
 
-        self._save_show_to_csv(self.current_show_name, self.current_show)
+        self._save_show_to_csv(self.current_song_name, self.current_show)
 
     def _import_all_shows_from_csv(self):
         """Import all show structures from CSV files in the shows directory."""
@@ -2246,19 +2246,19 @@ class StructureTab(BaseTab):
                 structure_file = os.path.join(shows_dir, file)
 
                 # Check if show already exists in configuration
-                if show_name in self.config.shows:
-                    show = self.config.shows[show_name]
+                if show_name in self.config.songs:
+                    show = self.config.songs[show_name]
                     # Clear existing parts to reload from CSV
                     show.parts.clear()
                 else:
                     # Create new Show object with timeline data
-                    show = Show(
+                    show = Song(
                         name=show_name,
                         parts=[],
                         effects=[],
                         timeline_data=TimelineData()
                     )
-                    self.config.shows[show_name] = show
+                    self.config.songs[show_name] = show
 
                 # Read CSV and create show parts
                 with open(structure_file, 'r') as f:
@@ -2510,14 +2510,14 @@ class StructureTab(BaseTab):
 
         Other tabs use this hook to copy widget state back to the config
         object before File -> Save / Export. The structure tab's edits
-        already mutate self.config.shows in place as the user edits, so
+        already mutate self.config.songs in place as the user edits, so
         nothing extra is needed here. Previously this method wrote a CSV
         per show to disk - that behaviour moved to the explicit
         File -> Export Show Structure action in v1.0.
         """
         return
 
-    def _save_show_to_csv(self, show_name: str, show: Show):
+    def _save_show_to_csv(self, show_name: str, show: Song):
         """Save a specific show structure to CSV file.
 
         Args:

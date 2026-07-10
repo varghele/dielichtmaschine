@@ -91,7 +91,7 @@ def _make_config_with_shows(shows_dict):
         "fixtures": [],
         "groups": {},
         "universes": {},
-        "shows": shows_dict,
+        "songs": shows_dict,
         "spots": {},
         "workspace_path": None,
         "shows_directory": None,
@@ -117,7 +117,7 @@ class TestEmptyAndNoTimeline:
         assert 'block_defs' not in compact
         # expand_compact should pass through since no block_defs
         result = expand_compact(compact)
-        assert result['shows'] == {}
+        assert result['songs'] == {}
 
     def test_no_timeline_data(self):
         """Show with no timeline_data passes through unchanged."""
@@ -155,7 +155,7 @@ class TestBackwardCompat:
             "S1": _make_show(lanes=[_make_lane([lb])])
         })
         result = expand_compact(data)
-        assert result['shows']['S1']['timeline_data']['lanes'][0]['light_blocks'][0] == lb
+        assert result['songs']['S1']['timeline_data']['lanes'][0]['light_blocks'][0] == lb
 
 
 class TestSingleLightBlock:
@@ -173,7 +173,7 @@ class TestSingleLightBlock:
         assert 'lb0' in compact['light_block_defs']
 
         # Verify lane now has ref+start+end entries
-        lane = compact['shows']['S1']['timeline_data']['lanes'][0]
+        lane = compact['songs']['S1']['timeline_data']['lanes'][0]
         assert len(lane['light_blocks']) == 1
         assert lane['light_blocks'][0]['ref'] == 'lb0'
         assert lane['light_blocks'][0]['start'] == 2.0
@@ -181,7 +181,7 @@ class TestSingleLightBlock:
 
         # Roundtrip back
         expanded = expand_compact(compact)
-        exp_lb = expanded['shows']['S1']['timeline_data']['lanes'][0]['light_blocks'][0]
+        exp_lb = expanded['songs']['S1']['timeline_data']['lanes'][0]['light_blocks'][0]
 
         # Compare key fields
         assert exp_lb['start_time'] == 2.0
@@ -233,7 +233,7 @@ class TestLightBlockDedup:
 
         # Should have one LightBlock template, two entries sharing same ref
         assert len(compact['light_block_defs']) == 1
-        lane = compact['shows']['S1']['timeline_data']['lanes'][0]
+        lane = compact['songs']['S1']['timeline_data']['lanes'][0]
         assert len(lane['light_blocks']) == 2
         assert lane['light_blocks'][0] == {'ref': 'lb0', 'start': 0, 'end': 10}
         assert lane['light_blocks'][1] == {'ref': 'lb0', 'start': 20, 'end': 30}
@@ -248,7 +248,7 @@ class TestLightBlockDedup:
         compact = compact_serialize(data)
 
         assert len(compact['light_block_defs']) == 2
-        lane = compact['shows']['S1']['timeline_data']['lanes'][0]
+        lane = compact['songs']['S1']['timeline_data']['lanes'][0]
         assert len(lane['light_blocks']) == 2
 
 
@@ -265,7 +265,7 @@ class TestOrderPreservation:
         compact = compact_serialize(data)
         expanded = expand_compact(compact)
 
-        exp_blocks = expanded['shows']['S1']['timeline_data']['lanes'][0]['light_blocks']
+        exp_blocks = expanded['songs']['S1']['timeline_data']['lanes'][0]['light_blocks']
         assert len(exp_blocks) == 3
         # Order must match original, not chronological
         assert exp_blocks[0]['start_time'] == 20.0
@@ -284,7 +284,7 @@ class TestDurationScaling:
         compact = compact_serialize(data)
         expanded = expand_compact(compact)
 
-        blocks = expanded['shows']['S1']['timeline_data']['lanes'][0]['light_blocks']
+        blocks = expanded['songs']['S1']['timeline_data']['lanes'][0]['light_blocks']
         assert len(blocks) == 2
 
         # First block: 0-10
@@ -318,7 +318,7 @@ class TestFractionalSublane:
 
         # Roundtrip
         expanded = expand_compact(compact)
-        exp_lb = expanded['shows']['S1']['timeline_data']['lanes'][0]['light_blocks'][0]
+        exp_lb = expanded['songs']['S1']['timeline_data']['lanes'][0]['light_blocks'][0]
         assert exp_lb['dimmer_blocks'][0]['start_time'] == 10.0
         assert exp_lb['dimmer_blocks'][0]['end_time'] == 15.0
 
@@ -336,7 +336,7 @@ class TestFractionalSublane:
         assert lb_template['colour_blocks'][0]['end'] == 0.75
 
         expanded = expand_compact(compact)
-        exp_lb = expanded['shows']['S1']['timeline_data']['lanes'][0]['light_blocks'][0]
+        exp_lb = expanded['songs']['S1']['timeline_data']['lanes'][0]['light_blocks'][0]
         assert exp_lb['colour_blocks'][0]['start_time'] == 25.0
         assert exp_lb['colour_blocks'][0]['end_time'] == 75.0
 
@@ -357,7 +357,7 @@ class TestFractionalSublane:
         assert lb_template['dimmer_blocks'][1] == {'ref': 'd1', 'offset': 0.5, 'end': 1.0}
 
         expanded = expand_compact(compact)
-        exp_lb = expanded['shows']['S1']['timeline_data']['lanes'][0]['light_blocks'][0]
+        exp_lb = expanded['songs']['S1']['timeline_data']['lanes'][0]['light_blocks'][0]
         assert exp_lb['dimmer_blocks'][0]['start_time'] == 0.0
         assert exp_lb['dimmer_blocks'][0]['end_time'] == 10.0
         assert exp_lb['dimmer_blocks'][0]['intensity'] == 255.0
@@ -462,9 +462,9 @@ class TestFullRoundtrip:
         expanded = expand_compact(compact)
 
         # Compare shows structure
-        for show_name in original['shows']:
-            orig_show = original['shows'][show_name]
-            exp_show = expanded['shows'][show_name]
+        for show_name in original['songs']:
+            orig_show = original['songs'][show_name]
+            exp_show = expanded['songs'][show_name]
 
             # Parts unchanged
             assert orig_show['parts'] == exp_show['parts']
@@ -512,7 +512,7 @@ class TestFullRoundtrip:
         compact = compact_serialize(data)
         expanded = expand_compact(compact)
 
-        result_lb = expanded['shows']['S1']['timeline_data']['lanes'][0]['light_blocks'][0]
+        result_lb = expanded['songs']['S1']['timeline_data']['lanes'][0]['light_blocks'][0]
         assert result_lb['start_time'] == 100.0
         assert result_lb['end_time'] == 200.0
         assert result_lb['dimmer_blocks'][0]['start_time'] == 100.0

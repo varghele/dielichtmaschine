@@ -368,7 +368,7 @@ class AutogenDialog(QDialog):
             show = getattr(parent, "current_show", None)
             if show is not None:
                 return show
-            return parent.config.shows.get(parent.current_show_name)
+            return parent.config.songs.get(parent.current_song_name)
         except Exception:
             return None
 

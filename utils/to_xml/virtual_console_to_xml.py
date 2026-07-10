@@ -920,7 +920,7 @@ def build_virtual_console(
             )
 
             # Add MIDI trigger input if configured for this show
-            show = config.shows.get(show_name)
+            show = config.songs.get(show_name)
             if show and show.trigger_device and show.trigger_channel >= 0:
                 # Find the universe ID for this trigger device
                 for midi_dev in getattr(config, 'midi_input_devices', []):

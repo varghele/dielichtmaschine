@@ -62,7 +62,7 @@ class TestInstantiate:
 
         config = Configuration.load(path)
         assert len(config.fixtures) == 9
-        assert not config.shows  # rig variant has no demo show
+        assert not config.songs  # rig variant has no demo show
         assert not os.path.isdir(str(tmp_path / "audiofiles"))
 
     def test_show_variant_brings_audio_bundle(self, club_band, tmp_path):
@@ -70,8 +70,8 @@ class TestInstantiate:
         instantiate_template(club_band, dest, include_show=True)
 
         config = Configuration.load(dest)
-        assert "Demo" in config.shows
-        audio_name = config.shows["Demo"].timeline_data.audio_file_path
+        assert "Demo" in config.songs
+        audio_name = config.songs["Demo"].timeline_data.audio_file_path
         assert audio_name
         # The audio resolves via the NEW project's bundle dir.
         bundle = config.audio_bundle_dir()
@@ -95,7 +95,7 @@ class TestInstantiate:
         # Learn the audio basename from the template itself.
         source_config = Configuration.load(club_band.show_path)
         basename = os.path.basename(
-            source_config.shows["Demo"].timeline_data.audio_file_path)
+            source_config.songs["Demo"].timeline_data.audio_file_path)
         existing = audio_dir / basename
         existing.write_bytes(b"user-version")
 

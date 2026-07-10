@@ -4,7 +4,7 @@
 import pytest
 import xml.etree.ElementTree as ET
 from config.models import (
-    Configuration, Fixture, FixtureMode, FixtureGroup, Universe, Show, ShowPart
+    Configuration, Fixture, FixtureMode, FixtureGroup, Universe, Song, ShowPart
 )
 
 
@@ -23,7 +23,7 @@ def simple_config(rgb_fixture):
         fixtures=[rgb_fixture],
         groups={"Wash": FixtureGroup("Wash", [rgb_fixture])},
         universes={1: Universe(id=1, name="Uni 1", output={"plugin": "ArtNet"})},
-        shows={"S1": Show(name="S1", parts=[
+        songs={"S1": Song(name="S1", parts=[
             ShowPart(name="P1", color="#fff", signature="4/4", bpm=120, num_bars=4, transition="instant")
         ])}
     )

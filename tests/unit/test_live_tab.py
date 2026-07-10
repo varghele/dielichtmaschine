@@ -399,7 +399,7 @@ class TestModeToggle:
         assert live_tab._kill_buttons == []
 
     def test_show_mode_pinned_row_names_first_show(self, live_tab):
-        live_tab.config.shows = {"Opening Night": object(),
+        live_tab.config.songs = {"Opening Night": object(),
                                  "Encore": object()}
         live_tab.state.set_mode("show")
         assert live_tab._pinned_show_label.text() == "OPENING NIGHT"

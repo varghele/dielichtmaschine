@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from config.models import Show, ShowPart, ShowEffect, TimelineData
+from config.models import Song, ShowPart, ShowEffect, TimelineData
 from utils.show_io import (
     CSV_FIELDNAMES,
     detect_format,
@@ -18,7 +18,7 @@ from utils.show_io import (
 
 
 def _make_show(name="TestShow"):
-    return Show(
+    return Song(
         name=name,
         parts=[
             ShowPart(name="intro", color="#00ff00", signature="4/4",

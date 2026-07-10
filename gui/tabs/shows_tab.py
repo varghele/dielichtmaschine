@@ -9,7 +9,7 @@ from PyQt6.QtWidgets import (QVBoxLayout, QHBoxLayout, QComboBox, QPushButton,
                              QApplication, QDialog, QButtonGroup)
 from PyQt6.QtCore import Qt, QTimer, QEvent, pyqtSignal, QPoint, QRect
 from PyQt6.QtGui import QShortcut, QKeySequence
-from config.models import Configuration, Show, ShowPart, TimelineData, LightBlock, ShowEffect
+from config.models import Configuration, Song, ShowPart, TimelineData, LightBlock, ShowEffect
 from timeline.song_structure import SongStructure
 from timeline.light_lane import LightLane
 from utils.fixture_utils import load_fixture_definitions_from_qlc, get_cached_fixture_definitions
@@ -82,7 +82,7 @@ class ShowsTab(BaseTab):
         # Initialize state before super().__init__
         self.song_structure = None
         self.lane_widgets = []
-        self.current_show_name = ""
+        self.current_song_name = ""
         self.is_playing = False
         self.playhead_position = 0.0
         self._is_activating = False
@@ -291,8 +291,8 @@ class ShowsTab(BaseTab):
         toolbar.setContentsMargins(0, 0, 0, 0)
         toolbar.setSpacing(10)
 
-        # Show selection
-        toolbar.addWidget(MicroLabel("Show", point_size=8))
+        # Song selection
+        toolbar.addWidget(MicroLabel("Song", point_size=8))
 
         self.show_combo = QComboBox()
         self.show_combo.setMinimumWidth(150)
@@ -813,10 +813,10 @@ class ShowsTab(BaseTab):
         current = self.show_combo.currentText()
         self.show_combo.blockSignals(True)
         self.show_combo.clear()
-        self.show_combo.addItems(sorted(self.config.shows.keys()))
-        if current and current in self.config.shows:
+        self.show_combo.addItems(sorted(self.config.songs.keys()))
+        if current and current in self.config.songs:
             self.show_combo.setCurrentText(current)
-        elif self.config.shows:
+        elif self.config.songs:
             self.show_combo.setCurrentIndex(0)
         self.show_combo.blockSignals(False)
 
@@ -860,7 +860,7 @@ class ShowsTab(BaseTab):
 
     def _on_show_changed(self, show_name: str):
         """Handle show selection change."""
-        if self.current_show_name:
+        if self.current_song_name:
             self.save_to_config()
         self._load_show(show_name)
         if self.parent() and hasattr(self.parent(), 'on_show_selected'):
@@ -902,8 +902,8 @@ class ShowsTab(BaseTab):
                     local_path = file_path  # Fall back to original
 
             # Update the show's timeline_data to store just the filename
-            if self.current_show_name and self.current_show_name in self.config.shows:
-                show = self.config.shows[self.current_show_name]
+            if self.current_song_name and self.current_song_name in self.config.songs:
+                show = self.config.songs[self.current_song_name]
                 if show.timeline_data:
                     show.timeline_data.audio_file_path = basename
                     print(f"Stored audio filename in show: {basename}")
@@ -930,12 +930,12 @@ class ShowsTab(BaseTab):
         # Stop playback
         self._stop_playback()
 
-        if not show_name or show_name not in self.config.shows:
+        if not show_name or show_name not in self.config.songs:
             self._clear_timeline()
             return
 
-        self.current_show_name = show_name
-        show = self.config.shows[show_name]
+        self.current_song_name = show_name
+        show = self.config.songs[show_name]
 
         # Convert old effects if no timeline data
         if show.timeline_data is None and show.effects:
@@ -1035,7 +1035,7 @@ class ShowsTab(BaseTab):
 
     def _clear_timeline(self):
         """Clear all timeline data."""
-        self.current_show_name = ""
+        self.current_song_name = ""
         self.song_structure = None
         self._clear_light_lanes()
         self.master_timeline.timeline_widget.set_song_structure(None)
@@ -1102,7 +1102,7 @@ class ShowsTab(BaseTab):
 
     def _add_new_lane(self):
         """Add a new empty light lane."""
-        if not self.current_show_name:
+        if not self.current_song_name:
             QMessageBox.warning(
                 self,
                 "No Show Selected",
@@ -1133,12 +1133,12 @@ class ShowsTab(BaseTab):
 
     def _on_autogenerate(self):
         """Open auto-generation dialog and generate show."""
-        if not self.current_show_name:
+        if not self.current_song_name:
             QMessageBox.warning(self, "No Show Selected",
                 "Please select a show first.", QMessageBox.StandardButton.Ok)
             return
 
-        show = self.config.shows.get(self.current_show_name)
+        show = self.config.songs.get(self.current_song_name)
         if not show or not show.parts:
             QMessageBox.warning(self, "No Song Structure",
                 "The show has no song parts defined. Add parts in the Structure tab first.",
@@ -1300,7 +1300,7 @@ class ShowsTab(BaseTab):
                     [widget.lane for widget in self.lane_widgets]
                 )
 
-    def _convert_effects_to_timeline(self, show: Show):
+    def _convert_effects_to_timeline(self, show: Song):
         """Convert old ShowEffect data to LightBlock timeline format."""
         if show.timeline_data is None:
             show.timeline_data = TimelineData()
@@ -1340,10 +1340,10 @@ class ShowsTab(BaseTab):
 
     def save_to_config(self):
         """Save timeline state to configuration."""
-        if not self.current_show_name or self.current_show_name not in self.config.shows:
+        if not self.current_song_name or self.current_song_name not in self.config.songs:
             return
 
-        show = self.config.shows[self.current_show_name]
+        show = self.config.songs[self.current_song_name]
 
         # Ensure timeline_data exists
         if show.timeline_data is None:
@@ -2083,19 +2083,19 @@ class ShowsTab(BaseTab):
             structure_file = os.path.join(shows_dir, file)
 
             # Check if show already exists in configuration
-            if show_name in self.config.shows:
-                show = self.config.shows[show_name]
+            if show_name in self.config.songs:
+                show = self.config.songs[show_name]
                 # Clear existing parts to reload from CSV
                 show.parts.clear()
             else:
                 # Create new Show object with timeline data
-                show = Show(
+                show = Song(
                     name=show_name,
                     parts=[],
                     effects=[],
                     timeline_data=TimelineData()
                 )
-                self.config.shows[show_name] = show
+                self.config.songs[show_name] = show
 
             # Read CSV and create show parts
             with open(structure_file, 'r') as f:
@@ -2141,8 +2141,8 @@ class ShowsTab(BaseTab):
         # Update show combo box with newly imported shows
         self.show_combo.blockSignals(True)
         self.show_combo.clear()
-        self.show_combo.addItems(sorted(self.config.shows.keys()))
-        if self.config.shows:
+        self.show_combo.addItems(sorted(self.config.songs.keys()))
+        if self.config.songs:
             self.show_combo.setCurrentIndex(0)
         self.show_combo.blockSignals(False)
 

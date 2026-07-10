@@ -63,13 +63,13 @@ def _has_placed_fixtures(config):
 
 
 def _has_structure(config):
-    shows = getattr(config, "shows", {}) or {}
-    return any(getattr(s, "parts", None) for s in shows.values())
+    songs = getattr(config, "songs", {}) or {}
+    return any(getattr(s, "parts", None) for s in songs.values())
 
 
 def _has_timeline_content(config):
-    shows = (getattr(config, "shows", {}) or {}).values()
-    for show in shows:
+    songs = (getattr(config, "songs", {}) or {}).values()
+    for show in songs:
         timeline = getattr(show, "timeline_data", None)
         for lane in getattr(timeline, "light_lanes", []) or []:
             if getattr(lane, "light_blocks", None):

@@ -54,13 +54,22 @@ legacy-load tests; the compact serializer's per-file block tables
 (`block_defs` / `light_block_defs`) are untouched - go through the
 object model, never raw-YAML merges.
 
-Rename ripple (inventory, updated as S1 executes): `gui/tabs/shows_tab.py`
-(`config.shows`, `current_show_name`), `gui/tabs/structure_tab.py`,
-`gui/gui.py` (rebind ladder, autosave fingerprint), `autogen/*` (show
-generation entry points), `utils/to_xml/*` (workspace export reads
-songs), `utils/config_merge.py`, demos generators + demo YAMLs
-(regenerate via `python -m demos.generate_shows`), tests that construct
-`Show(...)`. The public YAML stays loadable at every step.
+Rename ripple (executed 2026-07-09): `config/models.py` +
+`config/compact_serializer.py` (key `shows` -> `songs`; block tables
+unchanged), `gui/tabs/shows_tab.py` (`config.songs`,
+`current_song_name`, toolbar label "Song"), `gui/tabs/structure_tab.py`
+(mechanical only, UI rebuild is S2), `gui/tabs/live_tab.py`,
+`gui/gui.py` (rebind ladder, autosave, export/import actions),
+`gui/widgets/home_screen.py`, `gui/dialogs/autogen_dialog.py` +
+`render_dialog.py`, `utils/show_io.py`, `utils/config_merge.py`,
+`utils/create_workspace.py`, `utils/to_xml/*`,
+`utils/pause_show_generator.py`, `utils/legacy_show_converter.py`,
+`utils/render/offline_renderer.py`, demos generators, and every test
+constructing `Song(...)`. Demo YAMLs were intentionally NOT
+regenerated: they keep the legacy `shows:` key and prove the legacy
+load path (tests/unit/test_setlist_model.py). The public YAML stays
+loadable at every step. `ShowPart` / `ShowEffect` / `PauseShowConfig`
+keep their names for now (part-level rename is not part of S1).
 
 ## S2 - structure tab rebuild (three sub-stages, goldens each)
 

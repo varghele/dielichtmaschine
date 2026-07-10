@@ -10,7 +10,7 @@ from typing import Dict, List, Optional, Callable, Any
 import moderngl
 import glm
 
-from config.models import Configuration, Show
+from config.models import Configuration, Song
 from utils.fixture_utils import load_fixture_definitions_from_qlc
 from utils.target_resolver import resolve_targets_unique
 from utils.artnet.dmx_manager import DMXManager
@@ -24,7 +24,7 @@ class OfflineRenderer:
     def __init__(
         self,
         config: Configuration,
-        show: Show,
+        show: Song,
         fixture_definitions: Dict[str, Any],
         camera_preset_name: str = "Front",
         output_path: str = "output.mp4",
