@@ -6,8 +6,9 @@ with MIDI active, three numbered song cards with colour edges and mono
 trigger lines - PC#5, NOTE C2, Follows automatically - dashed
 pause-look rows between them, the open card's accent border + OPEN
 tag, the dashed "+ SONG" tile and the wrapping mono footer hint), the
-38px action strip (SHOW DIRECTORY chip left, audio readout +
-AUTOGENERATE right), the song title row ("MONSTERS" in condensed caps,
+38px action strip (audio readout + AUTOGENERATE right; the SHOW
+DIRECTORY chip is gone - legacy CSV merging moved to File > Import
+Legacy CSV Songs), the song title row ("MONSTERS" in condensed caps,
 the mono meta line, the RENAME SONG / DELETE outline chips), the parts
 strip of 190px cards with 3px top color bars + the selected card's
 accent check, clickable "INSTANT ." transition chips and the dashed

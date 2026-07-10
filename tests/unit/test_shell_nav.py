@@ -121,6 +121,14 @@ class TestOverflowMenu:
         assert ui.menuSettings.menuAction() in actions
         assert ui.menuHelp.menuAction() in actions
 
+    def test_import_legacy_csv_action_in_file_menu(self, shell_window):
+        """The Structure tab's SHOW DIRECTORY chip became this explicit
+        import action (the only interactive use of the directory hint
+        was merging pre-v1.0 CSV songs)."""
+        _, ui = shell_window
+        assert ui.actionImportLegacyCsv.text() == "Import Legacy CSV Songs..."
+        assert ui.actionImportLegacyCsv in ui.menuFile.actions()
+
 
 class TestScreenHints:
     def test_every_screen_has_a_hint(self, qapp):

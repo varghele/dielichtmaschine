@@ -5,11 +5,12 @@ design_handoff_lichtmaschine_app/screens/05b-show-structure-v2-setlist.html.
 Anatomy (top to bottom):
 
 - a slim 38px action strip: no tab title (the shell subnav names the
-  screen); a small "SHOW DIRECTORY..." outline chip on the left (the
-  import/export directory hint, evicted from the old show row), then
-  the mono audio readout ("neon_ruinen.wav . 03:42 ANALYZED", the
-  status word in green) and a bordered display-caps
-  "AUTOGENERATE SONG..." button on the right.
+  screen); the mono audio readout ("neon_ruinen.wav . 03:42 ANALYZED",
+  the status word in green) and a bordered display-caps
+  "AUTOGENERATE SONG..." button on the right. (The old "SHOW
+  DIRECTORY..." chip is gone: shows_directory is a legacy hint that
+  self-maintains on import/save; merging pre-v1.0 CSV songs is now the
+  explicit File > Import Legacy CSV Songs action.)
 - a 330px setlist rail on the left (reference screen 05b): header with
   "SETLIST . NAME", "N SONGS . MM MIN" and the SYNC segment row
   (MIDI / MTC / SMPTE / MANUAL writing setlist.sync_mode), then one
@@ -1050,10 +1051,13 @@ class StructureTab(BaseTab):
         main_layout.addWidget(status_strip)
 
     def _create_action_strip(self) -> QWidget:
-        """38px strip: the SHOW DIRECTORY chip on the left, mono audio
-        readout + AUTOGENERATE SONG button on the right.
+        """38px strip: mono audio readout + AUTOGENERATE SONG button on
+        the right.
 
-        No tab title - the shell subnav already names the screen.
+        No tab title - the shell subnav already names the screen. The
+        shows_directory hint has no UI here anymore: it self-maintains
+        (import/export dialogs remember their folder) and legacy CSV
+        merging is File > Import Legacy CSV Songs.
         """
         strip = QWidget()
         strip.setObjectName("StructureActionStrip")
@@ -1061,24 +1065,6 @@ class StructureTab(BaseTab):
         row = QHBoxLayout(strip)
         row.setContentsMargins(16, 0, 16, 0)
         row.setSpacing(10)
-
-        # The shows-directory hint (default location for File -> Import /
-        # Export Show Structure) lost its toolbar row to the title row:
-        # it lives on as a small outline chip in the action strip.
-        self.set_directory_btn = QPushButton("SHOW DIRECTORY...")
-        self.set_directory_btn.setObjectName("ShowDirectoryChip")
-        self.set_directory_btn.setProperty("role", "cta-outline")
-        directory_font = display_font(9, QFont.Weight.DemiBold,
-                                      tracking_em=0.08)
-        self.set_directory_btn.setFont(directory_font)
-        self.set_directory_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.set_directory_btn.setToolTip(
-            "Set the default directory for File > Import / Export "
-            "Show Structure")
-        self.set_directory_btn.setFixedWidth(
-            QFontMetrics(directory_font).horizontalAdvance(
-                self.set_directory_btn.text()) + 40)
-        row.addWidget(self.set_directory_btn)
 
         row.addStretch()
 
@@ -2322,7 +2308,6 @@ class StructureTab(BaseTab):
         self.delete_show_btn.clicked.connect(self._delete_show)
 
         # Action strip
-        self.set_directory_btn.clicked.connect(self._set_show_directory)
         self.autogen_btn.clicked.connect(self._on_autogenerate)
 
         # Master grid header
@@ -3050,9 +3035,6 @@ class StructureTab(BaseTab):
             # Load the new show
             self._load_show(name)
 
-            # Auto-save the new show to CSV
-            self._save_to_csv()
-
             # Notify parent to sync with other tabs
             if self.parent() and hasattr(self.parent(), 'on_show_selected'):
                 self.parent().on_show_selected(name, 'structure')
@@ -3126,47 +3108,6 @@ class StructureTab(BaseTab):
 
             QMessageBox.information(self, "Success", f"Song renamed from '{old_name}' to '{new_name}'.")
 
-    def _set_show_directory(self):
-        """Manually set/change the shows directory."""
-        # Ask user to choose directory
-        current_dir = self.config.shows_directory if self.config.shows_directory else os.path.expanduser("~")
-
-        custom_dir = QFileDialog.getExistingDirectory(
-            self,
-            "Select Shows Directory",
-            current_dir,
-            QFileDialog.Option.ShowDirsOnly
-        )
-
-        if custom_dir:
-            self.config.shows_directory = custom_dir
-            # shows_directory is just a hint now; we no longer auto-create
-            # an audiofiles/ subdir here or auto-scan for CSVs. Audio files
-            # live next to the config (config_dir/audiofiles/), and CSVs
-            # are imported explicitly via File -> Import Show Structure.
-            QMessageBox.information(
-                self,
-                "Directory Set",
-                f"Shows directory hint set to:\n{custom_dir}\n\n"
-                "Used as the default location for File -> Import / Export "
-                "Show Structure dialogs."
-            )
-
-    def _ensure_shows_directory(self) -> bool:
-        """Silent check: returns True iff shows_directory hint is set and exists.
-
-        Used to be a prompt-and-auto-create-on-first-use path that also
-        triggered CSV scanning. v1.0 demoted ``shows_directory`` to a hint
-        (last-used import/export location) so this function no longer
-        prompts or creates. Callers that need a directory for an explicit
-        user action (Set Shows Directory button, Export Show Structure
-        dialog) use a QFileDialog at the call site instead.
-        """
-        return bool(
-            self.config.shows_directory
-            and os.path.exists(self.config.shows_directory)
-        )
-
     def _delete_show(self):
         """Delete the current song (from config and disk)."""
         if not self.current_song_name:
@@ -3232,21 +3173,6 @@ class StructureTab(BaseTab):
             self._clear_timeline()
 
         QMessageBox.information(self, "Success", "Song deleted successfully.")
-
-    def _auto_load_shows(self):
-        """Automatically load all shows from the configured directory."""
-        if not self.config.shows_directory or not os.path.exists(self.config.shows_directory):
-            print(f"DEBUG: Cannot auto-load - no valid directory (directory={self.config.shows_directory})")
-            return
-
-        print(f"DEBUG: Auto-loading shows from {self.config.shows_directory}")
-        try:
-            self._import_all_shows_from_csv()
-            print(f"DEBUG: Import completed, shows: {list(self.config.songs.keys())}")
-        except Exception as e:
-            print(f"Failed to auto-load shows: {e}")
-            import traceback
-            traceback.print_exc()
 
     def _clear_timeline(self):
         """Clear the timeline and the parts strip."""
@@ -3314,34 +3240,6 @@ class StructureTab(BaseTab):
         self._update_audio_readout()
         # Move the OPEN marker (accent border + tag) to this song's card.
         self._refresh_setlist_rail()
-
-    def _load_all_shows(self):
-        """Load all shows from CSV files in the shows directory."""
-        try:
-            # Import all shows
-            self._import_all_shows_from_csv()
-
-            # Update dropdown
-            self.update_from_config()
-
-            # Show success message
-            show_count = len(self.config.songs)
-            QMessageBox.information(
-                self,
-                "Success",
-                f"Loaded {show_count} show(s) from CSV files."
-            )
-
-            # Load first show if available
-            if self.show_combo.count() > 0:
-                self._load_show(self.show_combo.currentText())
-
-        except Exception as e:
-            QMessageBox.critical(
-                self,
-                "Error",
-                f"Failed to load shows:\n{str(e)}"
-            )
 
     def _delete_part(self):
         """Delete the selected part."""
@@ -3443,83 +3341,6 @@ class StructureTab(BaseTab):
         The autosave-to-yaml feature in v1.2 will land in this slot.
         """
         return
-
-    def _save_to_csv(self):
-        """Save current show structure to CSV file."""
-        if not self.current_show or not self.current_show.parts:
-            return
-
-        # Ensure shows directory is configured
-        if not self._ensure_shows_directory():
-            return
-
-        self._save_show_to_csv(self.current_song_name, self.current_show)
-
-    def _import_all_shows_from_csv(self):
-        """Import all show structures from CSV files in the shows directory."""
-        # Use configured shows directory
-        if not self.config.shows_directory:
-            return
-
-        shows_dir = self.config.shows_directory
-
-        # Check if shows directory exists
-        if not os.path.exists(shows_dir):
-            print(f"Shows directory not found: {shows_dir}")
-            return
-
-        # Scan for all show structure CSV files
-        csv_files = [f for f in os.listdir(shows_dir) if f.endswith('.csv')]
-
-        if not csv_files:
-            print(f"No CSV files found in {shows_dir}")
-            return
-
-        imported_count = 0
-
-        for file in csv_files:
-            try:
-                show_name = os.path.splitext(file)[0]  # Remove .csv extension
-                structure_file = os.path.join(shows_dir, file)
-
-                # Check if show already exists in configuration
-                if show_name in self.config.songs:
-                    show = self.config.songs[show_name]
-                    # Clear existing parts to reload from CSV
-                    show.parts.clear()
-                else:
-                    # Create new Show object with timeline data
-                    show = Song(
-                        name=show_name,
-                        parts=[],
-                        effects=[],
-                        timeline_data=TimelineData()
-                    )
-                    self.config.songs[show_name] = show
-
-                # Read CSV and create show parts
-                with open(structure_file, 'r') as f:
-                    reader = csv.DictReader(f)
-                    for row in reader:
-                        # Create ShowPart from CSV row
-                        show_part = ShowPart(
-                            name=row['showpart'],
-                            color=row['color'],
-                            signature=row['signature'],
-                            bpm=float(row['bpm']),
-                            num_bars=int(row['num_bars']),
-                            transition=row['transition']
-                        )
-                        # Add part to show
-                        show.parts.append(show_part)
-
-                imported_count += 1
-                print(f"Imported show: {show_name}")
-
-            except Exception as e:
-                print(f"Failed to import {file}: {e}")
-
-        print(f"Successfully imported {imported_count} show(s) from {shows_dir}")
 
     def _on_audio_file_loaded(self, file_path: str):
         """Handle audio file loaded - copy to <config_dir>/audiofiles/."""
@@ -3754,44 +3575,15 @@ class StructureTab(BaseTab):
         """
         return
 
-    def _save_show_to_csv(self, show_name: str, show: Song):
-        """Save a specific show structure to CSV file.
-
-        Args:
-            show_name: Name of the show
-            show: Show object containing parts
-        """
-        if not show.parts:
-            return
-
-        csv_path = os.path.join(self.config.shows_directory, f"{show_name}.csv")
-
-        try:
-            with open(csv_path, 'w', newline='') as f:
-                writer = csv.DictWriter(f, fieldnames=['showpart', 'signature', 'bpm', 'num_bars', 'transition', 'color'])
-                writer.writeheader()
-
-                for part in show.parts:
-                    writer.writerow({
-                        'showpart': part.name,
-                        'signature': part.signature,
-                        'bpm': part.bpm,
-                        'num_bars': part.num_bars,
-                        'transition': part.transition,
-                        'color': part.color
-                    })
-        except Exception as e:
-            print(f"Failed to save CSV for {show_name}: {e}")
-
     def on_tab_activated(self):
         """Called when tab becomes visible.
 
         v1.0 made config.yaml the single source of truth, so this hook just
         refreshes the UI from the in-memory config. Previously it prompted
         for a shows_directory on first activation and silently scanned that
-        directory for CSV files; both behaviours moved out (shows_directory
-        is now a hint set via the "Set Shows Directory" button, and CSV
-        import is explicit via File -> Import Show Structure).
+        directory for CSV files; both behaviours are gone (shows_directory
+        is a self-maintaining hint, and legacy CSV songs are merged via
+        File > Import Legacy CSV Songs).
         """
         if self._is_activating:
             return

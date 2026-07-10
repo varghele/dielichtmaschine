@@ -567,6 +567,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.actionImportFixtureList.triggered.connect(self.import_fixture_list_file)
         self.actionExportFixtureList.triggered.connect(self.export_fixture_list_file)
         self.actionImportShowsFromConfig.triggered.connect(self.import_shows_from_config_file)
+        self.actionImportLegacyCsv.triggered.connect(self.import_legacy_csv_songs)
         self.actionNewFromTemplate.triggered.connect(self.new_from_template)
         self.actionImportWorkspace.triggered.connect(self.import_workspace)
         self.actionCreateWorkspace.triggered.connect(self.create_workspace)
@@ -1089,20 +1090,52 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             import traceback
             traceback.print_exc()
 
-    def _offer_legacy_csv_merge(self):
+    def import_legacy_csv_songs(self):
+        """File > Import Legacy CSV Songs: pick a folder of pre-v1.0
+        show CSVs and merge them into config.songs.
+
+        This replaced the Structure tab's "SHOW DIRECTORY..." chip: the
+        only interactive reason to point at a folder was exactly this
+        merge, so it became an explicit import action. The chosen folder
+        is remembered as the shows_directory hint (which also keeps the
+        legacy audiofiles/ fallback working for old projects)."""
+        from PyQt6.QtWidgets import QFileDialog
+        start_dir = (getattr(self.config, 'shows_directory', None)
+                     or (os.path.dirname(self.config_path)
+                         if getattr(self, 'config_path', None) else '')
+                     or os.path.expanduser('~'))
+        chosen = QFileDialog.getExistingDirectory(
+            self, "Import Legacy CSV Songs", start_dir,
+            QFileDialog.Option.ShowDirsOnly)
+        if not chosen:
+            return
+        self.config.shows_directory = chosen
+        self._offer_legacy_csv_merge(interactive=True)
+
+    def _offer_legacy_csv_merge(self, interactive: bool = False):
         """Scan config.shows_directory for *.csv shows not in config.songs.
 
         If any are found, prompt once. On accept, read each via
         ``utils.show_io.read_show`` and add to ``config.songs`` in memory.
         Skips silently if shows_directory is unset / missing / has no
-        unrecognised CSVs.
+        unrecognised CSVs - except when ``interactive`` (the explicit
+        File > Import Legacy CSV Songs path), which reports the empty
+        result instead of leaving the user wondering.
         """
         shows_dir = getattr(self.config, 'shows_directory', None)
         if not shows_dir or not os.path.isdir(shows_dir):
+            if interactive:
+                QMessageBox.information(
+                    self, "No Folder",
+                    "The chosen folder does not exist.")
             return
         try:
             csv_files = [f for f in os.listdir(shows_dir) if f.lower().endswith('.csv')]
         except OSError:
+            if interactive:
+                QMessageBox.information(
+                    self, "No Legacy Songs",
+                    f"Could not read the folder:\n{shows_dir}")
             return
         candidates = []
         for csv_name in csv_files:
@@ -1111,6 +1144,11 @@ class MainWindow(QMainWindow, Ui_MainWindow):
                 continue
             candidates.append((stem, os.path.join(shows_dir, csv_name)))
         if not candidates:
+            if interactive:
+                QMessageBox.information(
+                    self, "No Legacy Songs",
+                    f"No CSV songs found in:\n{shows_dir}\n\n"
+                    "(Songs already in the config are skipped.)")
             return
 
         names_preview = ', '.join(stem for stem, _ in candidates[:5])

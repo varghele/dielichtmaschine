@@ -807,30 +807,18 @@ class TestLegacyChromeGone:
         # Song creation is the rail's + SONG tile.
         assert not hasattr(tab, "new_show_btn")
 
-    def test_directory_action_moved_to_the_action_strip(self, tab,
-                                                        monkeypatch):
-        from PyQt6.QtWidgets import QFileDialog, QMessageBox
-        assert tab.set_directory_btn.text() == "SHOW DIRECTORY..."
-        monkeypatch.setattr(
-            QFileDialog, "getExistingDirectory",
-            staticmethod(lambda *a, **k: "C:/shows"))
-        infos = []
-        monkeypatch.setattr(
-            QMessageBox, "information",
-            staticmethod(lambda *a, **k: infos.append(a[1])))
-        tab.set_directory_btn.click()
-        assert tab.config.shows_directory == "C:/shows"
-        assert infos == ["Directory Set"]
-
-    def test_directory_dialog_cancel_keeps_the_hint(self, tab,
-                                                    monkeypatch):
-        from PyQt6.QtWidgets import QFileDialog
-        tab.config.shows_directory = "C:/keep"
-        monkeypatch.setattr(
-            QFileDialog, "getExistingDirectory",
-            staticmethod(lambda *a, **k: ""))
-        tab.set_directory_btn.click()
-        assert tab.config.shows_directory == "C:/keep"
+    def test_directory_button_is_gone(self, tab):
+        """shows_directory lost its last UI: the hint self-maintains
+        (import/export dialogs remember their folder) and merging
+        pre-v1.0 CSV songs is the explicit File > Import Legacy CSV
+        Songs action (see test_shell_nav.py for the menu action)."""
+        assert not hasattr(tab, "set_directory_btn")
+        assert not hasattr(tab, "_set_show_directory")
+        # The whole dead CSV cluster went with it.
+        for legacy in ("_save_to_csv", "_save_show_to_csv",
+                       "_import_all_shows_from_csv", "_auto_load_shows",
+                       "_load_all_shows", "_ensure_shows_directory"):
+            assert not hasattr(tab, legacy), legacy
 
 
 # ---------------------------------------------------------------------------
@@ -861,7 +849,7 @@ class TestThemeContract:
                  tab.delete_part_btn.text(),
                  tab.song_title.text(), tab.song_meta.text(),
                  tab.rename_show_btn.text(), tab.delete_show_btn.text(),
-                 tab.set_directory_btn.text(), tab.load_audio_btn.text(),
+                 tab.load_audio_btn.text(),
                  tab.audio_header_file.text()]
         texts += [chip.text() for chip in tab._chips]
         texts += [card.check_label.text() for card in tab._cards]

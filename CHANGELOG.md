@@ -65,6 +65,13 @@ verbatim as the GitHub Release notes (see [docs/releasing.md](docs/releasing.md)
 
 ### Changed
 
+- **The show-directory button is gone; legacy CSV import is a File
+  action.** The Structure tab's "SHOW DIRECTORY..." chip only existed
+  to point at a pre-v1.0 folder of CSV songs; that is now the explicit
+  File > Import Legacy CSV Songs action (pick a folder, it merges and
+  reports). The directory hint still self-maintains for import/export
+  dialogs and the legacy audiofiles fallback, and old configs load
+  unchanged. The dead CSV auto-save/auto-load code went with it.
 - **Shows became songs in a setlist.** What the app called a show (parts,
   BPM, audio) is now a song, and the show is the whole evening: an
   ordered setlist of songs, each entry carrying a start trigger (manual,
