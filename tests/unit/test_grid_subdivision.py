@@ -13,6 +13,9 @@ lane. Covers:
 - ``TimelineWidget.find_nearest_beat_time`` honours the lane's
   ``grid_subdivision`` so block placement / drag snap to the same grid the
   user sees.
+- The swing AMOUNT (timeline v3 stage T1: 0.0 off, 1.0 = the old full
+  triplet feel, linear in between) moves the snapped pixel positions:
+  the exact x targets are pinned for 0%, 50% and 100%.
 """
 
 from __future__ import annotations
@@ -183,6 +186,45 @@ def test_find_nearest_beat_time_fallback_path_uses_subdivision(qapp):
         # 120 BPM default → 0.5s/beat. At subdivision=2, 0.27 → 0.25.
         tw.set_grid_subdivision(2)
         assert abs(tw.find_nearest_beat_time(0.27) - 0.25) < 1e-6
+    finally:
+        tw.deleteLater()
+
+
+def test_swing_amount_moves_the_snapped_pixel_positions(qapp):
+    """Pin the actual snapped x positions on the 1/2-beat grid at 120 BPM
+    (beat = 0.5s, zoom 1.0 -> 60 px/s):
+
+    - amount 0.0 (off): off-beat at 1/2 beat = 0.25s -> x = 15.0 px
+    - amount 0.5: off-beat at 7/12 beat = 0.2916667s -> x = 17.5 px
+    - amount 1.0: off-beat at 2/3 beat = 0.3333s -> x = 20.0 px (the old
+      boolean triplet position, so blocks snap exactly as before at 100%)
+    """
+    from timeline_ui.timeline_widget import TimelineWidget
+
+    tw = TimelineWidget()
+    tw.set_song_structure(_make_song_structure())
+    tw.set_grid_subdivision(2.0)
+    try:
+        assert tw.pixels_per_second == 60
+
+        tw.set_swing(0.0)
+        snapped = tw.find_nearest_beat_time(0.27)
+        assert abs(snapped - 0.25) < 1e-6
+        assert abs(tw.time_to_pixel(snapped) - 15.0) < 1e-4
+
+        tw.set_swing(0.5)
+        snapped = tw.find_nearest_beat_time(0.27)
+        assert abs(snapped - 0.5 * (7.0 / 12.0)) < 1e-6
+        assert abs(tw.time_to_pixel(snapped) - 17.5) < 1e-4
+
+        tw.set_swing(1.0)
+        snapped = tw.find_nearest_beat_time(0.30)
+        assert abs(snapped - 0.5 * (2.0 / 3.0)) < 1e-6
+        assert abs(tw.time_to_pixel(snapped) - 20.0) < 1e-4
+
+        # Beat/bar lines never move, whatever the amount.
+        assert abs(tw.find_nearest_beat_time(0.02) - 0.0) < 1e-6
+        assert abs(tw.find_nearest_beat_time(0.48) - 0.5) < 1e-6
     finally:
         tw.deleteLater()
 

@@ -1,17 +1,21 @@
-"""Shows tab chrome (North Star card 4a / reference screen
-design_handoff_lichtmaschine_app/screens/06-show-timeline.html): toolbar
-grid + snap chips, icon transport, bar readout, right-pane header,
-block inspector and the footer status line.
+"""Shows tab chrome (timeline v3, reference screen
+design_handoff_lichtmaschine_app/screens/06b-show-timeline-v3.html):
+one compact toolbar row carrying song selector, actions, transport +
+bar readout, GRID segment group, SNAP chip and SWING dropdown, plus
+the right-pane header, block inspector and the footer status line.
 
 Covers:
-- The toolbar GRID chip row mirrors the master timeline's documented
-  subdivision choices, pushes clicks into TimelineGrid (master combo +
-  audio lane + light lanes all follow), and syncs back when the master
-  combobox changes - with no signal feedback loop. Same contract for
-  the SNAP chip.
-- Transport buttons are icon-only (line icons, no text) and the play
-  button swaps play/pause glyphs with playback state.
-- The transport readout is the reference's bar-based
+- The toolbar GRID segment group mirrors the master timeline's
+  documented subdivision choices as one bordered role="card" group of
+  role="segment" cells, and pushes clicks into TimelineGrid (master +
+  audio lane + light lanes all follow). Same contract for the SNAP
+  chip and the SWING percentage dropdown (0/25/50/75/100, fanned out
+  as a 0.0-1.0 amount).
+- The transport is merged INTO the toolbar row (no separate transport
+  bar): play/stop are icon-only (line icons, no text), the play button
+  swaps play/pause glyphs with playback state, and the position slider
+  lives on the slim strip directly under the row.
+- The inline readout is the reference's bar-based
   "BAR <bar>.<beat> · <mm:ss.s>", derived from the SongStructure parts.
 - The pane-toggle chevron collapses and restores the right splitter
   pane, and follows manual splitter drags; the pane header carries the
@@ -125,8 +129,13 @@ class TestGridChips:
         # Default: whole-beat grid checked, chips exclusive.
         assert shows_tab.grid_chips[1].isChecked()
         assert shows_tab.grid_chip_group.exclusive()
+        # Timeline v3 (stage T1): one bordered group (role="card"), each
+        # cell a borderless segment that accent-fills when checked (same
+        # sanctioned pattern as the Stage tab layer bar).
+        assert shows_tab.grid_group_frame.property("role") == "card"
         for chip in shows_tab.grid_chips.values():
-            assert chip.property("role") == "output-select"
+            assert chip.property("role") == "segment"
+            assert chip.parent() is shows_tab.grid_group_frame
 
     def test_chip_click_fans_out_to_master_and_lanes(self, shows_tab):
         from timeline.light_lane import LightLane
@@ -161,6 +170,31 @@ class TestGridChips:
         assert not hasattr(shows_tab.timeline_grid, "snap_changed")
         assert not hasattr(shows_tab.master_timeline, "subdivision_combo")
         assert not hasattr(shows_tab.master_timeline, "snap_checkbox")
+
+
+class TestToolbarStructure:
+    """Stage T1: the transport merged into the single toolbar row; the
+    separate transport bar row is gone. The position slider sits on the
+    slim strip directly under the row, inside the same toolbar widget
+    (a single row cannot hold both sliders at 1280px)."""
+
+    def test_transport_bar_row_is_gone(self, shows_tab):
+        from PyQt6.QtWidgets import QWidget
+        assert not hasattr(shows_tab, "transport_bar")
+        assert shows_tab.findChild(QWidget, "ShowsTransportBar") is None
+
+    def test_transport_and_readout_live_in_the_toolbar(self, shows_tab):
+        toolbar = shows_tab.toolbar_widget
+        for widget in (shows_tab.play_btn, shows_tab.stop_btn,
+                       shows_tab.time_label, shows_tab.position_slider,
+                       shows_tab.total_time_label, shows_tab.zoom_slider,
+                       shows_tab.swing_btn, shows_tab.snap_chip,
+                       shows_tab.grid_group_frame, shows_tab.save_btn):
+            assert toolbar.isAncestorOf(widget), widget
+
+    def test_compact_action_texts_match_the_mock(self, shows_tab):
+        assert shows_tab.add_lane_btn.text() == "+ LANE"
+        assert shows_tab.autogen_btn.text() == "AUTOGEN"
 
 
 class TestTransportButtons:
@@ -255,30 +289,47 @@ class TestSnapChip:
         assert not shows_tab.lane_widgets[0].snap_checkbox.isChecked()
 
 
-class TestSwingChip:
-    def test_swing_chip_is_a_checkable_output_select_chip(self, shows_tab):
-        assert shows_tab.swing_chip.isCheckable()
-        assert not shows_tab.swing_chip.isChecked()  # default off
-        assert shows_tab.swing_chip.property("role") == "output-select"
+class TestSwingDropdown:
+    def test_swing_is_a_lane_chip_dropdown_defaulting_to_zero(self, shows_tab):
+        # Timeline v3 (stage T1): SWING is a percentage dropdown chip, not
+        # an on/off toggle. Default 0% (straight grid), 0% action checked.
+        assert shows_tab.swing_btn.property("role") == "lane-chip"
+        assert not shows_tab.swing_btn.isCheckable()
+        # The mock's ▾ is tofu in the brand mono font; ↓ is the pinned
+        # drop indicator (same as the lane header TARGETS chip).
+        assert shows_tab.swing_btn.text() == "SWING 0% ↓"
+        assert shows_tab.swing_percent == 0
+        assert sorted(shows_tab.swing_actions) == [0, 25, 50, 75, 100]
+        assert shows_tab.swing_actions[0].isChecked()
+        assert [a.text() for a in shows_tab.swing_menu.actions()] == \
+            ["0%", "25%", "50%", "75%", "100%"]
 
-    def test_swing_chip_click_calls_grid_set_swing(self, shows_tab, monkeypatch):
+    def test_selecting_a_step_calls_grid_set_swing_with_amount(
+            self, shows_tab, monkeypatch):
         calls = []
         monkeypatch.setattr(shows_tab.timeline_grid, "set_swing",
-                            lambda enabled: calls.append(enabled))
-        shows_tab.swing_chip.click()  # off -> on
-        assert calls == [True]
-        assert shows_tab.swing_chip.isChecked()
-        shows_tab.swing_chip.click()  # on -> off
-        assert calls == [True, False]
+                            lambda amount: calls.append(amount))
+        shows_tab.swing_actions[50].trigger()
+        assert calls == [0.5]
+        assert shows_tab.swing_btn.text() == "SWING 50% ↓"
+        assert shows_tab.swing_percent == 50
+        assert shows_tab.swing_actions[50].isChecked()
+        shows_tab.swing_actions[0].trigger()
+        assert calls == [0.5, 0.0]
+        assert shows_tab.swing_btn.text() == "SWING 0% ↓"
 
-    def test_swing_chip_fans_out_to_master_and_lanes(self, shows_tab):
+    def test_swing_amount_fans_out_to_master_and_lanes(self, shows_tab):
         from timeline.light_lane import LightLane
         shows_tab._add_lane_widget(LightLane("L1"))
-        shows_tab.swing_chip.click()  # turn swing on
+        shows_tab.swing_actions[100].trigger()  # full triplet feel
         master = shows_tab.master_timeline
-        assert master.timeline_widget.swing_enabled is True
-        assert shows_tab.audio_lane.timeline_widget.swing_enabled is True
-        assert shows_tab.lane_widgets[0].timeline_widget.swing_enabled is True
+        assert master.timeline_widget.swing_amount == 1.0
+        assert shows_tab.audio_lane.timeline_widget.swing_amount == 1.0
+        assert shows_tab.lane_widgets[0].timeline_widget.swing_amount == 1.0
+
+        shows_tab.swing_actions[25].trigger()
+        assert master.timeline_widget.swing_amount == 0.25
+        assert shows_tab.lane_widgets[0].timeline_widget.swing_amount == 0.25
 
 
 class TestBarReadout:
@@ -442,6 +493,9 @@ class TestThemeRolesExist:
                      'QLabel[role="micro"]',
                      'QPushButton[role="cta-outline"]',
                      'QPushButton[role="output-select"]',
+                     'QPushButton[role="segment"]',
+                     'QPushButton[role="lane-chip"]',
+                     'QWidget[role="card"]',
                      'QWidget[role="section-caption"]'):
             assert rule in qss, rule
 
@@ -461,14 +515,17 @@ class TestButtonCoherence:
 
     def test_display_caps_actions_are_uppercase(self, shows_tab):
         # cta-accent / cta-outline text buttons carry display caps.
-        assert shows_tab.autogen_btn.text() == "AUTO-GENERATE"
+        assert shows_tab.autogen_btn.text() == "AUTOGEN"
         assert shows_tab.save_btn.text() == "SAVE"
         assert shows_tab.inspector_btn.text() == "INSPECTOR"
 
-    def test_toggle_chips_share_the_output_select_role(self, shows_tab):
-        for chip in (shows_tab.snap_chip, shows_tab.swing_chip,
-                     *shows_tab.grid_chips.values()):
-            assert chip.property("role") == "output-select"
+    def test_grid_snap_swing_chips_carry_their_theme_roles(self, shows_tab):
+        # Grid cells are borderless segments inside the card group; SNAP
+        # keeps the output-select chip role; SWING is a lane-chip dropdown.
+        for chip in shows_tab.grid_chips.values():
+            assert chip.property("role") == "segment"
+        assert shows_tab.snap_chip.property("role") == "output-select"
+        assert shows_tab.swing_btn.property("role") == "lane-chip"
 
     def test_transport_uses_function_colors(self, shows_tab):
         assert shows_tab.play_btn.property("role") == "success"
@@ -503,7 +560,8 @@ class TestPreservedChrome:
                      "save_btn", "play_btn", "stop_btn", "time_label",
                      "position_slider", "total_time_label",
                      "embedded_riff_panel", "embedded_visualizer",
-                     "snap_chip", "status_line", "block_inspector"):
+                     "snap_chip", "swing_btn", "status_line",
+                     "block_inspector"):
             assert getattr(shows_tab, name, None) is not None, name
         assert shows_tab.autogen_btn.property("role") == "cta-accent"
 

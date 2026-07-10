@@ -227,7 +227,7 @@ class TimelineGrid(QWidget):
             if hasattr(tw, "set_snap_to_grid"):
                 tw.set_snap_to_grid(master_tw.snap_to_grid)
             if hasattr(tw, "set_swing"):
-                tw.set_swing(getattr(master_tw, "swing_enabled", False))
+                tw.set_swing(getattr(master_tw, "swing_amount", 0.0))
             cb = getattr(lane_widget, "snap_checkbox", None)
             if cb is not None:
                 cb.blockSignals(True)
@@ -285,25 +285,27 @@ class TimelineGrid(QWidget):
             if hasattr(tw, "set_grid_subdivision"):
                 tw.set_grid_subdivision(subdivision)
 
-    def set_swing(self, enabled: bool) -> None:
-        """Push triplet-swing state to master + audio + every light lane.
+    def set_swing(self, amount: float) -> None:
+        """Push the swing amount to master + audio + every light lane.
 
         Mirrors ``set_grid_subdivision`` / ``set_snap_to_grid``: the shows-tab
-        SWING chip is the single control, and its state fans out so every
-        lane's drawn grid and snap targets swing together.
+        SWING dropdown is the single control, and its amount (0.0 straight,
+        1.0 full triplet feel, linear in between; bools accepted for the old
+        on/off semantics) fans out so every lane's drawn grid and snap
+        targets swing together.
         """
         if self._master_container is not None:
             tw = getattr(self._master_container, "timeline_widget", None)
             if tw is not None and hasattr(tw, "set_swing"):
-                tw.set_swing(enabled)
+                tw.set_swing(amount)
         if self._audio_lane is not None:
             tw = getattr(self._audio_lane, "timeline_widget", None)
             if tw is not None and hasattr(tw, "set_swing"):
-                tw.set_swing(enabled)
+                tw.set_swing(amount)
         for entry in self._lane_rows:
             tw = entry["lane"].timeline_widget
             if hasattr(tw, "set_swing"):
-                tw.set_swing(enabled)
+                tw.set_swing(amount)
 
     def set_snap_to_grid(self, snap: bool) -> None:
         """Push snap-to-grid state to master + audio + every light lane.

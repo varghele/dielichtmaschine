@@ -1,24 +1,25 @@
-"""Golden screenshots for the Shows tab chrome (North Star card 4a,
-reference design_handoff_lichtmaschine_app/screens/06-show-timeline.html).
+"""Golden screenshots for the Shows tab chrome (timeline v3, reference
+design_handoff_lichtmaschine_app/screens/06b-show-timeline-v3.html).
 
 Pins the tab-level chrome owned by gui/tabs/shows_tab.py:
 
-- ``shows_toolbar_dark``: SHOW caption + combo, lane/generate actions,
-  the GRID subdivision chip row + SNAP chip (output-select chips),
-  ZOOM, Save and the 3D-pane chevron.
-- ``shows_transport_dark``: icon-only play/stop transport buttons on
-  their function-color fills, the mono #TimeReadout carrying the
-  reference's "BAR n.m · mm:ss.s", position slider and the secondary
-  total-time readout.
+- ``shows_toolbar_dark``: the single compact toolbar row (stage T1):
+  SONG caption + selector, + LANE / AUTOGEN / INSPECTOR, icon-only
+  play/stop with the inline mono #TimeReadout ("BAR n.m · mm:ss.s"),
+  the bordered GRID segment group, SNAP chip, SWING dropdown, Save and
+  the 3D-pane chevron - plus the slim slider strip (position slider,
+  total-time readout, zoom) directly under the row. The former
+  separate transport bar golden (shows_transport_dark) is gone with
+  the bar itself.
 - ``shows_footer_dark``: the mono status line (lanes / blocks / grid /
   zoom).
 - ``shows_block_inspector_dark``: the right-pane EFFECT BLOCK inspector
   with a block selected (title, group-colored lane + bar range + length,
   DIM/COL/MOV/SPC stat tiles).
 
-Deliberately grabs only the toolbar, transport bar, footer and
-inspector widgets, not the timeline grid area - lane/master rendering
-belongs to timeline_ui and has its own goldens.
+Deliberately grabs only the toolbar, footer and inspector widgets, not
+the timeline grid area - lane/master rendering belongs to timeline_ui
+and has its own goldens.
 
 ShowsTab hangs headlessly on the embedded-GL visualizer, so the GL
 pane and riff panel are stubbed with plain widgets before construction
@@ -127,19 +128,14 @@ def chrome_tab(qapp, monkeypatch, sample_configuration):
 
 
 def test_shows_toolbar_golden(chrome_tab):
-    """Toolbar chrome: micro-caps captions, grid chip row with the
-    whole-beat chip checked, primary Auto-Generate/Save, pane chevron."""
+    """The single toolbar row + slider strip: micro-caps captions, song
+    combo, compact CTAs, icon play/stop with the inline BAR readout,
+    bordered GRID segment group with the whole-beat cell accent-filled,
+    SNAP chip, SWING 0% dropdown, Save, pane chevron, position/zoom
+    sliders below."""
     toolbar = chrome_tab.toolbar_widget
     assert toolbar.width() == 1400, "grab width drifted - golden invalid"
     compare_to_golden(toolbar.grab().toImage(), "shows_toolbar_dark")
-
-
-def test_shows_transport_golden(chrome_tab):
-    """Transport bar: icon play/stop on success/destructive fills, the
-    green mono BAR/time readout, position slider, total-time readout."""
-    bar = chrome_tab.transport_bar
-    assert bar.width() == 1400, "grab width drifted - golden invalid"
-    compare_to_golden(bar.grab().toImage(), "shows_transport_dark")
 
 
 def test_shows_footer_golden(chrome_tab):

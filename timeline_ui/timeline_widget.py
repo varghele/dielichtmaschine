@@ -15,12 +15,27 @@ from PyQt6.QtGui import QPainter, QPen, QColor, QWheelEvent, QBrush
 # all track canvases stay column-aligned.
 HEADER_COLUMN_WIDTH = 260
 
-# Standard triplet-swing ratio: the off-beat lands at 2/3 of the beat.
+# Full triplet-swing ratio: at swing amount 1.0 the off-beat lands at 2/3
+# of the beat. Amounts between 0 and 1 interpolate linearly from the
+# straight 1/2 (see swing_ratio).
 SWING_RATIO = 2.0 / 3.0
 # Epsilon guards. Subdivision is now a float (steps per beat): coarse grids
 # are fractions (0.25 = a line every 4 beats), fine grids are >1 (16 = 1/16).
 _SUBDIVISION_EPS = 1e-6
 _STEP_EPS = 1e-9
+
+
+def swing_ratio(amount: float) -> float:
+    """Off-beat ratio for a swing ``amount`` in [0, 1].
+
+    0.0 keeps the straight grid (the off-beat stays at 1/2 of the beat),
+    1.0 is the full triplet feel (off-beat at ``SWING_RATIO`` = 2/3), and
+    intermediate amounts shift the off-beat linearly between the two.
+    Bools are accepted (``True`` == 1.0) for backward compatibility with
+    the former on/off toggle; out-of-range values clamp.
+    """
+    amount = min(1.0, max(0.0, float(amount)))
+    return 0.5 + amount * (SWING_RATIO - 0.5)
 
 
 def swing_warp(f: float, ratio: float = SWING_RATIO) -> float:
@@ -53,10 +68,13 @@ def iter_grid_steps(part_start, seconds_per_beat, beats_per_bar, total_beats,
     ``"sub"`` (finer sub-beat line). ``subdivision`` is steps-per-beat as a
     float: values <= 1 give sparse coarse grids (a line every 1/subdivision
     beats) that are always drawn; values > 1 give fine sub-beat lines that
-    are hidden when they get denser than ``min_subdivision_pixels``. When
-    ``swing`` is on, sub-beat fractions are warped by :func:`swing_warp`;
-    beat/bar lines (fraction 0) are never moved.
+    are hidden when they get denser than ``min_subdivision_pixels``.
+    ``swing`` is the swing amount in [0, 1] (bools accepted): sub-beat
+    fractions are warped by :func:`swing_warp` using the amount's
+    interpolated ratio; beat/bar lines (fraction 0) are never moved.
     """
+    swing_amount = min(1.0, max(0.0, float(swing)))
+    ratio = swing_ratio(swing_amount)
     subdivision = max(_SUBDIVISION_EPS, float(subdivision))
     seconds_per_step = seconds_per_beat / subdivision
     pixels_per_step = seconds_per_step * pixels_per_second
@@ -77,7 +95,8 @@ def iter_grid_steps(part_start, seconds_per_beat, beats_per_bar, total_beats,
         frac = beat_pos - beat_index
         if frac < _STEP_EPS:
             frac = 0.0
-        warped = swing_warp(frac) if (swing and frac > 0.0) else frac
+        warped = (swing_warp(frac, ratio)
+                  if (swing_amount > 0.0 and frac > 0.0) else frac)
         step_time = part_start + (beat_index + warped) * seconds_per_beat
         if frac == 0.0:
             kind = "bar" if _is_multiple(beat_index, beats_per_bar) else "beat"
@@ -91,15 +110,19 @@ def _snap_in_frame(target, frame_start, seconds_per_beat, subdivision, swing):
     """Snap ``target`` to the grid within a single-tempo frame.
 
     ``frame_start`` is the reference (part start or 0); ``subdivision`` is
-    steps-per-beat (float). Without swing (or for coarse grids <= 1) this is
-    plain nearest-step rounding. With swing on and a fine grid, candidate
-    positions are the swing-warped sub-beat fractions of the nearby beats.
+    steps-per-beat (float); ``swing`` is the swing amount in [0, 1] (bools
+    accepted). At amount 0 (or for coarse grids <= 1) this is plain
+    nearest-step rounding. With a positive amount and a fine grid,
+    candidate positions are the swing-warped sub-beat fractions of the
+    nearby beats, using the amount's interpolated off-beat ratio.
     """
     seconds_per_step = seconds_per_beat / subdivision
-    if not swing or subdivision <= 1.0:
+    swing_amount = min(1.0, max(0.0, float(swing)))
+    if swing_amount <= 0.0 or subdivision <= 1.0:
         step = round((target - frame_start) / seconds_per_step)
         return frame_start + step * seconds_per_step
 
+    ratio = swing_ratio(swing_amount)
     steps_per_beat = max(1, int(round(subdivision)))
     beat = (target - frame_start) / seconds_per_beat
     base_beat = int(math.floor(beat))
@@ -107,7 +130,7 @@ def _snap_in_frame(target, frame_start, seconds_per_beat, subdivision, swing):
     for b in (base_beat - 1, base_beat, base_beat + 1):
         for k in range(steps_per_beat):
             f = k / steps_per_beat
-            cand = frame_start + (b + swing_warp(f)) * seconds_per_beat
+            cand = frame_start + (b + swing_warp(f, ratio)) * seconds_per_beat
             if best is None or abs(cand - target) < abs(best - target):
                 best = cand
     return best
@@ -142,10 +165,11 @@ class TimelineWidget(QWidget):
         # lines become visual noise rather than guidance. Snap targets stay
         # active.
         self.min_subdivision_pixels = 12
-        # Triplet swing for the off-beat grid. When True, sub-beat lines and
-        # snap targets are warped so the eighth-note off-beat sits at 2/3 of
-        # the beat instead of 1/2. Beat/bar lines are never moved.
-        self.swing_enabled = False
+        # Swing amount for the off-beat grid, 0.0-1.0. At 1.0 sub-beat
+        # lines and snap targets warp so the eighth-note off-beat sits at
+        # 2/3 of the beat instead of 1/2; intermediate amounts shift the
+        # off-beat linearly. Beat/bar lines are never moved. 0.0 = off.
+        self.swing_amount = 0.0
         self.playhead_position = 0.0  # Position in seconds
         self.dragging_playhead = False
         self.min_zoom = 0.1
@@ -230,9 +254,14 @@ class TimelineWidget(QWidget):
         self.grid_subdivision = max(_SUBDIVISION_EPS, float(subdivision))
         self.update()
 
-    def set_swing(self, enabled: bool):
-        """Enable/disable triplet swing on the sub-beat grid and repaint."""
-        self.swing_enabled = bool(enabled)
+    def set_swing(self, amount: float):
+        """Set the swing amount on the sub-beat grid and repaint.
+
+        ``amount`` is 0.0-1.0: 0 keeps the straight grid, 1 is the full
+        triplet feel, in between the off-beat shift interpolates linearly.
+        Bools are accepted for backward compatibility (True == 1.0).
+        """
+        self.swing_amount = min(1.0, max(0.0, float(amount)))
         self.update()
 
     def set_playhead_position(self, position: float):
@@ -349,13 +378,14 @@ class TimelineWidget(QWidget):
         """Find the nearest snap position using song structure if available.
 
         Honours ``self.grid_subdivision`` (float steps-per-beat, so coarse and
-        fine grids snap uniformly) and ``self.swing_enabled`` (off-beat targets
-        warp to the triplet feel), whether or not a song structure is loaded.
-        Snapping is done in-widget rather than delegating to SongStructure so
-        the float/swing behaviour matches the drawn grid exactly.
+        fine grids snap uniformly) and ``self.swing_amount`` (off-beat targets
+        shift toward the triplet feel with the amount), whether or not a song
+        structure is loaded. Snapping is done in-widget rather than delegating
+        to SongStructure so the float/swing behaviour matches the drawn grid
+        exactly.
         """
         subdivision = max(_SUBDIVISION_EPS, float(getattr(self, "grid_subdivision", 1.0)))
-        swing = bool(getattr(self, "swing_enabled", False))
+        swing = float(getattr(self, "swing_amount", 0.0))
 
         ss = self.song_structure
         if ss and hasattr(ss, 'parts') and ss.parts:
@@ -398,7 +428,7 @@ class TimelineWidget(QWidget):
         part_pen = QPen(QColor(127, 127, 127, 220), 3)
 
         subdivision = getattr(self, "grid_subdivision", 1.0)
-        swing = getattr(self, "swing_enabled", False)
+        swing = getattr(self, "swing_amount", 0.0)
         min_px = getattr(self, "min_subdivision_pixels", 12)
 
         num_parts = len(self.song_structure.parts)
@@ -436,7 +466,7 @@ class TimelineWidget(QWidget):
         bar_pen = QPen(QColor(127, 127, 127, 160), 2)
 
         subdivision = getattr(self, "grid_subdivision", 1.0)
-        swing = getattr(self, "swing_enabled", False)
+        swing = getattr(self, "swing_amount", 0.0)
         min_px = getattr(self, "min_subdivision_pixels", 12)
         seconds_per_beat = 60.0 / self.bpm
 

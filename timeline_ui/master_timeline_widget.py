@@ -168,7 +168,7 @@ class MasterTimelineWidget(TimelineWidget):
                 beat_pen = QPen(QColor(127, 127, 127, 100), 1)
 
                 subdivision = getattr(self, "grid_subdivision", 1.0)
-                swing = getattr(self, "swing_enabled", False)
+                swing = getattr(self, "swing_amount", 0.0)
                 min_px = getattr(self, "min_subdivision_pixels", 12)
 
                 num_parts = len(self.song_structure.parts)

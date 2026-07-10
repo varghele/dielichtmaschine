@@ -6,9 +6,9 @@ import csv
 from PyQt6.QtWidgets import (QVBoxLayout, QHBoxLayout, QComboBox, QPushButton,
                              QLabel, QSlider, QScrollArea, QWidget, QFrame,
                              QSplitter, QSizePolicy, QInputDialog, QMessageBox, QCheckBox,
-                             QApplication, QDialog, QButtonGroup)
+                             QApplication, QDialog, QButtonGroup, QMenu)
 from PyQt6.QtCore import Qt, QTimer, QEvent, pyqtSignal, QPoint, QRect
-from PyQt6.QtGui import QShortcut, QKeySequence
+from PyQt6.QtGui import QShortcut, QKeySequence, QActionGroup
 from config.models import Configuration, Song, ShowPart, TimelineData, LightBlock, ShowEffect
 from timeline.song_structure import SongStructure
 from timeline.light_lane import LightLane
@@ -60,6 +60,11 @@ try:
     TCP_AVAILABLE = True
 except ImportError:
     TCP_AVAILABLE = False
+
+# SWING dropdown steps (percent). 0 = straight grid, 100 = the full
+# triplet feel; intermediate steps interpolate the off-beat shift
+# linearly (timeline v3 toolbar, screen 06b).
+SWING_PERCENT_STEPS = (0, 25, 50, 75, 100)
 
 
 class ShowsTab(BaseTab):
@@ -251,14 +256,9 @@ class ShowsTab(BaseTab):
         self._selection_overlay = SelectionOverlay(self)
         self._selection_overlay.hide()
 
-        # Transport bar (a real QWidget so visual tests can grab it).
-        # North Star 06 puts the play controls at the TOP, so it is
-        # inserted right under the toolbar (index 1) rather than appended
-        # at the bottom. Creation stays here - after the master/lane
-        # widgets it may reference - and only the placement moves, so a
-        # single-line revert restores the bottom bar.
-        self.transport_bar = self._create_playback_controls()
-        main_layout.insertWidget(1, self.transport_bar)
+        # Timeline v3 (screen 06b): the transport lives INSIDE the main
+        # toolbar row (play/stop + inline BAR readout, built by
+        # _create_toolbar). The former separate transport bar row is gone.
 
         # Footer status line (reference statusbar): one mono line of real
         # timeline state.
@@ -271,14 +271,17 @@ class ShowsTab(BaseTab):
         self._refresh_block_inspector()
 
     def _create_toolbar(self):
-        """Create the top toolbar (North Star card 4a chrome).
+        """Create the single compact toolbar row (timeline v3, screen 06b).
 
-        Anatomy: SHOW caption + combo, lane/generate actions, the GRID
-        subdivision chip row (mirrors the master-timeline combobox),
-        ZOOM, then Save and the 3D-pane chevron on the right. Captions
-        are tracked micro caps; the grid chips reuse the generic
-        output-select checkable-chip role from the Universes screen.
-        Returns a QWidget so visual tests can grab just the toolbar.
+        One row carries the whole chrome, left to right: SONG caption +
+        selector, + LANE / AUTOGEN / INSPECTOR actions, the play/stop
+        transport with the inline BAR readout, the bordered GRID segment
+        group, the SNAP chip and the SWING percentage dropdown, then Save
+        and the 3D-pane chevron right-aligned. The position slider (with
+        the total-time readout) and the zoom control sit on a slim strip
+        directly UNDER the row: the row plus two usable sliders does not
+        fit 1280px. Returns a QWidget so visual tests can grab just the
+        toolbar.
         """
         toolbar_widget = QWidget()
         toolbar_widget.setObjectName("ShowsToolbar")
@@ -287,28 +290,35 @@ class ShowsTab(BaseTab):
         # strip in golden grabs (and would flash on repaint glitches).
         toolbar_widget.setProperty("role", "tab-page")
         toolbar_widget.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
-        toolbar = QHBoxLayout(toolbar_widget)
+        rows = QVBoxLayout(toolbar_widget)
+        rows.setContentsMargins(0, 0, 0, 0)
+        rows.setSpacing(4)
+        toolbar = QHBoxLayout()
         toolbar.setContentsMargins(0, 0, 0, 0)
-        toolbar.setSpacing(10)
+        toolbar.setSpacing(6)
+        rows.addLayout(toolbar)
 
-        # Song selection
+        # Song selection. The combo carries the lane-chip role for the
+        # mock's bordered mono chip; the existing rule is QPushButton-only
+        # (NEEDED-QSS: a QComboBox[role="lane-chip"] variant), so until
+        # that lands the base QComboBox chrome applies - no inline styles.
         toolbar.addWidget(MicroLabel("Song", point_size=8))
 
         self.show_combo = QComboBox()
-        self.show_combo.setMinimumWidth(150)
+        self.show_combo.setMinimumWidth(120)
+        self.show_combo.setProperty("role", "lane-chip")
         toolbar.addWidget(self.show_combo)
 
-        toolbar.addSpacing(10)
-
-        # Add lane button
-        self.add_lane_btn = QPushButton("+ Add Light Lane")
+        # Add lane button ("+ LANE" per the 06b mock)
+        self.add_lane_btn = QPushButton("+ LANE")
         self.add_lane_btn.setProperty("role", "success")
+        self.add_lane_btn.setToolTip("Add an empty light lane")
         toolbar.addWidget(self.add_lane_btn)
 
-        # Auto-generate button - the single loud CTA of the 4a toolbar
-        # ("SHOW AUS AUDIO GENERIEREN" in the mockup): accent-filled display
-        # caps, the only accent-filled button in the strip.
-        self.autogen_btn = QPushButton("AUTO-GENERATE")
+        # Auto-generate button - the single loud CTA of the toolbar
+        # ("AUTOGEN" in the 06b mock): accent-filled display caps, the
+        # only accent-filled button in the strip.
+        self.autogen_btn = QPushButton("AUTOGEN")
         self.autogen_btn.setProperty("role", "cta-accent")
         self.autogen_btn.setToolTip("Automatically generate light show from audio analysis")
         toolbar.addWidget(self.autogen_btn)
@@ -323,22 +333,59 @@ class ShowsTab(BaseTab):
         self.inspector_btn.setToolTip("Show generation decision inspector (requires auto-generated show)")
         toolbar.addWidget(self.inspector_btn)
 
-        toolbar.addSpacing(10)
+        toolbar.addSpacing(4)
 
-        # Grid subdivision chips (4a GRID switcher). The master-timeline
-        # header keeps its combobox; both drive TimelineGrid, which fans
-        # the value out to every lane. Sync is bidirectional and loop-free
-        # (set_grid_subdivision updates the combo without re-emitting).
+        # Transport, merged into the toolbar row (timeline v3): compact
+        # icon-only play/stop on their function-color fills. Glyphs are
+        # line icons, swapped play/pause by state in _apply_chrome_icons.
+        # TOOLBAR_BTN_WIDTH keeps the glyphs clear of the ~40px clipping
+        # floor (theme puts 14px horizontal padding on QPushButton).
+        self.play_btn = QPushButton()
+        self.play_btn.setFixedWidth(TOOLBAR_BTN_WIDTH)
+        self.play_btn.setProperty("role", "success")
+        self.play_btn.setToolTip("Play / Pause")
+        toolbar.addWidget(self.play_btn)
+
+        self.stop_btn = QPushButton()
+        self.stop_btn.setFixedWidth(TOOLBAR_BTN_WIDTH)
+        self.stop_btn.setProperty("role", "destructive")
+        self.stop_btn.setToolTip("Stop and return to start")
+        toolbar.addWidget(self.stop_btn)
+
+        # Time display, inline right of the transport - styled by the
+        # `#TimeReadout` rule in the active theme. Reference readout is
+        # bar-based: "BAR 28.3 · 01:52.6". The bar position is derived
+        # from the SongStructure parts (bars, meter, BPM); with no
+        # structure loaded the bar field reads "--.-". 230px: the combined
+        # readout needs room under wide fallback fonts. (The 06b mock uses
+        # a smaller 11px readout - NEEDED-QSS for a compact variant; the
+        # existing rule is reused unchanged so nothing breaks.)
+        self.time_label = QLabel(self._format_readout(0.0))
+        self.time_label.setObjectName("TimeReadout")
+        self.time_label.setFixedWidth(230)
+        toolbar.addWidget(self.time_label)
+
+        # Grid subdivision segments (06b GRID switcher): ONE bordered
+        # group with the active cell accent-filled. Same sanctioned
+        # pattern as the Stage tab layer bar: role="card" supplies the
+        # panel background + 1px border, each cell is a borderless
+        # role="segment" chip that fills with accent when checked. Clicks
+        # fan out through TimelineGrid to master + audio + every lane.
         toolbar.addWidget(MicroLabel("Grid", point_size=8))
+        self.grid_group_frame = QWidget()
+        self.grid_group_frame.setProperty("role", "card")
+        self.grid_group_frame.setAttribute(
+            Qt.WidgetAttribute.WA_StyledBackground, True)
+        chips = QHBoxLayout(self.grid_group_frame)
+        chips.setContentsMargins(0, 0, 0, 0)
+        chips.setSpacing(0)
         self.grid_chip_group = QButtonGroup(toolbar_widget)
         self.grid_chip_group.setExclusive(True)
         self.grid_chips = {}
-        chips = QHBoxLayout()
-        chips.setSpacing(2)
         for label, value in SUBDIVISION_CHOICES:
             chip = QPushButton(label)
             chip.setCheckable(True)
-            chip.setProperty("role", "output-select")
+            chip.setProperty("role", "segment")
             chip.setFont(mono_font(8, tracking_em=0.05))
             chip.setCursor(Qt.CursorShape.PointingHandCursor)
             chip.setToolTip(f"Grid: a line every {label} beat(s)")
@@ -347,11 +394,13 @@ class ShowsTab(BaseTab):
             chips.addWidget(chip)
         # Default to the on-beat grid (value 1.0), regardless of catalog order.
         self.grid_chips[1.0].setChecked(True)
-        toolbar.addLayout(chips)
+        toolbar.addWidget(self.grid_group_frame)
 
         # SNAP chip (reference toolbar, right of the grid switcher). Real
         # state: TimelineGrid.set_snap_to_grid fans out to master + audio +
-        # every lane, and the master checkbox syncs back via snap_changed.
+        # every lane. Checked = accent border + accent text (output-select);
+        # the mock's accent-TINTED checked background needs a theme rule
+        # (NEEDED-QSS), not an inline style.
         self.snap_chip = QPushButton("SNAP")
         self.snap_chip.setCheckable(True)
         self.snap_chip.setChecked(True)
@@ -361,44 +410,45 @@ class ShowsTab(BaseTab):
         self.snap_chip.setToolTip("Snap block edges to the grid")
         toolbar.addWidget(self.snap_chip)
 
-        # SWING chip (right of SNAP). Toggles a triplet feel on the off-beat
-        # grid; TimelineGrid.set_swing fans it out to master + audio + lanes,
-        # and the drawn grid + snap targets follow. Default off.
-        self.swing_chip = QPushButton("SWING")
-        self.swing_chip.setCheckable(True)
-        self.swing_chip.setChecked(False)
-        self.swing_chip.setProperty("role", "output-select")
-        self.swing_chip.setFont(mono_font(8, tracking_em=0.05))
-        self.swing_chip.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.swing_chip.setToolTip("Swing the off-beat grid (triplet feel)")
-        toolbar.addWidget(self.swing_chip)
-
-        toolbar.addSpacing(10)
-
-        # Zoom control
-        toolbar.addWidget(MicroLabel("Zoom", point_size=8))
-
-        self.zoom_slider = QSlider(Qt.Orientation.Horizontal)
-        self.zoom_slider.setRange(10, 500)  # 0.1x to 5.0x
-        self.zoom_slider.setValue(100)  # 1.0x default
-        self.zoom_slider.setFixedWidth(120)
-        toolbar.addWidget(self.zoom_slider)
-
-        self.zoom_label = QLabel("1.0x")
-        self.zoom_label.setFont(mono_font(9))
-        self.zoom_label.setFixedWidth(40)
-        toolbar.addWidget(self.zoom_label)
+        # SWING percentage dropdown ("SWING 0% ▾" in the mock, right of
+        # SNAP): 0% keeps the straight grid, 100% is the full triplet
+        # feel, and the steps in between interpolate the off-beat shift
+        # linearly. lane-chip = the mock's bordered mono chip. The mock's
+        # ▾ triangle is not in the brand fonts (tofu on the offscreen
+        # platform), so the drop indicator is U+2193, same as the lane
+        # header TARGETS chip. The menu opens via popup() (non-blocking)
+        # and the chosen amount fans out through TimelineGrid.set_swing.
+        # Session state only - like the on/off toggle it replaces, swing
+        # is not persisted.
+        self.swing_btn = QPushButton("SWING 0% ↓")
+        self.swing_btn.setProperty("role", "lane-chip")
+        self.swing_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.swing_btn.setToolTip(
+            "Swing the off-beat grid (0% straight, 100% full triplet feel)")
+        self.swing_percent = 0
+        self.swing_menu = QMenu(self.swing_btn)
+        self._swing_action_group = QActionGroup(self.swing_menu)
+        self._swing_action_group.setExclusive(True)
+        self.swing_actions = {}
+        for percent in SWING_PERCENT_STEPS:
+            action = self.swing_menu.addAction(f"{percent}%")
+            action.setCheckable(True)
+            action.setData(percent)
+            self._swing_action_group.addAction(action)
+            self.swing_actions[percent] = action
+        self.swing_actions[0].setChecked(True)
+        toolbar.addWidget(self.swing_btn)
 
         toolbar.addStretch()
 
         # Save button - a bordered display-caps text action (uniform with
-        # Inspector / POP OUT); not accent-filled, so Auto-Generate stays
-        # the sole CTA of the strip.
+        # Inspector / POP OUT); not accent-filled, so Autogen stays the
+        # sole CTA of the strip.
         self.save_btn = QPushButton("SAVE")
         self.save_btn.setProperty("role", "cta-outline")
         toolbar.addWidget(self.save_btn)
 
-        # 3D-pane chevron (4a right-pane collapse affordance, kept in the
+        # 3D-pane chevron (right-pane collapse affordance, kept in the
         # always-visible toolbar so a collapsed pane can be re-opened).
         # Icon set in _apply_chrome_icons. Pop-out already lives on the
         # embedded visualizer's own row - not duplicated here.
@@ -414,65 +464,42 @@ class ShowsTab(BaseTab):
         self.pane_toggle_btn.setToolTip("Show or hide the 3D preview pane")
         toolbar.addWidget(self.pane_toggle_btn)
 
-        return toolbar_widget
+        # Slim strip directly under the row: the shuttle (position) slider
+        # with the total-time readout, plus the zoom control right-aligned.
+        # Both sliders keep their attribute names - gui.py and the e2e
+        # suite drive them directly.
+        sliders = QHBoxLayout()
+        sliders.setContentsMargins(0, 0, 0, 0)
+        sliders.setSpacing(6)
+        rows.addLayout(sliders)
 
-    def _create_playback_controls(self):
-        """Create the bottom transport bar (North Star card 4a).
-
-        Icon-only transport buttons (16px line icons on the function-color
-        fills) + the mono time readouts. Returns a QWidget so visual tests
-        can grab just the bar.
-        """
-        bar = QWidget()
-        bar.setObjectName("ShowsTransportBar")
-        # Same themed-background note as the toolbar widget.
-        bar.setProperty("role", "tab-page")
-        bar.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
-        controls = QHBoxLayout(bar)
-        controls.setContentsMargins(0, 0, 0, 0)
-        controls.setSpacing(10)
-
-        # Playback buttons (transport — colors from active theme via role
-        # props; glyphs are line icons, swapped play/pause by state in
-        # _apply_chrome_icons).
-        self.play_btn = QPushButton()
-        self.play_btn.setFixedWidth(TOOLBAR_BTN_WIDTH)
-        self.play_btn.setProperty("role", "success")
-        self.play_btn.setToolTip("Play / Pause")
-        controls.addWidget(self.play_btn)
-
-        self.stop_btn = QPushButton()
-        self.stop_btn.setFixedWidth(TOOLBAR_BTN_WIDTH)
-        self.stop_btn.setProperty("role", "destructive")
-        self.stop_btn.setToolTip("Stop and return to start")
-        controls.addWidget(self.stop_btn)
-
-        controls.addSpacing(20)
-
-        # Time display — styled by `#TimeReadout` rule in the active theme.
-        # Reference readout is bar-based: "BAR 28.3 · 01:52.6". The bar
-        # position is derived from the SongStructure parts (bars, meter,
-        # BPM); with no structure loaded the bar field reads "--.-".
-        # 230px: the combined readout needs room under wide fallback fonts.
-        self.time_label = QLabel(self._format_readout(0.0))
-        self.time_label.setObjectName("TimeReadout")
-        self.time_label.setFixedWidth(230)
-        controls.addWidget(self.time_label)
-
-        controls.addSpacing(10)
-
-        # Position slider
         self.position_slider = QSlider(Qt.Orientation.Horizontal)
         self.position_slider.setRange(0, 1000)
         self.position_slider.setValue(0)
-        controls.addWidget(self.position_slider, 1)
+        sliders.addWidget(self.position_slider, 1)
 
         # Total time display
         self.total_time_label = QLabel("/ 00:00")
         self.total_time_label.setObjectName("TimeReadoutSecondary")
-        controls.addWidget(self.total_time_label)
+        sliders.addWidget(self.total_time_label)
 
-        return bar
+        sliders.addSpacing(8)
+
+        # Zoom control
+        sliders.addWidget(MicroLabel("Zoom", point_size=8))
+
+        self.zoom_slider = QSlider(Qt.Orientation.Horizontal)
+        self.zoom_slider.setRange(10, 500)  # 0.1x to 5.0x
+        self.zoom_slider.setValue(100)  # 1.0x default
+        self.zoom_slider.setFixedWidth(120)
+        sliders.addWidget(self.zoom_slider)
+
+        self.zoom_label = QLabel("1.0x")
+        self.zoom_label.setFont(mono_font(9))
+        self.zoom_label.setFixedWidth(40)
+        sliders.addWidget(self.zoom_label)
+
+        return toolbar_widget
 
     # ── Right pane chrome ─────────────────────────────────────────────
 
@@ -778,8 +805,12 @@ class ShowsTab(BaseTab):
         # snap checkboxes stay as individual overrides.
         self.snap_chip.clicked.connect(self._on_snap_chip_clicked)
 
-        # SWING chip: one-way push (no master swing control to sync back).
-        self.swing_chip.clicked.connect(self._on_swing_chip_clicked)
+        # SWING dropdown: one-way push (no master swing control to sync
+        # back). The chip opens a non-blocking popup menu; the checked
+        # action carries the percent.
+        self.swing_btn.clicked.connect(self._show_swing_menu)
+        self._swing_action_group.triggered.connect(
+            lambda action: self._set_swing_percent(action.data()))
 
         # Right-pane header affordances.
         self.pane_popout_btn.clicked.connect(lambda: self._launch_visualizer())
@@ -1202,7 +1233,7 @@ class ShowsTab(BaseTab):
     def _on_autogen_finished(self, lanes, report=None):
         """Handle generated lanes from background worker."""
         self.autogen_btn.setEnabled(True)
-        self.autogen_btn.setText("AUTO-GENERATE")
+        self.autogen_btn.setText("AUTOGEN")
 
         # Store generation report for inspector
         self._generation_report = report
@@ -1253,7 +1284,7 @@ class ShowsTab(BaseTab):
     def _on_autogen_error(self, error_msg):
         """Handle auto-generation error."""
         self.autogen_btn.setEnabled(True)
-        self.autogen_btn.setText("AUTO-GENERATE")
+        self.autogen_btn.setText("AUTOGEN")
         QMessageBox.critical(self, "Auto-Generate Error",
             f"Generation failed:\n{error_msg}",
             QMessageBox.StandardButton.Ok)
@@ -1394,9 +1425,25 @@ class ShowsTab(BaseTab):
         """Toolbar SNAP chip -> TimelineGrid (master + audio + lanes)."""
         self.timeline_grid.set_snap_to_grid(checked)
 
-    def _on_swing_chip_clicked(self, checked: bool):
-        """Toolbar SWING chip -> TimelineGrid (master + audio + lanes)."""
-        self.timeline_grid.set_swing(checked)
+    def _show_swing_menu(self):
+        """Open the SWING percentage menu under the chip (non-blocking)."""
+        self.swing_menu.popup(
+            self.swing_btn.mapToGlobal(self.swing_btn.rect().bottomLeft()))
+
+    def _set_swing_percent(self, percent: int):
+        """SWING dropdown -> TimelineGrid (master + audio + lanes).
+
+        0 keeps the straight grid, 100 is the full triplet feel, and the
+        off-beat shift interpolates linearly in between. Session state
+        only, matching the on/off toggle this replaced (swing was never
+        persisted to QSettings or the config)."""
+        percent = int(percent)
+        self.swing_percent = percent
+        self.swing_btn.setText(f"SWING {percent}% ↓")
+        action = self.swing_actions.get(percent)
+        if action is not None and not action.isChecked():
+            action.setChecked(True)
+        self.timeline_grid.set_swing(percent / 100.0)
 
     def refresh_sublane_labels_setting(self):
         """Repaint the lane timelines after the hidden

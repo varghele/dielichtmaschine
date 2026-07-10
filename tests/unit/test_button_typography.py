@@ -137,11 +137,12 @@ class TestCallSitesMigrated:
             home.deleteLater()
 
     def test_timeline_toolbar_shares_one_family(self, qapp):
-        """SAVE / AUTO-GENERATE / INSPECTOR / + Add Light Lane / POP OUT.
+        """SAVE / AUTOGEN / INSPECTOR / + LANE / POP OUT.
 
-        Auto-Generate is the sole accent-filled CTA (cta-accent); the other
+        Autogen is the sole accent-filled CTA (cta-accent); the other
         text actions read uniform as bordered display caps (cta-outline);
-        the Add action stays the success color.
+        the Add action stays the success color. (Texts compacted to the
+        timeline v3 mock wording in stage T1.)
         """
         from config.models import Configuration
         from gui.tabs.shows_tab import ShowsTab
@@ -154,7 +155,7 @@ class TestCallSitesMigrated:
             assert tab.pane_popout_btn.text() == "POP OUT"
             assert tab.pane_popout_btn.property("role") == "cta-outline"
             # Display-caps CTAs carry uppercase text.
-            assert tab.autogen_btn.text() == "AUTO-GENERATE"
+            assert tab.autogen_btn.text() == "AUTOGEN"
             assert tab.save_btn.text() == "SAVE"
             assert tab.inspector_btn.text() == "INSPECTOR"
         finally:

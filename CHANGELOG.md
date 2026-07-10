@@ -35,11 +35,12 @@ verbatim as the GitHub Release notes (see [docs/releasing.md](docs/releasing.md)
   is the panic release. Position/movement and intensity-FX pools are laid
   in and marked as arriving next. Drives an in-memory live state (with a
   grand x sub output resolve); live DMX output is a later pass.
-- **A fuller timeline grid and a swing toggle.** The grid snap now ranges
-  from coarse to fine: 4, 2, 1, 1/2, 1/4, 1/8, 1/16 (4 and 2 place a line
-  every 4 and every 2 beats; the fractions subdivide the beat). A new
-  SWING toggle shifts the off-beat grid lines to a triplet feel, so blocks
-  snap to swung positions; beat and bar lines are unaffected.
+- **A fuller timeline grid and percentage swing.** The grid snap now
+  ranges from coarse to fine: 4, 2, 1, 1/2, 1/4, 1/8, 1/16 (4 and 2 place
+  a line every 4 and every 2 beats; the fractions subdivide the beat). A
+  SWING dropdown (0/25/50/75/100%) shifts the off-beat grid lines toward
+  a triplet feel by that amount, so blocks snap to swung positions; 100%
+  is the full triplet, beat and bar lines are unaffected.
 - **Drag to reorder show parts.** In the Show Structure tab, drag a part
   card onto another to move it there, in addition to the Move buttons.
 - **Autosave with crash recovery.** While you work, unsaved changes are
@@ -64,6 +65,11 @@ verbatim as the GitHub Release notes (see [docs/releasing.md](docs/releasing.md)
   with `shows` load forever and get a setlist synthesized. Editing UI
   and the trigger engine follow in later passes; workspace export is
   byte-identical.
+- **One compact timeline toolbar.** Song selector, lane/autogen/inspector
+  actions, the transport with a bar-based readout (BAR n.m · mm:ss.s),
+  the grid segment, snap, swing and save all live in a single row, with
+  the position and zoom sliders on a slim strip directly beneath. The
+  separate transport bar row is gone.
 - **Timeline lane headers carry everything.** Each light lane's header
   column (now 260px, shared across all track types so the canvases stay
   aligned) shows the group-coloured edge, the lane name with a fixture
