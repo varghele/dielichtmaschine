@@ -223,6 +223,9 @@ QSpinBox:disabled {
     background-color: $panel$;
     color: $text_disabled$;
 }
+/* Quiet invalid-input tint (e.g. a malformed timecode): the field keeps
+   the previous value and carries state="invalid" until the next edit. */
+QLineEdit[state="invalid"] { border-color: $warning$; }
 QComboBox::drop-down { border: none; width: 20px; }
 QComboBox QAbstractItemView {
     background-color: $raised$;

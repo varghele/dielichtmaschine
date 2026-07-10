@@ -1383,6 +1383,13 @@ class TestSongTriggerSection:
         assert entry.trigger.timecode == "02:00:00:00"
         assert setlist_tab.trigger_timecode_edit.property("state") == ""
 
+    def test_invalid_state_rule_in_theme(self):
+        """The tint rides the theme's property selector, not a
+        widget-local stylesheet."""
+        from gui.theme_tokens import render_theme
+        qss = render_theme("dark")
+        assert 'QLineEdit[state="invalid"]' in qss
+
     def test_timecode_may_be_cleared(self, setlist_tab):
         setlist_tab.trigger_buttons["mtc"].click()
         setlist_tab.trigger_timecode_edit.setText("00:14:32:00")

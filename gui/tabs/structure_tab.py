@@ -1907,8 +1907,9 @@ class StructureTab(BaseTab):
         return section
 
     def _style_inspector_chrome(self, tokens: dict) -> None:
-        """Token-read chrome of the inspector: section hairlines, the
-        segment row boxes and the timecode warning tint."""
+        """Token-read chrome of the inspector: section hairlines and the
+        segment row boxes. The timecode warning tint rides the theme's
+        QLineEdit[state="invalid"] rule, no widget-local styling."""
         for divider in self._inspector_dividers:
             divider.setStyleSheet(
                 f"background-color: {tokens['border']}; border: none;")
@@ -1916,7 +1917,6 @@ class StructureTab(BaseTab):
             host.setStyleSheet(
                 f"QWidget#InspectorSegmentGroup {{"
                 f" border: 1px solid {tokens['border']}; }}")
-        self._style_timecode_state()
 
     # ------------------------------------------------------------------
     # SONG + AFTER THE SONG sections (the open song's setlist entry)
@@ -2033,26 +2033,18 @@ class StructureTab(BaseTab):
         self._auto_save()
 
     def _set_timecode_invalid(self, invalid: bool) -> None:
-        """The quiet warning tint on the timecode field, carried as the
-        ``state`` property + a widget-local border in the warning token
-        (data-ish state, the sanctioned pattern)."""
+        """The quiet warning tint on the timecode field: the ``state``
+        property drives the theme's QLineEdit[state="invalid"] rule.
+        Property selectors are only re-evaluated on repolish, so
+        unpolish/polish after changing it."""
         self._timecode_invalid = invalid
-        self.trigger_timecode_edit.setProperty(
-            "state", "invalid" if invalid else "")
-        self.trigger_timecode_edit.setToolTip(
+        edit = self.trigger_timecode_edit
+        edit.setProperty("state", "invalid" if invalid else "")
+        edit.setToolTip(
             "Timecode must be HH:MM:SS:FF · kept the previous value"
             if invalid else "MTC/SMPTE start time (HH:MM:SS:FF)")
-        self._style_timecode_state()
-
-    def _style_timecode_state(self) -> None:
-        if getattr(self, "trigger_timecode_edit", None) is None:
-            return
-        tokens = self._tokens or _active_tokens()
-        if self._timecode_invalid:
-            self.trigger_timecode_edit.setStyleSheet(
-                f"QLineEdit {{ border: 1px solid {tokens['warning']}; }}")
-        else:
-            self.trigger_timecode_edit.setStyleSheet("")
+        edit.style().unpolish(edit)
+        edit.style().polish(edit)
 
     def _build_pause_mode_menu(self) -> QMenu:
         """The pause-look mode menu: one checkable action per
