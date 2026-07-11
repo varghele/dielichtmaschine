@@ -1088,7 +1088,10 @@ class TestQueue:
 
 class TestRoles:
     def test_actions_use_theme_roles(self, live_tab):
-        assert live_tab._dbo_btn.property("role") == "destructive"
+        # DBO is destructive-outline: quiet outline idle, filled red
+        # when latched - the plain destructive fill reads identical
+        # checked and unchecked.
+        assert live_tab._dbo_btn.property("role") == "destructive-outline"
         assert live_tab._strobe_btn.property("role") == "output-select"
         assert live_tab._release_all_btn.property("role") == "cta-outline"
         assert live_tab._active_playbacks_label.property("role") == "hint-box"
@@ -1100,3 +1103,81 @@ class TestRoles:
         assert 'QPushButton[role="output-select"]' in qss
         assert 'QPushButton[role="cta-outline"]' in qss
         assert 'QLabel[role="hint-box"]' in qss
+        # The Live tab's feedback states + status chips.
+        assert 'QPushButton[role="destructive-outline"]:checked' in qss
+        assert 'QPushButton[role="output-select"]:pressed' in qss
+        assert 'QLabel#OutputReadout' in qss
+
+
+class _StubStatusArbiter:
+    """Minimal OutputArbiter.status() stand-in for the OUT chip."""
+
+    def __init__(self, running=True, frames=0, mapping=None):
+        self.running = running
+        self.frames = frames
+        self.mapping = {1: 0} if mapping is None else mapping
+
+    def status(self):
+        return {"running": self.running, "frames_sent": self.frames,
+                "universe_mapping": dict(self.mapping)}
+
+
+class TestOutputIndicators:
+    def test_chips_exist_in_the_fade_row(self, live_tab):
+        assert live_tab._out_chip.objectName() == "OutputReadout"
+        assert live_tab._sync_chip.objectName() == "OutputReadout"
+
+    def test_default_is_off_and_sync_int(self, live_tab):
+        # No arbiter wired: nothing streams, and the chip says so.
+        assert live_tab._out_chip.text() == "OUT OFF"
+        assert live_tab._out_chip.property("state") == "off"
+        # The only clock today is the internal TAP reference (external
+        # sync arrives with the v1.7 engine).
+        assert live_tab._sync_chip.text() == "SYNC INT"
+        assert live_tab._sync_chip.property("state") == "on"
+
+    def test_streaming_lights_the_chip(self, live_tab):
+        from config.models import Universe
+        # Explicit ArtNet universes: an empty output dict reads as the
+        # Universes tab's E1.31 default and would earn the * marker.
+        live_tab.config.universes = {
+            1: Universe(id=1, name="U1", output={"plugin": "ArtNet"}),
+            2: Universe(id=2, name="U2", output={"plugin": "ArtNet"}),
+        }
+        arbiter = _StubStatusArbiter(frames=10, mapping={1: 0, 2: 1})
+        live_tab.set_status_arbiter(arbiter)
+        arbiter.frames = 11
+        live_tab._refresh_output_status()
+        assert live_tab._out_chip.text() == "● ARTNET · 2U"
+        assert live_tab._out_chip.property("state") == "on"
+        assert "U1 -> ArtNet universe 0" in live_tab._out_chip.toolTip()
+
+    def test_stalled_loop_hollows_the_dot(self, live_tab):
+        arbiter = _StubStatusArbiter(frames=10)
+        live_tab.set_status_arbiter(arbiter)
+        live_tab._refresh_output_status()   # counter frozen since wiring
+        assert live_tab._out_chip.text().startswith("○")
+
+    def test_non_artnet_universes_get_the_marker(self, live_tab):
+        from config.models import Universe
+        live_tab.config.universes = {
+            1: Universe(id=1, name="U1", output={"plugin": "ArtNet"}),
+            2: Universe(id=2, name="U2", output={"plugin": "E1.31"}),
+        }
+        arbiter = _StubStatusArbiter(frames=1, mapping={1: 0, 2: 1})
+        live_tab.set_status_arbiter(arbiter)
+        assert live_tab._out_chip.text().endswith("*")
+        tip = live_tab._out_chip.toolTip()
+        assert "configured E1.31" in tip
+        assert "ArtNet-only" in tip
+
+    def test_stopped_arbiter_reads_off(self, live_tab):
+        arbiter = _StubStatusArbiter(running=False)
+        live_tab.set_status_arbiter(arbiter)
+        assert live_tab._out_chip.text() == "OUT OFF"
+        assert live_tab._out_chip.property("state") == "off"
+
+    def test_clearing_the_arbiter_reads_off(self, live_tab):
+        live_tab.set_status_arbiter(_StubStatusArbiter(frames=5))
+        live_tab.set_status_arbiter(None)
+        assert live_tab._out_chip.text() == "OUT OFF"

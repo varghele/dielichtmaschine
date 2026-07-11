@@ -368,6 +368,16 @@ class TestOutputArbiter:
         arbiter.shutdown()
         assert sender.closed
 
+    def test_status_snapshot(self, arbiter_config):
+        arbiter = OutputArbiter(config=arbiter_config, sender=StubSender())
+        status = arbiter.status()
+        assert status["running"] is False
+        assert status["frames_sent"] == 0
+        assert status["universe_mapping"] == {1: 0, 2: 1}
+        arbiter.tick_once(0.0)
+        arbiter.tick_once(1.0)
+        assert arbiter.status()["frames_sent"] == 2
+
 
 class TestPlaybackSlot:
     """The EXCLUSIVE playback slot: timeline XOR auto (locked

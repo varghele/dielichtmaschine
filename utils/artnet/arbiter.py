@@ -270,6 +270,10 @@ class OutputArbiter:
         self._thread: Optional[threading.Thread] = None
         self._stop_event = threading.Event()
 
+        # Monotonic frame counter for status displays (the Live tab's
+        # OUT chip polls it to light its activity dot).
+        self._frames_sent = 0
+
     # -- configuration ---------------------------------------------------
 
     def set_fixture_maps(self, fixture_maps) -> None:
@@ -481,7 +485,19 @@ class OutputArbiter:
                     callback(universe, bytes(merged[universe]))
                 except Exception:
                     logger.exception("local DMX callback failed")
+        self._frames_sent += 1
         return merged
+
+    def status(self) -> dict:
+        """A cheap snapshot for status displays: whether the loop is
+        streaming, how many frames have gone out (poll the delta for
+        an activity indicator), and the universe wire mapping."""
+        with self._lock:
+            return {
+                "running": self.running,
+                "frames_sent": self._frames_sent,
+                "universe_mapping": dict(self._universe_mapping),
+            }
 
     def _send_blackout(self) -> None:
         with self._lock:

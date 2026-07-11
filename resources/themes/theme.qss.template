@@ -194,6 +194,14 @@ QPushButton[role="destructive-outline"]:disabled {
     border-color: $border$;
     color: $text_disabled$;
 }
+/* Checkable kill switches (the Live tab's DBO): quiet outline until
+   latched, full destructive fill while armed - checked must read
+   unmistakably different from idle. */
+QPushButton[role="destructive-outline"]:checked {
+    background-color: $destructive$;
+    color: $on_function$;
+    border-color: $destructive_border$;
+}
 
 /* -- Inputs ---------------------------------------------------------- */
 QLineEdit,
@@ -773,6 +781,13 @@ QPushButton[role="output-select"]:checked {
     color: $accent_line$;
     background-color: $accent_tint$;
 }
+/* Momentary tactile feedback (the Live tab's FLASH, and every chip of
+   this role while the finger is down): accent fill for the press. */
+QPushButton[role="output-select"]:pressed {
+    background-color: $accent$;
+    color: $on_accent$;
+    border-color: $accent$;
+}
 
 /* -- Timeline lane header chips (M / S / TARGETS / + BLOCK) ------------- */
 /* Mono family must be pinned here: the app-wide QWidget font-family rule
@@ -830,6 +845,23 @@ QLabel#TimeReadout {
 QLabel#TimeReadoutSecondary {
     font-family: $font_mono$;
     color: $text_disabled$;
+}
+/* Compact engine-status readouts (the Live tab's OUT / SYNC chips):
+   the TimeReadout voice at chip size. state="on" wears the LED
+   readout colours, state="off" reads dormant. */
+QLabel#OutputReadout {
+    font-family: $font_mono$;
+    font-size: 11px;
+    font-weight: 600;
+    padding: 4px 8px;
+    background-color: $panel$;
+    color: $text_disabled$;
+    border: 1px solid $border$;
+}
+QLabel#OutputReadout[state="on"] {
+    background-color: $readout_bg$;
+    color: $readout_fg$;
+    border-color: $readout_border$;
 }
 
 /* -- Timeline grid (TimelineGrid in shows + structure tabs) ------------- */

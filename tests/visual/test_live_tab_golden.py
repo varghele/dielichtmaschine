@@ -2,7 +2,9 @@
 
 Pins the North Star 3b busking surface: the TOP SELECT row (one tile per
 group with a data-color accent bar + ALL / ODD-EVEN / CLEAR SEL) and FADE
-row, the CENTRE five-pool grid (COLOUR PALETTES painted in their actual
+row (whose right end carries the OUT / SYNC engine-status chips - OUT
+dormant grey here since no arbiter is wired, SYNC INT in the readout
+treatment - then the tempo cluster), the CENTRE five-pool grid (COLOUR PALETTES painted in their actual
 colours as square swatches in a 3-wide grid with the active one outlined,
 then POSITION PALETTES - a PRESETS subsection with the five computed
 geometry presets (CENTRE / AUDIENCE / CROSS / FAN OUT / CEILING) plus a

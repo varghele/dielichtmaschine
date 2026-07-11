@@ -53,6 +53,17 @@ verbatim as the GitHub Release notes (see [docs/releasing.md](docs/releasing.md)
   autosaved, so there is nothing to push by hand.
 - **F7 opens the pause screen** (screensaver). F11 stays fullscreen; F
   and L remain the Stage tab's own zoom/layer keys.
+- **OUT and SYNC readouts in the Live tab.** Two status chips sit next
+  to the tempo cluster in the LED-readout voice: OUT shows what is
+  actually on the wire - protocol, universe count and a live activity
+  dot fed by the output loop's frame counter - with a per-universe
+  wire-mapping tooltip, and flags universes configured for E1.31/DMX
+  USB (native output is ArtNet-only for now; those settings are
+  honoured in the QLC+ export). SYNC names the clock reference -
+  internal TAP today, external sources when the v1.7 engine slaves
+  the clock. The DBO kill switch now reads its state (quiet red
+  outline idle, filled red while armed) and FLASH - like every chip
+  of its kind - fills in the accent while held.
 - **The Live tab makes real light.** With ArtNet output enabled, the
   busk surface now drives the rig: applied colour palettes (split
   swatches alternate across a group's fixtures), submaster levels,

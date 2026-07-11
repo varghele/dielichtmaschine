@@ -290,6 +290,9 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             # Idle-floor policy follows the active shell section
             # (editor visible, live blackout - locked 2026-07-11).
             self._sync_idle_policy(self.tabWidget.currentIndex())
+
+            # The Live tab's OUT chip polls this arbiter's status.
+            self.live_tab.set_status_arbiter(arbiter)
         return self._output_arbiter
 
     def _push_live_masters(self):

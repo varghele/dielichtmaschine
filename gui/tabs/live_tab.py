@@ -57,7 +57,7 @@ are staged for later passes and marked "arrives next".
 
 from typing import Dict, List, Optional, Tuple
 
-from PyQt6.QtCore import Qt, QObject, pyqtSignal
+from PyQt6.QtCore import Qt, QObject, QTimer, pyqtSignal
 from PyQt6.QtGui import QColor, QFont, QPainter, QPolygon
 from PyQt6.QtCore import QPoint
 from PyQt6.QtWidgets import (
@@ -970,12 +970,23 @@ class LiveTab(BaseTab):
         self._accent_labels: List[QLabel] = []
         self._current_groups_fingerprint = None
         self._current_positions_fingerprint = None
+        # OUT chip source: the shared OutputArbiter, injected by gui.py
+        # when output is first enabled (None = nothing streams).
+        self._status_arbiter = None
+        self._last_frames_sent = None
 
         super().__init__(config, parent)
 
         self.state.state_changed.connect(self._sync_from_state)
         self._rebuild_groups()
         self._sync_from_state()
+
+        # Poll the arbiter status at glance rate; polling keeps the
+        # 44 Hz output thread free of cross-thread signal traffic.
+        self._status_timer = QTimer(self)
+        self._status_timer.setInterval(500)
+        self._status_timer.timeout.connect(self._refresh_output_status)
+        self._status_timer.start()
 
     # -- BaseTab ---------------------------------------------------------
 
@@ -1118,6 +1129,25 @@ class LiveTab(BaseTab):
         hbox.addWidget(hint)
         hbox.addStretch(1)
 
+        # Engine-status chips (left of the tempo cluster, same glance
+        # line as the BPM): OUT shows what is actually on the wire -
+        # the arbiter's stream, polled via set_status_arbiter - and
+        # SYNC names the clock reference (internal TAP until the v1.7
+        # engine slaves external sources).
+        self._out_chip = QLabel()
+        self._out_chip.setObjectName("OutputReadout")
+        hbox.addWidget(self._out_chip)
+        self._sync_chip = QLabel("SYNC INT")
+        self._sync_chip.setObjectName("OutputReadout")
+        self._sync_chip.setProperty("state", "on")
+        self._sync_chip.setToolTip(
+            "Tempo reference: internal (TAP). External sync - MIDI "
+            "clock, MTC, LTC - arrives with the v1.7 engine and will "
+            "slave the clock shown here")
+        hbox.addWidget(self._sync_chip)
+        hbox.addSpacing(8)
+        self._refresh_output_status()
+
         # Tempo cluster (right end): a BPM readout + TAP + RESET. This is
         # the reference tempo for the rate-based controls (strobe rate, the
         # rudiment "1/4"); this pass only surfaces and stores it.
@@ -1161,6 +1191,81 @@ class LiveTab(BaseTab):
         reset does not blank the reference mid-show; the next tap builds a
         fresh estimate."""
         self._tap_bpm.reset()
+
+    # -- engine-status chips (OUT / SYNC) ---------------------------------
+
+    def set_status_arbiter(self, arbiter) -> None:
+        """Wire the shared OutputArbiter as the OUT chip's source
+        (gui.py calls this when the arbiter is created; None reads
+        OFF). Display-only - the tab never drives the arbiter."""
+        self._status_arbiter = arbiter
+        self._last_frames_sent = None
+        self._refresh_output_status()
+
+    def _universe_plugins(self) -> Dict[int, str]:
+        """{config universe id: configured output plugin} from the
+        Setup/Universes tab (Universe.output['plugin'])."""
+        plugins: Dict[int, str] = {}
+        for uid, universe in (getattr(self.config, "universes", {})
+                              or {}).items():
+            output = getattr(universe, "output", None) or {}
+            plugins[int(uid)] = output.get("plugin", "E1.31")
+        return plugins
+
+    def _refresh_output_status(self) -> None:
+        """Poll the arbiter and restyle the OUT chip. Honesty rule:
+        the chip shows what is actually on the wire - the native path
+        streams ArtNet only; universes configured for E1.31/DMX USB
+        get a * marker and a tooltip note (those settings are honoured
+        by the QLC+ export, not by native output yet)."""
+        chip = getattr(self, "_out_chip", None)
+        if chip is None:
+            return
+        arbiter = self._status_arbiter
+        status = arbiter.status() if arbiter is not None else None
+        plugins = self._universe_plugins()
+
+        if status is None or not status["running"]:
+            self._last_frames_sent = None
+            chip.setText("OUT OFF")
+            self._set_chip_state(chip, False)
+            chip.setToolTip(
+                "No DMX is being sent · enable ArtNet output (topbar "
+                "chip) to stream the merged look to the rig and the "
+                "visualizer")
+            return
+
+        frames = status["frames_sent"]
+        # Solid dot while the frame counter advances between polls;
+        # hollow if the loop stalls (counter frozen).
+        active = frames != self._last_frames_sent
+        self._last_frames_sent = frames
+        mapping = status["universe_mapping"]
+        mixed = any(p != "ArtNet" for p in plugins.values())
+        dot = "●" if active else "○"
+        chip.setText(f"{dot} ARTNET · {len(mapping)}U"
+                     + ("*" if mixed else ""))
+        lines = [f"U{uid} -> ArtNet universe {wire}"
+                 + (f" · configured {plugins[uid]}"
+                    if plugins.get(uid, "ArtNet") != "ArtNet" else "")
+                 for uid, wire in sorted(mapping.items())]
+        if mixed:
+            lines.append(
+                "* some universes are configured for E1.31 / DMX USB - "
+                "native output is ArtNet-only for now; those settings "
+                "are honoured in the QLC+ export")
+        chip.setToolTip("\n".join(lines))
+        self._set_chip_state(chip, True)
+
+    @staticmethod
+    def _set_chip_state(chip: QLabel, on: bool) -> None:
+        state = "on" if on else "off"
+        if chip.property("state") != state:
+            chip.setProperty("state", state)
+            style = chip.style()
+            if style:
+                style.unpolish(chip)
+                style.polish(chip)
 
     # -- pools -----------------------------------------------------------
 
@@ -1809,9 +1914,13 @@ class LiveTab(BaseTab):
         col_layout.addWidget(fader, 1, Qt.AlignmentFlag.AlignHCenter)
         self._grand_fader = fader
 
+        # Quiet red outline until latched, full destructive fill while
+        # armed (destructive-outline:checked) - a kill switch must show
+        # its state, and the always-filled "destructive" role reads
+        # identical checked and unchecked.
         dbo = QPushButton("DBO")
         dbo.setCheckable(True)
-        dbo.setProperty("role", "destructive")
+        dbo.setProperty("role", "destructive-outline")
         dbo.setFont(mono_font(8, QFont.Weight.DemiBold))
         dbo.setCursor(Qt.CursorShape.PointingHandCursor)
         dbo.setToolTip("Dead blackout - zero all output")
