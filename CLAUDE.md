@@ -229,9 +229,28 @@ masks, exclusive playback slot, dimmer-only HTP, conductor clock,
 phases 0-4; todo.md now only carries roadmap pull-in candidates).
 The Live tab (3b busking surface, earlier
 in the pass) has BPM/TAP, SHOW/LIVE mode, 5 palette pools (effects =
-riff library, scenes = scenes/scene_library.py), dual queue - all
-in-memory, no output engine yet. Tests: pytest-xdist is set up -
-`pytest tests/unit -n auto` (~2 min); visual stays serial, never
-regen goldens under -n (tests/README.md). Known pre-existing failure:
-test_fixture_browser TestMultiAdd (modal-guard, tracked). Also new:
-main window nav is SETUP/SHOW/LIVE with Auto inside LIVE.
+riff library, scenes = scenes/scene_library.py), dual queue. Tests:
+pytest-xdist is set up - `pytest tests/unit -n auto` (~2 min); visual
+stays serial, never regen goldens under -n (tests/README.md). Also
+new: main window nav is SETUP/SHOW/LIVE with Auto inside LIVE.
+
+**Output arbiter phases 0-3 shipped (2026-07-11, same branch,
+docs/output-sync-plan.md has status + hashes):** ONE OutputArbiter
+(utils/artnet/arbiter.py) owns the one ArtNetSender and a 44 Hz pull
+loop; DMXManager tracks channel CLAIM MASKS (get_frame -> values +
+mask); ShowsArtNetController and AutoDMXController are layer adapters
+on an EXCLUSIVE playback slot (timeline XOR auto - second producer is
+REFUSED, and a producer that never held the slot must never stop the
+shared loop); the Live busk surface outputs for real via
+utils/artnet/live_layer.py (colours/submasters/flash/strobe,
+busk-on-top, RELEASE ALL = mask fall-through; positions and
+effects/scenes still data-only). Live GRAND/DBO drive the arbiter's
+post-merge master stage; idle floor follows the nav section (editor
+visible, LIVE blackout) - the SHELL owns policy on the shared
+arbiter, adapters only on private ones. MainWindow.output_arbiter()
+is the shared accessor; the arbiter forwards fixture maps to map-less
+layers. Gotcha: get_channels_by_property matches preset OR group, so
+RGB channels (group "Colour") land in color_wheel_channels and the
+safe-idle wheel-open write claims them at 0 (documented in
+tests/unit/test_dmx_masks.py). Phase 4 (conductor, pause look,
+setlist runner) stays v1.7.

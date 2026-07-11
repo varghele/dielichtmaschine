@@ -172,6 +172,12 @@ E. (later) engine resolve so busk-on-top actually merges over the show.
 Stages 1-3 done. Round 2: A done (e3487e4, tempo cluster + SHOW/LIVE
 toggle), B+C done (8411222, five-column centre with the effects pool on
 RiffLibrary and the scenes pool on the new SceneLibrary), D done
-(07ceb13, running stack + QUEUE latch + NEXT UP + GO). Open: E (engine
-resolve / ArtNet output), plus original stages 4-7 (position + intensity
-wiring, picker, REC) and predefined scene content for the library.
+(07ceb13, running stack + QUEUE latch + NEXT UP + GO). E done for the
+programmer surface (f10cceb, output-sync plan phase 3: colours,
+submasters, flash, strobe and GM/DBO render through the arbiter's
+LIVE layer, busk-on-top over the running playback with RELEASE ALL
+fall-through; utils/artnet/live_layer.py + tests/unit/
+test_live_busk_layer.py). Still open: playing the staged
+effects/scenes needs the v1.7 engine, plus original stages 4-7
+(position + intensity wiring, picker, REC) and predefined scene
+content for the library.

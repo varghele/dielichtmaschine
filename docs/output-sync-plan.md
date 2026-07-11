@@ -7,6 +7,19 @@ phased build. Engine work maps to roadmap v1.7 (clock sync, setlist
 trigger engine) and Live plan stage E (busk-on-top merge); this plan
 wires existing milestones together and invents no new one.
 
+**Status (2026-07-11): phases 0-3 SHIPPED**, same day, branch
+v1.2-rebrand - phase 0 masks 402f068, phase 1 arbiter + timeline
+layer e6f0003, phase 2 Auto slot afd3f07, phase 3 Live layer f10cceb.
+Every phase passed the full gauntlet (unit -n auto, visual serial,
+e2e + integration, byte-identical export hash). Phase 4 (conductor,
+pause look, setlist runner) remains v1.7 as planned. Notes from the
+build: real fixture defs put RGB channels in the colour-wheel class
+via the group-"Colour" match, so the safe-idle "wheel open" write
+claims them (kept, documented in tests/unit/test_dmx_masks.py);
+adapters own the idle policy only on PRIVATE arbiters - on the shared
+one the shell owns it (nav section); a producer that failed to
+acquire the slot must never stop the shared loop on teardown.
+
 ## Where output stands today (2026-07-11, verified in code)
 
 - **Timeline playback**: `utils/artnet/shows_artnet_controller.py`
