@@ -193,6 +193,19 @@ Theme roles added: lane-chip (+ QComboBox variant + lane-chip-accent),
 segment/card groups, destructive-outline, QLineEdit[state="invalid"],
 accent tint on output-select:checked.
 
+**Polish round (2026-07-10/11, same branch):** timeline block strip
+zone above the dimmer band (shared sublane_band_geometry - canvas,
+blocks and header labels all consume it), row-aligned DIM/COL labels,
+accent + BLOCK chip, lane names sized from font metrics + group
+subtitle; Live BPM wears #TimeReadout; show-directory button removed
+(File > Import Legacy CSV Songs replaces it); spike marks (
+resources/stageplot/spike-mark.svg) render on stage canvas + printed
+plot in accent, plot fonts moved to Barlow; multi-group rows get
+candy-stripe tints; the Live POSITION pool lists spike marks
+(movers-only, config-pruned, namespace-migrating to preset:/mark: ids
+per docs/position-presets-plan.md - READ THAT FILE for the in-flight
+computed-presets work and how to resume it).
+
 **Multi-group fixtures shipped (2026-07-10, same branch, stages 1-4 of
 docs/multi-group-fixtures-plan.md):** `Fixture.groups: List[str]` is
 the membership source of truth; `fixture.group` is a compat PROPERTY
