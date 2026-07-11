@@ -11,9 +11,12 @@ config's groups change. Round 2 adds the dual queue: the
 running-playbacks stack (mirroring the single staged effect/scene,
 PAUSE/RESUME + KILL per row, a pinned show row in SHOW mode) and the
 NEXT UP list (QUEUE latch arms touch-to-enqueue, GO fires the head) -
-all state-only, no output engine. Round 3 adds POSITION PALETTES: one
-selectable cell per config.spots spike mark, movers-only gated, staged
-position pruned when its mark leaves the config. They assert role
+all state-only, no output engine. Round 3 adds POSITION PALETTES,
+movers-only gated with namespaced position ids: a PRESETS subsection
+of targets computed from the stage setup (utils/position_presets.py -
+geometry presets never pruned, element presets pruned with their
+element) over a MARKS subsection with one cell per config.spots spike
+mark (pruned when its mark leaves the config). They assert role
 properties and LiveState, never widget.styleSheet() or font().family()
 (per the brand-role convention).
 """
@@ -637,7 +640,8 @@ class TestScenesPool:
 
 
 def _spot_config(groups=None, spot_rows=(("DS Centre", 0.0, -2.5, 0.0),
-                                         ("Drum Riser", 0.0, 1.5, 0.6))):
+                                         ("Drum Riser", 0.0, 1.5, 0.6)),
+                 elements=()):
     """A config with spike marks and (by default) one static PAR group
     plus one mover (type MH) group, for POSITION pool tests."""
     from config.models import Spot
@@ -647,7 +651,14 @@ def _spot_config(groups=None, spot_rows=(("DS Centre", 0.0, -2.5, 0.0),
     ))
     cfg.spots = {name: Spot(name=name, x=x, y=y, z=z)
                  for name, x, y, z in spot_rows}
+    cfg.stage_elements = list(elements)
     return cfg
+
+
+# The five geometry presets, in the pool's deterministic order (the
+# contract of utils/position_presets.compute_presets).
+GEOMETRY_PRESET_IDS = ["preset:centre", "preset:audience", "preset:cross",
+                       "preset:fanout", "preset:ceiling"]
 
 
 @pytest.fixture
@@ -666,43 +677,78 @@ class TestPositionPool:
         hits = []
         state = position_tab.state
         state.state_changed.connect(lambda: hits.append(1))
-        state.set_position("DS Centre")
-        assert state.position == "DS Centre"
-        state.set_position("DS Centre")  # same mark again -> cleared
+        state.set_position("mark:DS Centre", "DS Centre")
+        assert state.position == "mark:DS Centre"
+        assert state.position_label == "DS Centre"
+        state.set_position("mark:DS Centre")  # same id again -> cleared
         assert state.position is None
+        assert state.position_label is None
         assert len(hits) == 2
 
-    def test_cells_built_per_spot_in_config_order(self, position_tab):
-        assert list(position_tab._position_cells) == ["DS Centre",
-                                                      "Drum Riser"]
+    def test_cells_built_presets_then_marks_in_order(self, position_tab):
+        # The five geometry presets, then the marks in config order
+        # (no elements placed in this config -> no element presets).
+        assert list(position_tab._position_cells) == \
+            GEOMETRY_PRESET_IDS + ["mark:DS Centre", "mark:Drum Riser"]
 
     def test_cells_carry_card_role_and_coordinate_tag(self, position_tab):
-        cell = position_tab._position_cells["DS Centre"]
+        cell = position_tab._position_cells["mark:DS Centre"]
         assert cell.property("role") == "card"
         # Stage-space x · y (meters, one decimal) as a small mono tag.
         assert cell.tag_label is not None
         assert cell.tag_label.text() == "0.0 · -2.5"
         assert position_tab._position_cells[
-            "Drum Riser"].tag_label.text() == "0.0 · 1.5"
+            "mark:Drum Riser"].tag_label.text() == "0.0 · 1.5"
+
+    def test_preset_cells_carry_tags(self, position_tab):
+        cells = position_tab._position_cells
+        # Point presets tag their target coordinates (mono, like the
+        # marks); pattern presets say each mover derives its own.
+        assert cells["preset:centre"].tag_label.text() == "0.0 · 0.0"
+        # Default 10 x 6 m stage: audience target y = -(6/2 + 3).
+        assert cells["preset:audience"].tag_label.text() == "0.0 · -6.0"
+        assert cells["preset:cross"].tag_label.text() == "Per fixture"
+        assert cells["preset:fanout"].tag_label.text() == "Per fixture"
+        assert cells["preset:ceiling"].tag_label.text() == "Per fixture"
+
+    def test_element_preset_cell_built(self, qapp):
+        from config.models import StageElement
+        from gui.theme_manager import ThemeManager
+        from gui.tabs.live_tab import LiveTab
+
+        cfg = _spot_config(elements=[StageElement(
+            kind="drum-riser", x=0.0, y=1.5, element_id="drums1")])
+        ThemeManager().apply(qapp, "dark")
+        tab = LiveTab(cfg, parent=None)
+        try:
+            cell = tab._position_cells["preset:element:drums1"]
+            # DisplayLabel renders caps.
+            assert cell.name_label.text() == "DRUMS"
+            assert cell.tag_label.text() == "0.0 · 1.5"
+        finally:
+            tab.deleteLater()
 
     def test_click_stages_and_second_click_clears(self, position_tab):
-        cell = position_tab._position_cells["DS Centre"]
-        cell.clicked.emit("DS Centre")
-        assert position_tab.state.position == "DS Centre"
-        cell.clicked.emit("DS Centre")
+        cell = position_tab._position_cells["mark:DS Centre"]
+        cell.clicked.emit("mark:DS Centre")
+        assert position_tab.state.position == "mark:DS Centre"
+        assert position_tab.state.position_label == "DS Centre"
+        cell.clicked.emit("mark:DS Centre")
         assert position_tab.state.position is None
 
     def test_active_cell_outlined(self, position_tab):
-        position_tab.state.set_position("Drum Riser")
-        assert position_tab._position_cells["Drum Riser"].is_active()
-        assert not position_tab._position_cells["DS Centre"].is_active()
-        position_tab.state.set_position("Drum Riser")
-        assert not position_tab._position_cells["Drum Riser"].is_active()
+        position_tab.state.set_position("mark:Drum Riser", "Drum Riser")
+        assert position_tab._position_cells["mark:Drum Riser"].is_active()
+        assert not position_tab._position_cells["mark:DS Centre"].is_active()
+        position_tab.state.set_position("mark:Drum Riser")
+        assert not position_tab._position_cells["mark:Drum Riser"].is_active()
 
     def test_empty_config_shows_marked_empty_state(self, live_tab):
-        # three_group_config has no spots: no cells, an honest marker.
-        assert live_tab._position_cells == {}
-        item = live_tab._position_grid.itemAtPosition(0, 0)
+        # three_group_config has no spots: the geometry presets still
+        # render (they are computed, never empty), the MARKS subsection
+        # shows an honest marker.
+        assert list(live_tab._position_cells) == GEOMETRY_PRESET_IDS
+        item = live_tab._marks_grid.itemAtPosition(0, 0)
         assert item is not None
         text = item.widget().text().lower()
         assert "no marks yet" in text
@@ -742,41 +788,93 @@ class TestPositionPool:
             tab.deleteLater()
 
     def test_update_from_config_prunes_removed_mark(self, position_tab):
-        position_tab.state.set_position("DS Centre")
+        position_tab.state.set_position("mark:DS Centre", "DS Centre")
         del position_tab.config.spots["DS Centre"]
         position_tab.update_from_config()
         # Positions are config-bound: the stale mark is pruned...
         assert position_tab.state.position is None
         # ...and the pool rebuilt without its cell.
-        assert list(position_tab._position_cells) == ["Drum Riser"]
+        assert list(position_tab._position_cells) == \
+            GEOMETRY_PRESET_IDS + ["mark:Drum Riser"]
 
     def test_update_from_config_keeps_valid_mark(self, position_tab):
-        position_tab.state.set_position("Drum Riser")
+        position_tab.state.set_position("mark:Drum Riser", "Drum Riser")
         del position_tab.config.spots["DS Centre"]
         position_tab.update_from_config()
-        assert position_tab.state.position == "Drum Riser"
-        assert position_tab._position_cells["Drum Riser"].is_active()
+        assert position_tab.state.position == "mark:Drum Riser"
+        assert position_tab._position_cells["mark:Drum Riser"].is_active()
+
+    def test_geometry_preset_never_pruned(self, position_tab):
+        position_tab.state.set_position("preset:cross", "Cross")
+        position_tab.config.spots.clear()
+        position_tab.update_from_config()
+        assert position_tab.state.position == "preset:cross"
+        assert position_tab._position_cells["preset:cross"].is_active()
+
+    def test_element_preset_pruned_with_its_element(self, qapp):
+        from config.models import StageElement
+        from gui.theme_manager import ThemeManager
+        from gui.tabs.live_tab import LiveTab
+
+        cfg = _spot_config(elements=[StageElement(
+            kind="drum-riser", x=0.0, y=1.5, element_id="drums1")])
+        ThemeManager().apply(qapp, "dark")
+        tab = LiveTab(cfg, parent=None)
+        try:
+            tab.state.set_position("preset:element:drums1", "Drums")
+            cfg.stage_elements.clear()
+            tab.update_from_config()
+            assert tab.state.position is None
+            assert "preset:element:drums1" not in tab._position_cells
+        finally:
+            tab.deleteLater()
+
+    def test_adding_an_element_rebuilds_the_pool(self, position_tab):
+        from config.models import StageElement
+        assert "preset:element:drums1" not in position_tab._position_cells
+        position_tab.config.stage_elements.append(StageElement(
+            kind="drum-riser", x=0.0, y=1.5, element_id="drums1"))
+        position_tab.update_from_config()
+        assert "preset:element:drums1" in position_tab._position_cells
 
     def test_state_update_from_config_position_semantics(self, position_tab):
         # Direct LiveState contract: prune when absent, keep when present.
         state = position_tab.state
-        state.position = "DS Centre"
+        state.position = "mark:DS Centre"
         state.update_from_config(["Movers"], ["DS Centre", "Drum Riser"])
-        assert state.position == "DS Centre"
+        assert state.position == "mark:DS Centre"
         state.update_from_config(["Movers"], ["Drum Riser"])
+        assert state.position is None
+
+    def test_legacy_bare_id_migrates_to_mark_namespace(self, position_tab):
+        # The pre-namespace ids (raw spot names, one release old) are
+        # migrated on the next config sync, not accreted alongside.
+        state = position_tab.state
+        state.position = "DS Centre"
+        state.update_from_config(["Movers"], ["DS Centre"])
+        assert state.position == "mark:DS Centre"
+        state.position = "Gone Mark"
+        state.update_from_config(["Movers"], ["DS Centre"])
         assert state.position is None
 
     def test_programmer_bar_shows_position(self, position_tab):
         position_tab.state.toggle_group("Movers")
-        position_tab.state.set_position("DS Centre")
+        position_tab.state.set_position("mark:DS Centre", "DS Centre")
         assert "POS: DS CENTRE" in position_tab._programmer_label.text()
-        position_tab.state.set_position("DS Centre")
+        position_tab.state.set_position("mark:DS Centre")
         assert "POS:" not in position_tab._programmer_label.text()
 
+    def test_programmer_bar_shows_preset_label(self, position_tab):
+        position_tab.state.toggle_group("Movers")
+        position_tab._position_cells["preset:cross"].clicked.emit(
+            "preset:cross")
+        assert "POS: CROSS" in position_tab._programmer_label.text()
+
     def test_release_all_clears_position(self, position_tab):
-        position_tab.state.set_position("DS Centre")
+        position_tab.state.set_position("mark:DS Centre", "DS Centre")
         position_tab._release_all_btn.click()
         assert position_tab.state.position is None
+        assert position_tab.state.position_label is None
 
 
 class TestLibraryStatePreserved:

@@ -53,6 +53,16 @@ verbatim as the GitHub Release notes (see [docs/releasing.md](docs/releasing.md)
   autosaved, so there is nothing to push by hand.
 - **F7 opens the pause screen** (screensaver). F11 stays fullscreen; F
   and L remain the Stage tab's own zoom/layer keys.
+- **Computed position presets return to the Live pool.** The POSITION
+  pool's new PRESETS subsection lists CENTRE, AUDIENCE, CROSS, FAN OUT
+  and CEILING - not canned looks but targets computed from the stage
+  setup (stage size, each mover's own position) - plus one preset per
+  placed stage element the plot knows a focus for (drum riser, keys,
+  FOH desk, mic stand; the element's layer height folds into the
+  target). The spike marks keep their own MARKS subsection below.
+  Presets carry real target coordinates from day one; pan/tilt math
+  and actual movement arrive with the focus-geometry and output-engine
+  milestones.
 
 ### Fixed
 

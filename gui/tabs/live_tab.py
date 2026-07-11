@@ -16,8 +16,10 @@ Regions (North Star 3b):
   1 BAR / 4 BARS as output-select chips). Touch a palette and the
   selection "fades" to it over the chosen time (recorded, not animated).
 - CENTRE - a five-column pool grid: COLOUR PALETTES (fully built) |
-  POSITION PALETTES (one selectable cell per spike mark from
-  ``config.spots``, movers-only gated) + MOVEMENT SHAPES (placeholder) |
+  POSITION PALETTES (a PRESETS subsection of targets computed from the
+  stage setup via utils/position_presets.py, then a MARKS subsection
+  with one cell per ``config.spots`` spike mark; movers-only gated as a
+  whole) + MOVEMENT SHAPES (placeholder) |
   INTENSITY FX (placeholder, cell-fixtures gated) | EFFECTS (riffs from
   the shared RiffLibrary, selection-scoped: greyed with no selection) |
   SCENES (whole-rig looks from the SceneLibrary, always enabled). Below
@@ -42,8 +44,9 @@ FX-speed/size/white-wash bank slots and the transport clock are
 output-engine surfaces, so they are rendered as clearly-marked
 placeholders rather than faked. The dual queue is state-only: PAUSE and
 KILL mutate records, no output pauses or dies yet. POSITION PALETTES
-lists the stage's real spike marks (``config.spots``) as selectable
-cells, but staging one only mutates ``LiveState`` - no fixture moves
+lists computed presets (targets derived from the real stage setup) and
+the stage's real spike marks (``config.spots``) as selectable cells,
+but staging one only mutates ``LiveState`` - no fixture moves
 until the output engine lands. The colour PICKER, SONG PALETTE link and
 "+ REC" capture, and the MOVEMENT / INTENSITY pools, are staged for
 later passes and marked "arrives next".
@@ -62,6 +65,10 @@ from PyQt6.QtWidgets import (
 from auto.bpm_detector import TapBPM
 from config.models import Configuration
 from gui.typography import DisplayLabel, MicroLabel, display_font, mono_font
+from utils.position_presets import (
+    ELEMENT_PRESET_PREFIX, KIND_POINT, MARK_PREFIX, PRESET_PREFIX,
+    compute_presets, element_preset_ids, mark_id, mark_name,
+)
 
 from .base_tab import BaseTab
 
@@ -115,7 +122,8 @@ DEFAULT_FADE_SECONDS = 2.0
 
 # MOVEMENT / INTENSITY pools are placeholders this pass - the labels
 # seed the eventual controls but render as disabled, marked cells.
-# (POSITION PALETTES is real: one cell per config.spots spike mark.)
+# (POSITION PALETTES is real: computed presets from the stage setup
+# plus one cell per config.spots spike mark.)
 MOVEMENT_PLACEHOLDERS = ("Off", "Circle", "Fig-8", "Sweep", "Size")
 INTENSITY_PLACEHOLDERS = ("Static", "Pulse", "Chase", "Wave", "Sparkle",
                           "Strobe", "Ping-Pong")
@@ -220,11 +228,15 @@ class LiveState(QObject):
         # them alone (like bpm / mode).
         self.effect: Optional[str] = None        # staged riff key
         self.scene: Optional[str] = None         # staged scene key
-        # Staged position palette: the name of a spike mark from
-        # config.spots (movers point at it - state-only, no DMX yet).
+        # Staged position palette: a namespaced id ("preset:centre",
+        # "preset:element:<id>", "mark:<spot name>" - see
+        # utils/position_presets.py) the movers point at (state-only,
+        # no DMX yet), plus the display label the programmer bar shows.
         # Unlike effect/scene it is config-bound: update_from_config
-        # prunes it when the mark is renamed or removed on the Stage tab.
-        self.position: Optional[str] = None      # staged spot name
+        # prunes a mark whose spot left the config and an element
+        # preset whose element did; geometry presets are never pruned.
+        self.position: Optional[str] = None      # staged position id
+        self.position_label: Optional[str] = None
         # Dual queue. ``running`` is the running-playbacks stack - plain
         # dict records {"kind": "effect"|"scene", "key", "label",
         # "paused"} mirroring the single active effect/scene (at most one
@@ -237,13 +249,15 @@ class LiveState(QObject):
         self.next_up: List[dict] = []
 
     # -- config sync ----------------------------------------------------
-    def update_from_config(self, names, spot_names=()) -> None:
+    def update_from_config(self, names, spot_names=(),
+                           valid_element_ids=()) -> None:
         """Seed a submaster (default 100) for each group and prune state
         for groups that no longer exist. Positions are config-bound
-        (unlike effect/scene): a staged position whose spike mark is no
-        longer in ``spot_names`` (renamed/removed on the Stage tab) is
-        pruned to None. Silent - the tab re-syncs explicitly after a
-        rebuild."""
+        (unlike effect/scene): a staged "mark:" position whose spike
+        mark is no longer in ``spot_names`` and a "preset:element:"
+        position no longer in ``valid_element_ids`` (removed on the
+        Stage tab) are pruned to None; geometry presets are never
+        pruned. Silent - the tab re-syncs explicitly after a rebuild."""
         names = list(names)
         valid = set(names)
         self.selected &= valid
@@ -252,8 +266,25 @@ class LiveState(QObject):
         # Keep existing submaster values; add 100 for new groups; drop
         # stale. Rebuild as an ordered dict following the group order.
         self.submasters = {g: self.submasters.get(g, 100) for g in names}
-        if self.position is not None and self.position not in set(spot_names):
+        self._prune_position(spot_names, valid_element_ids)
+
+    def _prune_position(self, spot_names, valid_element_ids) -> None:
+        if self.position is None:
+            return
+        if not self.position.startswith((PRESET_PREFIX, MARK_PREFIX)):
+            # Migrate the pre-namespace ids (raw spot names, shipped one
+            # release before the namespacing) instead of accreting a
+            # second id scheme.
+            self.position = mark_id(self.position)
+        if self.position.startswith(ELEMENT_PRESET_PREFIX):
+            keep = self.position in set(valid_element_ids)
+        elif self.position.startswith(MARK_PREFIX):
+            keep = mark_name(self.position) in set(spot_names)
+        else:
+            keep = True   # geometry presets always exist
+        if not keep:
             self.position = None
+            self.position_label = None
 
     # -- selection ------------------------------------------------------
     def toggle_group(self, name: str) -> None:
@@ -298,6 +329,7 @@ class LiveState(QObject):
         self.effect = None
         self.scene = None
         self.position = None
+        self.position_label = None
         self.running.clear()
         self.state_changed.emit()
 
@@ -388,12 +420,19 @@ class LiveState(QObject):
         self._sync_running("scene", self.scene)
         self.state_changed.emit()
 
-    def set_position(self, name: Optional[str]) -> None:
-        """Toggle the staged position palette (a spike-mark name from
-        config.spots, movers-only). Touching the same mark again clears
-        it. State-only: no fixture moves until the output engine lands,
-        so it does not mirror into the running stack."""
-        self.position = None if name == self.position else name
+    def set_position(self, position_id: Optional[str],
+                     label: Optional[str] = None) -> None:
+        """Toggle the staged position palette (a namespaced preset or
+        spike-mark id, movers-only); ``label`` is the display name the
+        programmer bar shows. Touching the same id again clears it.
+        State-only: no fixture moves until the output engine lands, so
+        it does not mirror into the running stack."""
+        if position_id == self.position:
+            self.position = None
+            self.position_label = None
+        else:
+            self.position = position_id
+            self.position_label = label if position_id is not None else None
         self.state_changed.emit()
 
     def _sync_running(self, kind: str, key: Optional[str]) -> None:
@@ -885,9 +924,12 @@ class LiveTab(BaseTab):
         self._select_tiles: Dict[str, _SelectTile] = {}
         self._colour_swatches: Dict[str, _ColourSwatch] = {}
         self._colour_placeholders: Dict[str, QWidget] = {}
-        # POSITION PALETTES: one selectable cell per config.spots spike
-        # mark (movement shapes stay placeholders in _movement_cells).
+        # POSITION PALETTES: computed-preset cells + one cell per
+        # config.spots spike mark, keyed by namespaced position id
+        # (movement shapes stay placeholders in _movement_cells).
+        # _position_labels maps id -> display label for the programmer.
         self._position_cells: Dict[str, _LibraryCell] = {}
+        self._position_labels: Dict[str, str] = {}
         self._movement_cells: List[_PlaceholderCell] = []
         self._intensity_cells: List[_PlaceholderCell] = []
         # Library-backed pools (wired to the shared RiffLibrary and a new
@@ -908,7 +950,7 @@ class LiveTab(BaseTab):
         self._group_colors: Dict[str, str] = {}
         self._accent_labels: List[QLabel] = []
         self._current_groups_fingerprint = None
-        self._current_spots_fingerprint = None
+        self._current_positions_fingerprint = None
 
         super().__init__(config, parent)
 
@@ -934,7 +976,8 @@ class LiveTab(BaseTab):
 
     def update_from_config(self):
         """Refresh SELECT tiles + submaster bank when the groups change
-        and the POSITION PALETTES pool when the spike marks change."""
+        and the POSITION PALETTES pool when the spike marks, the
+        preset-relevant stage elements or the stage dimensions change."""
         self._rebuild_groups()
         self._rebuild_positions()
         self._sync_from_state()
@@ -1208,11 +1251,13 @@ class LiveTab(BaseTab):
 
     def _build_position_pool(self) -> QWidget:
         pool, layout = self._pool_shell()
-        # POSITION PALETTES: one selectable cell per spike mark from
-        # config.spots (authored on the Stage tab). Header + grid live in
-        # their own section widget so the movers-only gating can grey
-        # just this pool (setEnabled, like the effects pool) without
-        # touching the MOVEMENT SHAPES placeholders below.
+        # POSITION PALETTES: two subsections - PRESETS (targets computed
+        # from the stage setup, utils/position_presets.py) on top, MARKS
+        # (one cell per config.spots spike mark, authored on the Stage
+        # tab) below. Header + both grids live in one section widget so
+        # the movers-only gating can grey the whole pool (setEnabled,
+        # like the effects pool) without touching the MOVEMENT SHAPES
+        # placeholders below.
         section = QWidget()
         section_layout = QVBoxLayout(section)
         section_layout.setContentsMargins(0, 0, 0, 0)
@@ -1221,12 +1266,20 @@ class LiveTab(BaseTab):
         # narrow five-column header truncates longer tags silently.
         section_layout.addWidget(self._pool_header(
             "Position palettes", "Movers only", tag_accent=True))
-        grid_host = QWidget()
-        grid = QGridLayout(grid_host)
-        grid.setContentsMargins(14, 0, 14, 10)
-        grid.setSpacing(6)
-        self._position_grid = grid
-        section_layout.addWidget(grid_host)
+        section_layout.addWidget(self._pool_header("Presets"))
+        preset_host = QWidget()
+        preset_grid = QGridLayout(preset_host)
+        preset_grid.setContentsMargins(14, 0, 14, 6)
+        preset_grid.setSpacing(6)
+        self._preset_grid = preset_grid
+        section_layout.addWidget(preset_host)
+        section_layout.addWidget(self._pool_header("Marks"))
+        marks_host = QWidget()
+        marks_grid = QGridLayout(marks_host)
+        marks_grid.setContentsMargins(14, 0, 14, 10)
+        marks_grid.setSpacing(6)
+        self._marks_grid = marks_grid
+        section_layout.addWidget(marks_host)
         self._position_section = section
         layout.addWidget(section)
         self._populate_position_pool()
@@ -1251,44 +1304,82 @@ class LiveTab(BaseTab):
         layout.addStretch(1)
         return pool
 
+    def _add_position_cell(self, grid: QGridLayout, index: int,
+                           position_id: str, label: str, tag: str,
+                           tip: str) -> None:
+        cell = _LibraryCell(position_id, label, tag=tag)
+        cell.setToolTip(tip)
+        cell.clicked.connect(self._on_position_touched)
+        self._position_cells[position_id] = cell
+        self._position_labels[position_id] = label
+        grid.addWidget(cell, index // 2, index % 2)
+
     def _populate_position_pool(self) -> None:
-        """Rebuild the POSITION PALETTES grid from config.spots: one
-        selectable cell per spike mark (in config order) with the mark's
-        stage coordinates as a small mono tag, or an honest empty state
-        when the stage has no marks yet."""
-        self._clear_grid(self._position_grid)
+        """Rebuild both POSITION PALETTES grids: PRESETS from
+        compute_presets (five geometry presets plus one per matching
+        placed stage element), MARKS from config.spots (config order,
+        stage coordinates as a small mono tag, an honest empty state
+        when the stage has no marks yet)."""
+        self._clear_grid(self._preset_grid)
+        self._clear_grid(self._marks_grid)
         self._position_cells = {}
+        self._position_labels = {}
+        self._current_positions_fingerprint = self._positions_fingerprint()
+
+        for i, preset in enumerate(compute_presets(self.config)):
+            if preset.kind == KIND_POINT:
+                x, y, z = preset.point
+                where = f"target {x:.1f} / {y:.1f} / {z:.1f} m"
+            else:
+                where = "each mover derives its own target"
+            self._add_position_cell(
+                self._preset_grid, i, preset.preset_id, preset.label,
+                preset.tag,
+                f"{preset.label} · computed from the stage setup · "
+                f"{where} · touch to point the selected movers at it "
+                "(state-only, no output engine yet)")
+        for col in range(2):
+            self._preset_grid.setColumnStretch(col, 1)
+
         spots = getattr(self.config, "spots", {}) or {}
-        self._current_spots_fingerprint = tuple(spots.keys())
         if not spots:
-            self._position_grid.addWidget(
+            self._marks_grid.addWidget(
                 self._marker("No marks yet · add spike marks on the "
                              "Stage tab"),
                 0, 0, 1, 2)
             return
-        columns = 2
         for i, (name, spot) in enumerate(spots.items()):
-            tag = f"{spot.x:.1f} · {spot.y:.1f}"
-            cell = _LibraryCell(name, name, tag=tag)
-            cell.setToolTip(
+            self._add_position_cell(
+                self._marks_grid, i, mark_id(name), name,
+                f"{spot.x:.1f} · {spot.y:.1f}",
                 f"{name} · stage {spot.x:.1f} / {spot.y:.1f} / "
                 f"{spot.z:.1f} m · touch to point the selected movers "
                 "at it (state-only, no output engine yet)")
-            cell.clicked.connect(self._on_position_touched)
-            self._position_cells[name] = cell
-            self._position_grid.addWidget(cell, i // columns, i % columns)
-        for col in range(columns):
-            self._position_grid.setColumnStretch(col, 1)
+        for col in range(2):
+            self._marks_grid.setColumnStretch(col, 1)
+
+    def _positions_fingerprint(self) -> tuple:
+        """What the POSITION pool renders from: the spike-mark set, the
+        preset-relevant stage elements (id + kind, catalog-matching
+        kinds only) and the stage dimensions (AUDIENCE / FAN OUT tags
+        and targets depend on them)."""
+        spots = getattr(self.config, "spots", {}) or {}
+        return (tuple(spots.keys()),
+                tuple(element_preset_ids(self.config)),
+                (getattr(self.config, "stage_width", None),
+                 getattr(self.config, "stage_height", None)))
 
     def _rebuild_positions(self) -> None:
-        """Rebuild the POSITION PALETTES pool when the spike-mark set
-        changes; prune a staged position whose mark is gone (positions
-        are config-bound, unlike effect/scene)."""
-        spots = getattr(self.config, "spots", {}) or {}
-        if tuple(spots.keys()) == self._current_spots_fingerprint:
+        """Rebuild the POSITION PALETTES pool when its config inputs
+        change; prune a staged position whose mark or element is gone
+        (positions are config-bound, unlike effect/scene)."""
+        if self._positions_fingerprint() == \
+                self._current_positions_fingerprint:
             return
+        spots = getattr(self.config, "spots", {}) or {}
         self.state.update_from_config(
-            list(self.config.groups.keys()), spots.keys())
+            list(self.config.groups.keys()), spots.keys(),
+            element_preset_ids(self.config))
         self._populate_position_pool()
 
     def _selection_has_movers(self) -> bool:
@@ -1477,11 +1568,13 @@ class LiveTab(BaseTab):
         else:
             self.state.set_scene(key)
 
-    def _on_position_touched(self, name: str) -> None:
-        """Stage/toggle a spike mark as the position palette. Fire-only
-        (the QUEUE latch covers EFFECTS/SCENES cells; positions are not
-        playbacks) and state-only - no fixture moves yet."""
-        self.state.set_position(name)
+    def _on_position_touched(self, position_id: str) -> None:
+        """Stage/toggle a preset or spike mark as the position palette.
+        Fire-only (the QUEUE latch covers EFFECTS/SCENES cells;
+        positions are not playbacks) and state-only - no fixture moves
+        yet."""
+        self.state.set_position(position_id,
+                                self._position_labels.get(position_id))
 
     def _on_select_all(self) -> None:
         self.state.set_selection(self.config.groups.keys())
@@ -1795,9 +1888,11 @@ class LiveTab(BaseTab):
         self._current_groups_fingerprint = fingerprint
 
         # Seed/prune the state's per-group data for the new group set
-        # (spot names passed along so the position prune stays exact).
+        # (spot names + element preset ids passed along so the position
+        # prune stays exact).
         self.state.update_from_config(
-            group_names, (getattr(self.config, "spots", {}) or {}).keys())
+            group_names, (getattr(self.config, "spots", {}) or {}).keys(),
+            element_preset_ids(self.config))
 
         self._group_colors = {}
         for index, name in enumerate(group_names):
@@ -2034,7 +2129,12 @@ class LiveTab(BaseTab):
         if state.scene:
             text += f" · SCENE: {self._key_name(state.scene).upper()}"
         if state.position:
-            text += f" · POS: {state.position.upper()}"
+            # The display label ("CROSS", "DS CENTRE"), not the raw
+            # namespaced id; fall back to stripping the namespace for a
+            # position staged without a label (legacy callers).
+            label = state.position_label or \
+                state.position.split(":")[-1]
+            text += f" · POS: {label.upper()}"
         self._programmer_label.setText(text)
 
     @staticmethod

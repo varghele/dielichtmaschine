@@ -201,10 +201,14 @@ subtitle; Live BPM wears #TimeReadout; show-directory button removed
 (File > Import Legacy CSV Songs replaces it); spike marks (
 resources/stageplot/spike-mark.svg) render on stage canvas + printed
 plot in accent, plot fonts moved to Barlow; multi-group rows get
-candy-stripe tints; the Live POSITION pool lists spike marks
-(movers-only, config-pruned, namespace-migrating to preset:/mark: ids
-per docs/position-presets-plan.md - READ THAT FILE for the in-flight
-computed-presets work and how to resume it).
+candy-stripe tints; the Live POSITION pool is PRESETS + MARKS
+(movers-only, config-pruned): computed presets from the stage setup
+(utils/position_presets.py - CENTRE/AUDIENCE/CROSS/FAN OUT/CEILING +
+one per placed drum-riser/keys/foh/mic-stand element) above the spike
+marks, position ids namespaced preset:/preset:element:/mark: with
+legacy bare spot names migrated on config sync (shipped 2026-07-11,
+docs/position-presets-plan.md; targets are data-only until v1.5a
+focus geometry + the output arbiter).
 
 **Multi-group fixtures shipped (2026-07-10, same branch, stages 1-4 of
 docs/multi-group-fixtures-plan.md):** `Fixture.groups: List[str]` is

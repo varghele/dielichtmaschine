@@ -1,8 +1,14 @@
 # Computed position presets: plan + handoff
 
-Decided 2026-07-11 in discussion; implementation was IN FLIGHT via a
-background agent when the session stopped - see "Session handoff state"
-at the bottom before doing anything.
+Decided 2026-07-11 in discussion. SHIPPED 2026-07-11 (the background
+agent from the earlier session never landed its work; a fresh session
+re-implemented from this spec). Files: utils/position_presets.py,
+gui/tabs/live_tab.py, tests/unit/test_position_presets.py,
+tests/unit/test_live_tab.py, tests/visual/test_live_tab_golden.py +
+win32 golden. One interpretation call: CROSS's near-centre rule reads
+"x_target = 1.5"; implemented as a 1.5 m throw to the OPPOSITE side
+(sign(0) = +1 counts as stage right, so x = 0 targets -1.5) because
+the stated intent is "so the beam still crosses".
 
 ## The idea
 

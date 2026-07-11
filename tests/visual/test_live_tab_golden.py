@@ -4,10 +4,14 @@ Pins the North Star 3b busking surface: the TOP SELECT row (one tile per
 group with a data-color accent bar + ALL / ODD-EVEN / CLEAR SEL) and FADE
 row, the CENTRE five-pool grid (COLOUR PALETTES painted in their actual
 colours as square swatches in a 3-wide grid with the active one outlined,
-then POSITION PALETTES - one selectable cell per config.spots spike mark
-with a mono coordinate tag, movers-only gated and enabled here because
-the selected Movers group is type MH, the staged mark accent-outlined -
-over the marked MOVEMENT placeholders, then INTENSITY placeholders, then
+then POSITION PALETTES - a PRESETS subsection with the five computed
+geometry presets (CENTRE / AUDIENCE / CROSS / FAN OUT / CEILING) plus a
+DRUMS preset for the placed drum-riser element, over a MARKS subsection
+with one selectable cell per config.spots spike mark with a mono
+coordinate tag; movers-only gated as a whole and enabled here because
+the selected Movers group is type MH, the staged CROSS preset
+accent-outlined - then the marked MOVEMENT placeholders, then INTENSITY
+placeholders, then
 the library-backed EFFECTS pool - riffs, selection-scoped, greyed with no
 selection - and SCENES pool - whole-rig looks, always on - each with the
 active item outlined in the accent), the PROGRAMMER state bar naming the
@@ -21,7 +25,7 @@ DBO) first, a divider, then a bounded fader per group in the group
 colours, left-aligned.
 
 The render is deterministic: two groups selected (one of them movers),
-one colour active, one spike-mark position staged, one effect and one
+one colour active, the CROSS position preset staged, one effect and one
 scene staged (so the running stack shows two rows), two items enqueued
 in NEXT UP (one effect, one scene, GO enabled), a couple of submasters
 at different levels, no output engine (UI shell only).
@@ -44,7 +48,8 @@ import pytest
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from config.models import (
-    Configuration, Fixture, FixtureGroup, FixtureMode, Spot, Universe,
+    Configuration, Fixture, FixtureGroup, FixtureMode, Spot, StageElement,
+    Universe,
 )
 from tests.visual.harness import compare_to_golden
 
@@ -83,10 +88,14 @@ def scene_config():
         "Drum Riser": Spot(name="Drum Riser", x=0.0, y=1.5, z=0.6),
         "SL Solo": Spot(name="SL Solo", x=-3.0, y=-1.0, z=0.0),
     }
+    # A placed drum riser earns a computed DRUMS preset in the PRESETS
+    # subsection (sixth cell after the five geometry presets).
+    elements = [StageElement(kind="drum-riser", x=0.0, y=1.5,
+                             width=2.0, depth=2.0, element_id="drums1")]
     return Configuration(
         fixtures=fixtures, groups=groups,
         universes={1: Universe(id=1, name="Universe 1", output={})},
-        spots=spots,
+        spots=spots, stage_elements=elements,
         stage_width=8.0, stage_height=6.0,
     )
 
@@ -139,10 +148,11 @@ def test_live_tab_golden(qapp, scene_config, tmp_path):
         tab.state.set_mode("live")
         tab.state.set_effect("loops/Four Floor")
         tab.state.set_scene("looks/Warm Wash")
-        # Round-3: stage a spike-mark position. The Movers group (type
-        # MH) is selected, so the movers-only POSITION pool is enabled
-        # and the staged mark renders accent-outlined.
-        tab.state.set_position("DS Centre")
+        # Round-3: stage the computed CROSS preset. The Movers group
+        # (type MH) is selected, so the movers-only POSITION pool is
+        # enabled and the staged preset cell renders accent-outlined
+        # (the programmer bar reads "POS: CROSS").
+        tab.state.set_position("preset:cross", "Cross")
         # Dual queue: the staged effect+scene render as running rows;
         # preload two NEXT UP items (one effect, one scene) so the queue
         # rows, the remove X and the enabled GO all pin.
