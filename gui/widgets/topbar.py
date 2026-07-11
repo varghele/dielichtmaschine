@@ -303,6 +303,12 @@ class ShellNav:
     def _on_screen_selected(self, tab_index: int) -> None:
         self.tab_widget.setCurrentIndex(tab_index)
 
+    def section_for_tab(self, index: int):
+        """The section key ("setup"/"show"/"live") hosting a tab index,
+        or None. The shell uses this to wire per-section behaviour
+        (e.g. the output arbiter's idle-floor policy)."""
+        return self._index_to_section.get(index)
+
     # -- keep chrome in sync with the tab widget (any source) -----------
     def _on_tab_changed(self, index: int) -> None:
         self.sync_to_tab(index)

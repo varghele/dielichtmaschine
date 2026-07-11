@@ -174,8 +174,11 @@ class ShowsArtNetController(QObject):
             print("ArtNet output refused: Auto mode holds the playback slot")
             return False
         # The Shows tab is an editor context: idle keeps the rig
-        # visible for authoring.
-        self.arbiter.set_idle_policy(IDLE_VISIBLE)
+        # visible for authoring. Only a PRIVATE arbiter takes its
+        # policy from the producer - on the shared one the shell owns
+        # the policy (it follows the active nav section).
+        if self._owns_arbiter:
+            self.arbiter.set_idle_policy(IDLE_VISIBLE)
         self.output_enabled = True
         self.arbiter.start()
         print("ArtNet output enabled")

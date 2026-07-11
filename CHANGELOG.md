@@ -53,6 +53,18 @@ verbatim as the GitHub Release notes (see [docs/releasing.md](docs/releasing.md)
   autosaved, so there is nothing to push by hand.
 - **F7 opens the pause screen** (screensaver). F11 stays fullscreen; F
   and L remain the Stage tab's own zoom/layer keys.
+- **The Live tab makes real light.** With ArtNet output enabled, the
+  busk surface now drives the rig: applied colour palettes (split
+  swatches alternate across a group's fixtures), submaster levels,
+  FLASH and the strobe reach DMX through the output arbiter's LIVE
+  layer, riding on top of whatever plays underneath - a group you
+  touch overrides the show for exactly its channels, RELEASE ALL hands
+  them back seamlessly, and untouched groups keep playing the show.
+  The Live GRAND fader and DBO cap all output, timeline and Auto
+  included. The idle floor follows the shell: SETUP/SHOW keep the rig
+  visible for authoring, the LIVE section idles to blackout. Still
+  data-only until their own milestones: position presets (pan/tilt
+  math is v1.5a) and the effects/scenes pools (the v1.7 engine).
 - **Computed position presets return to the Live pool.** The POSITION
   pool's new PRESETS subsection lists CENTRE, AUDIENCE, CROSS, FAN OUT
   and CEILING - not canned looks but targets computed from the stage

@@ -95,9 +95,10 @@ def _controller(config, defs, arbiter=None, callback=None):
 
 class TestAutoAdapter:
     def test_start_claims_slot_and_streams(self, defs):
+        from utils.artnet.arbiter import IDLE_BLACKOUT
         config = _config()
         controller, arbiter, sender = _controller(config, defs)
-        arbiter_started = []
+        arbiter.set_idle_policy(IDLE_BLACKOUT)   # the shell's LIVE policy
         assert controller.start() is True
         assert arbiter.playback_slot_owner() == "auto"
         arbiter.stop(blackout=False)          # drive ticks manually
@@ -107,12 +108,14 @@ class TestAutoAdapter:
         assert merged[1][5] == 127
         assert merged[1][0] == 0              # blackout idle, no visible floor
 
-    def test_idle_policy_is_blackout(self, defs):
+    def test_shared_arbiter_keeps_shell_owned_idle_policy(self, defs):
+        # On a SHARED (injected) arbiter the producer must NOT flip
+        # the idle policy - the shell owns it (nav-section wiring).
+        # The arbiter default (visible) survives construction.
         config = _config()
         controller, arbiter, _ = _controller(config, defs)
-        # Not running at all: floor only, and the floor is blackout.
         merged = arbiter.tick_once(0.0)
-        assert merged[1] == bytearray(512)
+        assert merged[1][0] == 255            # visible floor untouched
 
     def test_target_ip_reaches_the_sender(self, defs):
         config = _config()

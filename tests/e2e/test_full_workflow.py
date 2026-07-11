@@ -912,3 +912,62 @@ class TestFullWorkflow:
             assert render_at(controller, 6.0)[base + PAR_DIMMER] == 0
         finally:
             controller.cleanup()
+
+
+# ===========================================================================
+# Step 7 - the shared arbiter's shell wiring (output-sync plan phase 3)
+# ===========================================================================
+class TestOutputShellWiring:
+    """MainWindow.output_arbiter(): one shared arbiter with the Live
+    busk layer registered, the Live tab's grandmaster/DBO driving the
+    post-merge master stage, and the idle-floor policy following the
+    active nav section (editor visible, LIVE blackout)."""
+
+    @pytest.fixture
+    def wired_window(self, main_window, monkeypatch):
+        import utils.artnet.arbiter as arb_mod
+
+        class StubSender:
+            def __init__(self, target_ip="255.255.255.255",
+                         target_port=6454):
+                self.target_ip = target_ip
+                self.sent = []
+
+            def send_dmx(self, universe, dmx_data, force=False):
+                self.sent.append((universe, bytes(dmx_data)))
+                return True
+
+            def close(self):
+                pass
+
+        monkeypatch.setattr(arb_mod, "ArtNetSender", StubSender)
+        arbiter = main_window.output_arbiter()
+        arbiter.stop(blackout=False)   # never let the loop race a test
+        try:
+            yield main_window, arbiter
+        finally:
+            arbiter.stop(blackout=False)
+
+    def test_live_layer_registered_once(self, wired_window):
+        window, arbiter = wired_window
+        assert arbiter._live_layer is window._live_busk_layer
+        assert window.output_arbiter() is arbiter   # accessor is stable
+
+    def test_live_masters_push_into_the_arbiter(self, wired_window):
+        window, arbiter = wired_window
+        window.live_tab.state.set_grandmaster(40)
+        assert arbiter._grandmaster == 40
+        window.live_tab.state.set_dbo(True)
+        assert arbiter._dbo is True
+        window.live_tab.state.set_dbo(False)
+        assert arbiter._dbo is False
+
+    def test_idle_policy_follows_the_nav_section(self, wired_window):
+        from utils.artnet.arbiter import IDLE_BLACKOUT, IDLE_VISIBLE
+        window, arbiter = wired_window
+        window.tabWidget.setCurrentIndex(6)   # LIVE section (busk screen)
+        assert arbiter._idle_policy == IDLE_BLACKOUT
+        window.tabWidget.setCurrentIndex(4)   # SHOW section (timeline)
+        assert arbiter._idle_policy == IDLE_VISIBLE
+        window.tabWidget.setCurrentIndex(5)   # LIVE section (Auto screen)
+        assert arbiter._idle_policy == IDLE_BLACKOUT

@@ -59,8 +59,12 @@ class AutoDMXController:
         self.arbiter.set_local_dmx_callback(local_dmx_callback)
 
         # Auto is a live context: idle means blackout, not the
-        # editor's "fixtures visible" floor.
-        self.arbiter.set_idle_policy(IDLE_BLACKOUT)
+        # editor's "fixtures visible" floor. Only a PRIVATE arbiter
+        # takes its policy from the producer - on the shared one the
+        # shell owns the policy (it follows the active nav section,
+        # and Auto lives inside LIVE, which idles to blackout anyway).
+        if self._owns_arbiter:
+            self.arbiter.set_idle_policy(IDLE_BLACKOUT)
 
         # Engine reference
         self._engine: Optional[AutoShowEngine] = None

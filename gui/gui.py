@@ -258,14 +258,61 @@ class MainWindow(QMainWindow, Ui_MainWindow):
 
     def output_arbiter(self):
         """The ONE shared OutputArbiter (docs/output-sync-plan.md):
-        every DMX producer (timeline, Auto, later the Live busk layer)
-        plugs into it, so the exclusive playback slot and the merge
-        actually arbitrate across features. Created lazily - most
-        sessions never enable output."""
+        every DMX producer (timeline, Auto, the Live busk layer) plugs
+        into it, so the exclusive playback slot and the merge actually
+        arbitrate across features. Created lazily - most sessions
+        never enable output."""
         if getattr(self, "_output_arbiter", None) is None:
             from utils.artnet.arbiter import OutputArbiter
-            self._output_arbiter = OutputArbiter(config=self.config)
+            from utils.artnet.live_layer import LiveBuskLayer
+            from gui.tabs.live_tab import COLOUR_SWATCHES
+
+            arbiter = OutputArbiter(config=self.config)
+
+            # The Live busk surface rides on top of whatever plays
+            # (busk-on-top): register its layer once, for the arbiter's
+            # lifetime. Channel maps arrive when a playback controller
+            # registers its own (the arbiter forwards them).
+            self._live_busk_layer = LiveBuskLayer(
+                state=self.live_tab.state,
+                config_provider=lambda: self.live_tab.config,
+                swatches=COLOUR_SWATCHES,
+            )
+            arbiter.set_live_layer(self._live_busk_layer)
+
+            # The Live tab's GRAND fader and DBO drive the arbiter's
+            # post-merge master stage, capping playback too.
+            self._output_arbiter = arbiter
+            self.live_tab.state.state_changed.connect(
+                self._push_live_masters)
+            self._push_live_masters()
+
+            # Idle-floor policy follows the active shell section
+            # (editor visible, live blackout - locked 2026-07-11).
+            self._sync_idle_policy(self.tabWidget.currentIndex())
         return self._output_arbiter
+
+    def _push_live_masters(self):
+        """Forward the Live tab's grandmaster/DBO into the arbiter."""
+        arbiter = getattr(self, "_output_arbiter", None)
+        if arbiter is None:
+            return
+        state = self.live_tab.state
+        arbiter.set_grandmaster(state.grandmaster)
+        arbiter.set_dbo(state.dbo)
+
+    def _sync_idle_policy(self, tab_index: int):
+        """The shell owns the idle-floor policy: SETUP/SHOW keep the
+        rig visible for authoring, the LIVE section idles to blackout
+        (the pause look replaces blackout in v1.7)."""
+        arbiter = getattr(self, "_output_arbiter", None)
+        if arbiter is None:
+            return
+        from utils.artnet.arbiter import IDLE_BLACKOUT, IDLE_VISIBLE
+        section = self.shell_nav.section_for_tab(tab_index) \
+            if hasattr(self, "shell_nav") else None
+        arbiter.set_idle_policy(
+            IDLE_BLACKOUT if section == "live" else IDLE_VISIBLE)
 
     def _create_tabs(self):
         """Create and integrate tab components"""
@@ -689,6 +736,11 @@ class MainWindow(QMainWindow, Ui_MainWindow):
 
             # Contextual statusbar hint for the new screen.
             self._update_status_hint(index)
+
+            # The output arbiter's idle floor follows the shell section
+            # (editor visible, LIVE blackout). No-op until output is
+            # first enabled (no arbiter exists before that).
+            self._sync_idle_policy(index)
 
         except Exception as e:
             print(f"ERROR in _on_tab_changed: {e}")

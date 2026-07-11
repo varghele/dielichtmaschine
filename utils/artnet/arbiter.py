@@ -275,7 +275,9 @@ class OutputArbiter:
     def set_fixture_maps(self, fixture_maps) -> None:
         """Adopt the fixture channel maps (from the playback layer's
         DMXManager): rebuilds the HTP/grandmaster class masks and the
-        idle floor, and learns any universes the maps introduce."""
+        idle floor, learns any universes the maps introduce, and
+        forwards the maps to map-less layers (the Live busk layer and
+        the future pause look render through the same maps)."""
         with self._lock:
             self._fixture_maps = dict(fixture_maps)
             self._htp_masks, self._gm_masks = \
@@ -286,6 +288,13 @@ class OutputArbiter:
                     self._universes.add(universe)
                     self._universe_mapping.setdefault(universe, universe - 1)
             self._rebuild_floor()
+            self._forward_fixture_maps()
+
+    def _forward_fixture_maps(self) -> None:
+        for layer in (self._live_layer, self._pause_look_layer):
+            forward = getattr(layer, "set_fixture_maps", None)
+            if forward is not None:
+                forward(self._fixture_maps)
 
     def set_idle_policy(self, policy: str) -> None:
         """"visible" (editor: rig lit for authoring) or "blackout"
@@ -378,10 +387,12 @@ class OutputArbiter:
     def set_live_layer(self, layer) -> None:
         with self._lock:
             self._live_layer = layer
+            self._forward_fixture_maps()
 
     def set_pause_look_layer(self, layer) -> None:
         with self._lock:
             self._pause_look_layer = layer
+            self._forward_fixture_maps()
 
     # -- the loop ----------------------------------------------------------
 

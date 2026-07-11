@@ -2,12 +2,16 @@
 design_handoff_lichtmaschine_app/screens/09-live-3b-palette.html (layout
 "3b").
 
-This is a UI shell wired to an in-memory :class:`LiveState`. There is no
-DMX / ArtNet output yet - every interaction mutates ``LiveState`` and
-emits ``LiveState.state_changed`` so a later engine pass can subscribe an
-output resolver to it without touching the widgets. ``LiveState`` is
-already shaped so that a resolve is a pure function of the state plus the
-fixture patch (see :meth:`LiveState.group_level`).
+This is a UI shell wired to an in-memory :class:`LiveState`; every
+interaction mutates ``LiveState`` and emits ``LiveState.state_changed``.
+Since the output-arbiter pass (docs/output-sync-plan.md phase 3) the
+busk surface makes real light: utils/artnet/live_layer.py renders the
+applied colours, submaster levels, flash and strobe as the arbiter's
+LIVE layer whenever ArtNet output is enabled, riding on top of
+whatever plays underneath (busk-on-top); the Live grandmaster and DBO
+drive the arbiter's post-merge master stage, capping playback too.
+The resolve stays a pure function of the state plus the fixture patch
+(see :meth:`LiveState.group_level` / :meth:`group_level_local`).
 
 Regions (North Star 3b):
 
@@ -38,18 +42,17 @@ Regions (North Star 3b):
   under it) set off by a thin divider, then one vertical fader per
   group in the group's data colour with a momentary FLASH button.
 
-Honest omissions vs. the reference (surfaces with no in-memory state to
-drive them yet): the live 3D render / DMX meters, the
-FX-speed/size/white-wash bank slots and the transport clock are
-output-engine surfaces, so they are rendered as clearly-marked
-placeholders rather than faked. The dual queue is state-only: PAUSE and
-KILL mutate records, no output pauses or dies yet. POSITION PALETTES
-lists computed presets (targets derived from the real stage setup) and
-the stage's real spike marks (``config.spots``) as selectable cells,
-but staging one only mutates ``LiveState`` - no fixture moves
-until the output engine lands. The colour PICKER, SONG PALETTE link and
-"+ REC" capture, and the MOVEMENT / INTENSITY pools, are staged for
-later passes and marked "arrives next".
+Honest omissions vs. the reference: the live 3D render / DMX meters,
+the FX-speed/size/white-wash bank slots and the transport clock are
+still placeholders. EFFECTS and SCENES stay state-only (the dual
+queue's PAUSE and KILL mutate records; playing a riff/scene needs the
+v1.7 engine). POSITION PALETTES lists computed presets (targets
+derived from the real stage setup) and the stage's real spike marks
+(``config.spots``) as selectable cells, but staging one only mutates
+``LiveState`` - converting a target into pan/tilt is the v1.5a focus
+geometry milestone, so no fixture moves yet. The colour PICKER, SONG
+PALETTE link and "+ REC" capture, and the MOVEMENT / INTENSITY pools,
+are staged for later passes and marked "arrives next".
 """
 
 from typing import Dict, List, Optional, Tuple
@@ -378,6 +381,22 @@ class LiveState(QObject):
         if self.blackout:
             return 0.0
         return (self.grandmaster / 100.0) * (self.submasters[group] / 100.0)
+
+    def group_level_local(self, group: str) -> float:
+        """The PRE-GRANDMASTER 0..1 level the busk output layer renders
+        (utils/artnet/live_layer.py): flash forces full, the soft
+        blackout zeroes, else the submaster. Grandmaster and DBO are
+        deliberately excluded - they live in the output arbiter's
+        post-merge stage so they also cap timeline/Auto playback
+        (docs/output-sync-plan.md); group_level keeps the full product
+        for consumers that want the final number."""
+        if group not in self.submasters:
+            return 0.0
+        if group in self.flash:
+            return 1.0
+        if self.blackout:
+            return 0.0
+        return self.submasters[group] / 100.0
 
     # -- strobe ---------------------------------------------------------
     def set_strobe_on(self, on: bool) -> None:
