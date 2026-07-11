@@ -218,14 +218,27 @@ def test_auto_tab_embeds_visualizer(qapp, sample_configuration):
 
 
 def test_live_dmx_callback_fires_per_universe():
-    """AutoDMXController.local_dmx_callback should fire once per
-    configured universe with the 1-based config universe id and a
-    512-byte buffer. Misbehaving callbacks must not break the wire send."""
-    from unittest.mock import MagicMock
-
+    """The embedded-visualizer callback should fire once per configured
+    universe with the 1-based config universe id and a 512-byte buffer
+    (dispatched by the arbiter with the post-merge frame since phase 2
+    of docs/output-sync-plan.md). Misbehaving callbacks must not break
+    the wire send."""
     from config.models import (Configuration, Fixture, FixtureMode,
                                FixtureGroup, Universe)
     from auto.dmx_output import AutoDMXController
+    from utils.artnet.arbiter import OutputArbiter
+
+    class StubSender:
+        def __init__(self):
+            self.sent = []
+            self.target_ip = ""
+
+        def send_dmx(self, universe, dmx_data, force=False):
+            self.sent.append((universe, bytes(dmx_data)))
+            return True
+
+        def close(self):
+            pass
 
     fixtures = [
         Fixture(universe=1, address=1, manufacturer="M", model="A",
@@ -245,15 +258,13 @@ def test_live_dmx_callback_fires_per_universe():
     )
 
     received: list[tuple[int, bytes]] = []
+    sender = StubSender()
     controller = AutoDMXController(
         config, fixture_definitions={},
         local_dmx_callback=lambda u, b: received.append((u, b)),
+        arbiter=OutputArbiter(config=config, sender=sender),
     )
-    # Mock the senders so no UDP socket is actually opened.
-    controller.artnet_sender = MagicMock()
-    controller._visualizer_sender = MagicMock()
-
-    controller._send_all_universes()
+    controller.arbiter.tick_once(0.0)
     seen_universes = sorted(u for u, _ in received)
     assert seen_universes == [1, 2]
     for _, payload in received:
@@ -261,18 +272,18 @@ def test_live_dmx_callback_fires_per_universe():
         assert len(payload) == 512
 
     # Misbehaving callback shouldn't break the send loop.
+    bad_sender = StubSender()
     bad_controller = AutoDMXController(
         config, fixture_definitions={},
         local_dmx_callback=lambda u, b: (_ for _ in ()).throw(
             RuntimeError("boom")
         ),
+        arbiter=OutputArbiter(config=config, sender=bad_sender),
     )
-    bad_controller.artnet_sender = MagicMock()
-    bad_controller._visualizer_sender = MagicMock()
     # Must not raise.
-    bad_controller._send_all_universes()
+    bad_controller.arbiter.tick_once(0.0)
     # Wire send still happened for both universes.
-    assert bad_controller.artnet_sender.send_dmx.call_count == 2
+    assert len(bad_sender.sent) == 2
 
 
 def test_fixture_definitions_reload_after_late_config_load(qapp, monkeypatch):

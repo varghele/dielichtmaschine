@@ -111,6 +111,11 @@ verbatim as the GitHub Release notes (see [docs/releasing.md](docs/releasing.md)
   look on the rig instead of going dark between refreshes, stopping
   returns to a continuously refreshed idle state, and the embedded
   visualizer mirrors exactly what goes on the wire, merge included.
+  Timeline playback and Auto mode share one exclusive output slot:
+  starting one while the other holds DMX is refused with a clear
+  message instead of both blasting the rig from separate sockets, and
+  Auto's universe remapping and broadcast mirror now work for every
+  producer.
 - **The show-directory button is gone; legacy CSV import is a File
   action.** The Structure tab's "SHOW DIRECTORY..." chip only existed
   to point at a pre-v1.0 folder of CSV songs; that is now the explicit

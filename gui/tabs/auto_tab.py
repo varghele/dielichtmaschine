@@ -1754,9 +1754,17 @@ class AutoTab(BaseTab):
                 if vis is not None:
                     vis.feed_dmx(universe, dmx_bytes)
 
+            # Use the app-wide shared arbiter when hosted in the main
+            # window (exclusive playback slot: timeline XOR auto);
+            # standalone (tests) the controller builds a private one.
+            window = self.window()
+            shared_arbiter = window.output_arbiter() \
+                if hasattr(window, "output_arbiter") else None
+
             self._dmx_controller = AutoDMXController(
                 self.config, self.fixture_definitions, target_ip=target_ip,
                 local_dmx_callback=_feed_embedded,
+                arbiter=shared_arbiter,
             )
             # Only override the controller's default mapping if the universe
             # table actually has rows - an empty user mapping used to wipe
@@ -1782,7 +1790,15 @@ class AutoTab(BaseTab):
                 self._cleanup()
                 return
             self._bridge.start(self._live_input.ring_buffer)
-            self._dmx_controller.start()
+            if not self._dmx_controller.start():
+                self.show_error(
+                    "DMX output refused",
+                    "The Show tab's timeline holds the DMX output "
+                    "(ArtNet is enabled there). Disable ArtNet on the "
+                    "Show tab before starting Auto mode.",
+                )
+                self._cleanup()
+                return
 
             self._is_running = True
             self._ui_timer.start()

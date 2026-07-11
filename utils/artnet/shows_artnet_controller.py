@@ -9,12 +9,15 @@ from typing import Optional, Dict, Tuple, List, Callable
 
 from config.models import Configuration
 from utils.target_resolver import resolve_targets_unique
-from .arbiter import Frame, OutputArbiter
+from .arbiter import Frame, IDLE_VISIBLE, OutputArbiter
 from .dmx_manager import DMXManager
 from .sender import ArtNetSender
 
 # Debug flag - set to False to disable verbose prints
 DEBUG_PRINTS = False
+
+# The playback-slot owner tag; Auto mode uses "auto".
+SLOT_OWNER = "timeline"
 
 # Playback layer states. Stopped renders nothing (the arbiter floor
 # shows through - "fixtures visible" in the editor, exactly the old
@@ -68,6 +71,7 @@ class ShowsArtNetController(QObject):
         # The arbiter owns the sender and the 44 Hz loop. The sender is
         # constructed HERE from this module's namespace so tests can
         # monkeypatch shows_artnet_controller.ArtNetSender.
+        self._owns_arbiter = arbiter is None
         if arbiter is None:
             arbiter = OutputArbiter(
                 config=config, sender=ArtNetSender(target_ip=target_ip))
@@ -75,7 +79,6 @@ class ShowsArtNetController(QObject):
         # Kept for introspection/back-compat (the arbiter owns it).
         self.artnet_sender = arbiter._sender
 
-        self.arbiter.set_playback_layer(self)
         self.arbiter.set_fixture_maps(self.dmx_manager.fixture_maps)
         self.arbiter.set_local_dmx_callback(local_dmx_callback)
 
@@ -162,20 +165,35 @@ class ShowsArtNetController(QObject):
 
     # -- output / transport ------------------------------------------------
 
-    def enable_output(self):
-        """Enable output: the arbiter loop starts streaming (the idle
-        floor until playback starts)."""
+    def enable_output(self) -> bool:
+        """Enable output: claim the exclusive playback slot and start
+        the arbiter loop (the idle floor streams until playback
+        starts). Returns False - and enables nothing - when Auto mode
+        holds the slot (timeline XOR auto)."""
+        if not self.arbiter.acquire_playback_slot(self, SLOT_OWNER):
+            print("ArtNet output refused: Auto mode holds the playback slot")
+            return False
+        # The Shows tab is an editor context: idle keeps the rig
+        # visible for authoring.
+        self.arbiter.set_idle_policy(IDLE_VISIBLE)
         self.output_enabled = True
         self.arbiter.start()
         print("ArtNet output enabled")
+        return True
 
     def disable_output(self):
-        """Disable output: stop the loop and send one blackout."""
+        """Disable output: release the slot, stop the loop, send one
+        blackout. On a SHARED arbiter the loop is only stopped if the
+        timeline actually held the slot - never out from under a
+        running Auto mode."""
         self.output_enabled = False
         with self._render_lock:
             self._state = _STOPPED
             self._last_frames = {}
-        self.arbiter.stop(blackout=True)
+        held = self.arbiter.playback_slot_owner() == SLOT_OWNER
+        self.arbiter.release_playback_slot(SLOT_OWNER)
+        if held or self._owns_arbiter:
+            self.arbiter.stop(blackout=True)
         print("ArtNet output disabled")
 
     def start_playback(self):
@@ -213,11 +231,18 @@ class ShowsArtNetController(QObject):
                 self._process_lane_blocks()
 
     def cleanup(self):
-        """Cleanup resources."""
+        """Cleanup resources. A private arbiter is shut down (socket
+        closed); a shared one is released, and stopped only if the
+        timeline held the slot."""
         with self._render_lock:
             self._state = _STOPPED
             self._last_frames = {}
-        self.arbiter.shutdown()
+        held = self.arbiter.playback_slot_owner() == SLOT_OWNER
+        self.arbiter.release_playback_slot(SLOT_OWNER)
+        if self._owns_arbiter:
+            self.arbiter.shutdown()
+        elif held:
+            self.arbiter.stop(blackout=True)
         print("ShowsArtNet Controller cleaned up")
 
     # -- the arbiter layer contract -----------------------------------------

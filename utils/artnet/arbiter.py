@@ -245,8 +245,15 @@ class OutputArbiter:
         self._universe_mapping = {u: u - 1 for u in self._universes}
 
         self._playback_layer = None
+        self._playback_owner: Optional[str] = None
         self._live_layer = None
         self._pause_look_layer = None
+
+        # Optional broadcast mirror (Auto mode's visualizer path,
+        # generalised): a second sender that repeats every frame to
+        # broadcast when the primary target is unicast.
+        self._mirror_enabled = False
+        self._mirror_sender: Optional[ArtNetSender] = None
 
         self._fixture_maps: Dict = {}
         self._htp_masks: Dict[int, bytearray] = {}
@@ -320,12 +327,53 @@ class OutputArbiter:
         with self._lock:
             self._dbo = bool(on)
 
+    def set_broadcast_mirror(self, enabled: bool,
+                             sender: Optional[ArtNetSender] = None) -> None:
+        """Repeat every merged frame to broadcast on a second sender
+        (for the standalone visualizer when the primary target is a
+        unicast node). Pass ``sender`` to inject a stub in tests."""
+        with self._lock:
+            self._mirror_enabled = bool(enabled)
+            if sender is not None:
+                self._mirror_sender = sender
+            elif enabled and self._mirror_sender is None:
+                self._mirror_sender = ArtNetSender(
+                    target_ip="255.255.255.255")
+
     # -- layer slots -------------------------------------------------------
 
     def set_playback_layer(self, layer) -> None:
-        """The exclusive playback slot (timeline XOR auto XOR None)."""
+        """Low-level slot write (tests, teardown). Producers use
+        acquire_playback_slot/release_playback_slot so exclusivity is
+        enforced."""
         with self._lock:
             self._playback_layer = layer
+            if layer is None:
+                self._playback_owner = None
+
+    def acquire_playback_slot(self, layer, owner: str) -> bool:
+        """Claim the EXCLUSIVE playback slot (timeline XOR auto, user
+        decision 2026-07-11). Returns False when another owner holds
+        it - the caller refuses its start and tells the user, rather
+        than silently evicting a running show."""
+        with self._lock:
+            if (self._playback_layer is not None
+                    and self._playback_owner not in (None, owner)):
+                return False
+            self._playback_layer = layer
+            self._playback_owner = owner
+            return True
+
+    def release_playback_slot(self, owner: str) -> None:
+        """Release the slot if ``owner`` holds it (idempotent)."""
+        with self._lock:
+            if self._playback_owner == owner:
+                self._playback_layer = None
+                self._playback_owner = None
+
+    def playback_slot_owner(self) -> Optional[str]:
+        with self._lock:
+            return self._playback_owner
 
     def set_live_layer(self, layer) -> None:
         with self._lock:
@@ -366,9 +414,11 @@ class OutputArbiter:
             self._send_blackout()
 
     def shutdown(self) -> None:
-        """stop() + close the socket. The arbiter is done after this."""
+        """stop() + close the sockets. The arbiter is done after this."""
         self.stop(blackout=True)
         self._sender.close()
+        if self._mirror_sender is not None:
+            self._mirror_sender.close()
 
     def _loop(self) -> None:
         while not self._stop_event.is_set():
@@ -403,11 +453,18 @@ class OutputArbiter:
                              self._gm_masks)
             mapping = dict(self._universe_mapping)
             callback = self._local_dmx_callback
+            mirror = self._mirror_sender if self._mirror_enabled else None
 
         for universe in sorted(merged):
             wire_universe = mapping.get(universe, universe - 1)
             self._sender.send_dmx(wire_universe, merged[universe],
                                   force=True)
+            if mirror is not None:
+                try:
+                    mirror.send_dmx(wire_universe, merged[universe],
+                                    force=True)
+                except Exception:
+                    logger.exception("broadcast mirror send failed")
             if callback is not None:
                 try:
                     callback(universe, bytes(merged[universe]))
@@ -418,9 +475,15 @@ class OutputArbiter:
     def _send_blackout(self) -> None:
         with self._lock:
             mapping = dict(self._universe_mapping)
+            # The mirror gets the blackout even when currently disabled:
+            # a viewer would otherwise hold the last mirrored frame if
+            # mirroring was toggled off mid-show (kept from Auto mode).
+            mirror = self._mirror_sender
         blackout = bytearray(512)
         for wire_universe in mapping.values():
             try:
                 self._sender.send_dmx(wire_universe, blackout, force=True)
+                if mirror is not None:
+                    mirror.send_dmx(wire_universe, blackout, force=True)
             except Exception:
                 logger.exception("blackout send failed")

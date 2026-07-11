@@ -256,6 +256,17 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.setup_dir = os.path.join(self.project_root, "setup")
         self.config_path = None
 
+    def output_arbiter(self):
+        """The ONE shared OutputArbiter (docs/output-sync-plan.md):
+        every DMX producer (timeline, Auto, later the Live busk layer)
+        plugs into it, so the exclusive playback slot and the merge
+        actually arbitrate across features. Created lazily - most
+        sessions never enable output."""
+        if getattr(self, "_output_arbiter", None) is None:
+            from utils.artnet.arbiter import OutputArbiter
+            self._output_arbiter = OutputArbiter(config=self.config)
+        return self._output_arbiter
+
     def _create_tabs(self):
         """Create and integrate tab components"""
         # Create tab instances with shared configuration
@@ -1812,5 +1823,10 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         # only place that stops it.
         if hasattr(self, 'auto_tab') and hasattr(self.auto_tab, 'cleanup'):
             self.auto_tab.cleanup()
+
+        # The shared output arbiter outlives the per-tab controllers;
+        # close its socket last.
+        if getattr(self, "_output_arbiter", None) is not None:
+            self._output_arbiter.shutdown()
 
         event.accept()

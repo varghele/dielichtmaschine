@@ -2022,12 +2022,21 @@ class ShowsTab(BaseTab):
                     if vis is not None:
                         vis.feed_dmx(universe, dmx_bytes)
 
+                # Use the app-wide shared arbiter when hosted in the
+                # main window, so the exclusive playback slot actually
+                # arbitrates between timeline and Auto; standalone
+                # (tests) the controller builds a private one.
+                window = self.window()
+                shared_arbiter = window.output_arbiter() \
+                    if hasattr(window, "output_arbiter") else None
+
                 self.artnet_controller = ShowsArtNetController(
                     config=self.config,
                     fixture_definitions=fixture_defs,
                     song_structure=self.song_structure,
                     target_ip="255.255.255.255",  # Broadcast
                     local_dmx_callback=_feed_embedded,
+                    arbiter=shared_arbiter,
                 )
 
                 # Set light lanes
@@ -2039,9 +2048,17 @@ class ShowsTab(BaseTab):
                 # This allows ArtNet to get fresh audio position on each DMX update
                 self.artnet_controller.set_position_callback(self._get_current_position)
 
-                # Enable output if checkbox is checked
+                # Enable output if checkbox is checked. Refused when
+                # Auto mode holds the exclusive playback slot.
                 if self.artnet_enabled:
-                    self.artnet_controller.enable_output()
+                    if not self.artnet_controller.enable_output():
+                        self.artnet_enabled = False
+                        self.show_error(
+                            "ArtNet output refused",
+                            "Auto mode is running and holds the DMX "
+                            "output. Stop Auto mode before enabling "
+                            "timeline ArtNet output.",
+                        )
 
                 print("ArtNet controller initialized")
 
@@ -2068,7 +2085,15 @@ class ShowsTab(BaseTab):
             if self.artnet_controller is None:
                 self._init_artnet_controller()
             elif self.artnet_controller:
-                self.artnet_controller.enable_output()
+                if not self.artnet_controller.enable_output():
+                    self.artnet_enabled = False
+                    self.show_error(
+                        "ArtNet output refused",
+                        "Auto mode is running and holds the DMX output. "
+                        "Stop Auto mode before enabling timeline ArtNet "
+                        "output.",
+                    )
+                    return
                 # Update song structure and lanes
                 self.artnet_controller.set_song_structure(self.song_structure)
                 self.artnet_controller.set_light_lanes(

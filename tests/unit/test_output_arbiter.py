@@ -367,3 +367,69 @@ class TestOutputArbiter:
         arbiter = OutputArbiter(config=arbiter_config, sender=sender)
         arbiter.shutdown()
         assert sender.closed
+
+
+class TestPlaybackSlot:
+    """The EXCLUSIVE playback slot: timeline XOR auto (locked
+    decision 2026-07-11) - second producer is refused, not evicted."""
+
+    def test_acquire_and_refusal(self, arbiter_config):
+        arbiter = OutputArbiter(config=arbiter_config, sender=StubSender())
+        timeline = StaticLayer(frame(1, ch0=10))
+        auto = StaticLayer(frame(1, ch0=20))
+        assert arbiter.acquire_playback_slot(timeline, "timeline") is True
+        assert arbiter.playback_slot_owner() == "timeline"
+        assert arbiter.acquire_playback_slot(auto, "auto") is False
+        # The holder keeps rendering.
+        assert arbiter.tick_once(0.0)[1][0] == 10
+
+    def test_same_owner_reacquires(self, arbiter_config):
+        arbiter = OutputArbiter(config=arbiter_config, sender=StubSender())
+        layer_a = StaticLayer({})
+        layer_b = StaticLayer({})
+        assert arbiter.acquire_playback_slot(layer_a, "timeline")
+        assert arbiter.acquire_playback_slot(layer_b, "timeline")
+
+    def test_release_frees_the_slot(self, arbiter_config):
+        arbiter = OutputArbiter(config=arbiter_config, sender=StubSender())
+        arbiter.acquire_playback_slot(StaticLayer({}), "timeline")
+        arbiter.release_playback_slot("timeline")
+        assert arbiter.playback_slot_owner() is None
+        assert arbiter.acquire_playback_slot(StaticLayer({}), "auto")
+
+    def test_release_by_non_owner_is_a_no_op(self, arbiter_config):
+        arbiter = OutputArbiter(config=arbiter_config, sender=StubSender())
+        arbiter.acquire_playback_slot(StaticLayer({}), "timeline")
+        arbiter.release_playback_slot("auto")
+        assert arbiter.playback_slot_owner() == "timeline"
+
+
+class TestBroadcastMirror:
+    def test_mirror_repeats_frames_when_enabled(self, arbiter_config):
+        sender = StubSender()
+        mirror = StubSender()
+        arbiter = OutputArbiter(config=arbiter_config, sender=sender)
+        arbiter.set_broadcast_mirror(True, sender=mirror)
+        arbiter.set_playback_layer(StaticLayer(frame(1, ch0=42)))
+        arbiter.tick_once(0.0)
+        assert len(mirror.sent) == len(sender.sent) == 2
+        assert mirror.sent[0][1] == sender.sent[0][1]
+
+    def test_mirror_silent_when_disabled(self, arbiter_config):
+        mirror = StubSender()
+        arbiter = OutputArbiter(config=arbiter_config, sender=StubSender())
+        arbiter.set_broadcast_mirror(True, sender=mirror)
+        arbiter.set_broadcast_mirror(False)
+        arbiter.tick_once(0.0)
+        assert mirror.sent == []
+
+    def test_blackout_reaches_a_disabled_mirror(self, arbiter_config):
+        # A viewer must not hold the last mirrored frame after stop,
+        # even if mirroring was toggled off mid-show.
+        mirror = StubSender()
+        arbiter = OutputArbiter(config=arbiter_config, sender=StubSender())
+        arbiter.set_broadcast_mirror(True, sender=mirror)
+        arbiter.set_broadcast_mirror(False)
+        arbiter.stop(blackout=True)
+        assert mirror.sent
+        assert all(data == bytes(512) for _, data, _ in mirror.sent)
