@@ -442,11 +442,14 @@ class StagePlotRenderer:
                     occupied: List[QRectF]) -> None:
         from gui.widgets.fixture_icons import _paint_symbol_icon
 
-        ink = QColor(90, 90, 90)
+        # Spike marks wear the brand accent on the plot too (the plot
+        # already prints group colours, so colour is at home here).
+        from gui.theme_tokens import THEMES
+        ink = QColor(THEMES["dark"]["accent"])
         painter.setPen(QPen(ink, 0.3 * mm))
         painter.setFont(self._font(2.0, mm))
         size = 1.6 * mm
-        box = 3.2 * mm  # spike-mark symbol box (same span as the old X)
+        box = 4.4 * mm  # spike-mark symbol box (bigger than the old X)
         for name, spot in getattr(self.config, 'spots', {}).items():
             x = ox + spot.x * ppm
             y = oy - spot.y * ppm

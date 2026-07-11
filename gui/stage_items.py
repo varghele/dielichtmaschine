@@ -505,7 +505,7 @@ class SpotItem(QGraphicsItem):
         self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsMovable)
         self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsSelectable)
         self.setAcceptHoverEvents(True)
-        self.size = 24  # Symbol box (the SVG spans the whole box)
+        self.size = 32  # Symbol box (the SVG spans the whole box)
         self.name = name
         self.z_height = 0.0  # Z height in meters (for 3D targeting)
         self.last_pos = self.pos()  # Store last position for snapping
@@ -529,12 +529,13 @@ class SpotItem(QGraphicsItem):
         name_w = QFontMetrics(name_font).horizontalAdvance(self.name)
         z_w = QFontMetrics(z_font).horizontalAdvance(
             f"Z: {self.z_height:.1f}m")
-        half_w = max(self.size / 2 + 2, name_w / 2, z_w / 2)
+        # +5: room for the selection ring (size/2 + 3 + pen width).
+        half_w = max(self.size / 2 + 5, name_w / 2, z_w / 2)
         # Symbol box + two centered label lines below.
         label_h = (QFontMetrics(name_font).height()
                    + QFontMetrics(z_font).height() + 6)
-        return QRectF(-half_w, -self.size / 2 - 2,
-                      half_w * 2, self.size + 4 + label_h)
+        return QRectF(-half_w, -self.size / 2 - 5,
+                      half_w * 2, self.size + 10 + label_h)
 
     def mouseMoveEvent(self, event):
         view = self.scene().views()[0]  # Get the main view
@@ -589,9 +590,15 @@ class SpotItem(QGraphicsItem):
 
         tokens = self._tokens()
         selected = self.isSelected()
-        ink = QColor(tokens["accent"] if selected
-                     else tokens["text_secondary"])
+        # Spike marks always wear the brand accent; selection adds a
+        # ring in the text colour around the mark.
+        ink = QColor(tokens["accent"])
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        if selected:
+            painter.setPen(QPen(QColor(tokens["text"]), 1.5))
+            painter.setBrush(Qt.BrushStyle.NoBrush)
+            ring = self.size / 2 + 3
+            painter.drawEllipse(QRectF(-ring, -ring, ring * 2, ring * 2))
 
         # The spike-mark symbol (SVG recolored to the ink), with the old
         # primitive X as the fallback if the asset is missing.
