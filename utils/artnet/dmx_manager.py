@@ -125,6 +125,18 @@ class DMXManager:
 
     Tracks active blocks and converts them to DMX values in real-time.
     Handles overlapping blocks with LTP (Latest Takes Priority).
+
+    Alongside the value buffers the manager keeps a per-universe CLAIM
+    MASK (``dmx_touched``): one byte per channel, 1 where this renderer
+    deliberately drives the channel. Every write through
+    :meth:`set_dmx_value` claims its channel - including a write of 0,
+    which is a claim to zero - while :meth:`clear_all_dmx` resets both
+    values and claims (a buffer reset is not a claim). The output
+    arbiter (docs/output-sync-plan.md) merges renderers by these masks;
+    an unclaimed channel falls through to the layer below. Because
+    :meth:`update_dmx` starts every frame from ``clear_all_dmx`` and
+    re-applies the safe idle state plus the active blocks, the mask is
+    exact per frame with no decay bookkeeping.
     """
 
     def __init__(self, config: Configuration, fixture_definitions: dict, song_structure=None):
@@ -140,17 +152,22 @@ class DMXManager:
         self.fixture_definitions = fixture_definitions
         self.song_structure = song_structure
 
-        # DMX state - universe_id -> 512-byte array
+        # DMX state - universe_id -> 512-byte array, plus the parallel
+        # claim mask (see class docstring): 1 = channel deliberately
+        # driven this frame, 0 = unclaimed (falls through in a merge).
         self.dmx_state: Dict[int, bytearray] = {}
+        self.dmx_touched: Dict[int, bytearray] = {}
 
         # Initialize universes from configuration (ensure int keys - YAML may load as string)
         for universe_id in config.universes.keys():
             self.dmx_state[int(universe_id)] = bytearray(512)
+            self.dmx_touched[int(universe_id)] = bytearray(512)
 
         # Also initialize universes for all fixtures (in case fixture uses unconfigured universe)
         for fixture in config.fixtures:
             if fixture.universe not in self.dmx_state:
                 self.dmx_state[fixture.universe] = bytearray(512)
+                self.dmx_touched[fixture.universe] = bytearray(512)
 
         # Build fixture channel maps
         self.fixture_maps: Dict[str, FixtureChannelMap] = {}
@@ -218,16 +235,22 @@ class DMXManager:
         for fixture in self.config.fixtures:
             if fixture.universe not in self.dmx_state:
                 self.dmx_state[fixture.universe] = bytearray(512)
+                self.dmx_touched[fixture.universe] = bytearray(512)
                 new_universes.append(fixture.universe)
 
         if new_universes:
             print(f"DMXManager: Added universe(s) {new_universes}")
 
     def clear_all_dmx(self):
-        """Clear all DMX values to 0."""
+        """Clear all DMX values to 0 and drop all channel claims.
+
+        A buffer reset is not a claim: after this, every channel is
+        unclaimed until something writes it through set_dmx_value.
+        """
         # PERFORMANCE: Use fill() instead of creating new bytearray objects
         for universe_id in self.dmx_state.keys():
             self.dmx_state[universe_id][:] = b'\x00' * 512
+            self.dmx_touched[universe_id][:] = b'\x00' * 512
 
     def clear_active_blocks(self):
         """Clear all active block tracking state.
@@ -323,7 +346,9 @@ class DMXManager:
 
     def set_dmx_value(self, universe: int, channel: int, value: int):
         """
-        Set a single DMX channel value.
+        Set a single DMX channel value and claim the channel (a write
+        of 0 is a claim to zero, not a release - release is
+        clear_all_dmx).
 
         Args:
             universe: Universe ID
@@ -336,6 +361,7 @@ class DMXManager:
 
         if 0 <= channel < 512:
             self.dmx_state[universe][channel] = max(0, min(255, value))
+            self.dmx_touched[universe][channel] = 1
 
     def get_dmx_data(self, universe: int) -> bytes:
         """
@@ -351,6 +377,32 @@ class DMXManager:
             return bytes(512)
 
         return bytes(self.dmx_state[universe])
+
+    def get_touched_mask(self, universe: int) -> bytes:
+        """The claim mask for a universe: one byte per channel, 1 where
+        this renderer deliberately drives the channel this frame.
+
+        Args:
+            universe: Universe ID
+
+        Returns:
+            512 bytes of 0/1 claims (all zeros for unknown universes)
+        """
+        if universe not in self.dmx_touched:
+            return bytes(512)
+        return bytes(self.dmx_touched[universe])
+
+    def get_frame(self, universe: int) -> Tuple[bytes, bytes]:
+        """The (values, mask) pair the output arbiter merges by
+        (docs/output-sync-plan.md).
+
+        Args:
+            universe: Universe ID
+
+        Returns:
+            (512 value bytes, 512 claim bytes)
+        """
+        return self.get_dmx_data(universe), self.get_touched_mask(universe)
 
     def block_started(self, lane_key: str, fixtures: List[Fixture], block: object, block_type: str, current_time: float):
         """
