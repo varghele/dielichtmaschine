@@ -92,6 +92,10 @@ verbatim as the GitHub Release notes (see [docs/releasing.md](docs/releasing.md)
   reports). The directory hint still self-maintains for import/export
   dialogs and the legacy audiofiles fallback, and old configs load
   unchanged. The dead CSV auto-save/auto-load code went with it.
+- **Multi-group rows wear candy stripes.** A fixture in several groups
+  gets a row background of gently slanted stripes cycling through its
+  groups' colours (primary first, same muted tint as the solid rows, so
+  nothing gets harder to read); single-group rows keep the solid tint.
 - **Multi-group fixtures work end to end.** A fixture in several groups
   shows up in each group's timeline lane, contributes its capabilities
   to every lane, appears in each group's exported channel groups and

@@ -17,9 +17,11 @@ Anatomy (left to right, top to bottom):
   QTableView::item rule, see docs/qt-gotchas.md #1), red UNI/ADDRESS
   cells on DMX conflicts. GROUP shows the fixture's FULL membership
   (" · "-joined, primary first, elided with the full list in the
-  tooltip) in the PRIMARY group's color; the row tint is the primary
-  group's too. Membership add/remove/make-primary happens in the
-  table's right-click Assign menu.
+  tooltip) in the PRIMARY group's color; single-group rows tint in the
+  primary group's colour, multi-group rows get diagonal candy stripes
+  cycling through every membership's tint (primary band first).
+  Membership add/remove/make-primary happens in the table's
+  right-click Assign menu.
 - a 380px inspector: display-caps fixture name + mono provenance,
   CAPABILITIES chip row, CHANNEL MAP mono list (both derived from the
   fixture-definition cache), the editors (name / universe / address /
@@ -33,6 +35,8 @@ config.fixtures (row index == config index, no sorting). Inspector
 editors write straight into the config, then refresh the affected table
 row(s), the DMX lint, the groups panel and the status strip.
 """
+
+import math
 
 from PyQt6 import QtWidgets, QtCore, QtGui
 from PyQt6.QtWidgets import (
@@ -57,6 +61,21 @@ TABLE_HEADERS = ("#", "FIXTURE", "TYPE", "MODE", "UNI", "ADDRESS", "GROUP")
 
 # Row tint: the group color at the reference's rgba(...,0.17).
 GROUP_TINT_ALPHA = 43
+
+# Candy stripes for multi-group rows: the row background cycles through
+# EVERY membership's tint colour (primary group first) as repeating
+# diagonal bands - the same visual family as the Live tab's diagonal
+# split swatches, here as an N-colour pattern. STRIPE_WIDTH is the
+# horizontal run of one band; STRIPE_ANGLE_DEG the slant off VERTICAL
+# (a little off, deliberately not 45). The tile height is derived so
+# the skew across the tile is exactly one horizontal period, making the
+# texture wrap seamlessly in both directions (the rounding nudges the
+# true angle a fraction of a degree).
+STRIPE_WIDTH = 11
+STRIPE_ANGLE_DEG = 18.0
+
+# Colour tuple -> QPixmap; one tile per membership colour combination.
+_STRIPE_TILE_CACHE = {}
 
 # Warning treatment for Universe / Address cells of conflicting fixtures.
 # A fixed red (not theme-derived) so it reads as "error" on both themes
@@ -265,6 +284,43 @@ def group_tint_color(group_color: QtGui.QColor,
         round(group_color.green() * alpha + base_color.green() * (1 - alpha)),
         round(group_color.blue() * alpha + base_color.blue() * (1 - alpha)),
     )
+
+
+def group_stripe_pixmap(color_names) -> QtGui.QPixmap:
+    """A seamless candy-stripe texture tile for a multi-group row.
+
+    ``color_names`` is an ordered iterable of OPAQUE '#rrggbb' strings,
+    each a group colour already pre-blended over the table base via
+    :func:`group_tint_color` (primary group first) - so every band has
+    exactly the contrast the solid single-group tint has, and text
+    stays as readable. Bands repeat left to right in membership order,
+    STRIPE_WIDTH px wide, boundaries slanted STRIPE_ANGLE_DEG off
+    vertical with a band's bottom edge to the RIGHT of its top edge.
+
+    Pixels are computed per scanline (no antialiasing), so the tile is
+    fully deterministic; the cache returns the SAME QPixmap object for
+    the same colour tuple, keeping goldens stable and letting every row
+    of a membership combination share one texture.
+    """
+    key = tuple(color_names)
+    cached = _STRIPE_TILE_CACHE.get(key)
+    if cached is not None:
+        return cached
+    colors = [QtGui.QColor(name).rgb() for name in key]
+    period = STRIPE_WIDTH * len(colors)
+    height = max(1, round(period / math.tan(math.radians(STRIPE_ANGLE_DEG))))
+    image = QtGui.QImage(period, height, QtGui.QImage.Format.Format_RGB32)
+    for y in range(height):
+        # Bands shift right by exactly one period across the tile
+        # height, so scanline ``height`` would equal scanline 0 and
+        # vertical tiling is seamless.
+        shift = (y * period) // height
+        for x in range(period):
+            image.setPixel(
+                x, y, colors[((x - shift) % period) // STRIPE_WIDTH])
+    pixmap = QtGui.QPixmap.fromImage(image)
+    _STRIPE_TILE_CACHE[key] = pixmap
+    return pixmap
 
 
 def _active_tokens() -> dict:
@@ -950,17 +1006,28 @@ class FixturesTab(BaseTab):
     def _apply_row_visuals(self, row: int):
         """Group tint + per-column foregrounds for one row (reference:
         rgba(group, 0.17) row background, dim mono #, bright fixture
-        name, secondary data cells, group name in the group color)."""
+        name, secondary data cells, group name in the group color).
+
+        Single-group rows get the solid primary-group tint; multi-group
+        rows get diagonal candy stripes cycling through EVERY
+        membership's tint (primary band first, group_stripe_pixmap)."""
         if row >= len(self.config.fixtures):
             return
         fixture = self.config.fixtures[row]
         tokens = self._tokens or _active_tokens()
 
         base = QtGui.QColor(tokens["panel"])
-        group_color = None
-        if fixture.group:
-            group_color = QtGui.QColor(self._ensure_group_color(fixture.group))
-        if group_color is not None:
+        member_colors = [QtGui.QColor(self._ensure_group_color(name))
+                         for name in fixture.groups if name]
+        group_color = member_colors[0] if member_colors else None
+        if len(member_colors) > 1:
+            # Candy stripes: every band is one membership's colour
+            # pre-blended exactly like the solid tint, so contrast (and
+            # the opaque-covers-selection story) is unchanged.
+            background = QtGui.QBrush(group_stripe_pixmap(
+                tuple(group_tint_color(c, base).name()
+                      for c in member_colors)))
+        elif group_color is not None:
             background = QtGui.QBrush(group_tint_color(group_color, base))
         else:
             # Opaque panel color, not a default brush: see

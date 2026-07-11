@@ -5,7 +5,8 @@ chip + accent "+ ADD FIXTURE" CTA), the 280px GROUPS panel (color-coded
 rows + dashed hint box), the display-styled read-only patch table
 (# / FIXTURE / TYPE / MODE / UNI / ADDRESS / GROUP with low-alpha group
 tints, colored group names, the " · "-joined multi-group membership
-list elided to the GROUP column, red conflict cells), the AUTO-PATCH footer,
+list elided to the GROUP column, the diagonal candy-stripe background
+on the multi-group row, red conflict cells), the AUTO-PATCH footer,
 the inspector (capabilities + channel map + editors + Duplicate/Remove
 footer) and the mono status strip.
 

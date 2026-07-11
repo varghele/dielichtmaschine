@@ -8,8 +8,9 @@ Contract under test:
   "+" add-group button, clicking a row selects that group's fixtures.
 - Table: read-only display items in reference column order
   (# / FIXTURE / TYPE / MODE / UNI / ADDRESS / GROUP), group-tinted row
-  backgrounds at low alpha, group names in the group color, red
-  UNI/ADDRESS cells + tooltip on DMX conflicts.
+  backgrounds at low alpha (diagonal candy stripes through every
+  membership's tint on multi-group rows), group names in the group
+  color, red UNI/ADDRESS cells + tooltip on DMX conflicts.
 - Inspector: the single write path - Name/Universe/Address/Mode/Group/
   Role editors write directly to the config and refresh the table row;
   CAPABILITIES chips + CHANNEL MAP come from the definition cache;
@@ -1004,6 +1005,160 @@ def test_duplicate_copies_full_membership(qapp):
         assert copy.groups is not tab.config.fixtures[2].groups
         assert copy in tab.config.groups["Wash"].fixtures
         assert copy in tab.config.groups["Spots"].fixtures
+    finally:
+        tab.deleteLater()
+
+
+# ---------------------------------------------------------------------------
+# Multi-group candy stripes (row background texture)
+#
+# A fixture in 2+ groups gets a diagonal candy-stripe row background
+# cycling through its memberships' tints (primary band first), slanted
+# a little off vertical; single-group rows keep the solid tint. The
+# tile is a cached, deterministic QPixmap (group_stripe_pixmap) set as
+# a texture brush on every item of the row.
+# ---------------------------------------------------------------------------
+
+def test_stripe_tile_alternates_colors_along_scanline(qapp):
+    from gui.tabs.fixtures_tab import STRIPE_WIDTH, group_stripe_pixmap
+
+    c0, c1 = "#402515", "#153040"
+    tile = group_stripe_pixmap((c0, c1))
+    image = tile.toImage()
+    assert tile.width() == 2 * STRIPE_WIDTH
+    mid = STRIPE_WIDTH // 2
+    # y=0: the first band is the PRIMARY colour, then the next member.
+    assert image.pixelColor(mid, 0).name() == c0
+    assert image.pixelColor(STRIPE_WIDTH + mid, 0).name() == c1
+    # Band boundary exactly at STRIPE_WIDTH on the top scanline.
+    assert image.pixelColor(STRIPE_WIDTH - 1, 0).name() == c0
+    assert image.pixelColor(STRIPE_WIDTH, 0).name() == c1
+
+
+def test_stripe_tile_three_colors_cycle_in_membership_order(qapp):
+    from gui.tabs.fixtures_tab import STRIPE_WIDTH, group_stripe_pixmap
+
+    colors = ("#402515", "#153040", "#154025")
+    tile = group_stripe_pixmap(colors)
+    image = tile.toImage()
+    assert tile.width() == 3 * STRIPE_WIDTH
+    mid = STRIPE_WIDTH // 2
+    for i, expected in enumerate(colors):
+        assert image.pixelColor(i * STRIPE_WIDTH + mid, 0).name() == expected
+
+
+def test_stripe_tile_skew_direction_and_angle(qapp):
+    """Boundaries slant a LITTLE off vertical (15-20 degrees, not 45),
+    bands shifting RIGHT as y grows, consistently for every tile."""
+    import math
+    from gui.tabs.fixtures_tab import group_stripe_pixmap
+
+    c0, c1 = "#402515", "#153040"
+    tile = group_stripe_pixmap((c0, c1))
+    image = tile.toImage()
+    period = tile.width()
+    # Tile geometry: the skew across the full height is one period.
+    angle = math.degrees(math.atan(period / tile.height()))
+    assert 15.0 <= angle <= 20.0
+
+    def first_c0_to_c1_boundary(y):
+        prev = image.pixelColor(0, y).name()
+        for x in range(1, period):
+            cur = image.pixelColor(x, y).name()
+            if prev == c0 and cur == c1:
+                return x
+            prev = cur
+        raise AssertionError(f"no c0->c1 boundary on scanline {y}")
+
+    y = 30  # deep enough for a multi-pixel shift, above the wrap point
+    top, lower = first_c0_to_c1_boundary(0), first_c0_to_c1_boundary(y)
+    assert lower > top  # boundary moves RIGHT going down
+    # ... by about tan(angle) px per scanline (integer steps allow 2px).
+    assert abs((lower - top) - math.tan(math.radians(18.0)) * y) <= 2.0
+
+
+def test_stripe_tile_cache_returns_same_object(qapp):
+    from gui.tabs.fixtures_tab import group_stripe_pixmap
+
+    a = group_stripe_pixmap(("#402515", "#153040"))
+    b = group_stripe_pixmap(("#402515", "#153040"))
+    assert a is b
+    # Order is part of the identity (primary band first).
+    c = group_stripe_pixmap(("#153040", "#402515"))
+    assert c is not a
+
+
+def test_multi_group_row_carries_striped_texture(qapp):
+    """P3 (Wash + Spots) gets the texture brush on EVERY column; P1
+    (Wash only) keeps the solid tint; the GROUP cell text colour stays
+    the primary group's."""
+    from PyQt6.QtCore import Qt
+    from PyQt6.QtGui import QColor
+    from gui.theme_tokens import DARK
+    from gui.tabs.fixtures_tab import group_stripe_pixmap, group_tint_color
+
+    tab = _make_tab(qapp, _membership_config())
+    try:
+        base = QColor(DARK["panel"])
+        expected = group_stripe_pixmap(tuple(
+            group_tint_color(QColor(tab._ensure_group_color(g)), base).name()
+            for g in ("Wash", "Spots")))
+        for col in range(tab.table.columnCount()):
+            brush = tab.table.item(2, col).background()
+            assert brush.style() == Qt.BrushStyle.TexturePattern, \
+                f"column {col} must carry the stripe texture"
+            assert brush.texture().cacheKey() == expected.cacheKey()
+
+        solid = tab.table.item(0, COL_FIXTURE).background()
+        assert solid.style() == Qt.BrushStyle.SolidPattern
+        wash = QColor(tab._ensure_group_color("Wash"))
+        assert solid.color().name() == group_tint_color(wash, base).name()
+
+        fg = tab.table.item(2, COL_GROUP).foreground().color()
+        assert fg.name() == tab._ensure_group_color("Wash")
+    finally:
+        tab.deleteLater()
+
+
+def test_membership_edit_flips_stripes_and_solid(qapp):
+    """Crossing the 1<->2 membership boundary via the Assign menu path
+    swaps the row between solid tint and stripes both ways."""
+    from PyQt6.QtCore import Qt
+
+    tab = _make_tab(qapp, _membership_config())
+    try:
+        assert (tab.table.item(0, COL_FIXTURE).background().style()
+                == Qt.BrushStyle.SolidPattern)
+        _select_rows(tab, [0])  # P1, Wash only
+        tab._assign_selected_to_group("Spots")
+        assert (tab.table.item(0, COL_FIXTURE).background().style()
+                == Qt.BrushStyle.TexturePattern)
+        # Selection has it now, so the same call removes the membership.
+        _select_rows(tab, [0])
+        tab._assign_selected_to_group("Spots")
+        assert (tab.table.item(0, COL_FIXTURE).background().style()
+                == Qt.BrushStyle.SolidPattern)
+    finally:
+        tab.deleteLater()
+
+
+def test_primary_change_reorders_stripe_colors(qapp):
+    """Make primary reorders the bands: the first band takes the new
+    primary group's tint (deterministic stripe order)."""
+    from PyQt6.QtGui import QColor
+    from gui.theme_tokens import DARK
+    from gui.tabs.fixtures_tab import STRIPE_WIDTH, group_tint_color
+
+    tab = _make_tab(qapp, _membership_config())
+    try:
+        base = QColor(DARK["panel"])
+        _select_rows(tab, [2])
+        tab._make_selected_primary("Spots")
+        tile = (tab.table.item(2, COL_FIXTURE).background()
+                .texture().toImage())
+        spots = group_tint_color(
+            QColor(tab._ensure_group_color("Spots")), base)
+        assert tile.pixelColor(STRIPE_WIDTH // 2, 0).name() == spots.name()
     finally:
         tab.deleteLater()
 
