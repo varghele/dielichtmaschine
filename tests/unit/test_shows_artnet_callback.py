@@ -1,26 +1,39 @@
 """
-Regression test for ``ShowsArtNetController.local_dmx_callback`` — the
-in-process bridge that lets the embedded visualizer mirror the show
-without a TCP/ArtNet round-trip.
+Regression test for the embedded-visualizer DMX bridge - since the
+arbiter pass (docs/output-sync-plan.md phase 1) the local callback is
+dispatched by the OutputArbiter with the POST-MERGE frame, once per
+config universe per tick, alongside the ArtNet send.
 
-Each call to ``_send_all_universes`` should:
-- still hand the DMX bytes to the ArtNet sender (the wire path stays
-  intact for the standalone visualizer), AND
+Each arbiter tick should:
+- hand the merged DMX bytes to the ArtNet sender (wire path intact,
+  0-based wire universes), AND
 - invoke the local callback once per configured universe with the
-  1-based universe id and the raw 512-byte DMX buffer.
+  1-based config universe id and the raw 512-byte buffer.
 
-A misbehaving callback must not poison the DMX thread, so an exception
+A misbehaving callback must not poison the send loop, so an exception
 inside the callback is swallowed without breaking the ArtNet send.
 """
 
 from __future__ import annotations
 
-from unittest.mock import MagicMock
-
 import pytest
 
 from config.models import Configuration, Fixture, FixtureMode, Universe
+from utils.artnet.arbiter import OutputArbiter
 from utils.artnet.shows_artnet_controller import ShowsArtNetController
+
+
+class StubSender:
+    def __init__(self, target_ip="255.255.255.255", target_port=6454):
+        self.target_ip = target_ip
+        self.sent = []
+
+    def send_dmx(self, universe, dmx_data, force=False):
+        self.sent.append((universe, bytes(dmx_data)))
+        return True
+
+    def close(self):
+        pass
 
 
 @pytest.fixture
@@ -50,17 +63,19 @@ def two_universe_config():
 
 
 def _make_controller(config, callback=None):
-    """Build a ShowsArtNetController with a mocked ArtNet sender so the
-    test never actually opens a UDP socket. ``fixture_definitions`` is
-    empty — DMXManager handles missing defs by leaving the universe at
-    zeros, which is fine for the callback wire-up assertion."""
+    """A ShowsArtNetController on an arbiter with a stub sender - no
+    UDP socket, ticks driven manually. ``fixture_definitions`` is
+    empty: DMXManager leaves the universes at zeros, which is fine for
+    the dispatch assertions."""
+    sender = StubSender()
+    arbiter = OutputArbiter(config=config, sender=sender)
     controller = ShowsArtNetController(
         config=config,
         fixture_definitions={},
         local_dmx_callback=callback,
+        arbiter=arbiter,
     )
-    controller.artnet_sender = MagicMock()
-    return controller
+    return controller, sender
 
 
 def test_callback_fires_once_per_universe(two_universe_config):
@@ -69,57 +84,49 @@ def test_callback_fires_once_per_universe(two_universe_config):
     def callback(universe: int, dmx_bytes: bytes) -> None:
         received.append((universe, dmx_bytes))
 
-    controller = _make_controller(two_universe_config, callback=callback)
-    controller._send_all_universes()
+    controller, sender = _make_controller(two_universe_config,
+                                          callback=callback)
+    controller.arbiter.tick_once(0.0)
 
     universes_seen = [u for u, _ in received]
     assert sorted(universes_seen) == [1, 2], (
         f"Expected callback for universes [1, 2], got {universes_seen}"
     )
     for _, payload in received:
-        assert isinstance(payload, bytes), (
-            f"Callback got {type(payload).__name__} instead of bytes"
-        )
-        assert len(payload) == 512, (
-            f"Expected 512-byte DMX buffer, got {len(payload)}"
-        )
+        assert isinstance(payload, bytes)
+        assert len(payload) == 512
 
-    # ArtNet sender still gets called per-universe — this is the
-    # belt-and-braces guarantee that the wire path is unaffected.
-    assert controller.artnet_sender.send_dmx.call_count == 2
+    # The wire path stays intact: one packet per universe, 0-based.
+    assert sorted(u for u, _ in sender.sent) == [0, 1]
 
 
 def test_callback_exception_does_not_break_send(two_universe_config):
     def bad_callback(universe: int, dmx_bytes: bytes) -> None:
         raise RuntimeError("visualizer is unhappy")
 
-    controller = _make_controller(two_universe_config, callback=bad_callback)
-    # Should not raise — the controller swallows callback exceptions so
-    # a misbehaving visualizer can't kill the DMX thread mid-show.
-    controller._send_all_universes()
-
-    # ArtNet sender still got both packets.
-    assert controller.artnet_sender.send_dmx.call_count == 2
+    controller, sender = _make_controller(two_universe_config,
+                                          callback=bad_callback)
+    controller.arbiter.tick_once(0.0)   # must not raise
+    assert len(sender.sent) == 2
 
 
 def test_set_local_dmx_callback_swaps_in_place(two_universe_config):
-    controller = _make_controller(two_universe_config, callback=None)
+    controller, _ = _make_controller(two_universe_config, callback=None)
 
     received: list[int] = []
     controller.set_local_dmx_callback(lambda u, _: received.append(u))
-    controller._send_all_universes()
+    controller.arbiter.tick_once(0.0)
     assert sorted(received) == [1, 2]
 
     # Clearing the callback stops further dispatch immediately.
     controller.set_local_dmx_callback(None)
     received.clear()
-    controller._send_all_universes()
+    controller.arbiter.tick_once(0.0)
     assert received == []
 
 
-def test_no_callback_means_zero_overhead(two_universe_config):
-    """When no callback is wired, the controller should not raise and
-    must still send via ArtNet."""
-    controller = _make_controller(two_universe_config, callback=None)
-    controller._send_all_universes()
-    assert controller.artnet_sender.send_dmx.call_count == 2
+def test_no_callback_means_no_dispatch_but_sends(two_universe_config):
+    controller, sender = _make_controller(two_universe_config,
+                                          callback=None)
+    controller.arbiter.tick_once(0.0)
+    assert len(sender.sent) == 2

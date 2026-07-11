@@ -1,498 +1,334 @@
 # utils/artnet/shows_artnet_controller.py
-# Simplified ArtNet controller for ShowsTab integration
-# Uses a dedicated thread for DMX updates to avoid Qt event loop blocking
+# Timeline playback as an output-arbiter layer (docs/output-sync-plan.md
+# phase 1). Public API kept from the pre-arbiter controller so the
+# Shows tab wiring is unchanged.
 
 import threading
-import time
 from PyQt6.QtCore import QObject
 from typing import Optional, Dict, Tuple, List, Callable
-from config.models import Configuration, Fixture
-from timeline.light_lane import LightLane
+
+from config.models import Configuration
+from utils.target_resolver import resolve_targets_unique
+from .arbiter import Frame, OutputArbiter
 from .dmx_manager import DMXManager
 from .sender import ArtNetSender
-from utils.target_resolver import resolve_targets_unique
 
-# Debug flag - set to False to disable verbose prints (improves performance significantly)
+# Debug flag - set to False to disable verbose prints
 DEBUG_PRINTS = False
+
+# Playback layer states. Stopped renders nothing (the arbiter floor
+# shows through - "fixtures visible" in the editor, exactly the old
+# stop_playback behaviour but continuously refreshed). Paused holds
+# and keeps re-sending the last rendered frame instead of dropping to
+# the floor mid-song.
+_STOPPED = "stopped"
+_PLAYING = "playing"
+_PAUSED = "paused"
 
 
 class ShowsArtNetController(QObject):
     """
-    Simplified ArtNet controller for ShowsTab.
+    Timeline playback producer for the Shows tab.
 
-    Uses a dedicated thread for DMX updates to ensure consistent timing
-    regardless of Qt event loop performance. This decouples light control
-    from UI responsiveness.
+    Since the arbiter pass this no longer owns a socket or a send
+    thread: it renders (values, mask) frames on demand as the
+    arbiter's PLAYBACK layer, at the arbiter's 44 Hz cadence (the old
+    private loop ran at 30). The DMXManager stays the renderer; block
+    scheduling from the light lanes is unchanged.
+
+    The arbiter is created here (private) in phase 1; phase 2 shares
+    one arbiter between timeline and Auto via the ``arbiter`` kwarg.
     """
 
     def __init__(self, config: Configuration, fixture_definitions: dict,
                  song_structure=None, target_ip: str = "255.255.255.255",
-                 local_dmx_callback: Optional[Callable[[int, bytes], None]] = None):
+                 local_dmx_callback: Optional[Callable[[int, bytes], None]] = None,
+                 arbiter: Optional[OutputArbiter] = None):
         """
-        Initialize ArtNet controller for ShowsTab.
-
         Args:
             config: Configuration with fixtures and universes
             fixture_definitions: Dictionary of parsed fixture definitions
             song_structure: Optional SongStructure for BPM-aware timing
             target_ip: Target IP for ArtNet packets (default: broadcast)
             local_dmx_callback: Optional callback ``(universe, dmx_bytes)``
-                invoked after each ArtNet packet is sent. Lets the embedded
-                in-process visualizer mirror what's being broadcast without
-                a TCP/ArtNet round-trip. The standalone visualizer keeps
-                receiving DMX over the wire as before — this is additive.
+                invoked with each post-merge frame. Lets the embedded
+                in-process visualizer mirror what's on the wire.
+            arbiter: Optional shared OutputArbiter. When omitted a
+                private one is created (owning its own ArtNetSender at
+                ``target_ip``).
         """
         super().__init__()
 
         self.config = config
         self.fixture_definitions = fixture_definitions
-        self._local_dmx_callback = local_dmx_callback
 
-        # Create DMX manager with song structure
+        # Renderer (no socket): DMX state + channel maps + block engine.
         self.dmx_manager = DMXManager(config, fixture_definitions, song_structure)
 
-        # Create ArtNet sender
-        self.artnet_sender = ArtNetSender(target_ip=target_ip)
+        # The arbiter owns the sender and the 44 Hz loop. The sender is
+        # constructed HERE from this module's namespace so tests can
+        # monkeypatch shows_artnet_controller.ArtNetSender.
+        if arbiter is None:
+            arbiter = OutputArbiter(
+                config=config, sender=ArtNetSender(target_ip=target_ip))
+        self.arbiter = arbiter
+        # Kept for introspection/back-compat (the arbiter owns it).
+        self.artnet_sender = arbiter._sender
 
-        # Output enabled flag
+        self.arbiter.set_playback_layer(self)
+        self.arbiter.set_fixture_maps(self.dmx_manager.fixture_maps)
+        self.arbiter.set_local_dmx_callback(local_dmx_callback)
+
+        # Output enabled flag (mirrors arbiter.running).
         self.output_enabled = False
 
-        # Threading for DMX updates (bypasses Qt event loop for consistent timing)
-        self._dmx_thread: Optional[threading.Thread] = None
-        self._stop_thread = threading.Event()
-        self._thread_lock = threading.Lock()
-        self._update_interval = 0.033  # 30Hz (33ms)
+        # Playback state consumed by render() on the arbiter thread;
+        # the render lock serialises it against UI-thread mutations.
+        self._render_lock = threading.RLock()
+        self._state = _STOPPED
+        self._last_frames: Frame = {}
 
         # Current playback time (set from ShowsTab or callback)
         self.current_time = 0.0
 
-        # Position callback for getting fresh audio position
-        # When set, this is called on each DMX update to get sample-accurate time
+        # Position callback for getting fresh audio position each frame.
         self._position_callback: Optional[Callable[[], float]] = None
 
         # Track active blocks per lane - used for detecting block endings
-        # lane_name -> {sublane_type -> set of block ids}
+        # lane_key -> {sublane_type -> set of block ids}
         self.active_block_ids: Dict[str, Dict[str, set]] = {}
 
         # Reference to light lanes (set from ShowsTab)
         self.light_lanes = []
 
-        # PERFORMANCE: Cache resolved fixtures per lane to avoid resolving on every frame
+        # PERFORMANCE: Cache resolved fixtures per lane
         # lane_id -> (targets_tuple, resolved_fixtures, sorted_fixtures)
         self._resolved_fixtures_cache: Dict[int, Tuple[tuple, List, List]] = {}
 
         # Track fixture fingerprint to avoid redundant rebuilds
         self._last_fixture_fingerprint = self._get_fixture_fingerprint()
 
-        # Debug: Print initialization info for WASH fixtures
-        print("ShowsArtNet Controller initialized")
-        print(f"  Fixture definitions loaded: {list(fixture_definitions.keys())}")
-        print(f"  Fixture maps created: {list(self.dmx_manager.fixture_maps.keys())}")
-        print(f"  DMX universes: {list(self.dmx_manager.dmx_state.keys())}")
-        for f in self.config.fixtures:
-            if 'W1' in f.name or 'W2' in f.name or 'WASH' in f.name.upper():
-                in_maps = f.name in self.dmx_manager.fixture_maps
-                print(f"  WASH fixture: {f.name}, universe={f.universe}, address={f.address}, in_maps={in_maps}")
+        print("ShowsArtNet Controller initialized (arbiter layer)")
+
+    # -- wiring ------------------------------------------------------------
 
     def set_position_callback(self, callback: Callable[[], float]):
-        """
-        Set callback for getting fresh audio position.
-
-        When set, the DMX update will call this to get sample-accurate
-        position from the audio engine, reducing sync drift.
-
-        Args:
-            callback: Function that returns current position in seconds
-        """
+        """Set callback for sample-accurate audio position; render()
+        pulls it every frame."""
         self._position_callback = callback
 
     def set_song_structure(self, song_structure):
-        """
-        Update song structure for BPM-aware calculations.
-
-        Args:
-            song_structure: SongStructure instance
-        """
+        """Update song structure for BPM-aware calculations."""
         self.dmx_manager.set_song_structure(song_structure)
 
     def set_light_lanes(self, lanes: list):
-        """
-        Set light lanes for processing.
+        """Set light lanes for processing."""
+        with self._render_lock:
+            self.light_lanes = lanes
+            self._resolved_fixtures_cache.clear()
 
-        Args:
-            lanes: List of LightLane instances
-        """
-        self.light_lanes = lanes
-        # Clear resolved fixtures cache when lanes change
-        self._resolved_fixtures_cache.clear()
+    def set_local_dmx_callback(
+        self, callback: Optional[Callable[[int, bytes], None]]
+    ) -> None:
+        """Update or clear the embedded-visualizer DMX callback."""
+        self.arbiter.set_local_dmx_callback(callback)
 
-    def _get_resolved_fixtures_cached(self, lane) -> Tuple[List, List]:
-        """
-        Get resolved and sorted fixtures for a lane, using cache.
-
-        Returns:
-            Tuple of (resolved_fixtures, sorted_fixtures)
-        """
-        lane_id = id(lane)
-
-        # Get current targets
-        targets = getattr(lane, 'fixture_targets', [])
-        if not targets and hasattr(lane, 'fixture_group') and lane.fixture_group:
-            targets = [lane.fixture_group]
-
-        targets_tuple = tuple(targets)  # For comparison
-
-        # Check cache
-        if lane_id in self._resolved_fixtures_cache:
-            cached_targets, resolved, sorted_fixtures = self._resolved_fixtures_cache[lane_id]
-            if cached_targets == targets_tuple:
-                return resolved, sorted_fixtures
-
-        # Cache miss - resolve and sort
-        resolved = resolve_targets_unique(targets, self.config)
-        sorted_fixtures = sorted(resolved, key=lambda f: f.x) if resolved else []
-
-        # Store in cache
-        self._resolved_fixtures_cache[lane_id] = (targets_tuple, resolved, sorted_fixtures)
-
-        return resolved, sorted_fixtures
+    def set_target_ip(self, ip: str):
+        """Set target IP address for ArtNet packets."""
+        self.arbiter.set_target_ip(ip)
+        print(f"ArtNet target IP set to: {ip}")
 
     def _get_fixture_fingerprint(self) -> str:
-        """Generate a fingerprint of current fixtures for change detection."""
-        # Create a string that changes when fixtures are added/removed/modified
+        """Fingerprint of current fixtures for change detection."""
         parts = []
         for f in self.config.fixtures:
             parts.append(f"{f.name}:{f.universe}:{f.address}:{f.current_mode}")
         return "|".join(sorted(parts))
 
     def update_fixtures(self, force: bool = False):
-        """
-        Rebuild fixture mappings when fixtures are added, removed, or modified.
-
-        Call this when fixtures change (e.g., after duplicating or adding fixtures).
-
-        Args:
-            force: If True, rebuild even if no changes detected
-        """
-        # Check if fixtures actually changed to avoid redundant rebuilds
+        """Rebuild fixture mappings when fixtures are added, removed,
+        or modified; the arbiter refreshes its floor and class masks
+        from the new maps."""
         current_fingerprint = self._get_fixture_fingerprint()
         if not force and current_fingerprint == self._last_fixture_fingerprint:
-            return  # No changes, skip rebuild
+            return
 
         self._last_fixture_fingerprint = current_fingerprint
-        self.dmx_manager.rebuild_fixture_maps()
-        # Also reset fixtures to visible state so new fixtures appear
-        self.dmx_manager.set_fixtures_visible()
-        self._send_all_universes()
+        with self._render_lock:
+            self.dmx_manager.rebuild_fixture_maps()
+            self._resolved_fixtures_cache.clear()
+        self.arbiter.set_fixture_maps(self.dmx_manager.fixture_maps)
         print(f"ShowsArtNet: Fixture mappings updated ({len(self.config.fixtures)} fixtures)")
 
+    # -- output / transport ------------------------------------------------
+
     def enable_output(self):
-        """Enable ArtNet output."""
+        """Enable output: the arbiter loop starts streaming (the idle
+        floor until playback starts)."""
         self.output_enabled = True
+        self.arbiter.start()
         print("ArtNet output enabled")
 
     def disable_output(self):
-        """Disable ArtNet output and clear DMX."""
+        """Disable output: stop the loop and send one blackout."""
         self.output_enabled = False
-        self._stop_dmx_thread()
-        self.dmx_manager.clear_all_dmx()
-        self._send_all_universes()
+        with self._render_lock:
+            self._state = _STOPPED
+            self._last_frames = {}
+        self.arbiter.stop(blackout=True)
         print("ArtNet output disabled")
 
-    def _start_dmx_thread(self):
-        """Start the DMX update thread."""
-        if self._dmx_thread is not None and self._dmx_thread.is_alive():
-            return  # Already running
-
-        self._stop_thread.clear()
-        self._dmx_thread = threading.Thread(target=self._dmx_update_loop, daemon=True)
-        self._dmx_thread.start()
-
-    def _stop_dmx_thread(self):
-        """Stop the DMX update thread."""
-        if self._dmx_thread is None:
-            return
-
-        self._stop_thread.set()
-        if self._dmx_thread.is_alive():
-            self._dmx_thread.join(timeout=0.5)
-        self._dmx_thread = None
-
-    def _dmx_update_loop(self):
-        """
-        DMX update loop running in a separate thread.
-
-        This runs independently of Qt's event loop, ensuring consistent
-        DMX output timing even when the UI is slow.
-        """
-        while not self._stop_thread.is_set():
-            start_time = time.perf_counter()
-
-            try:
-                self._update_and_send_dmx()
-            except Exception as e:
-                if DEBUG_PRINTS:
-                    print(f"DMX update error: {e}")
-
-            # Calculate sleep time to maintain consistent interval
-            elapsed = time.perf_counter() - start_time
-            sleep_time = max(0, self._update_interval - elapsed)
-            if sleep_time > 0:
-                time.sleep(sleep_time)
-
     def start_playback(self):
-        """Start ArtNet output during playback."""
+        """Playback started: the layer renders fresh frames."""
         if self.output_enabled:
-            self._start_dmx_thread()
+            with self._render_lock:
+                self._state = _PLAYING
             print("ArtNet output started")
 
-    def stop_playback(self):
-        """Stop ArtNet output and reset fixtures to visible state."""
-        self._stop_dmx_thread()
-        # Reset fixtures to visible (full dimmer, white color) instead of blackout
-        self.dmx_manager.set_fixtures_visible()
-        # Send multiple packets to ensure visualizer receives the reset state
-        for _ in range(5):
-            self._send_all_universes()
-        # Clear both controller and DMX manager block tracking
-        self.active_block_ids.clear()
-        self.dmx_manager.clear_active_blocks()
-        print("ArtNet output stopped - fixtures reset to visible")
-
     def pause_playback(self):
-        """Pause ArtNet output."""
-        self._stop_dmx_thread()
+        """Playback paused: hold (and keep refreshing) the last frame
+        instead of dropping to the idle floor mid-song."""
+        with self._render_lock:
+            if self._state == _PLAYING:
+                self._state = _PAUSED
         print("ArtNet output paused")
 
+    def stop_playback(self):
+        """Playback stopped: clear block tracking and stop rendering -
+        the arbiter floor takes over (visible in the editor)."""
+        with self._render_lock:
+            self._state = _STOPPED
+            self._last_frames = {}
+            self.active_block_ids.clear()
+            self.dmx_manager.clear_active_blocks()
+        print("ArtNet output stopped - idle floor takes over")
+
     def update_position(self, position: float):
-        """
-        Update current playback position.
-
-        Called from ShowsTab during playback. When position_callback is set,
-        block processing is handled by _update_and_send_dmx with fresh audio
-        position, so we skip it here to avoid double-processing.
-
-        Args:
-            position: Current position in seconds
-        """
+        """Update current playback position (from ShowsTab). With a
+        position callback set, block processing happens in render()
+        with fresh audio position instead."""
         self.current_time = position
-
-        # Only process blocks here if no position callback is set
-        # (otherwise _update_and_send_dmx handles it with fresh audio position)
         if self.light_lanes and not self._position_callback:
-            self._process_lane_blocks()
+            with self._render_lock:
+                self._process_lane_blocks()
+
+    def cleanup(self):
+        """Cleanup resources."""
+        with self._render_lock:
+            self._state = _STOPPED
+            self._last_frames = {}
+        self.arbiter.shutdown()
+        print("ShowsArtNet Controller cleaned up")
+
+    # -- the arbiter layer contract -----------------------------------------
+
+    def render(self, now: float) -> Frame:
+        """One playback frame for the arbiter merge.
+
+        Stopped: {} (floor shows through). Paused: the cached last
+        frames, re-sent so the wire keeps refreshing. Playing: pull
+        fresh audio position, process lane blocks, recompute DMX and
+        return per-universe (values, mask) pairs.
+        """
+        with self._render_lock:
+            if self._state == _STOPPED:
+                return {}
+            if self._state == _PAUSED:
+                return self._last_frames
+
+            if self._position_callback:
+                try:
+                    self.current_time = self._position_callback()
+                except Exception:
+                    pass  # keep last known position
+
+            if self.light_lanes:
+                self._process_lane_blocks()
+
+            self.dmx_manager.update_dmx(self.current_time)
+
+            frames: Frame = {}
+            for universe_id in self.config.universes.keys():
+                universe_int = int(universe_id)
+                frames[universe_int] = self.dmx_manager.get_frame(universe_int)
+            self._last_frames = frames
+            return frames
+
+    # -- lane block scheduling (unchanged behaviour) -------------------------
+
+    def _get_resolved_fixtures_cached(self, lane) -> Tuple[List, List]:
+        """Resolved and sorted fixtures for a lane, cached per targets."""
+        lane_id = id(lane)
+
+        targets = getattr(lane, 'fixture_targets', [])
+        if not targets and hasattr(lane, 'fixture_group') and lane.fixture_group:
+            targets = [lane.fixture_group]
+
+        targets_tuple = tuple(targets)
+
+        if lane_id in self._resolved_fixtures_cache:
+            cached_targets, resolved, sorted_fixtures = self._resolved_fixtures_cache[lane_id]
+            if cached_targets == targets_tuple:
+                return resolved, sorted_fixtures
+
+        resolved = resolve_targets_unique(targets, self.config)
+        sorted_fixtures = sorted(resolved, key=lambda f: f.x) if resolved else []
+        self._resolved_fixtures_cache[lane_id] = (targets_tuple, resolved, sorted_fixtures)
+        return resolved, sorted_fixtures
 
     def _process_lane_blocks(self):
         """Process blocks for all lanes at current time."""
-        # Debug: Print lane info once when time is around 12.5s (Lane 3 starts)
-        if DEBUG_PRINTS and 12.4 < self.current_time < 12.6 and not hasattr(self, '_debug_printed_12_5'):
-            self._debug_printed_12_5 = True
-            print(f"\n=== DEBUG at {self.current_time:.3f}s ===")
-            print(f"Total lanes: {len(self.light_lanes)}")
-            for i, lane in enumerate(self.light_lanes):
-                targets = getattr(lane, 'fixture_targets', [])
-                print(f"  Lane {i}: name={lane.name}, targets={targets}, muted={lane.muted}")
-                print(f"    light_blocks: {len(lane.light_blocks)}")
-                for lb in lane.light_blocks:
-                    print(f"      LB {lb.start_time:.2f}-{lb.end_time:.2f}: {len(lb.dimmer_blocks)} dimmer, {len(lb.colour_blocks)} colour")
-            print("=== END DEBUG ===\n")
-
-        # Debug: Print WASH info around 137s (when WASH:0 block should start)
-        if DEBUG_PRINTS and 137.0 < self.current_time < 137.5 and not hasattr(self, '_debug_printed_137'):
-            self._debug_printed_137 = True
-            print(f"\n=== WASH DEBUG at {self.current_time:.3f}s ===")
-            print(f"Total lanes: {len(self.light_lanes)}")
-            print(f"Available groups: {list(self.config.groups.keys())}")
-            if 'WASH' in self.config.groups:
-                wash_group = self.config.groups['WASH']
-                print(f"WASH group has {len(wash_group.fixtures)} fixtures:")
-                for i, f in enumerate(wash_group.fixtures):
-                    print(f"  [{i}] {f.name}: universe={f.universe}, address={f.address}")
-            print(f"DMX Manager fixture_maps: {list(self.dmx_manager.fixture_maps.keys())}")
-            print(f"DMX universes: {list(self.dmx_manager.dmx_state.keys())}")
-            for i, lane in enumerate(self.light_lanes):
-                targets = getattr(lane, 'fixture_targets', [])
-                if 'WASH' in str(targets):
-                    print(f"  Lane {i}: name={lane.name}, targets={targets}, muted={lane.muted}")
-                    resolved = resolve_targets_unique(targets, self.config)
-                    print(f"    Resolved fixtures: {[f.name for f in resolved]}")
-                    print(f"    light_blocks: {len(lane.light_blocks)}")
-                    for lb in lane.light_blocks:
-                        print(f"      LB {lb.start_time:.2f}-{lb.end_time:.2f}: {len(lb.dimmer_blocks)} dimmer, {len(lb.colour_blocks)} colour")
-            print("=== END WASH DEBUG ===\n")
-
         for lane in self.light_lanes:
             if lane.muted:
                 continue
 
-            # PERFORMANCE: Use cached fixture resolution instead of resolving every frame
             resolved_fixtures, _ = self._get_resolved_fixtures_cached(lane)
             if not resolved_fixtures:
                 continue
 
-            # Get targets for lane key (cached in resolved fixtures call)
             targets = getattr(lane, 'fixture_targets', [])
             if not targets and hasattr(lane, 'fixture_group') and lane.fixture_group:
                 targets = [lane.fixture_group]
 
-            # Use unique lane key - combine id with name to ensure uniqueness
-            # (multiple lanes could have the same name)
+            # Unique lane key - id + name (multiple lanes can share a name).
             lane_key = f"{id(lane)}_{lane.name}" if lane.name else f"{id(lane)}_{targets[0]}" if targets else f"{id(lane)}_unknown"
 
-            # Initialize tracking for this lane if needed
             if lane_key not in self.active_block_ids:
                 self.active_block_ids[lane_key] = {
-                    'dimmer': set(),
-                    'colour': set(),
-                    'movement': set(),
-                    'special': set()
+                    'dimmer': set(), 'colour': set(),
+                    'movement': set(), 'special': set(),
                 }
 
-            # Track which blocks are currently active
             currently_active = {
-                'dimmer': set(),
-                'colour': set(),
-                'movement': set(),
-                'special': set()
+                'dimmer': set(), 'colour': set(),
+                'movement': set(), 'special': set(),
             }
 
-            # Process all light blocks in the lane
             for light_block in lane.light_blocks:
-                # Check dimmer blocks
-                for dimmer_block in light_block.dimmer_blocks:
-                    block_id = id(dimmer_block)
-                    if dimmer_block.start_time <= self.current_time < dimmer_block.end_time:
-                        currently_active['dimmer'].add(block_id)
+                for sublane_type, sub_blocks in (
+                    ('dimmer', light_block.dimmer_blocks),
+                    ('colour', light_block.colour_blocks),
+                    ('movement', light_block.movement_blocks),
+                    ('special', light_block.special_blocks),
+                ):
+                    for sub_block in sub_blocks:
+                        block_id = id(sub_block)
+                        if sub_block.start_time <= self.current_time < sub_block.end_time:
+                            currently_active[sublane_type].add(block_id)
+                            if block_id not in self.active_block_ids[lane_key][sublane_type]:
+                                if DEBUG_PRINTS:
+                                    print(f"[{self.current_time:.2f}s] Starting {sublane_type} block on lane {lane.name}")
+                                self.dmx_manager.block_started(
+                                    lane_key, resolved_fixtures, sub_block,
+                                    sublane_type, self.current_time)
+                                self.active_block_ids[lane_key][sublane_type].add(block_id)
 
-                        # Start block if not already active
-                        if block_id not in self.active_block_ids[lane_key]['dimmer']:
-                            if DEBUG_PRINTS:
-                                fixture_names = [f.name for f in resolved_fixtures]
-                                print(f"[{self.current_time:.2f}s] Starting {dimmer_block.effect_type} on {fixture_names} ({dimmer_block.start_time:.2f}s-{dimmer_block.end_time:.2f}s)")
-                            self.dmx_manager.block_started(lane_key, resolved_fixtures, dimmer_block, 'dimmer', self.current_time)
-                            self.active_block_ids[lane_key]['dimmer'].add(block_id)
-
-                # Check colour blocks
-                for colour_block in light_block.colour_blocks:
-                    block_id = id(colour_block)
-                    if colour_block.start_time <= self.current_time < colour_block.end_time:
-                        currently_active['colour'].add(block_id)
-
-                        if block_id not in self.active_block_ids[lane_key]['colour']:
-                            self.dmx_manager.block_started(lane_key, resolved_fixtures, colour_block, 'colour', self.current_time)
-                            self.active_block_ids[lane_key]['colour'].add(block_id)
-
-                # Check movement blocks
-                for movement_block in light_block.movement_blocks:
-                    block_id = id(movement_block)
-                    if movement_block.start_time <= self.current_time < movement_block.end_time:
-                        currently_active['movement'].add(block_id)
-
-                        if block_id not in self.active_block_ids[lane_key]['movement']:
-                            self.dmx_manager.block_started(lane_key, resolved_fixtures, movement_block, 'movement', self.current_time)
-                            self.active_block_ids[lane_key]['movement'].add(block_id)
-
-                # Check special blocks
-                for special_block in light_block.special_blocks:
-                    block_id = id(special_block)
-                    if special_block.start_time <= self.current_time < special_block.end_time:
-                        currently_active['special'].add(block_id)
-
-                        if block_id not in self.active_block_ids[lane_key]['special']:
-                            self.dmx_manager.block_started(lane_key, resolved_fixtures, special_block, 'special', self.current_time)
-                            self.active_block_ids[lane_key]['special'].add(block_id)
-
-            # End blocks that are no longer active (granular ending per sublane type)
-            for sublane_type in ['dimmer', 'colour', 'movement', 'special']:
+            # End blocks that are no longer active (granular per sublane)
+            for sublane_type in ('dimmer', 'colour', 'movement', 'special'):
                 ended_blocks = self.active_block_ids[lane_key][sublane_type] - currently_active[sublane_type]
                 if ended_blocks:
-                    # Only clear the sublane if there are NO currently active blocks
-                    # If there are active blocks, they will maintain the state
                     if not currently_active[sublane_type]:
-                        # No active blocks remaining, clear the sublane
                         if DEBUG_PRINTS:
-                            fixture_names = [f.name for f in resolved_fixtures]
-                            print(f"[{self.current_time:.2f}s] Ending {sublane_type} blocks on {fixture_names}")
+                            print(f"[{self.current_time:.2f}s] Ending {sublane_type} blocks on lane {lane.name}")
                         self.dmx_manager.block_ended(lane_key, sublane_type)
-                    # Always update tracking to reflect current active blocks
                     self.active_block_ids[lane_key][sublane_type] = currently_active[sublane_type]
-
-    def _update_and_send_dmx(self):
-        """
-        Update DMX state and send via ArtNet.
-
-        Called periodically by update_timer at ~44Hz.
-        """
-        if not self.output_enabled:
-            return
-
-        # Get fresh position from callback if available (sample-accurate sync)
-        if self._position_callback:
-            try:
-                self.current_time = self._position_callback()
-            except Exception:
-                pass  # Keep using last known position
-
-        # Process active blocks with current time
-        if self.light_lanes:
-            self._process_lane_blocks()
-
-        # Update DMX state based on current time and active blocks
-        self.dmx_manager.update_dmx(self.current_time)
-
-        # Send DMX for all universes
-        self._send_all_universes()
-
-    def _send_all_universes(self):
-        """Send DMX data for all configured universes."""
-        # Debug: Check universe 2 data once around 137s
-        if DEBUG_PRINTS and 137.0 < self.current_time < 137.5 and not hasattr(self, '_debug_universe2_sent'):
-            self._debug_universe2_sent = True
-            print(f"\n=== UNIVERSE 2 DEBUG at {self.current_time:.3f}s ===")
-            print(f"Configured universes: {list(self.config.universes.keys())}")
-            for universe_id in self.config.universes.keys():
-                universe_int = int(universe_id)
-                dmx_data = self.dmx_manager.get_dmx_data(universe_int)
-                non_zero = sum(1 for b in dmx_data if b > 0)
-                first_12 = list(dmx_data[:12])
-                print(f"  Universe {universe_int}: {non_zero} non-zero bytes, first 12: {first_12}")
-            print("=== END UNIVERSE 2 DEBUG ===\n")
-
-        for universe_id in self.config.universes.keys():
-            # Ensure universe_id is int (YAML may load as string)
-            universe_int = int(universe_id)
-            dmx_data = self.dmx_manager.get_dmx_data(universe_int)
-            self.artnet_sender.send_dmx(universe_int - 1, dmx_data)  # Convert 1-based internal to 0-based ArtNet
-            # Forward the same frame to the in-process visualizer if one
-            # is wired up. Wrap in try/except so a misbehaving callback
-            # can't kill the DMX thread mid-show.
-            if self._local_dmx_callback is not None:
-                try:
-                    self._local_dmx_callback(universe_int, bytes(dmx_data))
-                except Exception as e:
-                    if DEBUG_PRINTS:
-                        print(f"local_dmx_callback raised: {e}")
-
-    def set_local_dmx_callback(
-        self, callback: Optional[Callable[[int, bytes], None]]
-    ) -> None:
-        """Update or clear the embedded-visualizer DMX callback after init."""
-        self._local_dmx_callback = callback
-
-    def set_target_ip(self, ip: str):
-        """
-        Set target IP address for ArtNet packets.
-
-        Args:
-            ip: Target IP address (e.g., "192.168.1.100" or "255.255.255.255")
-        """
-        self.artnet_sender.target_ip = ip
-        print(f"ArtNet target IP set to: {ip}")
-
-    def cleanup(self):
-        """Cleanup resources."""
-        self._stop_dmx_thread()
-        self.dmx_manager.clear_all_dmx()
-        self._send_all_universes()
-        self.artnet_sender.close()
-        print("ShowsArtNet Controller cleaned up")

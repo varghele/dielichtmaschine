@@ -2,209 +2,128 @@
 
 Real-time ArtNet DMX output for Die Lichtmaschine.
 
+Architecture reference: **docs/output-sync-plan.md** (the single
+output arbiter, merge rules, phased build). This README describes the
+module layout; the plan doc is the source of truth for the design
+decisions.
+
 ## Overview
 
-This module enables the app to send DMX data via ArtNet during playback, driving a real rig live and allowing real-time preview in the Visualizer or other ArtNet-compatible software.
+One `OutputArbiter` owns the one `ArtNetSender` and the one 44 Hz
+send loop. Every producer of light (timeline playback, Auto mode, the
+Live busk surface, the v1.7 pause look) is a LAYER: it renders
+per-universe `(values, mask)` frames on demand, and the arbiter
+merges the stack and sends. Nobody else touches a socket.
 
 ## Components
 
-### 1. `ArtNetSender`
+### 1. `ArtNetSender` (sender.py)
 Low-level ArtNet packet generator and UDP sender.
 
 - Generates ArtNet OpDmx packets according to specification
-- Rate-limited to 44Hz max to avoid overloading receivers
+- Rate-limited to 44 Hz per universe (the arbiter forces past this -
+  its loop IS the rate limiter)
 - Supports broadcast or unicast transmission
 
-### 2. `DMXManager`
-Manages DMX state for all universes.
+### 2. `DMXManager` (dmx_manager.py)
+Renderer: manages DMX state for all universes.
 
-- Tracks 512 channels per universe
-- Maps fixtures to DMX channels using `.qxf` definitions
-- Converts sublane blocks to DMX values in real-time
-- Handles overlapping blocks with LTP (Latest Takes Priority)
-- Supports real-time effect calculations (strobe, twinkle, movement shapes)
+- Tracks 512 channels per universe, plus a parallel CLAIM MASK
+  (1 = channel deliberately driven this frame; a written 0 is a claim
+  to zero). `get_frame(universe)` returns the `(values, mask)` pair a
+  layer hands to the arbiter.
+- Maps fixtures to DMX channels using `.qxf`/GDTF definitions
+  (`FixtureChannelMap`)
+- Converts sublane blocks to DMX values in real-time; overlapping
+  blocks within one renderer stay LTP, multi-group conflicts are
+  lane-order-wins (locked decision)
+- No sockets, no threads
 
-### 3. `ArtNetOutputController`
-High-level controller that integrates with the playback engine.
+### 3. `OutputArbiter` (arbiter.py)
+The merge stage and send loop.
 
-- Connects to PlaybackEngine signals
-- Updates DMX state based on active blocks
-- Sends DMX via ArtNet at 44Hz during playback
-- Can be enabled/disabled independently of playback
+- Layer slots: `set_playback_layer` (EXCLUSIVE slot - timeline XOR
+  Auto), `set_live_layer`, `set_pause_look_layer`
+- Stack, top wins: DBO kill > live > playback > pause look > idle
+  floor
+- Merge: strict priority (LTP) everywhere except dimmer-class
+  channels, which merge HTP between layers; the idle floor is
+  fall-through only (never HTP)
+- Grandmaster/DBO applied post-merge on each fixture's intensity
+  channels (dimmer where one exists, else the colour channels)
+- Idle floor policy: `set_idle_policy("visible")` for editor contexts
+  (rig lit for authoring), `"blackout"` for live contexts
+- Universe remapping (`set_universe_mapping`) for venue-specific
+  wiring, e.g. `{1: 0, 2: 1}` for an Enttec ODE
+- `set_local_dmx_callback` feeds the embedded visualizer the
+  POST-MERGE frame in-process
+- `tick_once(now)` runs one deterministic frame (tests, e2e)
+
+### 4. `ShowsArtNetController` (shows_artnet_controller.py)
+Timeline playback as an arbiter layer (adapter).
+
+- Keeps the pre-arbiter public API for the Shows tab
+- Schedules lane blocks into its `DMXManager`, renders frames when
+  playing, holds the last frame when paused, renders nothing when
+  stopped (the floor shows through)
+- Creates a private arbiter unless a shared one is injected
+  (`arbiter=` kwarg - phase 2 shares it with Auto)
 
 ## Integration Example
 
 ```python
-from utils.artnet import ArtNetOutputController
-from config.models import Configuration
-from timeline.playback_engine import PlaybackEngine
+from utils.artnet import ShowsArtNetController
 
-# Load configuration with fixtures
-config = Configuration.load("config.yaml")
-
-# Load fixture definitions
-fixture_definitions = Configuration._scan_fixture_definitions()
-
-# Create playback engine
-playback_engine = PlaybackEngine()
-
-# Create ArtNet output controller
-artnet_controller = ArtNetOutputController(
+controller = ShowsArtNetController(
     config=config,
-    fixture_definitions=fixture_definitions,
-    playback_engine=playback_engine,
-    target_ip="255.255.255.255"  # Broadcast (or specific IP like "192.168.1.100")
+    fixture_definitions=fixture_defs,
+    song_structure=song_structure,
+    target_ip="255.255.255.255",
+    local_dmx_callback=embedded_visualizer.feed_dmx,
 )
-
-# Enable ArtNet output
-artnet_controller.enable_output()
-
-# Now when playback starts, DMX will be sent via ArtNet
-playback_engine.play()
-
-# To disable output
-artnet_controller.disable_output()
-
-# Cleanup when done
-artnet_controller.cleanup()
+controller.set_light_lanes(lanes)
+controller.enable_output()      # arbiter loop starts (floor streams)
+controller.start_playback()     # layer renders fresh frames
+controller.update_position(t)   # or set_position_callback(...)
+controller.stop_playback()      # floor takes over
+controller.cleanup()
 ```
 
-## Integration with Main GUI
+## How a frame happens (44 Hz)
 
-In `gui/gui.py` or the Shows tab:
+1. The arbiter tick calls each active layer's `render(now)` under the
+   arbiter lock.
+2. The playback layer pulls fresh audio position (if a position
+   callback is set), starts/ends lane blocks, recomputes DMX state
+   and returns `(values, mask)` per universe.
+3. `compose()` merges floor + layers per the rules above, then
+   applies grandmaster/DBO.
+4. The merged buffers go to the sender (config universe mapped to the
+   0-based wire universe) and to the local visualizer callback.
 
-```python
-class MainWindow(QMainWindow):
-    def __init__(self):
-        super().__init__()
+## Rate
 
-        # ... existing initialization ...
-
-        # Create ArtNet controller (after config and playback engine are created)
-        self.artnet_controller = None
-        self._init_artnet_output()
-
-    def _init_artnet_output(self):
-        """Initialize ArtNet output controller."""
-        if self.config and self.playback_engine:
-            # Load fixture definitions
-            fixture_defs = Configuration._scan_fixture_definitions()
-
-            # Create controller
-            self.artnet_controller = ArtNetOutputController(
-                config=self.config,
-                fixture_definitions=fixture_defs,
-                playback_engine=self.playback_engine,
-                target_ip="255.255.255.255"
-            )
-
-            # Add a checkbox or button to enable/disable output
-            # For now, enable by default
-            self.artnet_controller.enable_output()
-
-    def closeEvent(self, event):
-        """Clean up on window close."""
-        if self.artnet_controller:
-            self.artnet_controller.cleanup()
-        super().closeEvent(event)
-```
-
-## How It Works
-
-### 1. Block Triggering
-When a `LightBlock` starts during playback:
-- `PlaybackEngine` emits `block_triggered(lane, block)` signal
-- `ArtNetOutputController` receives the signal
-- For each sublane block in the light block:
-  - Registers the block with `DMXManager` if it's currently active
-  - DMXManager stores the block for the fixture group
-
-### 2. Real-time DMX Update (44Hz)
-Every ~23ms (44Hz):
-- `ArtNetOutputController` timer triggers `_update_and_send_dmx()`
-- `DMXManager.update_dmx(current_time)` calculates DMX values:
-  - For each fixture group with active blocks:
-    - For each fixture in the group:
-      - Apply dimmer block → calculate intensity (with effects like strobe)
-      - Apply colour block → set RGB/color wheel channels
-      - Apply movement block → calculate pan/tilt position (shapes calculated in real-time)
-      - Apply special block → set gobo, prism, focus, zoom
-- `ArtNetSender.send_dmx()` sends packets for each universe
-
-### 3. Block Ending
-When a `LightBlock` ends:
-- `PlaybackEngine` emits `block_ended(lane, block)` signal
-- `ArtNetOutputController` removes the block from `DMXManager`
-
-## Real-time Effect Calculations
-
-### Dimmer Effects
-- **Static**: Constant intensity
-- **Strobe**: Alternates between intensity and 0 based on speed
-- **Twinkle**: Random variation around intensity
-
-### Movement Shapes
-Calculated using parametric equations based on `current_time`:
-
-- **Circle**: `pan = center + amplitude * cos(t)`, `tilt = center + amplitude * sin(t)`
-- **Figure-8**: `pan = center + amplitude * sin(t)`, `tilt = center + amplitude * sin(2t)`
-- **Lissajous**: Frequency ratio determines pattern (e.g., 1:2, 3:4)
-
-Where `t = 2π * cycles * progress` and progress is calculated from current playback time.
-
-## Configuration
-
-### Universe Settings
-The module reads universe configuration from `config.universes`:
-- Universe ID
-- Output type (E1.31, ArtNet, etc.)
-- IP address and port
-
-### Target IP
-Default: `255.255.255.255` (broadcast)
-
-To send to specific IP:
-```python
-artnet_controller.set_target_ip("192.168.1.100")
-```
-
-## Network Ports
-
-- **ArtNet**: UDP port 6454 (standard)
-- Packets are sent to the configured target IP on port 6454
-
-## Rate Limiting
-
-- Maximum send rate: **44Hz** (22.7ms interval)
-- Prevents overloading receivers
-- Matches standard DMX refresh rate
-- Can be forced with `send_dmx(force=True)` if needed
+- One loop at **44 Hz** (the ArtNet ceiling). The pre-arbiter
+  controllers looped at 30 Hz; this is a real refresh upgrade.
+- While output is enabled the merged frame streams continuously -
+  the idle floor alone when nothing plays, which doubles as the
+  periodic refresh ArtNet receivers expect.
 
 ## Troubleshooting
 
 ### No DMX output
-1. Check that output is enabled: `artnet_controller.enable_output()`
-2. Verify playback is running
-3. Check firewall settings (UDP port 6454)
-4. Verify fixture definitions are loaded correctly
+1. Check that output is enabled (the arbiter loop is running)
+2. Check firewall settings (UDP port 6454)
+3. Verify fixture definitions are loaded correctly
 
 ### Visualizer not receiving
-1. Ensure Visualizer is listening on the same network
+1. Ensure the visualizer listens on the same network
 2. Check IP address (use broadcast for testing)
-3. Verify universe numbers match
-4. Check that blocks have valid start/end times
+3. Verify universe numbers match (including any universe remapping)
 
 ### DMX values incorrect
 1. Verify fixture definitions (`.qxf` files) are correct
 2. Check fixture current_mode matches available modes
 3. Review channel mappings in DMXManager
-4. Enable debug logging to see DMX values
-
-## Future Enhancements
-
-- [ ] Add UI toggle for ArtNet output
-- [ ] Add universe activity indicators
-- [ ] Add DMX value monitoring/debugging view
-- [ ] Support for multiple output interfaces
-- [ ] Configurable send rate (currently fixed at 44Hz)
-- [ ] BPM-aware timing from SongStructure (currently uses default 120 BPM)
+4. Remember the merge: a higher layer or the grandmaster may be
+   shaping the value a producer wrote

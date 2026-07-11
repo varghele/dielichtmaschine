@@ -102,6 +102,15 @@ verbatim as the GitHub Release notes (see [docs/releasing.md](docs/releasing.md)
 
 ### Changed
 
+- **One output arbiter drives ArtNet.** All DMX now flows through a
+  single merge stage and one 44 Hz send loop (the old per-feature
+  senders looped at 30 Hz), per docs/output-sync-plan.md: producers
+  render frames with per-channel claims, the arbiter layers them
+  (strict priority, dimmer-only HTP), and a grandmaster/dead-blackout
+  stage caps everything post-merge. Pausing a show now holds its last
+  look on the rig instead of going dark between refreshes, stopping
+  returns to a continuously refreshed idle state, and the embedded
+  visualizer mirrors exactly what goes on the wire, merge included.
 - **The show-directory button is gone; legacy CSV import is a File
   action.** The Structure tab's "SHOW DIRECTORY..." chip only existed
   to point at a pre-v1.0 folder of CSV songs; that is now the explicit

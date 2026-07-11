@@ -261,9 +261,20 @@ def step6_build_playback_controller(window, monkeypatch):
 
 
 def render_at(controller, t):
-    """Run exactly one frame of the real DMX loop body at time ``t``."""
+    """Run exactly one frame of the real output path at time ``t``.
+
+    Since the arbiter pass the frame is a full arbiter tick (playback
+    layer render + merge + dispatch). The 44 Hz loop that
+    enable_output started is stopped first so frames are driven
+    synchronously and deterministically; the returned buffer is the
+    playback LAYER's render (pre-merge), which is what these
+    assertions have always pinned.
+    """
+    if controller.arbiter.running:
+        controller.arbiter.stop(blackout=False)
+    controller.start_playback()   # idempotent; needs enable_output first
     controller.current_time = t
-    controller._update_and_send_dmx()
+    controller.arbiter.tick_once(t)
     return controller.dmx_manager.get_dmx_data(1)
 
 
