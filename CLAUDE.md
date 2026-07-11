@@ -223,8 +223,11 @@ derivation puts a fixture in every listed group; indexed targets
 per-group ChannelsGroups (QLC+ tolerates shared channels), patch
 elements once, show tracks bucket under the primary. Conflicting
 simultaneous blocks from two groups' lanes = the output arbiter's
-problem (todo.md, which also carries the output/sync architecture
-agenda and roadmap pull-in candidates). The Live tab (3b busking surface, earlier
+problem: lane-order-wins, per docs/output-sync-plan.md (the output/
+sync architecture was decided 2026-07-11 - arbiter layers + channel
+masks, exclusive playback slot, dimmer-only HTP, conductor clock,
+phases 0-4; todo.md now only carries roadmap pull-in candidates).
+The Live tab (3b busking surface, earlier
 in the pass) has BPM/TAP, SHOW/LIVE mode, 5 palette pools (effects =
 riff library, scenes = scenes/scene_library.py), dual queue - all
 in-memory, no output engine yet. Tests: pytest-xdist is set up -
