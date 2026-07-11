@@ -56,6 +56,13 @@ verbatim as the GitHub Release notes (see [docs/releasing.md](docs/releasing.md)
 
 ### Fixed
 
+- **Spike marks are position palettes in the Live tab.** The POSITION
+  pool lists the stage's spike marks (name + x/y tag) as selectable
+  cells - movers-only, the staged mark accent-outlined and shown in the
+  programmer bar; a mark removed or renamed on the Stage tab clears
+  from the staged position. The fake position presets are gone; with no
+  marks the pool says so and points at the Stage tab. Staging is still
+  in-memory only until the output engine lands.
 - **Stage spots are spike marks in the brand voice.** The stage marker
   renders the spike-mark symbol (X through a circle, the screen 04
   asset) on the stage canvas and the printed plot, replacing the plain

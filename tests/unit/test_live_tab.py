@@ -2,15 +2,18 @@
 
 A UI shell over an in-memory ``LiveState`` with no DMX/ArtNet output.
 These tests pin the state contract and the tile/swatch/fader/control
-wiring across the three 3b regions (SELECT + FADE rows, the three-pool
-centre grid with a fully-built COLOUR pool and marked POSITION/INTENSITY
-placeholders, the right column of playbacks/strobe/kills, and the
-submaster bank whose first column is the GRAND master + DBO), plus that
-the tab refreshes when the config's groups change. Round 2 adds the dual
-queue: the running-playbacks stack (mirroring the single staged
-effect/scene, PAUSE/RESUME + KILL per row, a pinned show row in SHOW
-mode) and the NEXT UP list (QUEUE latch arms touch-to-enqueue, GO fires
-the head) - all state-only, no output engine. They assert role
+wiring across the three 3b regions (SELECT + FADE rows, the five-pool
+centre grid with a fully-built COLOUR pool, the spike-mark-backed
+POSITION pool and marked MOVEMENT/INTENSITY placeholders, the right
+column of playbacks/strobe/kills, and the submaster bank whose first
+column is the GRAND master + DBO), plus that the tab refreshes when the
+config's groups change. Round 2 adds the dual queue: the
+running-playbacks stack (mirroring the single staged effect/scene,
+PAUSE/RESUME + KILL per row, a pinned show row in SHOW mode) and the
+NEXT UP list (QUEUE latch arms touch-to-enqueue, GO fires the head) -
+all state-only, no output engine. Round 3 adds POSITION PALETTES: one
+selectable cell per config.spots spike mark, movers-only gated, staged
+position pruned when its mark leaves the config. They assert role
 properties and LiveState, never widget.styleSheet() or font().family()
 (per the brand-role convention).
 """
@@ -38,14 +41,17 @@ def _fixture(name, group, address, ftype="PAR"):
 
 
 def _config(rows):
-    """rows: iterable of (group_name, color, fixture_count)."""
+    """rows: iterable of (group_name, color, fixture_count) with an
+    optional trailing fixture type (defaults to the static "PAR")."""
     fixtures = []
     groups = {}
     address = 1
-    for name, color, count in rows:
+    for name, color, count, *rest in rows:
+        ftype = rest[0] if rest else "PAR"
         members = []
         for i in range(count):
-            members.append(_fixture(f"{name} {i + 1}", name, address))
+            members.append(_fixture(f"{name} {i + 1}", name, address,
+                                    ftype=ftype))
             address += 10
         fixtures.extend(members)
         groups[name] = FixtureGroup(name, members, color=color)
@@ -177,9 +183,11 @@ class TestPools:
         assert live_tab._position_pool is not None
         assert live_tab._intensity_pool is not None
 
-    def test_position_cells_are_disabled_placeholders(self, live_tab):
-        assert live_tab._position_cells
-        for cell in live_tab._position_cells:
+    def test_movement_cells_are_disabled_placeholders(self, live_tab):
+        # MOVEMENT SHAPES stays a marked placeholder (POSITION PALETTES
+        # is real now - see TestPositionPool).
+        assert live_tab._movement_cells
+        for cell in live_tab._movement_cells:
             assert cell.isEnabled() is False
             assert cell.property("placeholder") is True
 
@@ -626,6 +634,149 @@ class TestScenesPool:
             tmp_path, [("Warm Wash", "looks", "")]))
         live_tab.state.set_scene("looks/Warm Wash")
         assert "SCENE: WARM WASH" in live_tab._programmer_label.text()
+
+
+def _spot_config(groups=None, spot_rows=(("DS Centre", 0.0, -2.5, 0.0),
+                                         ("Drum Riser", 0.0, 1.5, 0.6))):
+    """A config with spike marks and (by default) one static PAR group
+    plus one mover (type MH) group, for POSITION pool tests."""
+    from config.models import Spot
+    cfg = _config(groups or (
+        ("Front Pars", "#D9A441", 2),
+        ("Movers", "#C95FD0", 2, "MH"),
+    ))
+    cfg.spots = {name: Spot(name=name, x=x, y=y, z=z)
+                 for name, x, y, z in spot_rows}
+    return cfg
+
+
+@pytest.fixture
+def position_tab(qapp):
+    from gui.theme_manager import ThemeManager
+    from gui.tabs.live_tab import LiveTab
+
+    ThemeManager().apply(qapp, "dark")
+    tab = LiveTab(_spot_config(), parent=None)
+    yield tab
+    tab.deleteLater()
+
+
+class TestPositionPool:
+    def test_set_position_toggles_and_emits(self, position_tab):
+        hits = []
+        state = position_tab.state
+        state.state_changed.connect(lambda: hits.append(1))
+        state.set_position("DS Centre")
+        assert state.position == "DS Centre"
+        state.set_position("DS Centre")  # same mark again -> cleared
+        assert state.position is None
+        assert len(hits) == 2
+
+    def test_cells_built_per_spot_in_config_order(self, position_tab):
+        assert list(position_tab._position_cells) == ["DS Centre",
+                                                      "Drum Riser"]
+
+    def test_cells_carry_card_role_and_coordinate_tag(self, position_tab):
+        cell = position_tab._position_cells["DS Centre"]
+        assert cell.property("role") == "card"
+        # Stage-space x · y (meters, one decimal) as a small mono tag.
+        assert cell.tag_label is not None
+        assert cell.tag_label.text() == "0.0 · -2.5"
+        assert position_tab._position_cells[
+            "Drum Riser"].tag_label.text() == "0.0 · 1.5"
+
+    def test_click_stages_and_second_click_clears(self, position_tab):
+        cell = position_tab._position_cells["DS Centre"]
+        cell.clicked.emit("DS Centre")
+        assert position_tab.state.position == "DS Centre"
+        cell.clicked.emit("DS Centre")
+        assert position_tab.state.position is None
+
+    def test_active_cell_outlined(self, position_tab):
+        position_tab.state.set_position("Drum Riser")
+        assert position_tab._position_cells["Drum Riser"].is_active()
+        assert not position_tab._position_cells["DS Centre"].is_active()
+        position_tab.state.set_position("Drum Riser")
+        assert not position_tab._position_cells["Drum Riser"].is_active()
+
+    def test_empty_config_shows_marked_empty_state(self, live_tab):
+        # three_group_config has no spots: no cells, an honest marker.
+        assert live_tab._position_cells == {}
+        item = live_tab._position_grid.itemAtPosition(0, 0)
+        assert item is not None
+        text = item.widget().text().lower()
+        assert "no marks yet" in text
+        assert "stage tab" in text
+        # Word-wrapped so it cannot clip in the narrow fifth column.
+        assert item.widget().wordWrap() is True
+
+    def test_pool_gated_on_mover_selection(self, position_tab):
+        # No selection -> no movers -> greyed.
+        assert position_tab._position_section.isEnabled() is False
+        # A static-only selection stays greyed.
+        position_tab.state.toggle_group("Front Pars")
+        assert position_tab._position_section.isEnabled() is False
+        # Adding the mover group enables the pool.
+        position_tab.state.toggle_group("Movers")
+        assert position_tab._position_section.isEnabled() is True
+        # Dropping it greys the pool again.
+        position_tab.state.toggle_group("Movers")
+        assert position_tab._position_section.isEnabled() is False
+
+    def test_capabilities_flag_counts_as_movers(self, qapp):
+        # A group whose scanned capabilities carry has_movement gates
+        # open even when the fixture type is not MH/WASH.
+        from config.models import FixtureGroupCapabilities
+        from gui.theme_manager import ThemeManager
+        from gui.tabs.live_tab import LiveTab
+
+        cfg = _spot_config(groups=(("Spider", "#5F86C9", 1),))
+        cfg.groups["Spider"].capabilities = FixtureGroupCapabilities(
+            has_movement=True)
+        ThemeManager().apply(qapp, "dark")
+        tab = LiveTab(cfg, parent=None)
+        try:
+            tab.state.toggle_group("Spider")
+            assert tab._position_section.isEnabled() is True
+        finally:
+            tab.deleteLater()
+
+    def test_update_from_config_prunes_removed_mark(self, position_tab):
+        position_tab.state.set_position("DS Centre")
+        del position_tab.config.spots["DS Centre"]
+        position_tab.update_from_config()
+        # Positions are config-bound: the stale mark is pruned...
+        assert position_tab.state.position is None
+        # ...and the pool rebuilt without its cell.
+        assert list(position_tab._position_cells) == ["Drum Riser"]
+
+    def test_update_from_config_keeps_valid_mark(self, position_tab):
+        position_tab.state.set_position("Drum Riser")
+        del position_tab.config.spots["DS Centre"]
+        position_tab.update_from_config()
+        assert position_tab.state.position == "Drum Riser"
+        assert position_tab._position_cells["Drum Riser"].is_active()
+
+    def test_state_update_from_config_position_semantics(self, position_tab):
+        # Direct LiveState contract: prune when absent, keep when present.
+        state = position_tab.state
+        state.position = "DS Centre"
+        state.update_from_config(["Movers"], ["DS Centre", "Drum Riser"])
+        assert state.position == "DS Centre"
+        state.update_from_config(["Movers"], ["Drum Riser"])
+        assert state.position is None
+
+    def test_programmer_bar_shows_position(self, position_tab):
+        position_tab.state.toggle_group("Movers")
+        position_tab.state.set_position("DS Centre")
+        assert "POS: DS CENTRE" in position_tab._programmer_label.text()
+        position_tab.state.set_position("DS Centre")
+        assert "POS:" not in position_tab._programmer_label.text()
+
+    def test_release_all_clears_position(self, position_tab):
+        position_tab.state.set_position("DS Centre")
+        position_tab._release_all_btn.click()
+        assert position_tab.state.position is None
 
 
 class TestLibraryStatePreserved:

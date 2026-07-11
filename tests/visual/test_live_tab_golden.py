@@ -4,10 +4,14 @@ Pins the North Star 3b busking surface: the TOP SELECT row (one tile per
 group with a data-color accent bar + ALL / ODD-EVEN / CLEAR SEL) and FADE
 row, the CENTRE five-pool grid (COLOUR PALETTES painted in their actual
 colours as square swatches in a 3-wide grid with the active one outlined,
-then marked POSITION and INTENSITY placeholders, then the library-backed
-EFFECTS pool - riffs, selection-scoped, greyed with no selection - and
-SCENES pool - whole-rig looks, always on - each with the active item
-outlined in the accent), the PROGRAMMER state bar, the 330px RIGHT column
+then POSITION PALETTES - one selectable cell per config.spots spike mark
+with a mono coordinate tag, movers-only gated and enabled here because
+the selected Movers group is type MH, the staged mark accent-outlined -
+over the marked MOVEMENT placeholders, then INTENSITY placeholders, then
+the library-backed EFFECTS pool - riffs, selection-scoped, greyed with no
+selection - and SCENES pool - whole-rig looks, always on - each with the
+active item outlined in the accent), the PROGRAMMER state bar naming the
+staged FX/SCENE/POS, the 330px RIGHT column
 (the dual queue: an ACTIVE PLAYBACKS stack with one row per running
 effect/scene, each with PAUSE + KILL; the NEXT UP list with the QUEUE
 latch beside its caption, one row per queued item with a remove X, and
@@ -16,10 +20,11 @@ ALL) and the BOTTOM submaster bank: a GRAND master column (accent fader +
 DBO) first, a divider, then a bounded fader per group in the group
 colours, left-aligned.
 
-The render is deterministic: two groups selected, one colour active, one
-effect and one scene staged (so the running stack shows two rows), two
-items enqueued in NEXT UP (one effect, one scene, GO enabled), a couple
-of submasters at different levels, no output engine (UI shell only).
+The render is deterministic: two groups selected (one of them movers),
+one colour active, one spike-mark position staged, one effect and one
+scene staged (so the running stack shows two rows), two items enqueued
+in NEXT UP (one effect, one scene, GO enabled), a couple of submasters
+at different levels, no output engine (UI shell only).
 
 Regenerate after intended changes:
 
@@ -39,7 +44,7 @@ import pytest
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from config.models import (
-    Configuration, Fixture, FixtureGroup, FixtureMode, Universe,
+    Configuration, Fixture, FixtureGroup, FixtureMode, Spot, Universe,
 )
 from tests.visual.harness import compare_to_golden
 
@@ -54,7 +59,8 @@ def _fixture(name, group, address, ftype="PAR"):
 
 @pytest.fixture
 def scene_config():
-    """Reference-flavoured rig: five colored groups."""
+    """Reference-flavoured rig: five colored groups + three spike marks
+    (the POSITION PALETTES pool renders one selectable cell per mark)."""
     rows = (
         ("Front Pars", "#D9A441", "PAR", 4),
         ("Rear Wash", "#4ECBD4", "WASH", 2),
@@ -72,9 +78,15 @@ def scene_config():
             address += 10
         fixtures.extend(members)
         groups[name] = FixtureGroup(name, members, color=color)
+    spots = {
+        "DS Centre": Spot(name="DS Centre", x=0.0, y=-2.5, z=0.0),
+        "Drum Riser": Spot(name="Drum Riser", x=0.0, y=1.5, z=0.6),
+        "SL Solo": Spot(name="SL Solo", x=-3.0, y=-1.0, z=0.0),
+    }
     return Configuration(
         fixtures=fixtures, groups=groups,
         universes={1: Universe(id=1, name="Universe 1", output={})},
+        spots=spots,
         stage_width=8.0, stage_height=6.0,
     )
 
@@ -127,6 +139,10 @@ def test_live_tab_golden(qapp, scene_config, tmp_path):
         tab.state.set_mode("live")
         tab.state.set_effect("loops/Four Floor")
         tab.state.set_scene("looks/Warm Wash")
+        # Round-3: stage a spike-mark position. The Movers group (type
+        # MH) is selected, so the movers-only POSITION pool is enabled
+        # and the staged mark renders accent-outlined.
+        tab.state.set_position("DS Centre")
         # Dual queue: the staged effect+scene render as running rows;
         # preload two NEXT UP items (one effect, one scene) so the queue
         # rows, the remove X and the enabled GO all pin.
