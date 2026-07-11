@@ -254,3 +254,28 @@ RGB channels (group "Colour") land in color_wheel_channels and the
 safe-idle wheel-open write claims them at 0 (documented in
 tests/unit/test_dmx_masks.py). Phase 4 (conductor, pause look,
 setlist runner) stays v1.7.
+
+**Output shell polish (2026-07-12, same branch, commits 5820f77 ·
+5170f90 · bb8e046):** Live fade row carries OUT + SYNC status chips
+(#OutputReadout QSS id; OUT polls arbiter.status() via
+LiveTab.set_status_arbiter at 500 ms - wire truth, activity dot,
+* marker when universes are configured E1.31/DMX USB since native
+output is ARTNET-ONLY; SYNC INT until v1.7). DBO is
+destructive-outline (filled red only when :checked);
+output-select:pressed fills accent (FLASH). Topbar chips renamed
+OUTPUT + VISUALIZER: OUTPUT is the master switch and the playback
+slot is contended at PLAY time (ShowsArtNetController acquires in
+start_playback, releases in stop_playback - enable-to-busk never
+locks Auto out; teardown never stops a loop another owner streams
+through). VISUALIZER chip = labelled OPEN/STOP button that starts the
+TCP feed AND launches the viewer in one press; tcp_enabled now
+defaults False and toggle_tcp derives from tcp_server.is_running()
+(the stale-flag double-press bug). The standalone visualizer frame is
+rebranded (visualizer/main.py: brand boot fonts+icon+theme, #TopBar
+header with glyph/wordmark/chips replacing the QToolBar, token-driven
+mono statusbar; tests/unit/test_visualizer_frame.py stubs
+engine/listener/client - no GL, no sockets). PENDING MANUAL CHECKS
+(need hardware or a desktop session): busk a colour over a playing
+show against a real node/visualizer, the VISUALIZER OPEN flow
+end-to-end (process launch is stubbed in tests), and the rebranded
+viewer frame under a live GL context.

@@ -33,3 +33,16 @@ screen design first), timeline undo/redo (big), MVR/OSC (own tracks).
 - [x] Discuss the output/sync logic - done 2026-07-11, decisions in
       docs/output-sync-plan.md
 - [x] Promote to docs/output-sync-plan.md with phases + tests
+- [x] Build phases 0-3 - done 2026-07-11/12, hashes in the plan doc;
+      phase 4 (conductor, pause look, setlist runner) stays v1.7
+
+## Pending manual verification (user, needs hardware/desktop)
+
+- [ ] Busk a colour over a playing show against a real ArtNet node or
+      the standalone visualizer (merge is unit-tested, never touched
+      hardware)
+- [ ] Topbar VISUALIZER OPEN end to end: one press = feed up + viewer
+      launched + client count ticks to 1 (process launch is stubbed
+      in tests)
+- [ ] Eyeball the rebranded visualizer frame under a live GL context
+      (header spacing, statusbar colors)
