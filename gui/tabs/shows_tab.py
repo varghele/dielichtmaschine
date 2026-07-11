@@ -112,7 +112,10 @@ class ShowsTab(BaseTab):
 
         # TCP server for Visualizer (lazy init)
         self.tcp_server = None
-        self.tcp_enabled = True  # Default to enabled
+        # False until the server actually runs: the flag must reflect
+        # reality, or the first VISUALIZER press walks the disable
+        # branch as a no-op and the user has to press twice.
+        self.tcp_enabled = False
 
         # Playback timer
         self.playback_timer = QTimer()
@@ -2076,8 +2079,11 @@ class ShowsTab(BaseTab):
         self._on_artnet_toggle(not self.artnet_enabled)
 
     def toggle_tcp(self):
-        """Toggle TCP server on/off. Called from MainWindow toolbar."""
-        self._on_tcp_toggle(not self.tcp_enabled)
+        """Toggle TCP server on/off. Called from MainWindow toolbar.
+        Derives the flip from the server's ACTUAL state, not the flag,
+        so a stale flag can never demand a double press."""
+        running = self.tcp_server is not None and self.tcp_server.is_running()
+        self._on_tcp_toggle(not running)
 
     def _on_artnet_toggle(self, checked: bool):
         """Handle ArtNet toggle."""

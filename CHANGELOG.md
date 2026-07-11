@@ -53,6 +53,17 @@ verbatim as the GitHub Release notes (see [docs/releasing.md](docs/releasing.md)
   autosaved, so there is nothing to push by hand.
 - **F7 opens the pause screen** (screensaver). F11 stays fullscreen; F
   and L remain the Stage tab's own zoom/layer keys.
+- **The standalone visualizer wears the brand.** The viewer window
+  boots with the app's fonts, dark theme and icon; the stock grey
+  toolbar became the brand header (rotor glyph, wordmark, VISUALIZER
+  tag, CONNECT / RESET VIEW / HELP as chips) and the status bar reads
+  in mono caps with the theme's own state colors and the brand
+  separator. The 3D scene itself is untouched.
+- **One press opens the visualizer.** The VISUALIZER button used to
+  need two presses: a stale "enabled" flag from startup made the
+  first press a silent no-op. The toggle now derives from whether the
+  feed is actually running, so the first press starts it and launches
+  the viewer.
 - **The topbar chips say what they do: OUTPUT and VISUALIZER.** The
   ArtNet chip is now the OUTPUT master switch and reads streaming
   truth (it shows ON whenever anything is on the wire, Auto included),

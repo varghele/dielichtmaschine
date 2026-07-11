@@ -213,18 +213,19 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         dialog); STOP = end the feed, leaving the viewer window to
         idle."""
         if hasattr(self.shows_tab, 'toggle_tcp'):
-            tcp_enabled = getattr(self.shows_tab, 'tcp_enabled', False)
+            # Branch on the server's ACTUAL state (not a flag that can
+            # go stale and eat the first press).
+            tcp_server = getattr(self.shows_tab, 'tcp_server', None)
+            was_running = tcp_server is not None and tcp_server.is_running()
 
-            if not tcp_enabled:
-                self.shows_tab.toggle_tcp()
-                self._update_toolbar_status()
+            self.shows_tab.toggle_tcp()
+            self._update_toolbar_status()
+
+            if not was_running:
                 tcp_server = getattr(self.shows_tab, 'tcp_server', None)
                 if (tcp_server and tcp_server.is_running()
                         and tcp_server.get_client_count() == 0):
                     self._launch_visualizer()
-            else:
-                self.shows_tab.toggle_tcp()
-                self._update_toolbar_status()
 
     def _launch_visualizer(self):
         """Launch the 3D Visualizer application."""

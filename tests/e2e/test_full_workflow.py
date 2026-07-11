@@ -973,3 +973,54 @@ class TestOutputShellWiring:
         assert arbiter._idle_policy == IDLE_VISIBLE
         window.tabWidget.setCurrentIndex(5)   # LIVE section (Auto screen)
         assert arbiter._idle_policy == IDLE_BLACKOUT
+
+
+class TestVisualizerButton:
+    """The topbar VISUALIZER action: ONE press starts the feed and
+    launches the viewer (regression: a stale tcp_enabled default made
+    the first press a no-op disable, demanding a double press)."""
+
+    def test_single_press_starts_feed_and_launches(self, main_window,
+                                                   monkeypatch):
+        import gui.tabs.shows_tab as shows_tab_mod
+
+        class StubServer:
+            def __init__(self, config=None, port=9000):
+                self.running = False
+                # Signal stand-ins: .connect(...) must exist.
+                class _Sig:
+                    def connect(self, *_a):
+                        pass
+                self.client_connected = _Sig()
+                self.client_disconnected = _Sig()
+                self.error_occurred = _Sig()
+
+            def start(self):
+                self.running = True
+
+            def stop(self):
+                self.running = False
+
+            def is_running(self):
+                return self.running
+
+            def get_client_count(self):
+                return 0
+
+        launches = []
+        monkeypatch.setattr(shows_tab_mod, "VisualizerTCPServer",
+                            StubServer)
+        monkeypatch.setattr(shows_tab_mod, "TCP_AVAILABLE", True)
+        monkeypatch.setattr(main_window, "_launch_visualizer",
+                            lambda: launches.append(1))
+
+        # The flag must reflect reality at startup: nothing runs.
+        assert main_window.shows_tab.tcp_enabled is False
+
+        main_window._toggle_tcp()             # ONE press
+        assert main_window.shows_tab.tcp_server.is_running()
+        assert launches == [1]
+
+        main_window._toggle_tcp()             # second press stops
+        assert not main_window.shows_tab.tcp_server.is_running()
+        assert launches == [1]                # no relaunch on stop
