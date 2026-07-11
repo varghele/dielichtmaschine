@@ -19,6 +19,11 @@ claims them (kept, documented in tests/unit/test_dmx_masks.py);
 adapters own the idle policy only on PRIVATE arbiters - on the shared
 one the shell owns it (nav section); a producer that failed to
 acquire the slot must never stop the shared loop on teardown.
+Follow-up refinement (2026-07-12): the playback slot is contended at
+PLAY time, not enable time - the topbar OUTPUT chip is a master
+switch that starts the arbiter without claiming the slot, so
+output-on-to-busk never locks Auto out; the timeline acquires on
+start_playback and releases on stop_playback.
 
 ## Where output stands today (2026-07-11, verified in code)
 

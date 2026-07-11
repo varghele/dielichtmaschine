@@ -53,6 +53,18 @@ verbatim as the GitHub Release notes (see [docs/releasing.md](docs/releasing.md)
   autosaved, so there is nothing to push by hand.
 - **F7 opens the pause screen** (screensaver). F11 stays fullscreen; F
   and L remain the Stage tab's own zoom/layer keys.
+- **The topbar chips say what they do: OUTPUT and VISUALIZER.** The
+  ArtNet chip is now the OUTPUT master switch and reads streaming
+  truth (it shows ON whenever anything is on the wire, Auto included),
+  and enabling it no longer locks Auto mode out - the timeline claims
+  the exclusive output slot only while it actually plays, so you can
+  switch output on, busk on the Live tab, then start Auto without
+  being refused. Pressing play while Auto holds the output explains
+  itself and keeps the audio running. The cryptic "Vis" dot became a
+  VISUALIZER chip with a labelled OPEN/STOP button: OPEN launches the
+  standalone visualizer and starts its feed in one click (no more
+  "would you like to launch it?" dialog), the status readout shows
+  the connected-viewer count, STOP ends the feed.
 - **OUT and SYNC readouts in the Live tab.** Two status chips sit next
   to the tempo cluster in the LED-readout voice: OUT shows what is
   actually on the wire - protocol, universe count and a live activity

@@ -104,23 +104,31 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             # Keep the Home checklist live while the user works.
             if hasattr(self, 'home_screen') and self.home_screen.isVisible():
                 self.home_screen.refresh_checklist(self.config)
-        # ArtNet
+        # OUTPUT (master DMX switch; native ArtNet). ON reflects the
+        # truth on the wire: either the timeline-context enable or any
+        # other producer (Auto) streaming through the shared arbiter.
         artnet_controller = getattr(self.shows_tab, 'artnet_controller', None)
         artnet_enabled = getattr(self.shows_tab, 'artnet_enabled', False)
-        if artnet_controller and artnet_enabled:
+        arbiter = getattr(self, "_output_arbiter", None)
+        streaming = arbiter is not None and arbiter.running
+        if (artnet_controller and artnet_enabled) or streaming:
             self.artnet_status_indicator.setText("ON")
             self._set_status(self.artnet_status_indicator, "on")
             self._set_status(self.artnet_toggle_btn, "on")
-            self.artnet_status_indicator.setToolTip("ArtNet DMX Output: Enabled")
-            self.artnet_toggle_btn.setToolTip("Click to disable ArtNet")
+            self.artnet_status_indicator.setToolTip(
+                "DMX output is streaming (native ArtNet)")
+            self.artnet_toggle_btn.setToolTip("Click to disable DMX output")
         else:
             self.artnet_status_indicator.setText("OFF")
             self._set_status(self.artnet_status_indicator, "off")
             self._set_status(self.artnet_toggle_btn, "off")
-            self.artnet_status_indicator.setToolTip("ArtNet DMX Output: Disabled")
-            self.artnet_toggle_btn.setToolTip("Click to enable ArtNet")
+            self.artnet_status_indicator.setToolTip(
+                "DMX output is off (native ArtNet)")
+            self.artnet_toggle_btn.setToolTip("Click to enable DMX output")
 
-        # TCP visualizer server
+        # VISUALIZER: one labelled action button (OPEN launches the
+        # standalone visualizer AND starts its TCP feed; STOP ends the
+        # feed) + a status readout showing the connection truth.
         tcp_server = getattr(self.shows_tab, 'tcp_server', None)
         if tcp_server and tcp_server.is_running():
             client_count = tcp_server.get_client_count()
@@ -129,20 +137,25 @@ class MainWindow(QMainWindow, Ui_MainWindow):
                 self._set_status(self.tcp_status_indicator, "active")
                 self._set_status(self.tcp_toggle_btn, "active")
                 self.tcp_status_indicator.setToolTip(
-                    f"TCP Visualizer Server: {client_count} client(s) connected"
+                    f"Visualizer feed: {client_count} viewer(s) connected"
                 )
             else:
                 self.tcp_status_indicator.setText("ON")
                 self._set_status(self.tcp_status_indicator, "ready")
                 self._set_status(self.tcp_toggle_btn, "ready")
-                self.tcp_status_indicator.setToolTip("TCP Visualizer Server: Running, no clients")
-            self.tcp_toggle_btn.setToolTip("Click to stop Visualizer Server")
+                self.tcp_status_indicator.setToolTip(
+                    "Visualizer feed running · no viewer connected yet")
+            self.tcp_toggle_btn.setText("STOP")
+            self.tcp_toggle_btn.setToolTip(
+                "Stop the visualizer feed (the viewer window stays open)")
         else:
             self.tcp_status_indicator.setText("OFF")
             self._set_status(self.tcp_status_indicator, "off")
             self._set_status(self.tcp_toggle_btn, "off")
-            self.tcp_status_indicator.setToolTip("TCP Visualizer Server: Not running")
-            self.tcp_toggle_btn.setToolTip("Click to start Visualizer Server")
+            self.tcp_status_indicator.setToolTip("Visualizer feed: off")
+            self.tcp_toggle_btn.setText("OPEN")
+            self.tcp_toggle_btn.setToolTip(
+                "Launch the standalone visualizer and start its feed")
 
     def _set_status(self, widget, value):
         """Set the `status` dynamic property on a widget and re-polish so QSS
@@ -194,34 +207,22 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             self._update_toolbar_status()
 
     def _toggle_tcp(self):
-        """Toggle TCP server via shows tab."""
+        """The topbar VISUALIZER action. OPEN = start the TCP feed AND
+        launch the standalone visualizer in one click (clicking
+        VISUALIZER already says what the user wants - no question
+        dialog); STOP = end the feed, leaving the viewer window to
+        idle."""
         if hasattr(self.shows_tab, 'toggle_tcp'):
-            # Check if we're about to enable TCP (currently disabled)
             tcp_enabled = getattr(self.shows_tab, 'tcp_enabled', False)
 
             if not tcp_enabled:
-                # We're enabling TCP - check if visualizer is running
                 self.shows_tab.toggle_tcp()
                 self._update_toolbar_status()
-
-                # Check if visualizer is connected after a short delay
-                # If no clients, offer to launch visualizer
                 tcp_server = getattr(self.shows_tab, 'tcp_server', None)
-                if tcp_server and tcp_server.is_running():
-                    if tcp_server.get_client_count() == 0:
-                        # No visualizer connected, ask to launch
-                        reply = QMessageBox.question(
-                            self,
-                            "Launch Visualizer?",
-                            "The TCP server is now running but no Visualizer is connected.\n\n"
-                            "Would you like to launch the Visualizer?",
-                            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-                            QMessageBox.StandardButton.Yes
-                        )
-                        if reply == QMessageBox.StandardButton.Yes:
-                            self._launch_visualizer()
+                if (tcp_server and tcp_server.is_running()
+                        and tcp_server.get_client_count() == 0):
+                    self._launch_visualizer()
             else:
-                # We're disabling TCP
                 self.shows_tab.toggle_tcp()
                 self._update_toolbar_status()
 

@@ -1759,7 +1759,16 @@ class ShowsTab(BaseTab):
             if self.artnet_controller:
                 # Set initial position before starting playback
                 self.artnet_controller.update_position(self.playhead_position)
-                self.artnet_controller.start_playback()
+                # The exclusive playback slot is contended at PLAY
+                # time (timeline XOR auto); a refusal keeps the audio
+                # transport running, only DMX stays with Auto.
+                if not self.artnet_controller.start_playback():
+                    self.show_error(
+                        "DMX output busy",
+                        "Auto mode holds the DMX output. Stop Auto "
+                        "mode to send this show to the rig - playback "
+                        "continues without DMX.",
+                    )
 
         # Switch the embedded preview to live so the show drives it via
         # local_dmx_callback. If ArtNet is off the callback never fires
@@ -2048,17 +2057,11 @@ class ShowsTab(BaseTab):
                 # This allows ArtNet to get fresh audio position on each DMX update
                 self.artnet_controller.set_position_callback(self._get_current_position)
 
-                # Enable output if checkbox is checked. Refused when
-                # Auto mode holds the exclusive playback slot.
+                # Enable output if checkbox is checked. The master
+                # switch never contends the playback slot - refusal
+                # happens at PLAY time (timeline XOR auto).
                 if self.artnet_enabled:
-                    if not self.artnet_controller.enable_output():
-                        self.artnet_enabled = False
-                        self.show_error(
-                            "ArtNet output refused",
-                            "Auto mode is running and holds the DMX "
-                            "output. Stop Auto mode before enabling "
-                            "timeline ArtNet output.",
-                        )
+                    self.artnet_controller.enable_output()
 
                 print("ArtNet controller initialized")
 
@@ -2081,19 +2084,12 @@ class ShowsTab(BaseTab):
         self.artnet_enabled = checked
 
         if checked:
-            # Initialize and enable
+            # Initialize and enable. The master switch never contends
+            # the playback slot; timeline XOR auto applies at PLAY time.
             if self.artnet_controller is None:
                 self._init_artnet_controller()
             elif self.artnet_controller:
-                if not self.artnet_controller.enable_output():
-                    self.artnet_enabled = False
-                    self.show_error(
-                        "ArtNet output refused",
-                        "Auto mode is running and holds the DMX output. "
-                        "Stop Auto mode before enabling timeline ArtNet "
-                        "output.",
-                    )
-                    return
+                self.artnet_controller.enable_output()
                 # Update song structure and lanes
                 self.artnet_controller.set_song_structure(self.song_structure)
                 self.artnet_controller.set_light_lanes(

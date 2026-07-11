@@ -166,13 +166,11 @@ class ShowsArtNetController(QObject):
     # -- output / transport ------------------------------------------------
 
     def enable_output(self) -> bool:
-        """Enable output: claim the exclusive playback slot and start
-        the arbiter loop (the idle floor streams until playback
-        starts). Returns False - and enables nothing - when Auto mode
-        holds the slot (timeline XOR auto)."""
-        if not self.arbiter.acquire_playback_slot(self, SLOT_OWNER):
-            print("ArtNet output refused: Auto mode holds the playback slot")
-            return False
+        """Enable output: start the arbiter loop as the MASTER output
+        switch (the idle floor and the Live busk layer stream). The
+        exclusive playback slot is deliberately NOT claimed here -
+        enabling output to busk must not lock Auto mode out; the
+        timeline claims the slot when it actually PLAYS."""
         # The Shows tab is an editor context: idle keeps the rig
         # visible for authoring. Only a PRIVATE arbiter takes its
         # policy from the producer - on the shared one the shell owns
@@ -185,43 +183,55 @@ class ShowsArtNetController(QObject):
         return True
 
     def disable_output(self):
-        """Disable output: release the slot, stop the loop, send one
-        blackout. On a SHARED arbiter the loop is only stopped if the
-        timeline actually held the slot - never out from under a
-        running Auto mode."""
+        """Disable output: release the slot (if playing) and stop the
+        loop with one blackout. On a SHARED arbiter the loop is only
+        stopped when no OTHER producer holds the playback slot - never
+        out from under a running Auto mode."""
         self.output_enabled = False
         with self._render_lock:
             self._state = _STOPPED
             self._last_frames = {}
-        held = self.arbiter.playback_slot_owner() == SLOT_OWNER
         self.arbiter.release_playback_slot(SLOT_OWNER)
-        if held or self._owns_arbiter:
+        if self._owns_arbiter \
+                or self.arbiter.playback_slot_owner() is None:
             self.arbiter.stop(blackout=True)
         print("ArtNet output disabled")
 
-    def start_playback(self):
-        """Playback started: the layer renders fresh frames."""
-        if self.output_enabled:
-            with self._render_lock:
-                self._state = _PLAYING
-            print("ArtNet output started")
+    def start_playback(self) -> bool:
+        """Playback started: claim the exclusive playback slot and
+        render fresh frames. Returns False - and renders nothing -
+        when Auto mode holds the slot (timeline XOR auto applies at
+        PLAY time; the transport itself may keep running without
+        DMX)."""
+        if not self.output_enabled:
+            return True   # nothing streams; nothing to claim
+        if not self.arbiter.acquire_playback_slot(self, SLOT_OWNER):
+            print("ArtNet playback refused: Auto mode holds the playback slot")
+            return False
+        with self._render_lock:
+            self._state = _PLAYING
+        print("ArtNet output started")
+        return True
 
     def pause_playback(self):
         """Playback paused: hold (and keep refreshing) the last frame
-        instead of dropping to the idle floor mid-song."""
+        instead of dropping to the idle floor mid-song. The slot stays
+        claimed - a paused show still owns the rig."""
         with self._render_lock:
             if self._state == _PLAYING:
                 self._state = _PAUSED
         print("ArtNet output paused")
 
     def stop_playback(self):
-        """Playback stopped: clear block tracking and stop rendering -
-        the arbiter floor takes over (visible in the editor)."""
+        """Playback stopped: clear block tracking, stop rendering and
+        release the playback slot - the arbiter floor takes over
+        (visible in the editor) and Auto may claim the slot."""
         with self._render_lock:
             self._state = _STOPPED
             self._last_frames = {}
             self.active_block_ids.clear()
             self.dmx_manager.clear_active_blocks()
+        self.arbiter.release_playback_slot(SLOT_OWNER)
         print("ArtNet output stopped - idle floor takes over")
 
     def update_position(self, position: float):
@@ -235,16 +245,17 @@ class ShowsArtNetController(QObject):
 
     def cleanup(self):
         """Cleanup resources. A private arbiter is shut down (socket
-        closed); a shared one is released, and stopped only if the
-        timeline held the slot."""
+        closed); a shared one is released, and stopped only when no
+        OTHER producer still holds the playback slot."""
         with self._render_lock:
             self._state = _STOPPED
             self._last_frames = {}
-        held = self.arbiter.playback_slot_owner() == SLOT_OWNER
+        was_enabled = self.output_enabled
+        self.output_enabled = False
         self.arbiter.release_playback_slot(SLOT_OWNER)
         if self._owns_arbiter:
             self.arbiter.shutdown()
-        elif held:
+        elif was_enabled and self.arbiter.playback_slot_owner() is None:
             self.arbiter.stop(blackout=True)
         print("ShowsArtNet Controller cleaned up")
 

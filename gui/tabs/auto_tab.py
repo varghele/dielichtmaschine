@@ -1793,9 +1793,9 @@ class AutoTab(BaseTab):
             if not self._dmx_controller.start():
                 self.show_error(
                     "DMX output refused",
-                    "The Show tab's timeline holds the DMX output "
-                    "(ArtNet is enabled there). Disable ArtNet on the "
-                    "Show tab before starting Auto mode.",
+                    "The Show tab's timeline is playing and holds the "
+                    "DMX output. Stop timeline playback before "
+                    "starting Auto mode.",
                 )
                 self._cleanup()
                 return

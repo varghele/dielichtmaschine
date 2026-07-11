@@ -33,24 +33,36 @@ class Ui_MainWindow(object):
         # are packed into topbar StatusChips in setupStatusAndMenu.
         self.artnet_status_indicator = QtWidgets.QLabel("OFF")
         self.artnet_status_indicator.setProperty("status", "off")
-        self.artnet_status_indicator.setToolTip("ArtNet DMX Output Status")
+        self.artnet_status_indicator.setToolTip(
+            "DMX output status (native ArtNet)")
         # The toggle is a small square that fills with the status color
         # (QSS [status=...] rules); no glyph, so no font dependency.
         self.artnet_toggle_btn = QtWidgets.QPushButton("")
         self.artnet_toggle_btn.setFixedSize(14, 14)
         self.artnet_toggle_btn.setProperty("role", "status-pill")
         self.artnet_toggle_btn.setProperty("status", "off")
-        self.artnet_toggle_btn.setToolTip("Click to toggle ArtNet")
+        self.artnet_toggle_btn.setToolTip("Click to toggle DMX output")
         self.artnet_toggle_btn.setCursor(QtCore.Qt.CursorShape.PointingHandCursor)
 
         self.tcp_status_indicator = QtWidgets.QLabel("OFF")
         self.tcp_status_indicator.setProperty("status", "off")
-        self.tcp_status_indicator.setToolTip("TCP Visualizer Server Status")
-        self.tcp_toggle_btn = QtWidgets.QPushButton("")
-        self.tcp_toggle_btn.setFixedSize(14, 14)
-        self.tcp_toggle_btn.setProperty("role", "status-pill")
+        self.tcp_status_indicator.setToolTip("Visualizer feed status")
+        # A labelled ACTION button, not an anonymous status square:
+        # OPEN launches the standalone visualizer and starts its TCP
+        # feed in one click, STOP ends the feed. Text is driven by
+        # gui.py's _update_toolbar_status; width from the text (a
+        # fixed narrow width would clip the glyphs, CLAUDE.md).
+        self.tcp_toggle_btn = QtWidgets.QPushButton("OPEN")
+        self.tcp_toggle_btn.setProperty("role", "output-select")
+        # compact density: the default 6px vertical padding clips the
+        # label inside the 26px chip row (CLAUDE.md glyph-clip rule).
+        self.tcp_toggle_btn.setProperty("density", "compact")
         self.tcp_toggle_btn.setProperty("status", "off")
-        self.tcp_toggle_btn.setToolTip("Click to toggle Visualizer Server")
+        from gui.typography import mono_font
+        self.tcp_toggle_btn.setFont(mono_font(8, QFont.Weight.DemiBold))
+        self.tcp_toggle_btn.setFixedHeight(20)
+        self.tcp_toggle_btn.setToolTip(
+            "Launch the standalone visualizer and start its feed")
         self.tcp_toggle_btn.setCursor(QtCore.Qt.CursorShape.PointingHandCursor)
 
         # Main layout: [topbar][subnav][tab pages]; the topbar + subnav
@@ -282,10 +294,12 @@ class Ui_MainWindow(object):
         self.topbar.right_layout.addWidget(self.topbar.filename_label)
         self.topbar.right_layout.addSpacing(8)
 
+        # OUTPUT = the master DMX switch (native ArtNet); VISUALIZER
+        # pairs the feed status with an explicit OPEN/STOP action.
         self.artnet_chip = StatusChip(
-            "ArtNet", self.artnet_status_indicator, self.artnet_toggle_btn)
+            "Output", self.artnet_status_indicator, self.artnet_toggle_btn)
         self.tcp_chip = StatusChip(
-            "Vis", self.tcp_status_indicator, self.tcp_toggle_btn)
+            "Visualizer", self.tcp_status_indicator, self.tcp_toggle_btn)
         self.topbar.right_layout.addWidget(self.artnet_chip)
         self.topbar.right_layout.addWidget(self.tcp_chip)
 

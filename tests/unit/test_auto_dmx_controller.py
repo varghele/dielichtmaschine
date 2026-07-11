@@ -193,20 +193,38 @@ class TestAutoAdapter:
 
 class TestSlotExclusivity:
     """timeline XOR auto on ONE shared arbiter, with the real
-    ShowsArtNetController on the other side."""
+    ShowsArtNetController on the other side. The slot is contended at
+    PLAY time - merely enabling the master output switch (to busk on
+    the Live tab, say) must never lock Auto mode out."""
 
     def _shows_controller(self, config, defs, arbiter):
         from utils.artnet.shows_artnet_controller import ShowsArtNetController
         return ShowsArtNetController(
             config=config, fixture_definitions=defs, arbiter=arbiter)
 
-    def test_auto_refused_while_timeline_enabled(self, defs):
+    def test_auto_allowed_while_timeline_merely_enabled(self, defs):
+        # OUTPUT on, nothing playing: the slot is free and Auto starts.
+        config = _config()
+        shared = OutputArbiter(config=config, sender=StubSender())
+        shows = self._shows_controller(config, defs, shared)
+        assert shows.enable_output() is True
+        shared.stop(blackout=False)
+        assert shared.playback_slot_owner() is None
+
+        auto = AutoDMXController(config, defs, arbiter=shared)
+        assert auto.start() is True
+        assert shared.playback_slot_owner() == "auto"
+        shared.stop(blackout=False)
+
+    def test_auto_refused_while_timeline_plays(self, defs):
         config = _config()
         sender = StubSender()
         shared = OutputArbiter(config=config, sender=sender)
         shows = self._shows_controller(config, defs, shared)
         assert shows.enable_output() is True
         shared.stop(blackout=False)
+        assert shows.start_playback() is True
+        assert shared.playback_slot_owner() == "timeline"
 
         auto = AutoDMXController(config, defs, arbiter=shared)
         assert auto.start() is False
@@ -216,7 +234,7 @@ class TestSlotExclusivity:
         auto.stop()
         assert sender.sent == []
 
-    def test_timeline_refused_while_auto_runs(self, defs):
+    def test_timeline_play_refused_while_auto_runs(self, defs):
         config = _config()
         shared = OutputArbiter(config=config, sender=StubSender())
         auto = AutoDMXController(config, defs, arbiter=shared)
@@ -224,10 +242,30 @@ class TestSlotExclusivity:
         shared.stop(blackout=False)
 
         shows = self._shows_controller(config, defs, shared)
-        assert shows.enable_output() is False
+        # The master switch itself is not refused...
+        assert shows.enable_output() is True
+        shared.stop(blackout=False)
+        # ...but PLAYING is, and disabling must not stop Auto's stream.
+        assert shows.start_playback() is False
+        assert shared.playback_slot_owner() == "auto"
+        shows.disable_output()
         assert shared.playback_slot_owner() == "auto"
 
-    def test_slot_frees_after_stop(self, defs):
+    def test_stop_playback_frees_the_slot_for_auto(self, defs):
+        config = _config()
+        shared = OutputArbiter(config=config, sender=StubSender())
+        shows = self._shows_controller(config, defs, shared)
+        assert shows.enable_output() is True
+        shared.stop(blackout=False)
+        assert shows.start_playback() is True
+        shows.stop_playback()
+        assert shared.playback_slot_owner() is None
+
+        auto = AutoDMXController(config, defs, arbiter=shared)
+        assert auto.start() is True
+        shared.stop(blackout=False)
+
+    def test_slot_frees_after_auto_stop(self, defs):
         config = _config()
         shared = OutputArbiter(config=config, sender=StubSender())
         auto = AutoDMXController(config, defs, arbiter=shared)
@@ -237,3 +275,4 @@ class TestSlotExclusivity:
         shows = self._shows_controller(config, defs, shared)
         assert shows.enable_output() is True
         shared.stop(blackout=False)
+        assert shows.start_playback() is True
