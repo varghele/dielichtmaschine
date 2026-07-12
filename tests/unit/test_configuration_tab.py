@@ -306,6 +306,88 @@ class TestContextMenu:
             tab.deleteLater()
 
 
+def _patch_fixture(universe, address=1):
+    from config.models import Fixture, FixtureMode
+    return Fixture(universe=universe, address=address, manufacturer="M",
+                   model="X", name=f"F{universe}", group="G",
+                   current_mode="Std",
+                   available_modes=[FixtureMode(name="Std", channels=8)],
+                   type="PAR")
+
+
+class TestRemoveConfirmation:
+    """Deleting a universe with fixtures still patched to it asks first."""
+
+    def test_helper_lists_fixtures_on_that_universe(self, qapp):
+        from gui.tabs.configuration_tab import fixtures_on_universe
+        cfg = _make_config(("ArtNet", "E1.31"))
+        cfg.fixtures = [_patch_fixture(1), _patch_fixture(1, 20),
+                        _patch_fixture(2)]
+        assert len(fixtures_on_universe(cfg, 1)) == 2
+        assert len(fixtures_on_universe(cfg, 2)) == 1
+        assert fixtures_on_universe(cfg, 9) == []
+
+    def test_empty_universe_removed_without_prompt(self, qapp, monkeypatch):
+        from PyQt6 import QtWidgets
+        tab = _make_tab(qapp, ("ArtNet", "E1.31"))
+        try:
+            def boom(*a, **k):
+                raise AssertionError("should not prompt for an empty universe")
+            monkeypatch.setattr(QtWidgets.QMessageBox, "question", boom)
+            tab._remove_universe_by_id(2)
+            assert sorted(tab.config.universes) == [1]
+        finally:
+            tab.deleteLater()
+
+    def test_patched_universe_prompts_and_cancel_keeps_it(self, qapp, monkeypatch):
+        from PyQt6 import QtWidgets
+        tab = _make_tab(qapp, ("ArtNet", "E1.31"))
+        try:
+            tab.config.fixtures = [_patch_fixture(2)]
+            asked = {}
+            def no(parent, title, text, *a, **k):
+                asked["text"] = text
+                return QtWidgets.QMessageBox.StandardButton.No
+            monkeypatch.setattr(QtWidgets.QMessageBox, "question",
+                                staticmethod(no))
+            tab._remove_universe_by_id(2)
+            assert sorted(tab.config.universes) == [1, 2]  # kept
+            assert "patched" in asked["text"]
+        finally:
+            tab.deleteLater()
+
+    def test_patched_universe_prompts_and_confirm_removes_it(self, qapp, monkeypatch):
+        from PyQt6 import QtWidgets
+        tab = _make_tab(qapp, ("ArtNet", "E1.31"))
+        try:
+            tab.config.fixtures = [_patch_fixture(2), _patch_fixture(2, 20)]
+            monkeypatch.setattr(
+                QtWidgets.QMessageBox, "question",
+                staticmethod(lambda *a, **k:
+                             QtWidgets.QMessageBox.StandardButton.Yes))
+            tab._remove_universe_by_id(2)
+            assert sorted(tab.config.universes) == [1]  # removed
+        finally:
+            tab.deleteLater()
+
+    def test_remove_button_also_confirms(self, qapp, monkeypatch):
+        from PyQt6 import QtWidgets
+        tab = _make_tab(qapp, ("ArtNet", "E1.31"))
+        try:
+            tab._on_card_clicked(2)
+            tab.config.fixtures = [_patch_fixture(2)]
+            calls = []
+            monkeypatch.setattr(
+                QtWidgets.QMessageBox, "question",
+                staticmethod(lambda *a, **k: calls.append(1) or
+                             QtWidgets.QMessageBox.StandardButton.No))
+            tab._remove_universe()  # the inspector button path
+            assert calls == [1]                    # it prompted
+            assert sorted(tab.config.universes) == [1, 2]  # cancelled
+        finally:
+            tab.deleteLater()
+
+
 class TestReferenceChrome:
     """Deltas closed in the screen-03 diff pass."""
 

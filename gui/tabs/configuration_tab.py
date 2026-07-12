@@ -58,6 +58,12 @@ def channels_used(config, universe_id: int) -> int:
     return total
 
 
+def fixtures_on_universe(config, universe_id: int) -> list:
+    """The fixtures patched to a given universe (by DMX universe id)."""
+    return [f for f in getattr(config, "fixtures", []) or []
+            if f.universe == universe_id]
+
+
 def destination_summary(universe: Universe) -> str:
     """The mono one-liner describing where a universe goes."""
     protocol = universe.output.get("plugin", "E1.31")
@@ -758,13 +764,36 @@ class ConfigurationTab(BaseTab):
 
     def _remove_universe_by_id(self, universe_id):
         """Drop one universe by id (shared by the button and the
-        right-click menu). No-op when it is missing/None."""
+        right-click menu). No-op when it is missing/None.
+
+        If fixtures are still patched to it, confirm first: removing the
+        universe leaves those fixtures with no output. An empty universe
+        is removed without a prompt (matches the plain delete)."""
         if universe_id is None or universe_id not in self.config.universes:
+            return
+        patched = fixtures_on_universe(self.config, universe_id)
+        if patched and not self._confirm_remove_with_fixtures(
+                universe_id, len(patched)):
             return
         self.config.universes.pop(universe_id, None)
         if self._selected_id == universe_id:
             self._selected_id = None
         self.update_from_config()
+
+    def _confirm_remove_with_fixtures(self, universe_id: int,
+                                      count: int) -> bool:
+        """Ask before removing a universe that still has fixtures on it.
+        Returns True to proceed. Defaults to No (the safe choice)."""
+        noun = "fixture" if count == 1 else "fixtures"
+        resp = QtWidgets.QMessageBox.question(
+            self, "Remove universe",
+            f"Universe {universe_id} still has {count} {noun} patched to "
+            f"it. Removing the universe leaves them with no output.\n\n"
+            f"Remove it anyway?",
+            QtWidgets.QMessageBox.StandardButton.Yes
+            | QtWidgets.QMessageBox.StandardButton.No,
+            QtWidgets.QMessageBox.StandardButton.No)
+        return resp == QtWidgets.QMessageBox.StandardButton.Yes
 
     # ------------------------------------------------------------------
     # Right-click context menus (add / remove)
