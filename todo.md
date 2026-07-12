@@ -19,13 +19,13 @@ clock-driven riff player in the live layer).
 
 Discuss before pulling any of these in - order is by leverage:
 
-- [ ] **Headless export CLI** (v1.3): nearly free since
-      `create_qlc_workspace` gained `output_path`; just an argparse
-      shell + console-script entry.
+- [x] **Headless export CLI** (v1.3): done 2026-07-12 -
+      `python main.py export config.yaml --out x.qxw --qlc-version
+      5.2.1`, dispatched before any Qt import (utils/export_cli.py).
 - [ ] **Configurable fixture library paths** (v1.2): user GDTF dir +
       user `.qxf` dir in Settings, folded into `fixture_search_dirs()`;
       prerequisite for GDTF Share Phase 4, and the packaged app needs
-      writable per-user defaults anyway.
+      writable per-user defaults anyway. (In progress 2026-07-12.)
 - [ ] **`.lms` project extension** (v1.3): file filters, recents,
       packaging association; `.yaml` stays loadable.
 - [ ] **Fixtures table delegate editing** (v1.3): the last old-styling

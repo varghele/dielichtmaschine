@@ -83,6 +83,14 @@ The five-minute path from blank project to a working show:
 5. **Shows** - drop riffs onto the timeline, or paint dimmer / colour / movement / special blocks lane by lane. Enable ArtNet output and / or the embedded visualizer to preview as you go.
 6. **Play or export** - drive your rig live over ArtNet from the Shows tab, or `File → Export QLC+ Workspace` to run the `.qxw` from QLC+.
 
+For batch workflows there is a headless export (no window, no display needed):
+
+```bash
+python main.py export show.yaml --out venue_a.qxw --qlc-version 5.2.1
+```
+
+`--no-vc` skips the Virtual Console, `--dark-mode` flips its background; the default output lands next to the config. Handy for exporting N variants for N venues from a script.
+
 ### Unscripted (Auto Mode)
 
 `Ctrl+L` opens the Auto Mode tab. Pick a host API + audio input, hit **START**, and the engine selects rudiments per group from a sliding window of live audio. FILL NOW, colour override, BPM tap, and per-group AUTO / CURATED / LOCKED controls are on the same tab.

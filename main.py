@@ -13,16 +13,24 @@ import faulthandler
 faulthandler.enable()
 
 import os
-from PyQt6 import QtWidgets
-from PyQt6.QtGui import QIcon
-from gui import MainWindow
 from utils import app_identity
-from utils.paths import get_project_root
 
 # Handle --version flag early
 if '--version' in sys.argv:
     print(app_identity.version_string())
     sys.exit(0)
+
+# Headless subcommands run BEFORE any PyQt import so they work with no
+# display: `lichtmaschine export config.yaml --out workspace.qxw
+# --qlc-version 5.2.1` (utils/export_cli.py).
+if len(sys.argv) > 1 and sys.argv[1] == 'export':
+    from utils.export_cli import run_export_cli
+    sys.exit(run_export_cli(sys.argv[2:]))
+
+from PyQt6 import QtWidgets
+from PyQt6.QtGui import QIcon
+from gui import MainWindow
+from utils.paths import get_project_root
 
 # Performance profiling - enable with --profile flag
 PROFILING_ENABLED = '--profile' in sys.argv

@@ -13,6 +13,13 @@ verbatim as the GitHub Release notes (see [docs/releasing.md](docs/releasing.md)
 
 ### Added
 
+- **Headless QLC+ export.** `python main.py export show.yaml --out
+  venue_a.qxw --qlc-version 5.2.1` writes the workspace without opening
+  the app (no display needed) - for scripted setups and exporting many
+  venue variants in one go. `--no-vc` skips the Virtual Console,
+  `--dark-mode` flips its background, and with no `--out` the workspace
+  lands next to the config.
+
 - **The Live tab's POSITION pool aims real light, per group.** Select
   fixture groups and touch a position palette - a computed preset
   (CENTRE, AUDIENCE, CROSS, FAN OUT, CEILING, one per placed drum
