@@ -11,7 +11,8 @@ and SHIPPED with a per-group policy (each selected group takes the
 touched position, others keep theirs; second touch releases) - see
 docs/position-presets-plan.md UPDATE and the ROADMAP v1.8 palette
 item. In trade, GDTF Share Phase 4 (in-app login) is deferred; it
-stays in ROADMAP v1.2 behind configurable library paths. Next Live
+stays in ROADMAP v1.2 (unblocked since the configurable library paths
+shipped later the same day). Next Live
 gaps by leverage: scenes pool -> light, effects pool -> light (needs a
 clock-driven riff player in the live layer).
 
@@ -22,10 +23,10 @@ Discuss before pulling any of these in - order is by leverage:
 - [x] **Headless export CLI** (v1.3): done 2026-07-12 -
       `python main.py export config.yaml --out x.qxw --qlc-version
       5.2.1`, dispatched before any Qt import (utils/export_cli.py).
-- [ ] **Configurable fixture library paths** (v1.2): user GDTF dir +
-      user `.qxf` dir in Settings, folded into `fixture_search_dirs()`;
-      prerequisite for GDTF Share Phase 4, and the packaged app needs
-      writable per-user defaults anyway. (In progress 2026-07-12.)
+- [x] **Configurable fixture library paths** (v1.2): done 2026-07-12 -
+      Settings > Fixture Libraries..., user-gdtf/user-qxf sources in
+      fixture_search_dirs(), app-data defaults, cache invalidation on
+      change. GDTF Share Phase 4 is now unblocked.
 - [ ] **`.lms` project extension** (v1.3): file filters, recents,
       packaging association; `.yaml` stays loadable.
 - [ ] **Fixtures table delegate editing** (v1.3): the last old-styling

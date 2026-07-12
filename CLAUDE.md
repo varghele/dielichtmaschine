@@ -255,6 +255,25 @@ safe-idle wheel-open write claims them at 0 (documented in
 tests/unit/test_dmx_masks.py). Phase 4 (conductor, pause look,
 setlist runner) stays v1.7.
 
+**Solo pull-ins (2026-07-12 evening, same branch):** two roadmap
+items shipped while the user was away. (1) Headless export CLI (v1.3):
+`python main.py export config.yaml --out x.qxw --qlc-version 5.2.1`
+plus `--no-vc`/`--dark-mode`; main.py dispatches to
+utils/export_cli.py BEFORE any PyQt import (keep new subcommands above
+the Qt imports); no console-script entry because there is no pip
+packaging, and the packaged exe is windowed so its console output is
+invisible. (2) Configurable fixture library paths (v1.2): Settings >
+Fixture Libraries... dialog, `library/user_gdtf_dir`/`user_qxf_dir`
+keys (empty = app-data default from utils/app_identity.user_data_dir,
+which app_logging.log_dir now shares), sources `user-gdtf`/`user-qxf`
+in fixture_search_dirs (priority: user GDTF > gdtf_fixtures >
+custom_fixtures > user QXF > QLC+ dirs), setters invalidate the
+definition cache, tests/conftest.py filters the user sources from the
+hermetic suite and parks the unwrapped function as
+`fl._real_fixture_search_dirs`. GDTF Share Phase 4 is unblocked again.
+The fixture browser's manufacturer/model separator became " · " (was
+an em-dash, banned in UI copy).
+
 **Live position palettes make light (2026-07-12, same branch):**
 pulled forward from v1.5a/v1.8 (GDTF Share Phase 4 deferred in trade).
 Per-group policy: LiveState.positions is Dict[group -> position id]

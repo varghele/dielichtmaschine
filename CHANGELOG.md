@@ -13,6 +13,13 @@ verbatim as the GitHub Release notes (see [docs/releasing.md](docs/releasing.md)
 
 ### Added
 
+- **Your own fixture library folders.** Settings > Fixture Libraries...
+  points the app at a personal GDTF directory and a personal .qxf
+  directory. Definitions found there are picked up by the fixture
+  browser (tagged [GDTF] / [user]) and take priority over the shipped
+  ones - your corrected file wins over the bundled copy of the same
+  fixture. The defaults live in the per-user app data folder, so a
+  packaged install never needs write access to its own directory.
 - **Headless QLC+ export.** `python main.py export show.yaml --out
   venue_a.qxw --qlc-version 5.2.1` writes the workspace without opening
   the app (no display needed) - for scripted setups and exporting many
