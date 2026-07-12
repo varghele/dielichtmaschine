@@ -1,5 +1,15 @@
 # -*- mode: python ; coding: utf-8 -*-
-"""PyInstaller spec for Die Lichtmaschine (bundled with Visualizer)."""
+"""PyInstaller spec for Die Lichtmaschine (bundled with Visualizer).
+
+Project files use the native .lms extension (plain YAML on disk; see
+utils/app_identity.PROJECT_EXT). The built executable already accepts a
+project path as its first argument (main.py -> open_project_on_launch),
+so a .lms double-click opens the project once the OS association points
+at Lichtmaschine.exe. Registering that association is an installer's job
+(HKCR\.lms + a ProgId whose shell/open/command runs `Lichtmaschine.exe
+"%1"`); this project ships a raw PyInstaller folder / zip with no
+installer yet, so association is set up manually until one exists.
+"""
 
 import os
 

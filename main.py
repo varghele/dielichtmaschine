@@ -91,6 +91,14 @@ def main():
         window = MainWindow()
         window.showMaximized()
 
+        # A project path on the command line - or a file the OS handed us
+        # from a .lms double-click once the extension is associated - opens
+        # that project as soon as the window is up. Runs after the export
+        # subcommand dispatch above, so only GUI launches reach here.
+        launch_project = app_identity.project_path_from_argv(sys.argv[1:])
+        if launch_project and os.path.isfile(launch_project):
+            window.open_project_on_launch(os.path.abspath(launch_project))
+
         # If profiling, set up periodic report printing
         if PROFILING_ENABLED:
             from PyQt6.QtCore import QTimer

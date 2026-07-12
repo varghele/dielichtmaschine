@@ -8,6 +8,7 @@ from PyQt6.QtWidgets import QMainWindow, QFileDialog, QMessageBox
 from PyQt6.QtCore import QTimer, Qt
 from PyQt6.QtGui import QUndoStack, QKeySequence, QAction
 from config.models import Configuration
+from utils import app_identity
 from utils.create_workspace import create_qlc_workspace
 from gui.Ui_MainWindow import Ui_MainWindow
 from gui.tabs import (ConfigurationTab, FixturesTab, AutoTab, LiveTab,
@@ -861,13 +862,13 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             if not self.config_path:
                 file_path, _ = QFileDialog.getSaveFileName(
                     self,
-                    "Save Configuration",
+                    "Save Project",
                     "",
-                    "YAML Files (*.yaml);;All Files (*)"
+                    app_identity.project_save_filter()
                 )
                 if not file_path:
                     return
-                self.config_path = file_path
+                self.config_path = app_identity.ensure_project_ext(file_path)
 
             # Save configuration
             self.config.save(self.config_path)
@@ -921,6 +922,14 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             QApplication.processEvents()
         QTimer.singleShot(100, self._do_load_configuration)
 
+    def open_project_on_launch(self, path: str):
+        """Open a project handed to the app at startup: a command-line
+        path, or a file the OS passed us from a .lms double-click. Uses
+        the same deferred load flow as the recent list; setting the
+        project path here also suppresses the crash-recovery prompt (it
+        only fires on an untouched session)."""
+        self.open_recent_config(path)
+
     def save_configuration_as(self):
         """Save configuration to a new YAML file (always prompts for location)"""
         try:
@@ -935,15 +944,15 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             default_dir = os.path.dirname(self.config_path) if self.config_path else ""
             file_path, _ = QFileDialog.getSaveFileName(
                 self,
-                "Save Configuration As",
+                "Save Project As",
                 default_dir,
-                "YAML Files (*.yaml);;All Files (*)"
+                app_identity.project_save_filter()
             )
             if not file_path:
                 return
 
             # Update the current config path to the new location
-            self.config_path = file_path
+            self.config_path = app_identity.ensure_project_ext(file_path)
 
             # Save configuration
             self.config.save(self.config_path)
@@ -1025,13 +1034,13 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         dest_path, _ = QFileDialog.getSaveFileName(
             self,
             "Create Project From Template",
-            os.path.join(os.path.expanduser("~"), f"{template.key}.yaml"),
-            "YAML Files (*.yaml)"
+            os.path.join(os.path.expanduser("~"),
+                         f"{template.key}{app_identity.PROJECT_EXT}"),
+            app_identity.project_save_filter()
         )
         if not dest_path:
             return
-        if not os.path.splitext(dest_path)[1]:
-            dest_path += ".yaml"
+        dest_path = app_identity.ensure_project_ext(dest_path)
 
         try:
             new_path = instantiate_template(
@@ -1062,12 +1071,12 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         QTimer.singleShot(100, self._do_load_configuration)
 
     def load_configuration(self):
-        """Load configuration from YAML file"""
+        """Load a project (.lms, or a legacy .yaml/.yml)."""
         file_path, _ = QFileDialog.getOpenFileName(
             self,
-            "Load Configuration",
+            "Open Project",
             "",
-            "YAML Files (*.yaml);;All Files (*)"
+            app_identity.project_open_filter()
         )
 
         if not file_path:

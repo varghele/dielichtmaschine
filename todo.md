@@ -27,8 +27,14 @@ Discuss before pulling any of these in - order is by leverage:
       Settings > Fixture Libraries..., user-gdtf/user-qxf sources in
       fixture_search_dirs(), app-data defaults, cache invalidation on
       change. GDTF Share Phase 4 is now unblocked.
-- [ ] **`.lms` project extension** (v1.3): file filters, recents,
-      packaging association; `.yaml` stays loadable. IN PROGRESS.
+- [x] **`.lms` project extension** (v1.3): done 2026-07-12 - native
+      `.lms` (app_identity PROJECT_EXT + filters + ensure_project_ext),
+      Save/Save As/New-from-Template default to it, open accepts
+      `.lms`+legacy `.yaml`/`.yml`, explicit `.yaml` respected, format
+      is unchanged YAML (byte-identical across extensions). main.py
+      opens a CLI/double-click path via open_project_on_launch. OS
+      file-association registration needs an installer (noted in the
+      spec) - the only follow-up. 17 unit + 3 e2e tests.
 - [x] **Fixtures table delegate editing** (v1.3): dropped - obsoleted by
       the North Star rebuild of the Fixtures tab (read-only table +
       inspector editing, no cell widgets). Experiment files deleted,

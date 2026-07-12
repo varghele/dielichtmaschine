@@ -32,10 +32,57 @@ LEGACY_SETTINGS_APP = "QLCShowCreator"
 
 APP_VERSION = __version__
 
+# Project file format. The native extension is .lms (a Lichtmaschine
+# project, as named in the design handoff); the on-disk format is plain
+# YAML, so legacy .yaml/.yml projects load unchanged and can be re-saved
+# as either. The extension is cosmetic - Configuration.load/save key off
+# the path only, never the suffix.
+PROJECT_EXT = ".lms"
+PROJECT_EXTENSIONS = (".lms", ".yaml", ".yml")
+
 
 def version_string() -> str:
     """The one-line version string for --version and the About dialog."""
     return f"{APP_NAME} {APP_VERSION}"
+
+
+def project_open_filter() -> str:
+    """QFileDialog name-filter for opening a project.
+
+    The native .lms and the legacy .yaml/.yml all match the first entry,
+    so old projects stay visible without switching filters.
+    """
+    return (f"{APP_NAME} Project (*.lms *.yaml *.yml);;"
+            "YAML Files (*.yaml *.yml);;"
+            "All Files (*)")
+
+
+def project_save_filter() -> str:
+    """QFileDialog name-filter for saving a project.
+
+    The native .lms leads (it is the default suffix); .yaml stays offered
+    for interop and for users who prefer the plain extension.
+    """
+    return f"{APP_NAME} Project (*.lms);;YAML Files (*.yaml)"
+
+
+def ensure_project_ext(path: str) -> str:
+    """Give a save path the native .lms suffix when the user typed a bare
+    name with no extension. An explicit suffix (.yaml, .lms, anything) is
+    left exactly as chosen."""
+    if path and not os.path.splitext(path)[1]:
+        return path + PROJECT_EXT
+    return path
+
+
+def project_path_from_argv(argv) -> str | None:
+    """The first non-flag argument in ``argv``, treated as a project to
+    open on launch - a command-line path or a file the OS handed us from
+    a .lms double-click. ``None`` when there is no positional argument."""
+    for arg in argv:
+        if arg and not arg.startswith("-"):
+            return arg
+    return None
 
 
 def user_data_dir() -> str:

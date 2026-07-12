@@ -1032,3 +1032,63 @@ class TestVisualizerButton:
         main_window._toggle_tcp()             # second press stops
         assert not main_window.shows_tab.tcp_server.is_running()
         assert launches == [1]                # no relaunch on stop
+
+
+# ===========================================================================
+# Project file dialogs: the native .lms extension (v1.3)
+# ===========================================================================
+class TestProjectFileDialogs:
+    """The save/open dialog glue for the native .lms project extension.
+
+    The pure helpers (filters, ensure_project_ext, argv parsing) and the
+    YAML round-trip are unit-tested in test_project_extension.py; these
+    drive the REAL MainWindow save/open handlers so the wiring itself is
+    proven, not just the helpers."""
+
+    def test_bare_save_name_becomes_lms(
+            self, main_window, message_boxes, monkeypatch, tmp_path):
+        """Save As with a bare typed name writes a .lms project."""
+        import os
+        from PyQt6.QtWidgets import QFileDialog
+        from config.models import Configuration
+        window = main_window
+
+        bare = str(tmp_path / "my_gig")  # no extension, as a user often types
+        monkeypatch.setattr(QFileDialog, "getSaveFileName",
+                            staticmethod(lambda *a, **k: (bare, "")))
+        message_boxes.expect("Success")
+        window.save_configuration_as()
+
+        assert window.config_path == bare + ".lms"
+        assert os.path.isfile(bare + ".lms")
+        Configuration.load(bare + ".lms")  # the written file loads back
+
+    def test_explicit_yaml_extension_is_respected(
+            self, main_window, message_boxes, monkeypatch, tmp_path):
+        """A user who deliberately types .yaml keeps it (interop)."""
+        import os
+        from PyQt6.QtWidgets import QFileDialog
+        window = main_window
+
+        yaml_path = str(tmp_path / "legacy.yaml")
+        monkeypatch.setattr(QFileDialog, "getSaveFileName",
+                            staticmethod(lambda *a, **k: (yaml_path, "")))
+        message_boxes.expect("Success")
+        window.save_configuration_as()
+
+        assert window.config_path == yaml_path
+        assert os.path.isfile(yaml_path)
+
+    def test_open_on_launch_routes_through_the_recent_open_flow(
+            self, main_window, monkeypatch, tmp_path):
+        """open_project_on_launch (the .lms double-click / CLI path) reuses
+        the existing deferred recent-open flow with the given path."""
+        window = main_window
+        lms = str(tmp_path / "launch.lms")
+
+        seen = []
+        monkeypatch.setattr(window, "open_recent_config",
+                            lambda path: seen.append(path))
+        window.open_project_on_launch(lms)
+
+        assert seen == [lms]

@@ -44,6 +44,15 @@ verbatim as the GitHub Release notes (see [docs/releasing.md](docs/releasing.md)
 
 ### Added
 
+- **Native `.lms` project files.** Projects now save with the `.lms`
+  extension (Die Lichtmaschine project); Save and Save As default to it,
+  and a bare typed name gets `.lms` automatically. The file is still
+  plain YAML inside, so nothing about the format changed - your existing
+  `.yaml` projects open exactly as before and can be re-saved as either.
+  Passing a project path on the command line (or double-clicking a
+  `.lms` file once it is associated with the app) opens it on launch;
+  registering that association still needs a manual step until an
+  installer ships.
 - **Your own fixture library folders.** Settings > Fixture Libraries...
   points the app at a personal GDTF directory and a personal .qxf
   directory. Definitions found there are picked up by the fixture
