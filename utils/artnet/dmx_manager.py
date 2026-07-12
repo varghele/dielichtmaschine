@@ -15,6 +15,13 @@ from effects import (
 # Debug flag - set to False to disable verbose prints (improves performance significantly)
 DEBUG_PRINTS = False
 
+# Assumed pan/tilt travel when the fixture definition declares no
+# <Physical><Focus> ranges (PanMax/TiltMax absent or 0). Matches the
+# calculate_pan_tilt/pan_tilt_to_dmx defaults so aiming stays unchanged
+# for definitions without physical data.
+DEFAULT_PAN_RANGE = 540.0
+DEFAULT_TILT_RANGE = 270.0
+
 
 class FixtureChannelMap:
     """
@@ -43,6 +50,15 @@ class FixtureChannelMap:
         # Get channel mappings from fixture definition
         self.mode_name = fixture.current_mode
         self._build_channel_map()
+
+        # Physical pan/tilt travel (degrees) from the definition's
+        # <Physical><Focus>, with the historical defaults as fallback
+        # when the definition declares none (absent key or 0).
+        physical = fixture_def.get('physical') or {}
+        self.pan_range = float(physical.get('pan_max') or 0.0) \
+            or DEFAULT_PAN_RANGE
+        self.tilt_range = float(physical.get('tilt_max') or 0.0) \
+            or DEFAULT_TILT_RANGE
 
     def _build_channel_map(self):
         """Build channel mapping from fixture definition."""
@@ -843,9 +859,13 @@ class DMXManager:
             pan_degrees, tilt_degrees = calculate_pan_tilt(
                 fixture_x=fixture.x, fixture_y=fixture.y, fixture_z=fixture_z,
                 target_x=target_x, target_y=target_y, target_z=target_z,
-                mounting=mounting, yaw=yaw, pitch=pitch, roll=roll
+                mounting=mounting, yaw=yaw, pitch=pitch, roll=roll,
+                pan_range=fixture_map.pan_range,
+                tilt_range=fixture_map.tilt_range,
             )
-            pan_dmx, tilt_dmx = pan_tilt_to_dmx(pan_degrees, tilt_degrees)
+            pan_dmx, tilt_dmx = pan_tilt_to_dmx(
+                pan_degrees, tilt_degrees,
+                fixture_map.pan_range, fixture_map.tilt_range)
 
             pan = max(pan_min, min(pan_max, float(pan_dmx)))
             tilt = max(tilt_min, min(tilt_max, float(tilt_dmx)))
@@ -863,9 +883,13 @@ class DMXManager:
                     pan_degrees, tilt_degrees = calculate_pan_tilt(
                         fixture_x=fixture.x, fixture_y=fixture.y, fixture_z=fixture_z,
                         target_x=spot.x, target_y=spot.y, target_z=spot.z,
-                        mounting=mounting, yaw=yaw, pitch=pitch, roll=roll
+                        mounting=mounting, yaw=yaw, pitch=pitch, roll=roll,
+                        pan_range=fixture_map.pan_range,
+                        tilt_range=fixture_map.tilt_range,
                     )
-                    pan_dmx, tilt_dmx = pan_tilt_to_dmx(pan_degrees, tilt_degrees)
+                    pan_dmx, tilt_dmx = pan_tilt_to_dmx(
+                        pan_degrees, tilt_degrees,
+                        fixture_map.pan_range, fixture_map.tilt_range)
 
                     if DEBUG_PRINTS:
                         debug_key = f"_spot_debug_{fixture.name}"

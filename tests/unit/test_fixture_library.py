@@ -132,6 +132,9 @@ def test_legacy_dict_matches_reference_parser(qxf_path):
     ]
 
     legacy = parse_fixture_file(qxf_path).to_legacy_dict()
+    # 'physical' (pan/tilt focus ranges) is additive surface the reference
+    # parser never produced; it gets its own tests.
+    legacy.pop("physical")
     assert legacy == reference
 
 
@@ -142,6 +145,19 @@ def test_canonical_parse_has_no_junk_channels(qxf_path):
     assert defn.modes, "every bundled fixture has at least one mode"
     for mode in defn.modes:
         assert all(isinstance(ref.number, int) for ref in mode.channels)
+
+
+def test_parse_carries_focus_ranges():
+    # A mover's <Physical><Focus PanMax TiltMax> lands on the canonical
+    # model and rides the legacy dict's additive 'physical' key (the
+    # live/playback aiming reads it via FixtureChannelMap).
+    defn = parse_fixture_file(
+        os.path.join(CUSTOM_FIXTURES, "Martin-MAC-Aura.qxf"))
+    assert defn.pan_max > 0
+    assert defn.tilt_max > 0
+    legacy = defn.to_legacy_dict()
+    assert legacy["physical"] == {"pan_max": defn.pan_max,
+                                  "tilt_max": defn.tilt_max}
 
 
 def test_parse_carries_type_layout_and_root():

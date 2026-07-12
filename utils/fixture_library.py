@@ -123,6 +123,8 @@ class FixtureDefinition:
     qlc_type: str                 # raw <Type> text ('' if absent)
     legacy_type: str              # determine_fixture_type() result
     layout: Tuple[int, int]       # <Physical><Layout> cell grid, (1, 1) default
+    pan_max: float = 0.0          # <Physical><Focus PanMax>, 0 = not declared
+    tilt_max: float = 0.0         # <Physical><Focus TiltMax>, 0 = not declared
     channels: List[ChannelDef] = field(default_factory=list)
     modes: List[ModeDef] = field(default_factory=list)
     root: Optional[ET.Element] = None
@@ -150,6 +152,7 @@ class FixtureDefinition:
         return {
             'manufacturer': self.manufacturer,
             'model': self.model,
+            'physical': {'pan_max': self.pan_max, 'tilt_max': self.tilt_max},
             'channels': [
                 {
                     'name': ch.name,
@@ -285,12 +288,20 @@ def definition_from_qxf_root(root: ET.Element, path: str) -> FixtureDefinition:
         modes.append(ModeDef(name=mode.get('Name'), channels=refs, heads=heads))
 
     layout = (1, 1)
+    pan_max = tilt_max = 0.0
     physical = _find(root, './/Physical')
     if physical is not None:
         layout_el = _find(physical, 'Layout')
         if layout_el is not None:
             layout = (int(layout_el.get('Width', 1)),
                       int(layout_el.get('Height', 1)))
+        focus_el = _find(physical, 'Focus')
+        if focus_el is not None:
+            try:
+                pan_max = float(focus_el.get('PanMax') or 0.0)
+                tilt_max = float(focus_el.get('TiltMax') or 0.0)
+            except (TypeError, ValueError):
+                pan_max = tilt_max = 0.0
 
     return FixtureDefinition(
         path=path,
@@ -299,6 +310,8 @@ def definition_from_qxf_root(root: ET.Element, path: str) -> FixtureDefinition:
         qlc_type=_find_text(root, './/Type') or '',
         legacy_type=determine_fixture_type(root),
         layout=layout,
+        pan_max=pan_max,
+        tilt_max=tilt_max,
         channels=channels,
         modes=modes,
         root=root,
