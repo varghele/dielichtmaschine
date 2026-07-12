@@ -131,6 +131,9 @@ same convention).
 
 ## 4. Swapping two axes MIRRORS the world (stage -> scene mapping)
 
+*Long form, plus the fixture-orientation half of the story:
+[coordinate-frames-and-orientation.md](coordinate-frames-and-orientation.md).*
+
 **Symptom:** the 3D scene looks subtly wrong in a way nobody can name.
 Floor lettering renders as mirror writing. A mover aimed at a spike
 mark appears to hit the mark's mirror image. "Point at the audience"

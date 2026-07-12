@@ -48,6 +48,10 @@ screen design first), timeline undo/redo (big), MVR/OSC (own tracks).
 
 ## Open finding: the pan/tilt yoke model may not match real movers
 
+**Full write-up, with the hardware verification protocol (tests A-D and
+the data to collect): `docs/coordinate-frames-and-orientation.md`.**
+The user has two real moving heads to test with. Read that doc first.
+
 Found 2026-07-12 while fixing the mirrored stage and the mounting
 presets. NOT yet fixed - it needs a real fixture to settle, and it
 does not affect the visualizer (which is self-consistent).

@@ -35,6 +35,10 @@ ArtNet playback, PyQt6 + ModernGL, developed primarily on Windows.
 - `docs/` - architecture and theory notes; `qt-gotchas.md` and
   `gl-gotchas.md` are the trap references (read before Qt styling or
   ModernGL work; add entries when a diagnosis took >20 min).
+  `coordinate-frames-and-orientation.md` is REQUIRED READING before
+  touching stage->3D mapping, mounting presets, or pan/tilt: the three
+  frames, the two bugs fixed 2026-07-12, and the open yoke question
+  with its hardware protocol.
 - `tests/README.md` - suite layout + visual-regression workflow.
 - `demos/README.md` - the reproducible demo rigs/shows that double as
   project templates and test data.
@@ -291,7 +295,10 @@ pan/tilt). NEW OPEN FINDING in todo.md + ROADMAP v1.5a: the pan/tilt
 YOKE model (beam +X, pan about local Z) cannot describe a real moving
 head (pan axis must be vertical when hung); the visualizer is
 self-consistent so this is invisible in-app - needs hardware to
-settle. Do not "fix" it by flipping signs.
+settle. Do not "fix" it by flipping signs. ALL OF IT (frames, both
+bugs, the open question, the hardware test protocol) is written up in
+`docs/coordinate-frames-and-orientation.md` - start there. The user has
+two real moving heads on hand to run the protocol.
 
 **Solo pull-ins (2026-07-12 evening, same branch):** two roadmap
 items shipped while the user was away. (1) Headless export CLI (v1.3):
