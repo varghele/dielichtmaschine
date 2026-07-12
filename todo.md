@@ -28,9 +28,11 @@ Discuss before pulling any of these in - order is by leverage:
       fixture_search_dirs(), app-data defaults, cache invalidation on
       change. GDTF Share Phase 4 is now unblocked.
 - [ ] **`.lms` project extension** (v1.3): file filters, recents,
-      packaging association; `.yaml` stays loadable.
-- [ ] **Fixtures table delegate editing** (v1.3): the last old-styling
-      holdout, fits the tab-polish pass.
+      packaging association; `.yaml` stays loadable. IN PROGRESS.
+- [x] **Fixtures table delegate editing** (v1.3): dropped - obsoleted by
+      the North Star rebuild of the Fixtures tab (read-only table +
+      inspector editing, no cell widgets). Experiment files deleted,
+      qt-gotchas #3 + ROADMAP updated 2026-07-12.
 - [ ] **Riff tagging + search** (v1.3): rail search exists; tags are a
       small model addition.
 
