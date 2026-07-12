@@ -19,6 +19,7 @@ from PyQt6.QtCore import Qt, QTimer, pyqtSignal
 
 from utils.fixture_capabilities import Chassis, chassis_from_legacy_type
 from utils.geometry import GeometryBuilder
+from utils.orientation import MOUNTING_PRESET_ANGLES
 
 
 class OrientationPreviewWidget(QOpenGLWidget):
@@ -1901,13 +1902,15 @@ class OrientationPanel(QWidget):
 
     # Absolute orientation values for each preset (yaw, pitch, roll)
     # These are the actual world-space angles, not relative adjustments
+    # The mounting presets come from utils/orientation.py - the ONE table
+    # (see MOUNTING_PRESET_ANGLES). This dialog used to define its own,
+    # in which 'hanging' was pitch +90: a rotation about the X axis,
+    # which cannot move a beam that starts along +X, so hanging and
+    # standing both aimed stage-right exactly like 'wall_back'. That is
+    # the bug where a hanging rig rendered wall-mounted. Never
+    # re-introduce a local copy of these numbers.
     PRESET_VALUES = {
-        'hanging': (0.0, 90.0, 0.0),      # Beam pointing down (-Z world)
-        'standing': (0.0, -90.0, 0.0),    # Beam pointing up (+Z world)
-        'wall_left': (-90.0, 0.0, 0.0),   # Beam pointing stage-right (+X world)
-        'wall_right': (90.0, 0.0, 0.0),   # Beam pointing stage-left (-X world)
-        'wall_back': (0.0, 0.0, 0.0),     # Beam pointing toward audience (-Y world)
-        'wall_front': (180.0, 0.0, 0.0),  # Beam pointing toward back (+Y world)
+        **MOUNTING_PRESET_ANGLES,
         'custom': None,  # No predefined values for custom
     }
 

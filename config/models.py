@@ -1729,6 +1729,18 @@ class Configuration:
         for warning in reconcile_fixture_modes(fixtures):
             print(f"Config load: {warning}")
 
+        # Bring stored orientations onto the canonical mounting table
+        # (utils/orientation.py). Configs written before 2026-07-12 saved
+        # `mounting: hanging` next to yaw/pitch/roll = 0, and every
+        # consumer used the zeros and ignored the mounting - so a hanging
+        # rig aimed as if it were wall-mounted. Custom orientations are
+        # left untouched; the rewrite is idempotent.
+        from utils.orientation import migrate_orientation_angles
+        for fixture in fixtures:
+            fixture.yaw, fixture.pitch, fixture.roll = \
+                migrate_orientation_angles(fixture.mounting, fixture.yaw,
+                                           fixture.pitch, fixture.roll)
+
         # Handle groups with colors and orientation defaults
         # Groups reference the same fixture objects as the top-level fixtures list
         groups = {}
@@ -1738,15 +1750,22 @@ class Configuration:
             # appears in every group it lists.
             group_fixtures = [f for f in fixtures if name in f.groups]
 
+            group_mounting = group_data.get('default_mounting', 'hanging')
+            group_yaw, group_pitch, group_roll = migrate_orientation_angles(
+                group_mounting,
+                group_data.get('default_yaw', 0.0),
+                group_data.get('default_pitch', 0.0),
+                group_data.get('default_roll', 0.0),
+            )
             groups[name] = FixtureGroup(
                 name=name,
                 fixtures=group_fixtures,
                 color=group_data.get('color', '#808080'),
-                # Orientation defaults
-                default_mounting=group_data.get('default_mounting', 'hanging'),
-                default_yaw=group_data.get('default_yaw', 0.0),
-                default_pitch=group_data.get('default_pitch', 0.0),
-                default_roll=group_data.get('default_roll', 0.0),
+                # Orientation defaults (canonical angles - migrated above)
+                default_mounting=group_mounting,
+                default_yaw=group_yaw,
+                default_pitch=group_pitch,
+                default_roll=group_roll,
                 default_z_height=group_data.get('default_z_height', 3.0),
                 lighting_role=group_data.get('lighting_role', ''),
                 export_intensity=group_data.get('export_intensity', 255),

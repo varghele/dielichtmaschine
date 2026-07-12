@@ -556,7 +556,12 @@ class TestStep3Stage:
 
         par1 = _fixture(main_window, _par_names(main_window)[0])
         assert par1.mounting == "standing"
-        assert par1.pitch == pytest.approx(-90.0)  # PRESET_VALUES['standing']
+        # Canonical 'standing' is roll +90 (beam UP). It used to be
+        # pitch -90, which is a rotation about the beam's own axis and
+        # therefore aimed the fixture sideways - see
+        # utils/orientation.py MOUNTING_PRESET_ANGLES.
+        assert par1.roll == pytest.approx(90.0)
+        assert par1.pitch == pytest.approx(0.0)
         assert par1.yaw == pytest.approx(0.0)
         assert par1.z == pytest.approx(2.5)
         assert par1.orientation_uses_group_default is False
@@ -827,7 +832,10 @@ class TestFullWorkflow:
         assert pars[0].x == pytest.approx(-2.0, abs=0.01)
         assert pars[0].layer == WASH_LAYER
         assert pars[0].mounting == "standing"
-        assert pars[0].pitch == pytest.approx(-90.0)
+        # Canonical 'standing' = roll +90 (beam UP); survives save + load
+        # (and the load-time orientation migration leaves it alone).
+        assert pars[0].roll == pytest.approx(90.0)
+        assert pars[0].pitch == pytest.approx(0.0)
 
         mh = next(f for f in loaded.fixtures if f.model == MH_MODEL)
         assert mh.current_mode == MH_MODE_8CH

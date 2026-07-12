@@ -1,55 +1,113 @@
 # tests/unit/test_orientation.py
-"""Unit tests for utils/orientation.py - rotation matrices and pan/tilt calculations."""
+"""Unit tests for utils/orientation.py - the mounting presets, the one
+rotation convention, and pan/tilt calculations.
+
+The mounting presets are asserted by the only thing that matters: WHERE
+THE BEAM ACTUALLY POINTS, in stage coordinates (+X stage right, +Y
+upstage, +Z up; the audience is -Y). Before 2026-07-12 nothing pinned
+this, and every wall_* preset was 90 degrees off while the dialog's
+'hanging' pointed sideways.
+"""
 
 import math
 import pytest
 import numpy as np
 from utils.orientation import (
-    MOUNTING_BASE_ROTATIONS,
-    get_rotation_matrix,
+    MOUNTING_PRESET_ANGLES,
+    beam_direction_stage,
     calculate_pan_tilt,
+    fixture_rotation_matrix,
+    migrate_orientation_angles,
     pan_tilt_to_dmx,
-    get_beam_direction,
-    is_fixture_pointing_down,
+    preset_angles,
     get_direction_for_tilt_calculation,
 )
 
+RIGHT = np.array([1.0, 0.0, 0.0])
+LEFT = np.array([-1.0, 0.0, 0.0])
+UPSTAGE = np.array([0.0, 1.0, 0.0])
+AUDIENCE = np.array([0.0, -1.0, 0.0])
+UP = np.array([0.0, 0.0, 1.0])
+DOWN = np.array([0.0, 0.0, -1.0])
 
-class TestMountingBaseRotations:
+
+class TestMountingPresetBeams:
+    """At pan=0, tilt=0, each mounting must aim where its name says."""
+
+    @pytest.mark.parametrize("mounting,expected", [
+        ('hanging', DOWN),          # hung from truss, beam at the floor
+        ('standing', UP),           # on the deck, beam at the ceiling
+        ('wall_left', RIGHT),       # stage-left wall, shooting across
+        ('wall_right', LEFT),       # stage-right wall, shooting across
+        ('wall_back', AUDIENCE),    # back wall, shooting at the crowd
+        ('wall_front', UPSTAGE),    # downstage, shooting at the band
+    ], ids=lambda v: v if isinstance(v, str) else "")
+    def test_preset_beam_direction(self, mounting, expected):
+        beam = beam_direction_stage(*preset_angles(mounting))
+        np.testing.assert_allclose(beam, expected, atol=1e-9)
 
     def test_all_presets_defined(self):
-        expected = {'hanging', 'standing', 'wall_left', 'wall_right',
-                    'wall_back', 'wall_front'}
-        assert set(MOUNTING_BASE_ROTATIONS.keys()) == expected
+        assert set(MOUNTING_PRESET_ANGLES) == {
+            'hanging', 'standing', 'wall_left', 'wall_right',
+            'wall_back', 'wall_front'}
 
-    def test_each_preset_has_required_keys(self):
-        for name, rot in MOUNTING_BASE_ROTATIONS.items():
-            assert 'pitch' in rot, f"{name} missing pitch"
-            assert 'yaw' in rot, f"{name} missing yaw"
+    def test_hanging_is_not_wall_back(self):
+        # The exact regression: the dialog stored hanging as pitch +90,
+        # and a pitch (X-axis) rotation cannot move a beam that starts
+        # along +X - so hanging aimed stage-right, like wall_back.
+        assert not np.allclose(beam_direction_stage(*preset_angles('hanging')),
+                               beam_direction_stage(*preset_angles('wall_back')))
+        assert np.allclose(beam_direction_stage(0.0, 90.0, 0.0), RIGHT), \
+            "the old dialog 'hanging' angles aimed sideways - keep them dead"
 
 
-class TestGetRotationMatrix:
+class TestFixtureRotationMatrix:
 
     def test_returns_3x3(self):
-        R = get_rotation_matrix('hanging', 0, 0, 0)
-        assert R.shape == (3, 3)
-
-    def test_identity_with_wall_back_zero_rotation(self):
-        """wall_back has yaw=0, pitch=0 base. With no user rotation, should be near identity."""
-        R = get_rotation_matrix('wall_back', 0, 0, 0)
-        # roll is applied separately; pitch/yaw are both 0 for wall_back
-        expected = np.eye(3)
-        np.testing.assert_allclose(R, expected, atol=1e-10)
+        assert fixture_rotation_matrix(0, 0, 0).shape == (3, 3)
 
     def test_is_orthogonal(self):
-        """Rotation matrix should be orthogonal: R @ R^T = I."""
-        R = get_rotation_matrix('hanging', 45, 30, 15)
-        product = R @ R.T
-        np.testing.assert_allclose(product, np.eye(3), atol=1e-10)
+        R = fixture_rotation_matrix(45, 30, 15)
+        np.testing.assert_allclose(R @ R.T, np.eye(3), atol=1e-10)
 
     def test_determinant_is_one(self):
-        R = get_rotation_matrix('standing', 90, 45, 10)
+        # A proper rotation, never a reflection.
+        R = fixture_rotation_matrix(90, 45, 10)
         assert abs(np.linalg.det(R) - 1.0) < 1e-10
+
+
+class TestMigration:
+    """Configs written before the fix carry `mounting` next to zeroed
+    angles (or the old dialog's angles); load rewrites them."""
+
+    def test_zeroed_angles_take_the_preset(self):
+        assert migrate_orientation_angles('hanging', 0.0, 0.0, 0.0) == \
+            preset_angles('hanging')
+        assert migrate_orientation_angles('wall_back', 0.0, 0.0, 0.0) == \
+            preset_angles('wall_back')
+
+    def test_old_dialog_angles_are_replaced(self):
+        # hanging was (0, 90, 0) in the dialog's dead table.
+        assert migrate_orientation_angles('hanging', 0.0, 90.0, 0.0) == \
+            preset_angles('hanging')
+        assert migrate_orientation_angles('wall_front', 180.0, 0.0, 0.0) == \
+            preset_angles('wall_front')
+
+    def test_custom_orientation_is_left_alone(self):
+        assert migrate_orientation_angles('hanging', 33.0, 12.0, -5.0) == \
+            (33.0, 12.0, -5.0)
+
+    def test_is_idempotent(self):
+        for mounting in MOUNTING_PRESET_ANGLES:
+            once = migrate_orientation_angles(mounting,
+                                              *preset_angles(mounting))
+            twice = migrate_orientation_angles(mounting, *once)
+            assert once == preset_angles(mounting)
+            assert twice == once
+
+    def test_unknown_mounting_is_left_alone(self):
+        assert migrate_orientation_angles('bogus', 0.0, 0.0, 0.0) == \
+            (0.0, 0.0, 0.0)
 
 
 class TestPanTiltToDmx:
@@ -104,33 +162,52 @@ class TestCalculatePanTilt:
         assert -135 <= tilt <= 135
 
 
-class TestGetBeamDirection:
+def _aimed_beam_stage(fixture_xyz, target_xyz, mounting):
+    """Where a fixture ACTUALLY ends up pointing, in stage coordinates,
+    after the solver aims it: run calculate_pan_tilt, then rebuild the
+    beam the way the renderer does (R @ pan @ tilt @ +X) and convert
+    back to stage. This is the end-to-end aiming contract - it closes
+    the loop the visualizer draws."""
+    yaw, pitch, roll = preset_angles(mounting)
+    pan_deg, tilt_deg = calculate_pan_tilt(
+        *fixture_xyz, *target_xyz, mounting, yaw, pitch, roll)
 
-    def test_returns_unit_vector(self):
-        direction = get_beam_direction('hanging', 0, 0, 0)
-        length = np.linalg.norm(direction)
-        assert abs(length - 1.0) < 1e-10
-
-    def test_wall_back_points_along_z(self):
-        """wall_back with no extra rotation: beam along local Z = world Z."""
-        direction = get_beam_direction('wall_back', 0, 0, 0)
-        expected = np.array([0, 0, 1])
-        np.testing.assert_allclose(direction, expected, atol=1e-10)
+    p, t = math.radians(pan_deg), math.radians(tilt_deg)
+    # tilt about Y by -t, then pan about Z, applied to local +X.
+    local = np.array([math.cos(t) * math.cos(p),
+                      math.cos(t) * math.sin(p),
+                      math.sin(t)])
+    scene = fixture_rotation_matrix(yaw, pitch, roll) @ local
+    return np.array([scene[0], scene[2], scene[1]])   # scene -> stage
 
 
-class TestIsFixturePointingDown:
+class TestAimingEndToEnd:
+    """A hanging mover aimed at a stage point must actually look at it -
+    not at its mirror image. Stage frame: +X right, +Y upstage, +Z up."""
 
-    def test_hanging_default_points_down(self):
-        """Hanging fixture at default should point down (negative Z)."""
-        result = is_fixture_pointing_down('hanging', 0, 0, 0)
-        # Returns numpy bool_, verify it's truthy/falsy
-        assert result is not None
+    @pytest.mark.parametrize("target,description", [
+        ((3.0, 0.0, 0.0), "stage right"),
+        ((-3.0, 0.0, 0.0), "stage left"),
+        ((0.0, -3.0, 0.0), "downstage / audience"),
+        ((0.0, 3.0, 0.0), "upstage / back"),
+        ((2.0, -2.0, 1.0), "off-axis, raised"),
+    ], ids=lambda v: v if isinstance(v, str) else "")
+    def test_hanging_mover_looks_at_its_target(self, target, description):
+        fixture = (0.0, 0.0, 6.0)      # hung above centre stage
+        beam = _aimed_beam_stage(fixture, target, 'hanging')
+        want = np.array(target) - np.array(fixture)
+        want = want / np.linalg.norm(want)
+        np.testing.assert_allclose(beam, want, atol=1e-6)
 
-    def test_standing_default_not_pointing_down(self):
-        """Standing fixture should not point down by default."""
-        # Standing has roll=90, so beam points up
-        result = is_fixture_pointing_down('standing', 0, 0, 0)
-        assert result is not None
+    def test_the_beam_is_not_mirrored_in_x(self):
+        # The user-visible symptom: aim stage-right, beam goes stage-left.
+        beam = _aimed_beam_stage((0.0, 0.0, 6.0), (3.0, 0.0, 0.0), 'hanging')
+        assert beam[0] > 0, "a target at +X must produce a beam toward +X"
+
+    def test_the_beam_is_not_mirrored_in_depth(self):
+        # Aim at the audience, the beam must not fly upstage.
+        beam = _aimed_beam_stage((0.0, 0.0, 6.0), (0.0, -4.0, 0.0), 'hanging')
+        assert beam[1] < 0, "a target toward the audience must aim -Y"
 
 
 class TestGetDirectionForTiltCalculation:

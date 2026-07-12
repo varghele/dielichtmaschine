@@ -6,75 +6,131 @@ import numpy as np
 from typing import Tuple, Optional
 
 
-# Base rotations for each mounting preset
-# These define the fixture orientation so that at pan=0, tilt=0, the beam points
-# in the expected direction for that mounting type.
-# Visualizer coordinate system: Y-up, beam starts at local +X
-MOUNTING_BASE_ROTATIONS = {
-    'hanging': {'pitch': 0.0, 'yaw': 0.0, 'roll': -90.0},   # Beam points down at pan=0, tilt=0
-    'standing': {'pitch': 0.0, 'yaw': 0.0, 'roll': 90.0},   # Beam points up at pan=0, tilt=0
-    'wall_left': {'pitch': 0.0, 'yaw': -90.0, 'roll': 0.0}, # Base against stage-right wall
-    'wall_right': {'pitch': 0.0, 'yaw': 90.0, 'roll': 0.0}, # Base against stage-left wall
-    'wall_back': {'pitch': 0.0, 'yaw': 0.0, 'roll': 0.0},   # Base against back wall
-    'wall_front': {'pitch': 0.0, 'yaw': 180.0, 'roll': 0.0},# Base toward audience
+# ---------------------------------------------------------------------------
+# Mounting presets (canonical, 2026-07-12)
+#
+# ABSOLUTE fixture orientations, as (yaw, pitch, roll) in degrees. The
+# stored yaw/pitch/roll on a Fixture / FixtureGroup ARE these angles -
+# nothing adds a hidden base rotation on top; `mounting` is the label of
+# the preset those angles came from.
+#
+# The angles live in the frame every consumer actually uses (the
+# visualizer's beam chain and calculate_pan_tilt below):
+#   R = Ry(yaw) @ Rx(pitch) @ Rz(roll), applied to the beam's local +X,
+#   in the scene frame stage (x, y, z_height) -> scene (x, z_height, y).
+# Stage frame: +X stage right, +Y upstage (the AUDIENCE is -Y), +Z up.
+#
+# These values were WRONG before 2026-07-12 and are pinned by
+# tests/unit/test_orientation.py::TestMountingPresetBeams, which asserts
+# the resulting beam direction in stage coordinates for every preset:
+#
+# - The old table's four wall_* presets were each 90 degrees off (e.g.
+#   'wall_back' resolved to a beam pointing stage-right, not at the
+#   audience).
+# - The orientation dialog carried a SECOND, contradictory table in which
+#   'hanging' was pitch +90. A pitch rotation is a rotation about the X
+#   axis and therefore CANNOT move a beam that starts along +X: hanging
+#   and standing both came out pointing stage-right, i.e. exactly like
+#   'wall_back'. That is why a hanging rig rendered as wall-mounted.
+#   The dialog now imports this table instead of defining its own.
+#
+# Fixtures saved with the old (or with all-zero) angles are migrated on
+# config load - see migrate_orientation_angles.
+# ---------------------------------------------------------------------------
+MOUNTING_PRESET_ANGLES = {
+    'hanging':    (0.0, 0.0, -90.0),   # beam DOWN (-Z)
+    'standing':   (0.0, 0.0, 90.0),    # beam UP (+Z)
+    'wall_left':  (0.0, 0.0, 0.0),     # on the stage-left wall, beam stage RIGHT (+X)
+    'wall_right': (180.0, 0.0, 0.0),   # on the stage-right wall, beam stage LEFT (-X)
+    'wall_back':  (90.0, 0.0, 0.0),    # on the back wall, beam at the AUDIENCE (-Y)
+    'wall_front': (-90.0, 0.0, 0.0),   # downstage, beam UPSTAGE (+Y)
+}
+
+DEFAULT_MOUNTING = 'hanging'
+
+# The two pre-2026-07-12 tables, kept ONLY so config load can recognise
+# angles a previous version wrote and migrate them. Never use these to
+# orient anything.
+_LEGACY_DIALOG_ANGLES = {
+    'hanging':    (0.0, 90.0, 0.0),
+    'standing':   (0.0, -90.0, 0.0),
+    'wall_left':  (-90.0, 0.0, 0.0),
+    'wall_right': (90.0, 0.0, 0.0),
+    'wall_back':  (0.0, 0.0, 0.0),
+    'wall_front': (180.0, 0.0, 0.0),
 }
 
 
-def get_rotation_matrix(mounting: str, yaw: float, pitch: float, roll: float) -> np.ndarray:
+def preset_angles(mounting: str) -> Tuple[float, float, float]:
+    """The absolute (yaw, pitch, roll) for a mounting preset."""
+    return MOUNTING_PRESET_ANGLES.get(
+        mounting, MOUNTING_PRESET_ANGLES[DEFAULT_MOUNTING])
+
+
+def _same_angles(a, b, tol: float = 0.01) -> bool:
+    return all(abs(x - y) <= tol for x, y in zip(a, b))
+
+
+def migrate_orientation_angles(mounting: str, yaw: float, pitch: float,
+                               roll: float) -> Tuple[float, float, float]:
+    """Bring one stored orientation up to the canonical table.
+
+    Rewrites the angles to :func:`preset_angles` when they are the ones
+    a previous version wrote for this mounting, namely:
+
+    - ALL ZERO - the overwhelmingly common case. Every config written
+      before this fix stored `mounting: hanging` next to
+      `yaw/pitch/roll: 0`, and every consumer ignored `mounting` and
+      used the zeros, so the fixture behaved as if wall-mounted.
+    - EXACTLY the old orientation-dialog preset for this mounting (a
+      user who opened the dialog and clicked a preset button).
+
+    Anything else is a deliberate custom orientation and is left alone.
+    Idempotent: canonical angles are never any of the above (the sole
+    overlap, wall_left = all zeros, maps to itself).
     """
-    Build a 3x3 rotation matrix from mounting preset and Euler angles.
+    angles = (yaw, pitch, roll)
+    if mounting not in MOUNTING_PRESET_ANGLES:
+        return angles
+    if _same_angles(angles, (0.0, 0.0, 0.0)) or \
+            _same_angles(angles, _LEGACY_DIALOG_ANGLES[mounting]):
+        return preset_angles(mounting)
+    return angles
 
-    Uses ZYX (yaw-pitch-roll) convention:
-    1. First apply yaw (rotation around world Z/up axis)
-    2. Then apply pitch (rotation around local Y axis)
-    3. Finally apply roll (rotation around local X axis)
 
-    Args:
-        mounting: Mounting preset name ('hanging', 'standing', 'wall_left', etc.)
-        yaw: Yaw angle in degrees (-180 to 180)
-        pitch: Pitch angle in degrees (-90 to 90)
-        roll: Roll angle in degrees (-180 to 180)
+def fixture_rotation_matrix(yaw: float, pitch: float,
+                            roll: float) -> np.ndarray:
+    """The fixture's absolute orientation as a 3x3 matrix in the scene
+    frame: R = Ry(yaw) @ Rx(pitch) @ Rz(roll).
 
-    Returns:
-        3x3 numpy rotation matrix that transforms from fixture-local to world space
+    THE one rotation convention. The visualizer's beam chain
+    (visualizer/renderer/composable_fixtures._compute_beam_dir_world)
+    and :func:`calculate_pan_tilt` below both build exactly this, so a
+    beam aimed by the solver lands where the renderer draws it.
     """
-    # Get base rotation from mounting preset
-    base = MOUNTING_BASE_ROTATIONS.get(mounting, {'pitch': 0.0, 'yaw': 0.0})
-    base_pitch = base['pitch']
-    base_yaw = base['yaw']
+    y, p, r = math.radians(yaw), math.radians(pitch), math.radians(roll)
+    Ry = np.array([[math.cos(y), 0, math.sin(y)],
+                   [0, 1, 0],
+                   [-math.sin(y), 0, math.cos(y)]])
+    Rx = np.array([[1, 0, 0],
+                   [0, math.cos(p), -math.sin(p)],
+                   [0, math.sin(p), math.cos(p)]])
+    Rz = np.array([[math.cos(r), -math.sin(r), 0],
+                   [math.sin(r), math.cos(r), 0],
+                   [0, 0, 1]])
+    return Ry @ Rx @ Rz
 
-    # Add user adjustments to base rotation
-    total_yaw = math.radians(base_yaw + yaw)
-    total_pitch = math.radians(base_pitch + pitch)
-    total_roll = math.radians(roll)
 
-    # Build rotation matrices
-    # Rz (yaw) - rotation around Z axis (world up)
-    cos_yaw, sin_yaw = math.cos(total_yaw), math.sin(total_yaw)
-    Rz = np.array([
-        [cos_yaw, -sin_yaw, 0],
-        [sin_yaw, cos_yaw, 0],
-        [0, 0, 1]
-    ])
-
-    # Ry (pitch) - rotation around Y axis
-    cos_pitch, sin_pitch = math.cos(total_pitch), math.sin(total_pitch)
-    Ry = np.array([
-        [cos_pitch, 0, sin_pitch],
-        [0, 1, 0],
-        [-sin_pitch, 0, cos_pitch]
-    ])
-
-    # Rx (roll) - rotation around X axis
-    cos_roll, sin_roll = math.cos(total_roll), math.sin(total_roll)
-    Rx = np.array([
-        [1, 0, 0],
-        [0, cos_roll, -sin_roll],
-        [0, sin_roll, cos_roll]
-    ])
-
-    # Combined rotation: Rz * Ry * Rx
-    return Rz @ Ry @ Rx
+def beam_direction_stage(yaw: float, pitch: float,
+                         roll: float) -> np.ndarray:
+    """Where a fixture with this orientation points at pan=0, tilt=0,
+    as a unit vector in STAGE coordinates (+X stage right, +Y upstage,
+    +Z up). The readable statement of what a mounting preset means."""
+    scene = fixture_rotation_matrix(yaw, pitch, roll) @ np.array([1.0, 0.0,
+                                                                  0.0])
+    # scene (a, b, c) -> stage (a, c, b): the renderer maps stage Y to
+    # scene Z and stage Z (height) to scene Y.
+    return np.array([scene[0], scene[2], scene[1]])
 
 
 def calculate_pan_tilt(
@@ -123,29 +179,9 @@ def calculate_pan_tilt(
     # Stage X -> 3D X, Stage Y -> 3D Z, Stage Z -> 3D Y
     target_dir_3d = np.array([dx_stage, dz_stage, dy_stage])
 
-    # Build inverse fixture orientation matrix to transform world direction to local space
-    # Visualizer applies: yaw around Y, pitch around X, roll around Z (in that order)
-    # We need the inverse to go from world to local
-    yaw_rad = math.radians(yaw)
-    pitch_rad = math.radians(pitch)
-    roll_rad = math.radians(roll)
-
-    # Rotation matrices (same as visualizer)
-    cy, sy = math.cos(yaw_rad), math.sin(yaw_rad)
-    cp, sp = math.cos(pitch_rad), math.sin(pitch_rad)
-    cr, sr = math.cos(roll_rad), math.sin(roll_rad)
-
-    # Yaw around Y: [[cy, 0, sy], [0, 1, 0], [-sy, 0, cy]]
-    Ry = np.array([[cy, 0, sy], [0, 1, 0], [-sy, 0, cy]])
-
-    # Pitch around X: [[1, 0, 0], [0, cp, -sp], [0, sp, cp]]
-    Rx = np.array([[1, 0, 0], [0, cp, -sp], [0, sp, cp]])
-
-    # Roll around Z: [[cr, -sr, 0], [sr, cr, 0], [0, 0, 1]]
-    Rz = np.array([[cr, -sr, 0], [sr, cr, 0], [0, 0, 1]])
-
-    # Combined fixture orientation: Ry @ Rx @ Rz (same order as visualizer)
-    fixture_orientation = Ry @ Rx @ Rz
+    # Fixture orientation, in the ONE convention (same matrix the
+    # visualizer's beam chain builds); transpose = world -> local.
+    fixture_orientation = fixture_rotation_matrix(yaw, pitch, roll)
 
     # Transform target direction to fixture-local space
     local_dir = fixture_orientation.T @ target_dir_3d
@@ -232,59 +268,14 @@ def pan_tilt_to_dmx(
     return pan_dmx, tilt_dmx
 
 
-def get_beam_direction(mounting: str, yaw: float, pitch: float, roll: float) -> np.ndarray:
-    """
-    Get the beam direction vector in world space for a fixture.
-
-    In fixture local space, the beam points along the positive Z axis.
-    This function transforms that to world space.
-
-    Args:
-        mounting: Mounting preset name
-        yaw, pitch, roll: Fixture orientation angles (degrees)
-
-    Returns:
-        Unit vector (3,) pointing in the beam direction in world space
-    """
-    R = get_rotation_matrix(mounting, yaw, pitch, roll)
-    local_z = np.array([0, 0, 1])
-    return R @ local_z
-
-
-def get_fill_direction(mounting: str, yaw: float, pitch: float, roll: float) -> np.ndarray:
-    """
-    Get the fill direction for strip fixtures in world space.
-
-    For strip fixtures, the fill direction is along the local X axis
-    (from pixel 1 to pixel N).
-
-    Args:
-        mounting: Mounting preset name
-        yaw, pitch, roll: Fixture orientation angles (degrees)
-
-    Returns:
-        Unit vector (3,) pointing in the fill direction in world space
-    """
-    R = get_rotation_matrix(mounting, yaw, pitch, roll)
-    local_x = np.array([1, 0, 0])
-    return R @ local_x
-
-
-def is_fixture_pointing_down(mounting: str, yaw: float, pitch: float, roll: float) -> bool:
-    """
-    Check if the fixture's beam is primarily pointing downward.
-
-    Useful for determining tilt direction conventions.
-
-    Args:
-        mounting: Mounting preset name
-        yaw, pitch, roll: Fixture orientation angles (degrees)
-
-    Returns:
-        True if beam Z component is negative (pointing down in world space)
-    """
-    beam_dir = get_beam_direction(mounting, yaw, pitch, roll)
-    return beam_dir[2] < 0
+# REMOVED 2026-07-12: get_rotation_matrix / get_beam_direction /
+# get_fill_direction / is_fixture_pointing_down. They built a THIRD
+# rotation convention (ZYX with yaw around a Z-up axis, plus a hidden
+# base rotation added on top of the caller's angles) that contradicted
+# the one the visualizer and calculate_pan_tilt actually use, and no
+# production code called them - only their own tests did. They are the
+# reason the mounting presets were never noticed to be wrong. Use
+# fixture_rotation_matrix / beam_direction_stage instead.
 
 
 def get_direction_for_tilt_calculation(mounting: str) -> str:
