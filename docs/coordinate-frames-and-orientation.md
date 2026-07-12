@@ -104,68 +104,64 @@ display frame is +1 (a rotation). Also `docs/gl-gotchas.md` #4.
 
 ---
 
-## 3. The mounting presets (fixed)
+## 3. The mounting presets (reverted 2026-07-13 to the pre-rebrand convention)
 
-**Symptom, as reported:** a fixture set to `hanging` in the config
-behaves like `wall_back` in the visualizer.
+**A mounting preset is a BODY orientation** - how the chassis sits (which
+way is up, which face is against the wall) - **not a home-beam
+direction.** A moving head's real aim comes from the pan/tilt solve
+(`calculate_pan_tilt`), which the renderer reproduces with the same
+matrix, so the beam lands on target for ANY body orientation. The home
+(pan=tilt=0) beam direction is irrelevant to whether the mounting is
+"right".
 
-**Two independent faults, both real:**
-
-1. **Consumers ignored `mounting`.** Configs store
-   `mounting: hanging` next to `yaw/pitch/roll: 0.0`. Both the
-   visualizer payload and `calculate_pan_tilt` used the explicit angles
-   and ignored the mounting string entirely. Zeroed angles mean "beam
-   along +X" = pointing stage right = exactly what a wall mount does.
-2. **The preset tables were wrong.** There were *two* of them, and
-   neither was right:
-   - The orientation dialog's `PRESET_VALUES` defined `hanging` as
-     **pitch +90**. Pitch is a rotation about the X axis, and the beam
-     starts along +X, so a pitch rotation **cannot move the beam at
-     all**. Hanging and standing both aimed stage right.
-   - `utils/orientation.py`'s table had `hanging` and `standing` right,
-     but **all four `wall_*` presets were 90 degrees off** (its
-     `wall_back` aimed stage right rather than at the audience).
-
-**The fix:** exactly ONE table,
-`utils/orientation.py::MOUNTING_PRESET_ANGLES`. The dialog imports it.
-Never write a second copy.
+**What went wrong, and the revert.** On 2026-07-12 (commit `c5c72c1`)
+this table was rewritten by asking "where must the pan/tilt-HOME beam
+point" - `hanging` -> straight down, and so on. That was the wrong lens,
+and it broke every mover rig that had been correct before the rebrand.
+Verified against real fixtures by the user (2026-07-13), the pre-rebrand
+values are the ones that behave like the real world, and they are
+restored:
 
 ```python
-MOUNTING_PRESET_ANGLES = {           # absolute (yaw, pitch, roll)
-    'hanging':    (0.0, 0.0, -90.0),   # beam DOWN
-    'standing':   (0.0, 0.0,  90.0),   # beam UP
-    'wall_left':  (0.0, 0.0,   0.0),   # beam stage RIGHT
-    'wall_right': (180.0, 0.0, 0.0),   # beam stage LEFT
-    'wall_back':  (90.0, 0.0,  0.0),   # beam at the AUDIENCE
-    'wall_front': (-90.0, 0.0, 0.0),   # beam UPSTAGE
+MOUNTING_PRESET_ANGLES = {            # absolute (yaw, pitch, roll)
+    'hanging':    (0.0,  90.0, 0.0),   # chassis flipped, hung from truss
+    'standing':   (0.0, -90.0, 0.0),   # chassis upright on the deck
+    'wall_left':  (-90.0, 0.0, 0.0),   # base against the stage-left wall
+    'wall_right': (90.0,  0.0, 0.0),   # base against the stage-right wall
+    'wall_back':  (0.0,   0.0, 0.0),   # base against the back wall
+    'wall_front': (180.0, 0.0, 0.0),   # base downstage, facing upstage
 }
 ```
 
 **Rules that keep this fixed:**
 
-- `mounting` is a **label**. The angles carry the truth.
-- Assert presets by **where the beam actually points in stage
-  coordinates** (`beam_direction_stage`), never by the angle numbers.
-  The angle numbers are exactly what nobody could sanity-check by eye,
-  which is how they stayed wrong.
-- Config load migrates zeroed and legacy-dialog angles onto the table
-  (`migrate_orientation_angles`, idempotent). Hand-dialled custom
-  orientations are left alone.
-- A dead third rotation API (`get_rotation_matrix` and friends: a Z-up
-  ZYX convention that added a hidden base rotation, called by nothing
-  but its own tests) was deleted. It is the reason nobody noticed the
-  presets were wrong: it *looked* like the authority and was never used.
+- One table only, `utils/orientation.py::MOUNTING_PRESET_ANGLES`; the
+  dialog imports it. Never write a second copy.
+- **Do NOT re-derive these from where the home beam points.** That is
+  exactly the 2026-07-12 mistake. `hanging` and `standing` share the
+  same home-beam direction (+X) because a pitch rotation cannot move a
+  +X beam - and that is fine; the beam is aimed by pan/tilt.
+- `mounting` is a label; the angles carry the truth.
+- Correctness is pinned **end to end** by
+  `tests/unit/test_orientation.py::TestAimingEndToEnd`: a hanging mover
+  aimed at a stage point must land its beam there, not at its mirror
+  image. That closed loop is the contract, not the home-beam direction.
+- Config load corrects the wrong 2026-07-12 values and all-zero angles
+  onto the table (`migrate_orientation_angles`, idempotent); hand-dialled
+  custom orientations are left alone.
+- The `wall_*` LABELS may not match every operator's naming (the user
+  reads `wall_left` as "wall back"); the label is cosmetic and can be
+  renamed without touching aiming. Left as-is pending a physical-wall
+  pass.
 
-**Consequence you must know:** because fixtures are now oriented
-correctly, the pan/tilt written to the rig and to exported `.qxw`
-workspaces **changes for any rig containing moving heads**. This is
-intended: the old values were computed from mis-oriented fixtures. The
-delta is provably confined to pan/tilt: of the five demo rigs, only
-`theatre_static` (the one with zero movers) still exports
-byte-identically.
+**Consequence you must know:** restoring the pre-rebrand orientations
+**changes the pan/tilt written to the rig and to exported `.qxw`
+workspaces for any rig containing moving heads** (it changes them back to
+what the pre-rebrand version produced). The delta is confined to
+pan/tilt: mover-less rigs such as `theatre_static` are unaffected.
 
 **Pinned by:** `tests/unit/test_orientation.py`
-(`TestMountingPresetBeams`, `TestMigration`, `TestAimingEndToEnd`).
+(`TestMountingPresets`, `TestMigration`, `TestAimingEndToEnd`).
 
 ---
 
@@ -182,11 +178,15 @@ Both the solver and the renderer model *every* fixture the same way:
 - **tilt** rotates about local **Y**
 
 In that model the beam at `tilt = 0` is always **perpendicular to the
-pan axis**. Combine this with the canonical `hanging` preset (roll -90,
-beam down at home) and the pan axis comes out **horizontal**.
+pan axis**.
 
-A real hanging moving head pans about a **vertical** axis, and at
-mid-tilt its beam points roughly **horizontally**, not straight down.
+**Update 2026-07-13:** the `hanging` preset is now a **+90 pitch**
+(chassis flipped, restored to the pre-rebrand convention), which the
+user confirmed against real fixtures behaves correctly - so the
+practical convention is settled: presets orient the body, pan/tilt does
+the aiming, and the closed loop lands the beam. What remains genuinely
+open below is only the **mixed-rig** case (hanging PARs vs hanging movers
+in one show), where a single Euler triple cannot serve both.
 
 ### Worked example (the discriminating prediction)
 

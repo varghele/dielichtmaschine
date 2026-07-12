@@ -23,21 +23,6 @@ verbatim as the GitHub Release notes (see [docs/releasing.md](docs/releasing.md)
   that, the default camera sat behind the band. Both are fixed: the view
   is now a faithful copy of the stage, seen from the audience. DMX
   output is unchanged by this fix.
-- **A hanging rig behaved like a wall-mounted one.** Mounting presets
-  lived in two contradictory tables, and neither was right. Configs
-  stored `mounting: hanging` beside zeroed angles, and every consumer
-  used the angles and ignored the mounting - so hanging fixtures aimed
-  sideways, exactly like a wall mount. The orientation dialog's own
-  table made it worse: its "hanging" was a rotation about the beam's own
-  axis, which cannot move the beam at all. There is now ONE table
-  (`utils/orientation.py`), every preset is pinned by a test asserting
-  where the beam actually points, and all four wall presets - each of
-  which was 90 degrees off - are corrected. Existing projects are
-  migrated on load; hand-dialled custom orientations are left alone.
-  **Because fixtures are now oriented correctly, the pan/tilt values
-  written to your rig and to exported QLC+ workspaces change for any rig
-  containing moving heads.** Rigs without movers export byte-identically.
-  Worth a look at your fixtures' mounting before the next show.
 - **The visualizer says where the audience is.** "AUDIENCE" is written
   on the apron at the front edge of the stage, so the orientation of the
   3D view is never in doubt.

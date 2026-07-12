@@ -1900,15 +1900,14 @@ class OrientationPanel(QWidget):
         'custom': {'label': 'Custom', 'tooltip': 'Custom orientation (manually adjusted)'},
     }
 
-    # Absolute orientation values for each preset (yaw, pitch, roll)
-    # These are the actual world-space angles, not relative adjustments
-    # The mounting presets come from utils/orientation.py - the ONE table
-    # (see MOUNTING_PRESET_ANGLES). This dialog used to define its own,
-    # in which 'hanging' was pitch +90: a rotation about the X axis,
-    # which cannot move a beam that starts along +X, so hanging and
-    # standing both aimed stage-right exactly like 'wall_back'. That is
-    # the bug where a hanging rig rendered wall-mounted. Never
-    # re-introduce a local copy of these numbers.
+    # Absolute orientation values for each preset (yaw, pitch, roll),
+    # body orientations, not relative adjustments. The mounting presets
+    # come from utils/orientation.py - the ONE table
+    # (MOUNTING_PRESET_ANGLES); never keep a local copy of these numbers.
+    # 'hanging' is a +90 pitch that flips the chassis to hang from the
+    # truss (the pre-rebrand convention, restored 2026-07-13). See that
+    # module's comment for why the 2026-07-12 "beam-direction" values
+    # were wrong.
     PRESET_VALUES = {
         **MOUNTING_PRESET_ANGLES,
         'custom': None,  # No predefined values for custom

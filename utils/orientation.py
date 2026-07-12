@@ -7,57 +7,57 @@ from typing import Tuple, Optional
 
 
 # ---------------------------------------------------------------------------
-# Mounting presets (canonical, 2026-07-12)
+# Mounting presets (restored 2026-07-13 to the pre-rebrand convention)
 #
 # ABSOLUTE fixture orientations, as (yaw, pitch, roll) in degrees. The
 # stored yaw/pitch/roll on a Fixture / FixtureGroup ARE these angles -
 # nothing adds a hidden base rotation on top; `mounting` is the label of
 # the preset those angles came from.
 #
-# The angles live in the frame every consumer actually uses (the
-# visualizer's beam chain and calculate_pan_tilt below):
-#   R = Ry(yaw) @ Rx(pitch) @ Rz(roll), applied to the beam's local +X,
-#   in the scene frame stage (x, y, z_height) -> scene (x, z_height, y).
+# These are BODY-ORIENTATION angles: they say how the chassis SITS
+# (which way is up, which face is against the wall), not where the beam
+# points at pan/tilt-home. A moving head's actual aim comes from the
+# pan/tilt solve (calculate_pan_tilt), which the visualizer reproduces
+# with the same matrix - so the closed loop lands the beam on target for
+# ANY body orientation. The rotation convention every consumer uses:
+#   R = Ry(yaw) @ Rx(pitch) @ Rz(roll), applied to the chassis, in the
+#   scene frame stage (x, y, z_height) -> scene (x, z_height, y).
 # Stage frame: +X stage right, +Y upstage (the AUDIENCE is -Y), +Z up.
 #
-# These values were WRONG before 2026-07-12 and are pinned by
-# tests/unit/test_orientation.py::TestMountingPresetBeams, which asserts
-# the resulting beam direction in stage coordinates for every preset:
+# HISTORY - do not "re-fix" this by beam-direction reasoning again.
+# On 2026-07-12 (commit c5c72c1) this table was replaced with a set
+# derived by asking "where must the pan/tilt-HOME beam point" (hanging ->
+# straight down, etc.). That was the wrong lens: hanging is a body flip,
+# not a home-beam direction, and the change broke every mover rig that
+# had been correct before the rebrand (verified against real fixtures by
+# the user, 2026-07-13). The pre-rebrand values below are the ones that
+# actually behave like the real world; hanging is a +90 pitch that flips
+# the chassis to hang from the truss.
 #
-# - The old table's four wall_* presets were each 90 degrees off (e.g.
-#   'wall_back' resolved to a beam pointing stage-right, not at the
-#   audience).
-# - The orientation dialog carried a SECOND, contradictory table in which
-#   'hanging' was pitch +90. A pitch rotation is a rotation about the X
-#   axis and therefore CANNOT move a beam that starts along +X: hanging
-#   and standing both came out pointing stage-right, i.e. exactly like
-#   'wall_back'. That is why a hanging rig rendered as wall-mounted.
-#   The dialog now imports this table instead of defining its own.
-#
-# Fixtures saved with the old (or with all-zero) angles are migrated on
-# config load - see migrate_orientation_angles.
+# Configs written by the 2026-07-12 version (or with all-zero angles) are
+# corrected on config load - see migrate_orientation_angles.
 # ---------------------------------------------------------------------------
 MOUNTING_PRESET_ANGLES = {
-    'hanging':    (0.0, 0.0, -90.0),   # beam DOWN (-Z)
-    'standing':   (0.0, 0.0, 90.0),    # beam UP (+Z)
-    'wall_left':  (0.0, 0.0, 0.0),     # on the stage-left wall, beam stage RIGHT (+X)
-    'wall_right': (180.0, 0.0, 0.0),   # on the stage-right wall, beam stage LEFT (-X)
-    'wall_back':  (90.0, 0.0, 0.0),    # on the back wall, beam at the AUDIENCE (-Y)
-    'wall_front': (-90.0, 0.0, 0.0),   # downstage, beam UPSTAGE (+Y)
+    'hanging':    (0.0, 90.0, 0.0),    # chassis flipped, hung from truss
+    'standing':   (0.0, -90.0, 0.0),   # chassis upright on the deck
+    'wall_left':  (-90.0, 0.0, 0.0),   # base against the stage-left wall
+    'wall_right': (90.0, 0.0, 0.0),    # base against the stage-right wall
+    'wall_back':  (0.0, 0.0, 0.0),     # base against the back wall
+    'wall_front': (180.0, 0.0, 0.0),   # base downstage, facing upstage
 }
 
 DEFAULT_MOUNTING = 'hanging'
 
-# The two pre-2026-07-12 tables, kept ONLY so config load can recognise
-# angles a previous version wrote and migrate them. Never use these to
-# orient anything.
-_LEGACY_DIALOG_ANGLES = {
-    'hanging':    (0.0, 90.0, 0.0),
-    'standing':   (0.0, -90.0, 0.0),
-    'wall_left':  (-90.0, 0.0, 0.0),
-    'wall_right': (90.0, 0.0, 0.0),
-    'wall_back':  (0.0, 0.0, 0.0),
-    'wall_front': (180.0, 0.0, 0.0),
+# The wrong 2026-07-12 "beam-direction" table (commit c5c72c1), kept ONLY
+# so config load can recognise angles that version wrote and correct them
+# back to the table above. Never use these to orient anything.
+_BEAM_MATH_ANGLES = {
+    'hanging':    (0.0, 0.0, -90.0),
+    'standing':   (0.0, 0.0, 90.0),
+    'wall_left':  (0.0, 0.0, 0.0),
+    'wall_right': (180.0, 0.0, 0.0),
+    'wall_back':  (90.0, 0.0, 0.0),
+    'wall_front': (-90.0, 0.0, 0.0),
 }
 
 
@@ -76,24 +76,24 @@ def migrate_orientation_angles(mounting: str, yaw: float, pitch: float,
     """Bring one stored orientation up to the canonical table.
 
     Rewrites the angles to :func:`preset_angles` when they are the ones
-    a previous version wrote for this mounting, namely:
+    a broken version wrote for this mounting, namely:
 
-    - ALL ZERO - the overwhelmingly common case. Every config written
-      before this fix stored `mounting: hanging` next to
-      `yaw/pitch/roll: 0`, and every consumer ignored `mounting` and
-      used the zeros, so the fixture behaved as if wall-mounted.
-    - EXACTLY the old orientation-dialog preset for this mounting (a
-      user who opened the dialog and clicked a preset button).
+    - EXACTLY the wrong 2026-07-12 "beam-direction" preset for this
+      mounting (:data:`_BEAM_MATH_ANGLES`) - a config saved by that
+      version, so its damage is undone on the next load.
+    - ALL ZERO - a fixture placed but never given an explicit
+      orientation; take the mounting's preset so a `hanging` fixture
+      actually hangs.
 
     Anything else is a deliberate custom orientation and is left alone.
-    Idempotent: canonical angles are never any of the above (the sole
-    overlap, wall_left = all zeros, maps to itself).
+    Idempotent: the canonical angles are neither all-zero (except
+    wall_back, which maps to itself) nor any beam-math value.
     """
     angles = (yaw, pitch, roll)
     if mounting not in MOUNTING_PRESET_ANGLES:
         return angles
     if _same_angles(angles, (0.0, 0.0, 0.0)) or \
-            _same_angles(angles, _LEGACY_DIALOG_ANGLES[mounting]):
+            _same_angles(angles, _BEAM_MATH_ANGLES[mounting]):
         return preset_angles(mounting)
     return angles
 
@@ -125,7 +125,10 @@ def beam_direction_stage(yaw: float, pitch: float,
                          roll: float) -> np.ndarray:
     """Where a fixture with this orientation points at pan=0, tilt=0,
     as a unit vector in STAGE coordinates (+X stage right, +Y upstage,
-    +Z up). The readable statement of what a mounting preset means."""
+    +Z up). This is only the pan/tilt-HOME rest direction - it is NOT
+    what a mounting preset "means" (presets are body orientations; a
+    mover's real aim comes from the pan/tilt solve). Kept for tests and
+    diagnostics."""
     scene = fixture_rotation_matrix(yaw, pitch, roll) @ np.array([1.0, 0.0,
                                                                   0.0])
     # scene (a, b, c) -> stage (a, c, b): the renderer maps stage Y to

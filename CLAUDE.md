@@ -81,14 +81,18 @@ ArtNet playback, PyQt6 + ModernGL, developed primarily on Windows.
 - **Fixture orientation has exactly ONE table**
   (`utils/orientation.py` `MOUNTING_PRESET_ANGLES`): absolute
   (yaw, pitch, roll) per mounting, in the scene frame, with
-  R = Ry(yaw) @ Rx(pitch) @ Rz(roll) applied to the beam's local +X.
-  Never write a second copy (the orientation dialog used to have one -
-  its "hanging" was a pitch rotation, which cannot move a +X beam, so
-  hanging rigs aimed sideways like wall mounts). `mounting` is a LABEL;
-  the angles carry the truth, and config load migrates zeroed/legacy
-  angles onto the table (`migrate_orientation_angles`). Assert presets
-  by WHERE THE BEAM POINTS in stage coords (`beam_direction_stage`),
-  never by the angle numbers.
+  R = Ry(yaw) @ Rx(pitch) @ Rz(roll). Never write a second copy.
+  The presets are BODY orientations (how the chassis sits), NOT
+  home-beam directions - a mover's aim comes from the pan/tilt solve.
+  `hanging` is a +90 pitch that flips the chassis (pre-rebrand
+  convention, restored 2026-07-13 after a 2026-07-12 "beam-direction"
+  rewrite broke every mover rig). DO NOT re-derive these from where the
+  home beam points - that is exactly what went wrong. `mounting` is a
+  LABEL; the angles carry the truth, and config load corrects the
+  2026-07-12 values + all-zero angles onto the table
+  (`migrate_orientation_angles`). Correctness is pinned END TO END by
+  `test_orientation.py::TestAimingEndToEnd` (aimed mover lands its beam
+  on target), never by the home-beam direction.
 - The QLC+ workspace XML schema is **identical between QLC+ 4.14.4 and
   5.2.1**; the export version selector only stamps `<Creator><Version>`.
 
@@ -284,21 +288,28 @@ flipped"; "hanging fixtures behave like wall-back"). (1) The scene
 frame swaps two axes = a REFLECTION, so the 3D view was a mirror of
 the stage and the default camera sat upstage; corrected with one
 DISPLAY_FLIP on the view matrix (DMX untouched, hash-verified). (2)
-The mounting presets lived in two contradictory tables and BOTH were
-wrong (all four wall_* presets 90 deg off; the dialog's hanging was a
-pitch rotation, a no-op on a +X beam). Now one table
-(MOUNTING_PRESET_ANGLES) pinned by beam-direction tests, dialog
-imports it, config load migrates old/zeroed angles. **Export changes
-for any rig with movers** (theatre_static, the only mover-less demo
-rig, stays byte-identical - that is the proof the delta is confined to
-pan/tilt). NEW OPEN FINDING in todo.md + ROADMAP v1.5a: the pan/tilt
-YOKE model (beam +X, pan about local Z) cannot describe a real moving
-head (pan axis must be vertical when hung); the visualizer is
-self-consistent so this is invisible in-app - needs hardware to
-settle. Do not "fix" it by flipping signs. ALL OF IT (frames, both
-bugs, the open question, the hardware test protocol) is written up in
-`docs/coordinate-frames-and-orientation.md` - start there. The user has
-two real moving heads on hand to run the protocol.
+The mounting-preset table was rewritten to a "beam-direction" set
+(hanging = beam straight down, etc.). **This half (2) was WRONG and was
+REVERTED 2026-07-13** - see the next note; the DISPLAY_FLIP half (1)
+stands. The write-up is in
+`docs/coordinate-frames-and-orientation.md` - start there.
+
+**Mounting presets reverted (2026-07-13, same branch):** the 2026-07-12
+"beam-direction" mounting table broke every mover rig that was correct
+before the rebrand. Root cause: it treated a mounting preset as a
+home-beam direction, but a preset is a BODY orientation - a mover aims
+via the pan/tilt solve, so the home beam is irrelevant. Restored the
+pre-rebrand values (`hanging` = pitch +90, chassis flip; `standing` =
+pitch -90; walls back to yaw-only), verified by the user against real
+fixtures. `migrate_orientation_angles` now corrects the 2026-07-12
+values on load. Tests re-pinned: `TestMountingPresets` (values) +
+`TestAimingEndToEnd` (closed-loop aim). **Export changes back for any
+rig with movers** (mover-less rigs like theatre_static unaffected).
+Still open (mixed rigs): a hanging PAR wants beam-down while a hanging
+mover wants a vertical pan axis - one Euler triple can't do both;
+per-fixture beam/base axes from GDTF are the real fix (ROADMAP v1.5a).
+Also unconfirmed: the `wall_*` LABELS may not match operator naming
+(user reads wall_left as "wall back") - cosmetic, a rename, deferred.
 
 **Solo pull-ins (2026-07-12 evening, same branch):** two roadmap
 items shipped while the user was away. (1) Headless export CLI (v1.3):

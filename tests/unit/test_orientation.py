@@ -2,11 +2,13 @@
 """Unit tests for utils/orientation.py - the mounting presets, the one
 rotation convention, and pan/tilt calculations.
 
-The mounting presets are asserted by the only thing that matters: WHERE
-THE BEAM ACTUALLY POINTS, in stage coordinates (+X stage right, +Y
-upstage, +Z up; the audience is -Y). Before 2026-07-12 nothing pinned
-this, and every wall_* preset was 90 degrees off while the dialog's
-'hanging' pointed sideways.
+The mounting presets are BODY orientations (how the chassis sits), not
+home-beam directions - see the module comment in utils/orientation.py.
+They are pinned here by their exact angle values (restored 2026-07-13 to
+the pre-rebrand convention after the 2026-07-12 beam-direction table
+broke real mover rigs). What actually matters for aiming - that a mover
+lands its beam on the target, not its mirror image - is pinned
+end-to-end by TestAimingEndToEnd, which closes the solve+render loop.
 """
 
 import math
@@ -14,7 +16,6 @@ import pytest
 import numpy as np
 from utils.orientation import (
     MOUNTING_PRESET_ANGLES,
-    beam_direction_stage,
     calculate_pan_tilt,
     fixture_rotation_matrix,
     migrate_orientation_angles,
@@ -23,42 +24,34 @@ from utils.orientation import (
     get_direction_for_tilt_calculation,
 )
 
-RIGHT = np.array([1.0, 0.0, 0.0])
-LEFT = np.array([-1.0, 0.0, 0.0])
-UPSTAGE = np.array([0.0, 1.0, 0.0])
-AUDIENCE = np.array([0.0, -1.0, 0.0])
-UP = np.array([0.0, 0.0, 1.0])
-DOWN = np.array([0.0, 0.0, -1.0])
 
+class TestMountingPresets:
+    """The presets are the pre-rebrand body orientations (restored
+    2026-07-13). Pinned by value so the 2026-07-12 beam-direction table
+    can never silently come back."""
 
-class TestMountingPresetBeams:
-    """At pan=0, tilt=0, each mounting must aim where its name says."""
-
-    @pytest.mark.parametrize("mounting,expected", [
-        ('hanging', DOWN),          # hung from truss, beam at the floor
-        ('standing', UP),           # on the deck, beam at the ceiling
-        ('wall_left', RIGHT),       # stage-left wall, shooting across
-        ('wall_right', LEFT),       # stage-right wall, shooting across
-        ('wall_back', AUDIENCE),    # back wall, shooting at the crowd
-        ('wall_front', UPSTAGE),    # downstage, shooting at the band
+    @pytest.mark.parametrize("mounting,angles", [
+        ('hanging',    (0.0, 90.0, 0.0)),    # chassis flipped, hung
+        ('standing',   (0.0, -90.0, 0.0)),   # chassis upright
+        ('wall_left',  (-90.0, 0.0, 0.0)),
+        ('wall_right', (90.0, 0.0, 0.0)),
+        ('wall_back',  (0.0, 0.0, 0.0)),
+        ('wall_front', (180.0, 0.0, 0.0)),
     ], ids=lambda v: v if isinstance(v, str) else "")
-    def test_preset_beam_direction(self, mounting, expected):
-        beam = beam_direction_stage(*preset_angles(mounting))
-        np.testing.assert_allclose(beam, expected, atol=1e-9)
+    def test_preset_values(self, mounting, angles):
+        assert preset_angles(mounting) == angles
 
     def test_all_presets_defined(self):
         assert set(MOUNTING_PRESET_ANGLES) == {
             'hanging', 'standing', 'wall_left', 'wall_right',
             'wall_back', 'wall_front'}
 
-    def test_hanging_is_not_wall_back(self):
-        # The exact regression: the dialog stored hanging as pitch +90,
-        # and a pitch (X-axis) rotation cannot move a beam that starts
-        # along +X - so hanging aimed stage-right, like wall_back.
-        assert not np.allclose(beam_direction_stage(*preset_angles('hanging')),
-                               beam_direction_stage(*preset_angles('wall_back')))
-        assert np.allclose(beam_direction_stage(0.0, 90.0, 0.0), RIGHT), \
-            "the old dialog 'hanging' angles aimed sideways - keep them dead"
+    def test_hanging_is_a_pitch_flip_not_the_beam_math_roll(self):
+        # The 2026-07-12 regression stored hanging as roll -90 (a
+        # home-beam-points-down value); the real convention is a +90
+        # pitch that flips the chassis to hang. Guard against reverting.
+        assert preset_angles('hanging') == (0.0, 90.0, 0.0)
+        assert preset_angles('standing') == (0.0, -90.0, 0.0)
 
 
 class TestFixtureRotationMatrix:
@@ -86,12 +79,15 @@ class TestMigration:
         assert migrate_orientation_angles('wall_back', 0.0, 0.0, 0.0) == \
             preset_angles('wall_back')
 
-    def test_old_dialog_angles_are_replaced(self):
-        # hanging was (0, 90, 0) in the dialog's dead table.
-        assert migrate_orientation_angles('hanging', 0.0, 90.0, 0.0) == \
-            preset_angles('hanging')
-        assert migrate_orientation_angles('wall_front', 180.0, 0.0, 0.0) == \
-            preset_angles('wall_front')
+    def test_beam_math_angles_are_corrected(self):
+        # Configs saved by the broken 2026-07-12 version stored the
+        # beam-direction values; load must correct them back.
+        assert migrate_orientation_angles('hanging', 0.0, 0.0, -90.0) == \
+            preset_angles('hanging')          # -> (0, 90, 0)
+        assert migrate_orientation_angles('standing', 0.0, 0.0, 90.0) == \
+            preset_angles('standing')         # -> (0, -90, 0)
+        assert migrate_orientation_angles('wall_back', 90.0, 0.0, 0.0) == \
+            preset_angles('wall_back')        # -> (0, 0, 0)
 
     def test_custom_orientation_is_left_alone(self):
         assert migrate_orientation_angles('hanging', 33.0, 12.0, -5.0) == \
