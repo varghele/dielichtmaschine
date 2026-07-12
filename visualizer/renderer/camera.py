@@ -5,6 +5,48 @@ import math
 import glm
 
 
+# ---------------------------------------------------------------------------
+# Stage-to-display correction (the "mirrored stage" fix, 2026-07-12)
+#
+# Every renderer builds its geometry in the historical scene frame
+#   stage (x, y, z_height) -> scene (x, z_height, y)
+# which SWAPS two axes. A two-axis swap has determinant -1: it is a
+# REFLECTION, so the whole scene was a mirror image of the real stage
+# (floor text came out as mirror writing, and a beam aimed at a spot
+# appeared to hit its mirror image). Everything inside the scene was
+# self-consistent, which is why beams still landed on their targets -
+# the mirror only showed up against reality.
+#
+# The correction is one change of basis applied at the VIEW matrix, so
+# no renderer, no model matrix, and above all NO PAN/TILT MATH changes:
+#   display = DISPLAY_FLIP * scene,   DISPLAY_FLIP = diag(1, 1, -1)
+# Composed with the scene mapping this gives stage (x, y, z) ->
+# display (x, z, -y): determinant +1, a proper rotation, so the picture
+# is finally a faithful copy of the stage rather than its mirror.
+#
+# Consequences, all desirable:
+# - Stage depth +Y (upstage) maps to display -Z, so the AUDIENCE side
+#   (-Y) lands at display +Z, which is where the default camera already
+#   sits (azimuth 45) - the view now looks at the stage FROM the
+#   audience instead of from behind the band.
+# - The coordinate gizmo consumes the view matrix too, so it flips with
+#   the scene and keeps agreeing with what is drawn.
+# - Face culling is never enabled in this renderer, so the reflected
+#   winding is harmless; blending and depth are unaffected.
+#
+# DMX is untouched by design: utils/orientation.py keeps solving pan and
+# tilt in the scene frame, and both the target and the beam it produces
+# get the same correction, so what the arbiter sends the rig is exactly
+# what it sent before this fix.
+# ---------------------------------------------------------------------------
+DISPLAY_FLIP = glm.mat4(
+    1.0, 0.0, 0.0, 0.0,
+    0.0, 1.0, 0.0, 0.0,
+    0.0, 0.0, -1.0, 0.0,
+    0.0, 0.0, 0.0, 1.0,
+)
+
+
 class OrbitCamera:
     """
     Orbiting camera that rotates around a target point.
@@ -136,9 +178,17 @@ class OrbitCamera:
         return self.target + glm.vec3(x, y, z)
 
     def get_view_matrix(self) -> glm.mat4:
-        """Get view matrix for rendering."""
+        """Get view matrix for rendering.
+
+        Carries the stage-to-display correction (:data:`DISPLAY_FLIP`):
+        renderers hand in geometry in the historical mirrored scene
+        frame, and this matrix turns it into a faithful, non-reflected
+        view of the stage. The camera itself therefore lives in display
+        space - azimuth 45 looks at the stage from the AUDIENCE side.
+        """
         position = self.get_position()
-        return glm.lookAt(position, self.target, glm.vec3(0.0, 1.0, 0.0))
+        view = glm.lookAt(position, self.target, glm.vec3(0.0, 1.0, 0.0))
+        return view * DISPLAY_FLIP
 
     def get_projection_matrix(self) -> glm.mat4:
         """Get projection matrix for rendering."""
@@ -150,7 +200,7 @@ class OrbitCamera:
         )
 
     def get_view_projection_matrix(self) -> glm.mat4:
-        """Get combined view-projection matrix."""
+        """Get combined view-projection matrix (display-corrected)."""
         return self.get_projection_matrix() * self.get_view_matrix()
 
     def _get_right_vector(self) -> glm.vec3:

@@ -221,11 +221,19 @@ def _set_mh_dmx(
 
 
 def _camera() -> OrbitCamera:
-    """Front-of-stage, eye-level, looking at the PAR at world (0, 1, 0)."""
+    """Eye-level, looking at the PAR at scene (0, 1, 0), from the side
+    the fixtures in this synthetic scene actually face.
+
+    The azimuth is 180, not 0, since the stage-to-display correction
+    landed (visualizer/renderer/camera.py DISPLAY_FLIP): the camera now
+    orbits in display space, so a given azimuth views the stage from the
+    opposite side than it used to. Verified equivalent - this framing
+    reproduces the pre-correction image pixel for pixel.
+    """
     cam = OrbitCamera()
     cam.set_aspect(1.0)
     cam.target = glm.vec3(0.0, 1.0, 0.0)
-    cam.azimuth = 0.0
+    cam.azimuth = 180.0
     cam.elevation = 5.0
     cam.distance = 5.0
     return cam
@@ -510,11 +518,16 @@ def _make_overhead_mh(name: str = "mh_overhead") -> Fixture:
 
 
 def _floor_scene_camera() -> OrbitCamera:
-    """Slightly elevated front camera framing the whole MH-above-PAR stack."""
+    """Slightly elevated camera framing the whole MH-above-PAR stack.
+
+    195, not 15: the same 180 degree remap as :func:`_camera` (see its
+    docstring) since DISPLAY_FLIP landed, keeping the slight off-axis
+    angle that stops the MH hiding directly behind the PAR.
+    """
     cam = OrbitCamera()
     cam.set_aspect(1.0)
     cam.target = glm.vec3(0.0, 1.5, 0.0)
-    cam.azimuth = 15.0  # slight angle so the MH isn't directly behind the PAR
+    cam.azimuth = 195.0
     cam.elevation = 10.0
     cam.distance = 6.0
     return cam
