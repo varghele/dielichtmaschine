@@ -6,6 +6,85 @@ import moderngl
 import glm
 
 
+# ---------------------------------------------------------------------------
+# AUDIENCE floor marker
+#
+# The 3D stage floor is symmetric, so nothing tells you which side the
+# audience is on - and the default orbit camera looks at the stage from
+# BEHIND (azimuth 45 = the +X/+Z corner, which is upstage in the world
+# mapping stage-Y -> world +Z). The marker writes AUDIENCE on the apron
+# just off the downstage edge, as stroke line segments through the
+# existing grid pipeline: no fonts (the offscreen Qt platform has no
+# font database on Windows), no textures, deterministic in goldens.
+# Lettering is oriented like the printed stage plot: readable with the
+# audience at the bottom, glyph tops toward the stage.
+# ---------------------------------------------------------------------------
+
+# Stroke glyphs in a unit box: (0,0) bottom-left, u = advance, v = up.
+_MARKER_GLYPHS = {
+    'A': [(0.0, 0.0, 0.5, 1.0), (0.5, 1.0, 1.0, 0.0),
+          (0.2, 0.4, 0.8, 0.4)],
+    'U': [(0.0, 1.0, 0.0, 0.15), (0.0, 0.15, 0.15, 0.0),
+          (0.15, 0.0, 0.85, 0.0), (0.85, 0.0, 1.0, 0.15),
+          (1.0, 0.15, 1.0, 1.0)],
+    'D': [(0.0, 0.0, 0.0, 1.0), (0.0, 1.0, 0.7, 1.0),
+          (0.7, 1.0, 1.0, 0.7), (1.0, 0.7, 1.0, 0.3),
+          (1.0, 0.3, 0.7, 0.0), (0.7, 0.0, 0.0, 0.0)],
+    'I': [(0.5, 0.0, 0.5, 1.0), (0.2, 0.0, 0.8, 0.0),
+          (0.2, 1.0, 0.8, 1.0)],
+    'E': [(1.0, 0.0, 0.0, 0.0), (0.0, 0.0, 0.0, 1.0),
+          (0.0, 1.0, 1.0, 1.0), (0.0, 0.5, 0.7, 0.5)],
+    'N': [(0.0, 0.0, 0.0, 1.0), (0.0, 1.0, 1.0, 0.0),
+          (1.0, 0.0, 1.0, 1.0)],
+    'C': [(1.0, 0.85, 0.85, 1.0), (0.85, 1.0, 0.15, 1.0),
+          (0.15, 1.0, 0.0, 0.85), (0.0, 0.85, 0.0, 0.15),
+          (0.0, 0.15, 0.15, 0.0), (0.15, 0.0, 0.85, 0.0),
+          (0.85, 0.0, 1.0, 0.15)],
+    # Chevron pointing toward the audience (glyph-down).
+    'v': [(0.0, 0.75, 0.5, 0.25), (0.5, 0.25, 1.0, 0.75)],
+}
+
+_MARKER_TEXT = "v AUDIENCE v"
+_MARKER_GLYPH_WIDTH = 0.6     # in glyph-height units
+_MARKER_GLYPH_GAP = 0.25
+_MARKER_SPACE = 0.5           # advance for ' '
+_MARKER_EDGE_MARGIN = 0.35    # meters between stage edge and glyph tops
+_MARKER_MAX_HEIGHT_M = 1.0
+_MARKER_STAGE_FRACTION = 0.8  # marker width cap as a fraction of stage width
+
+
+def audience_marker_segments(width: float, depth: float) -> list:
+    """AUDIENCE marker stroke segments as (x1, z1, x2, z2) world floor
+    coordinates for a width x depth stage. The audience side is world
+    -Z (stage front, negative stage-Y); every segment lies beyond the
+    downstage edge. Pure geometry, unit-tested without GL."""
+    advance = _MARKER_GLYPH_WIDTH + _MARKER_GLYPH_GAP
+    total_units = 0.0
+    for ch in _MARKER_TEXT:
+        total_units += _MARKER_SPACE if ch == ' ' else advance
+    total_units -= _MARKER_GLYPH_GAP  # no trailing gap
+
+    height = min(_MARKER_MAX_HEIGHT_M,
+                 (_MARKER_STAGE_FRACTION * width) / total_units)
+    z_top = -(depth / 2.0) - _MARKER_EDGE_MARGIN   # glyph tops, v = 1
+    x_cursor = -(total_units * height) / 2.0
+
+    segments = []
+    for ch in _MARKER_TEXT:
+        if ch == ' ':
+            x_cursor += _MARKER_SPACE * height
+            continue
+        for u1, v1, u2, v2 in _MARKER_GLYPHS[ch]:
+            segments.append((
+                x_cursor + u1 * _MARKER_GLYPH_WIDTH * height,
+                z_top - (1.0 - v1) * height,
+                x_cursor + u2 * _MARKER_GLYPH_WIDTH * height,
+                z_top - (1.0 - v2) * height,
+            ))
+        x_cursor += advance * height
+    return segments
+
+
 class StageRenderer:
     """
     Renders the stage floor with grid lines.
@@ -15,6 +94,8 @@ class StageRenderer:
     - Grid lines at 1m intervals
     - Center cross marking origin (0,0)
     - Coordinate axes (X=red, Z=blue)
+    - "v AUDIENCE v" stroke lettering on the apron beyond the downstage
+      edge (world -Z), so the front of the stage is always identifiable
     """
 
     # Shader sources
@@ -92,6 +173,7 @@ class StageRenderer:
         self.axis_x_color = (1.0, 0.3, 0.3)  # Bright red for X axis
         self.axis_z_color = (0.3, 0.3, 1.0)  # Bright blue for Z axis
         self.center_color = (1.0, 1.0, 1.0)  # White for center cross
+        self.marker_color = (0.94, 0.34, 0.18)  # Glutorange, AUDIENCE marker
 
         # Create shaders
         try:
@@ -192,6 +274,13 @@ class StageRenderer:
             lines.extend([-half_w, y_offset, z, *self.grid_color])
             lines.extend([half_w, y_offset, z, *self.grid_color])
             z -= self.grid_spacing
+
+        # AUDIENCE marker on the downstage apron (world -Z = stage
+        # front). Stroke lettering through this same line pipeline.
+        for x1, z1, x2, z2 in audience_marker_segments(self.width,
+                                                       self.depth):
+            lines.extend([x1, axis_offset, z1, *self.marker_color])
+            lines.extend([x2, axis_offset, z2, *self.marker_color])
 
         # Center cross (more visible, white)
         cross_size = 0.2
