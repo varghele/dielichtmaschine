@@ -673,17 +673,37 @@ def position_tab(qapp):
 
 
 class TestPositionPool:
-    def test_set_position_toggles_and_emits(self, position_tab):
+    def test_stage_position_applies_per_selected_group(self, position_tab):
         hits = []
         state = position_tab.state
         state.state_changed.connect(lambda: hits.append(1))
-        state.set_position("mark:DS Centre", "DS Centre")
-        assert state.position == "mark:DS Centre"
-        assert state.position_label == "DS Centre"
-        state.set_position("mark:DS Centre")  # same id again -> cleared
-        assert state.position is None
-        assert state.position_label is None
-        assert len(hits) == 2
+        state.set_selection(["Movers"])
+        state.stage_position("mark:DS Centre", "DS Centre")
+        assert state.positions == {"Movers": "mark:DS Centre"}
+        assert state.position_labels["mark:DS Centre"] == "DS Centre"
+        # Same id on the same selection again -> released from it.
+        state.stage_position("mark:DS Centre")
+        assert state.positions == {}
+        assert len(hits) == 3   # set_selection + two touches
+
+    def test_groups_hold_positions_independently(self, position_tab):
+        # The per-group policy: a selected group takes the position,
+        # the group holding another target is unaffected.
+        state = position_tab.state
+        state.set_selection(["Movers"])
+        state.stage_position("mark:Drum Riser", "Drum Riser")
+        state.set_selection(["Front Pars"])
+        state.stage_position("preset:audience", "Audience")
+        assert state.positions == {"Movers": "mark:Drum Riser",
+                                   "Front Pars": "preset:audience"}
+        # Releasing from Front Pars leaves Movers aimed.
+        state.stage_position("preset:audience")
+        assert state.positions == {"Movers": "mark:Drum Riser"}
+
+    def test_stage_position_without_selection_is_a_no_op(self, position_tab):
+        state = position_tab.state
+        state.stage_position("mark:DS Centre", "DS Centre")
+        assert state.positions == {}
 
     def test_cells_built_presets_then_marks_in_order(self, position_tab):
         # The five geometry presets, then the marks in config order
@@ -728,19 +748,28 @@ class TestPositionPool:
         finally:
             tab.deleteLater()
 
-    def test_click_stages_and_second_click_clears(self, position_tab):
+    def test_click_applies_and_second_click_releases(self, position_tab):
+        position_tab.state.set_selection(["Movers"])
         cell = position_tab._position_cells["mark:DS Centre"]
         cell.clicked.emit("mark:DS Centre")
-        assert position_tab.state.position == "mark:DS Centre"
-        assert position_tab.state.position_label == "DS Centre"
+        assert position_tab.state.positions == {"Movers": "mark:DS Centre"}
+        assert position_tab.state.position_labels["mark:DS Centre"] == \
+            "DS Centre"
         cell.clicked.emit("mark:DS Centre")
-        assert position_tab.state.position is None
+        assert position_tab.state.positions == {}
 
-    def test_active_cell_outlined(self, position_tab):
-        position_tab.state.set_position("mark:Drum Riser", "Drum Riser")
+    def test_active_cell_outlined_selection_scoped(self, position_tab):
+        state = position_tab.state
+        state.set_selection(["Movers"])
+        state.stage_position("mark:Drum Riser", "Drum Riser")
         assert position_tab._position_cells["mark:Drum Riser"].is_active()
         assert not position_tab._position_cells["mark:DS Centre"].is_active()
-        position_tab.state.set_position("mark:Drum Riser")
+        # The outline follows the selection (like the colour pool): a
+        # selection whose groups hold nothing outlines nothing.
+        state.set_selection(["Front Pars"])
+        assert not position_tab._position_cells["mark:Drum Riser"].is_active()
+        state.set_selection(["Movers"])
+        state.stage_position("mark:Drum Riser")
         assert not position_tab._position_cells["mark:Drum Riser"].is_active()
 
     def test_empty_config_shows_marked_empty_state(self, live_tab):
@@ -788,27 +817,30 @@ class TestPositionPool:
             tab.deleteLater()
 
     def test_update_from_config_prunes_removed_mark(self, position_tab):
-        position_tab.state.set_position("mark:DS Centre", "DS Centre")
+        position_tab.state.set_selection(["Movers"])
+        position_tab.state.stage_position("mark:DS Centre", "DS Centre")
         del position_tab.config.spots["DS Centre"]
         position_tab.update_from_config()
         # Positions are config-bound: the stale mark is pruned...
-        assert position_tab.state.position is None
+        assert position_tab.state.positions == {}
         # ...and the pool rebuilt without its cell.
         assert list(position_tab._position_cells) == \
             GEOMETRY_PRESET_IDS + ["mark:Drum Riser"]
 
     def test_update_from_config_keeps_valid_mark(self, position_tab):
-        position_tab.state.set_position("mark:Drum Riser", "Drum Riser")
+        position_tab.state.set_selection(["Movers"])
+        position_tab.state.stage_position("mark:Drum Riser", "Drum Riser")
         del position_tab.config.spots["DS Centre"]
         position_tab.update_from_config()
-        assert position_tab.state.position == "mark:Drum Riser"
+        assert position_tab.state.positions == {"Movers": "mark:Drum Riser"}
         assert position_tab._position_cells["mark:Drum Riser"].is_active()
 
     def test_geometry_preset_never_pruned(self, position_tab):
-        position_tab.state.set_position("preset:cross", "Cross")
+        position_tab.state.set_selection(["Movers"])
+        position_tab.state.stage_position("preset:cross", "Cross")
         position_tab.config.spots.clear()
         position_tab.update_from_config()
-        assert position_tab.state.position == "preset:cross"
+        assert position_tab.state.positions == {"Movers": "preset:cross"}
         assert position_tab._position_cells["preset:cross"].is_active()
 
     def test_element_preset_pruned_with_its_element(self, qapp):
@@ -821,10 +853,11 @@ class TestPositionPool:
         ThemeManager().apply(qapp, "dark")
         tab = LiveTab(cfg, parent=None)
         try:
-            tab.state.set_position("preset:element:drums1", "Drums")
+            tab.state.set_selection(["Movers"])
+            tab.state.stage_position("preset:element:drums1", "Drums")
             cfg.stage_elements.clear()
             tab.update_from_config()
-            assert tab.state.position is None
+            assert tab.state.positions == {}
             assert "preset:element:drums1" not in tab._position_cells
         finally:
             tab.deleteLater()
@@ -840,28 +873,37 @@ class TestPositionPool:
     def test_state_update_from_config_position_semantics(self, position_tab):
         # Direct LiveState contract: prune when absent, keep when present.
         state = position_tab.state
-        state.position = "mark:DS Centre"
+        state.positions = {"Movers": "mark:DS Centre"}
         state.update_from_config(["Movers"], ["DS Centre", "Drum Riser"])
-        assert state.position == "mark:DS Centre"
+        assert state.positions == {"Movers": "mark:DS Centre"}
         state.update_from_config(["Movers"], ["Drum Riser"])
-        assert state.position is None
+        assert state.positions == {}
+
+    def test_position_dropped_with_its_group(self, position_tab):
+        # Like colours: a group that left the config takes its applied
+        # position with it.
+        state = position_tab.state
+        state.positions = {"Movers": "mark:DS Centre",
+                           "Gone": "mark:DS Centre"}
+        state.update_from_config(["Movers"], ["DS Centre"])
+        assert state.positions == {"Movers": "mark:DS Centre"}
 
     def test_legacy_bare_id_migrates_to_mark_namespace(self, position_tab):
         # The pre-namespace ids (raw spot names, one release old) are
         # migrated on the next config sync, not accreted alongside.
         state = position_tab.state
-        state.position = "DS Centre"
+        state.positions = {"Movers": "DS Centre"}
         state.update_from_config(["Movers"], ["DS Centre"])
-        assert state.position == "mark:DS Centre"
-        state.position = "Gone Mark"
+        assert state.positions == {"Movers": "mark:DS Centre"}
+        state.positions = {"Movers": "Gone Mark"}
         state.update_from_config(["Movers"], ["DS Centre"])
-        assert state.position is None
+        assert state.positions == {}
 
     def test_programmer_bar_shows_position(self, position_tab):
         position_tab.state.toggle_group("Movers")
-        position_tab.state.set_position("mark:DS Centre", "DS Centre")
+        position_tab.state.stage_position("mark:DS Centre", "DS Centre")
         assert "POS: DS CENTRE" in position_tab._programmer_label.text()
-        position_tab.state.set_position("mark:DS Centre")
+        position_tab.state.stage_position("mark:DS Centre")
         assert "POS:" not in position_tab._programmer_label.text()
 
     def test_programmer_bar_shows_preset_label(self, position_tab):
@@ -870,11 +912,20 @@ class TestPositionPool:
             "preset:cross")
         assert "POS: CROSS" in position_tab._programmer_label.text()
 
-    def test_release_all_clears_position(self, position_tab):
-        position_tab.state.set_position("mark:DS Centre", "DS Centre")
+    def test_programmer_bar_shows_held_positions_without_selection(
+            self, position_tab):
+        state = position_tab.state
+        state.set_selection(["Movers"])
+        state.stage_position("mark:DS Centre", "DS Centre")
+        state.clear_selection()
+        # Mirrors the colour HELD branch: still aimed, still reported.
+        assert "POS: DS CENTRE" in position_tab._programmer_label.text()
+
+    def test_release_all_clears_positions(self, position_tab):
+        position_tab.state.set_selection(["Movers"])
+        position_tab.state.stage_position("mark:DS Centre", "DS Centre")
         position_tab._release_all_btn.click()
-        assert position_tab.state.position is None
-        assert position_tab.state.position_label is None
+        assert position_tab.state.positions == {}
 
 
 class TestLibraryStatePreserved:

@@ -80,6 +80,24 @@ ELEMENT_PRESET_KINDS = {
 KIND_POINT = "point"
 KIND_PATTERN = "pattern"
 
+
+def group_has_movers(group) -> bool:
+    """Whether a fixture group can take a position palette (pan/tilt).
+
+    Keys on the group's auto-detected sublane capabilities
+    (``FixtureGroupCapabilities.has_movement`` - set when the fixture
+    definitions carry Pan/Tilt channels, the same flag the timeline's
+    movement sublane keys on). Falls back to the fixture-type test used
+    by autogen/spatial.py (type ``MH`` / ``WASH``) for configs whose
+    capabilities were never scanned. Shared by the Live tab's pool
+    gating and the busk output layer's position pass.
+    """
+    caps = getattr(group, "capabilities", None)
+    if caps is not None and getattr(caps, "has_movement", False):
+        return True
+    return any(getattr(f, "type", "") in ("MH", "WASH")
+               for f in (getattr(group, "fixtures", None) or []))
+
 # The tag shown under pattern presets (point presets show their target
 # coordinates, mono, like the spike-mark cells).
 PATTERN_TAG = "Per fixture"

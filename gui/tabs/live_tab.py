@@ -70,7 +70,8 @@ from config.models import Configuration
 from gui.typography import DisplayLabel, MicroLabel, display_font, mono_font
 from utils.position_presets import (
     ELEMENT_PRESET_PREFIX, KIND_POINT, MARK_PREFIX, PRESET_PREFIX,
-    compute_presets, element_preset_ids, mark_id, mark_name,
+    compute_presets, element_preset_ids, group_has_movers, mark_id,
+    mark_name,
 )
 
 from .base_tab import BaseTab
@@ -158,21 +159,9 @@ def _contrast_text(hex_color: str) -> str:
     return "#141416" if lum > 128 else "#F4F1EA"
 
 
-def _group_has_movers(group) -> bool:
-    """Whether a fixture group can take a position palette (pan/tilt).
-
-    Keys on the group's auto-detected sublane capabilities
-    (``FixtureGroupCapabilities.has_movement`` - set when the fixture
-    definitions carry Pan/Tilt channels, the same flag the timeline's
-    movement sublane keys on). Falls back to the fixture-type test used
-    by autogen/spatial.py (type ``MH`` / ``WASH``) for configs whose
-    capabilities were never scanned.
-    """
-    caps = getattr(group, "capabilities", None)
-    if caps is not None and getattr(caps, "has_movement", False):
-        return True
-    return any(getattr(f, "type", "") in ("MH", "WASH")
-               for f in (getattr(group, "fixtures", None) or []))
+# _group_has_movers moved to utils/position_presets.py (group_has_movers)
+# so the busk output layer shares the exact gating; imported above.
+_group_has_movers = group_has_movers
 
 
 # ---------------------------------------------------------------------------
@@ -231,15 +220,19 @@ class LiveState(QObject):
         # them alone (like bpm / mode).
         self.effect: Optional[str] = None        # staged riff key
         self.scene: Optional[str] = None         # staged scene key
-        # Staged position palette: a namespaced id ("preset:centre",
-        # "preset:element:<id>", "mark:<spot name>" - see
-        # utils/position_presets.py) the movers point at (state-only,
-        # no DMX yet), plus the display label the programmer bar shows.
-        # Unlike effect/scene it is config-bound: update_from_config
-        # prunes a mark whose spot left the config and an element
-        # preset whose element did; geometry presets are never pruned.
-        self.position: Optional[str] = None      # staged position id
-        self.position_label: Optional[str] = None
+        # Applied position palettes, PER GROUP (group name -> namespaced
+        # id: "preset:centre", "preset:element:<id>", "mark:<spot name>"
+        # - see utils/position_presets.py). Mirrors ``colours``: staging
+        # a position applies it to every selected group, so one group
+        # aims at the drum riser while another holds the audience -
+        # the busk output layer renders each group's movers at its own
+        # target. ``position_labels`` accumulates id -> display label
+        # for the programmer bar. Unlike effect/scene the ids are
+        # config-bound: update_from_config prunes a mark whose spot
+        # left the config and an element preset whose element did;
+        # geometry presets are never pruned.
+        self.positions: Dict[str, str] = {}       # group name -> id
+        self.position_labels: Dict[str, str] = {}  # id -> display label
         # Dual queue. ``running`` is the running-playbacks stack - plain
         # dict records {"kind": "effect"|"scene", "key", "label",
         # "paused"} mirroring the single active effect/scene (at most one
@@ -269,25 +262,29 @@ class LiveState(QObject):
         # Keep existing submaster values; add 100 for new groups; drop
         # stale. Rebuild as an ordered dict following the group order.
         self.submasters = {g: self.submasters.get(g, 100) for g in names}
-        self._prune_position(spot_names, valid_element_ids)
+        self.positions = {g: p for g, p in self.positions.items()
+                          if g in valid}
+        self._prune_positions(spot_names, valid_element_ids)
 
-    def _prune_position(self, spot_names, valid_element_ids) -> None:
-        if self.position is None:
-            return
-        if not self.position.startswith((PRESET_PREFIX, MARK_PREFIX)):
-            # Migrate the pre-namespace ids (raw spot names, shipped one
-            # release before the namespacing) instead of accreting a
-            # second id scheme.
-            self.position = mark_id(self.position)
-        if self.position.startswith(ELEMENT_PRESET_PREFIX):
-            keep = self.position in set(valid_element_ids)
-        elif self.position.startswith(MARK_PREFIX):
-            keep = mark_name(self.position) in set(spot_names)
-        else:
-            keep = True   # geometry presets always exist
-        if not keep:
-            self.position = None
-            self.position_label = None
+    def _prune_positions(self, spot_names, valid_element_ids) -> None:
+        spot_names = set(spot_names)
+        valid_element_ids = set(valid_element_ids)
+        pruned: Dict[str, str] = {}
+        for group, position_id in self.positions.items():
+            if not position_id.startswith((PRESET_PREFIX, MARK_PREFIX)):
+                # Migrate the pre-namespace ids (raw spot names, shipped
+                # one release before the namespacing) instead of
+                # accreting a second id scheme.
+                position_id = mark_id(position_id)
+            if position_id.startswith(ELEMENT_PRESET_PREFIX):
+                keep = position_id in valid_element_ids
+            elif position_id.startswith(MARK_PREFIX):
+                keep = mark_name(position_id) in spot_names
+            else:
+                keep = True   # geometry presets always exist
+            if keep:
+                pruned[group] = position_id
+        self.positions = pruned
 
     # -- selection ------------------------------------------------------
     def toggle_group(self, name: str) -> None:
@@ -331,8 +328,7 @@ class LiveState(QObject):
         self.selected.clear()
         self.effect = None
         self.scene = None
-        self.position = None
-        self.position_label = None
+        self.positions.clear()
         self.running.clear()
         self.state_changed.emit()
 
@@ -439,20 +435,35 @@ class LiveState(QObject):
         self._sync_running("scene", self.scene)
         self.state_changed.emit()
 
-    def set_position(self, position_id: Optional[str],
-                     label: Optional[str] = None) -> None:
-        """Toggle the staged position palette (a namespaced preset or
-        spike-mark id, movers-only); ``label`` is the display name the
-        programmer bar shows. Touching the same id again clears it.
-        State-only: no fixture moves until the output engine lands, so
-        it does not mirror into the running stack."""
-        if position_id == self.position:
-            self.position = None
-            self.position_label = None
+    def stage_position(self, position_id: str,
+                       label: Optional[str] = None) -> None:
+        """Touch a position palette (a namespaced preset or spike-mark
+        id, movers-only): apply it to every selected group, mutual
+        exclusion per group like colours. Touching an id every selected
+        group already holds RELEASES it from those groups (pan/tilt
+        falls back to the show underneath) - positions toggle where
+        colours only replace. ``label`` is the display name the
+        programmer bar shows for the id. Not a playback, so it does not
+        mirror into the running stack."""
+        if not self.selected:
+            self.state_changed.emit()
+            return
+        if label is not None:
+            self.position_labels[position_id] = label
+        if all(self.positions.get(g) == position_id
+               for g in self.selected):
+            for group in self.selected:
+                self.positions.pop(group, None)
         else:
-            self.position = position_id
-            self.position_label = label if position_id is not None else None
+            for group in self.selected:
+                self.positions[group] = position_id
         self.state_changed.emit()
+
+    def active_position_ids(self) -> set:
+        """Position ids applied to any selected group - the cells the
+        pool outlines in the accent (mirrors active_colour_ids)."""
+        return {self.positions[g] for g in self.selected
+                if g in self.positions}
 
     def _sync_running(self, kind: str, key: Optional[str]) -> None:
         """Mirror the single active effect/scene into the running stack:
@@ -1693,12 +1704,12 @@ class LiveTab(BaseTab):
             self.state.set_scene(key)
 
     def _on_position_touched(self, position_id: str) -> None:
-        """Stage/toggle a preset or spike mark as the position palette.
-        Fire-only (the QUEUE latch covers EFFECTS/SCENES cells;
-        positions are not playbacks) and state-only - no fixture moves
-        yet."""
-        self.state.set_position(position_id,
-                                self._position_labels.get(position_id))
+        """Apply/toggle a preset or spike mark on the selected groups
+        (per-group, like colours). Fire-only - the QUEUE latch covers
+        EFFECTS/SCENES cells; positions are not playbacks. The busk
+        output layer aims each group's movers at its applied target."""
+        self.state.stage_position(position_id,
+                                  self._position_labels.get(position_id))
 
     def _on_select_all(self) -> None:
         self.state.set_selection(self.config.groups.keys())
@@ -2085,10 +2096,12 @@ class LiveTab(BaseTab):
             cell.set_active(key == state.scene)
 
         # POSITION PALETTES: movers-only. Grey the section when the
-        # selection holds no mover groups; outline the staged mark.
+        # selection holds no mover groups; outline the ids applied to
+        # any selected group (selection-scoped, like the colour pool).
         self._position_section.setEnabled(self._selection_has_movers())
+        active_positions = state.active_position_ids()
         for name, cell in self._position_cells.items():
-            cell.set_active(name == state.position)
+            cell.set_active(name in active_positions)
 
         for name, fader in self._submaster_faders.items():
             fader.set_value(state.submasters.get(name, 100))
@@ -2256,13 +2269,18 @@ class LiveTab(BaseTab):
             text += f" · FX: {self._key_name(state.effect).upper()}"
         if state.scene:
             text += f" · SCENE: {self._key_name(state.scene).upper()}"
-        if state.position:
-            # The display label ("CROSS", "DS CENTRE"), not the raw
-            # namespaced id; fall back to stripping the namespace for a
-            # position staged without a label (legacy callers).
-            label = state.position_label or \
-                state.position.split(":")[-1]
-            text += f" · POS: {label.upper()}"
+        # POS shows the selection's applied targets; with no selection,
+        # everything held (mirrors the colour HELD branch). Display
+        # labels ("CROSS", "DS CENTRE"), not raw namespaced ids; fall
+        # back to stripping the namespace for ids applied without a
+        # label (legacy callers).
+        position_ids = state.active_position_ids() if state.selected \
+            else set(state.positions.values())
+        if position_ids:
+            labels = sorted(
+                (state.position_labels.get(p) or p.split(":")[-1]).upper()
+                for p in position_ids)
+            text += f" · POS: {' · '.join(labels)}"
         self._programmer_label.setText(text)
 
     @staticmethod

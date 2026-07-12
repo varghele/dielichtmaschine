@@ -8,8 +8,10 @@ flash-only claims dimmer only, untouched groups claim nothing), the
 group_level_local resolve (pre-grandmaster), split-swatch alternation,
 dimmerless colour scaling and white-flash, the wall-clock strobe chop,
 RELEASE ALL fall-through against a playback layer underneath, the
-busk-over-show merge precedence, arbiter-forwarded fixture maps, and
-the grandmaster/DBO stage capping the busk output. Socket-free.
+busk-over-show merge precedence, arbiter-forwarded fixture maps, the
+grandmaster/DBO stage capping the busk output, and the per-group
+position palettes (pan/tilt claims aimed by calculate_pan_tilt at the
+definition's physical ranges). Socket-free.
 
 Fixture layout (shared mock def, base address 0): dimmer 0, RGBW 1-4,
 pan 5, tilt 6, fines 7-8, gobo 9.
@@ -18,14 +20,16 @@ pan 5, tilt 6, fines 7-8, gobo 9.
 import pytest
 
 from config.models import (
-    Configuration, Fixture, FixtureGroup, FixtureMode, Universe,
+    Configuration, Fixture, FixtureGroup, FixtureMode, Spot, Universe,
 )
 from gui.tabs.live_tab import COLOUR_SWATCHES, LiveState
 from utils.artnet.arbiter import IDLE_BLACKOUT, OutputArbiter
 from utils.artnet.dmx_manager import FixtureChannelMap
 from utils.artnet.live_layer import LiveBuskLayer
+from utils.orientation import calculate_pan_tilt, pan_tilt_to_dmx
 
 DIMMER, RED, GREEN, BLUE, WHITE, PAN = 0, 1, 2, 3, 4, 5
+TILT, PAN_FINE, TILT_FINE, GOBO = 6, 7, 8, 9
 
 
 def _fixture(name, address, x=0.0, model="TestModel"):
@@ -310,3 +314,144 @@ class TestBuskOverShow:
         assert layer.render(0.0) == {}       # no maps yet
         arbiter.set_fixture_maps(maps)       # playback registers maps
         assert layer.render(0.0)             # busk lights up
+
+
+def _expected_aim(fixture, target, pan_range=540.0, tilt_range=270.0):
+    """Reference pan/tilt DMX for a fixture aimed at a stage-space
+    target - the exact calculate_pan_tilt/pan_tilt_to_dmx contract the
+    playback layer's spot targeting uses (no group in these configs, so
+    orientation comes from the fixture's own fields)."""
+    mounting, yaw, pitch, roll = fixture.get_effective_orientation(None)
+    pan_deg, tilt_deg = calculate_pan_tilt(
+        fixture_x=fixture.x, fixture_y=fixture.y,
+        fixture_z=fixture.get_effective_z(None),
+        target_x=target[0], target_y=target[1], target_z=target[2],
+        mounting=mounting, yaw=yaw, pitch=pitch, roll=roll,
+        pan_range=pan_range, tilt_range=tilt_range,
+    )
+    return pan_tilt_to_dmx(pan_deg, tilt_deg, pan_range, tilt_range)
+
+
+class TestPositionClaims:
+    def test_mark_claims_pan_tilt_and_fines_only(self, qapp,
+                                                 mock_fixture_def):
+        state, layer, config, _ = _setup(mock_fixture_def)
+        mh1 = config.fixtures[0]
+        # A spike mark exactly at MH1's head: the aim degenerates to
+        # home -> DMX centre 127/127 (hard anchor, no reference math).
+        config.spots = {"On Head": Spot(name="On Head", x=mh1.x,
+                                        y=mh1.y, z=mh1.z)}
+        state.positions = {"Movers": "mark:On Head"}
+        values, mask = layer.render(0.0)[1]
+        assert mask[PAN] and values[PAN] == 127
+        assert mask[TILT] and values[TILT] == 127
+        # Fine channels claimed to zero so a movement block underneath
+        # cannot jitter the busked aim.
+        assert mask[PAN_FINE] and values[PAN_FINE] == 0
+        assert mask[TILT_FINE] and values[TILT_FINE] == 0
+        # Position claims NO intensity, NO shutter, nothing else: movers
+        # can be pre-aimed dark.
+        assert mask[DIMMER] == 0
+        assert mask[RED] == 0
+        assert mask[GOBO] == 0
+        # MH2 (base 10) aims at the same mark from its own position.
+        expected = _expected_aim(config.fixtures[1], (mh1.x, mh1.y, mh1.z))
+        assert (values[10 + PAN], values[10 + TILT]) == expected
+
+    def test_point_preset_converges_pattern_preset_per_fixture(
+            self, qapp, mock_fixture_def):
+        state, layer, config, _ = _setup(mock_fixture_def)
+        # CENTRE: both movers converge on (0, 0, 1.5).
+        state.positions = {"Movers": "preset:centre"}
+        values, _ = layer.render(0.0)[1]
+        for fixture, base in ((config.fixtures[0], 0),
+                              (config.fixtures[1], 10)):
+            expected = _expected_aim(fixture, (0.0, 0.0, 1.5))
+            assert (values[base + PAN], values[base + TILT]) == expected
+        # CEILING: each mover derives its own target (x, y, z + 10).
+        state.positions = {"Movers": "preset:ceiling"}
+        values, _ = layer.render(0.0)[1]
+        for fixture, base in ((config.fixtures[0], 0),
+                              (config.fixtures[1], 10)):
+            expected = _expected_aim(
+                fixture, (fixture.x, fixture.y, fixture.z + 10.0))
+            assert (values[base + PAN], values[base + TILT]) == expected
+
+    def test_stage_position_drives_the_layer_per_group(self, qapp,
+                                                       mock_fixture_def):
+        # Through the real mutator: only the selected group aims.
+        mh = _fixture("MH1", 1, x=-1.0)
+        other = _fixture("MH2", 11, x=1.0)
+        groups = {"Left": FixtureGroup(name="Left", fixtures=[mh]),
+                  "Right": FixtureGroup(name="Right", fixtures=[other])}
+        state, layer, config, _ = _setup(mock_fixture_def,
+                                         fixtures=[mh, other],
+                                         groups=groups)
+        state.set_selection(["Left"])
+        state.stage_position("preset:centre", "Centre")
+        values, mask = layer.render(0.0)[1]
+        assert mask[PAN]                       # Left's mover aims...
+        assert mask[10 + PAN] == 0             # ...Right is unaffected
+
+    def test_non_mover_group_never_aims(self, qapp, mock_fixture_def,
+                                        rgb_par_def):
+        par = _fixture("PAR1", 100, model="ParModel")
+        par.type = "PAR"
+        config = Configuration(
+            fixtures=[par],
+            groups={"Pars": FixtureGroup(name="Pars", fixtures=[par])},
+            universes={1: Universe(id=1, name="U1", output={})},
+        )
+        maps = {"PAR1": FixtureChannelMap(par, rgb_par_def, config)}
+        state = LiveState()
+        state.update_from_config(["Pars"])
+        state.positions = {"Pars": "preset:centre"}
+        layer = LiveBuskLayer(state, config_provider=lambda: config,
+                              swatches=COLOUR_SWATCHES)
+        layer.set_fixture_maps(maps)
+        assert layer.render(0.0) == {}
+
+    def test_stale_mark_renders_nothing(self, qapp, mock_fixture_def):
+        state, layer, config, _ = _setup(mock_fixture_def)
+        config.spots = {}
+        state.positions = {"Movers": "mark:Ghost"}
+        assert layer.render(0.0) == {}
+
+    def test_position_composes_with_colour_claims(self, qapp,
+                                                  mock_fixture_def):
+        state, layer, config, _ = _setup(mock_fixture_def)
+        state.selected = {"Movers"}
+        state.stage_colour("red")
+        state.stage_position("preset:centre", "Centre")
+        values, mask = layer.render(0.0)[1]
+        assert mask[DIMMER] and values[DIMMER] == 255
+        assert values[RED] == 0xFF
+        assert mask[PAN] and mask[TILT]
+
+    def test_release_all_releases_the_aim(self, qapp, mock_fixture_def):
+        state, layer, config, _ = _setup(mock_fixture_def)
+        state.set_selection(["Movers"])
+        state.stage_position("preset:centre", "Centre")
+        assert layer.render(0.0)
+        state.release_all()
+        assert layer.render(0.0) == {}
+
+    def test_definition_ranges_drive_the_aim(self, qapp,
+                                             mock_fixture_def):
+        # A definition declaring 360/180 physical travel aims through
+        # those ranges; the shared mock def (no physical data) falls
+        # back to 540/270.
+        ranged_def = dict(mock_fixture_def)
+        ranged_def["physical"] = {"pan_max": 360.0, "tilt_max": 180.0}
+        state, layer, config, maps = _setup(ranged_def)
+        assert maps["MH1"].pan_range == 360.0
+        assert maps["MH1"].tilt_range == 180.0
+        state.positions = {"Movers": "preset:centre"}
+        values, _ = layer.render(0.0)[1]
+        expected = _expected_aim(config.fixtures[0], (0.0, 0.0, 1.5),
+                                 pan_range=360.0, tilt_range=180.0)
+        assert (values[PAN], values[TILT]) == expected
+        # And the fallback contract on the plain def:
+        _, _, _, plain_maps = _setup(mock_fixture_def)
+        assert plain_maps["MH1"].pan_range == 540.0
+        assert plain_maps["MH1"].tilt_range == 270.0

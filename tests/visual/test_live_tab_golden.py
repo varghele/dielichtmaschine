@@ -150,11 +150,12 @@ def test_live_tab_golden(qapp, scene_config, tmp_path):
         tab.state.set_mode("live")
         tab.state.set_effect("loops/Four Floor")
         tab.state.set_scene("looks/Warm Wash")
-        # Round-3: stage the computed CROSS preset. The Movers group
-        # (type MH) is selected, so the movers-only POSITION pool is
-        # enabled and the staged preset cell renders accent-outlined
-        # (the programmer bar reads "POS: CROSS").
-        tab.state.set_position("preset:cross", "Cross")
+        # Round-3: apply the computed CROSS preset to the selection
+        # (per-group positions). The Movers group (type MH) is selected,
+        # so the movers-only POSITION pool is enabled and the applied
+        # preset cell renders accent-outlined (the programmer bar reads
+        # "POS: CROSS") - pixel-identical to the old staged rendering.
+        tab.state.stage_position("preset:cross", "Cross")
         # Dual queue: the staged effect+scene render as running rows;
         # preload two NEXT UP items (one effect, one scene) so the queue
         # rows, the remove X and the enabled GO all pin.

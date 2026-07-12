@@ -21,8 +21,16 @@ busk programmer actually drives:
   capability guessing on shutter channels.
 - Fixtures without a dimmer channel get their COLOUR scaled by the
   level instead (and flash-only reads as a white flash).
-- Pan/tilt is NEVER claimed: position presets stay data-only until
-  the v1.5a focus-geometry milestone.
+- A mover group with an APPLIED POSITION (LiveState.positions, per
+  group) claims pan + tilt on its pan/tilt-capable fixtures, aimed at
+  the palette's stage-space target through the same
+  calculate_pan_tilt/pan_tilt_to_dmx path the playback layer uses for
+  spot-targeted MovementBlocks, at the definition's physical ranges
+  (FixtureChannelMap.pan_range/tilt_range). The fine channels are
+  claimed to zero so a movement block underneath cannot jitter the
+  busked aim. Position claims NO dimmer and NO shutter: movers can be
+  pre-aimed dark, and intensity stays whatever the show (or a busk
+  colour/flash) says.
 - Groups without busk content claim nothing - RELEASE ALL clears the
   programmer, the claims vanish, and every channel falls through to
   whatever runs underneath. That IS busk-on-top.
@@ -37,6 +45,11 @@ timeline/Auto playback too.
 """
 
 from typing import Callable, Dict, Optional, Tuple
+
+from utils.orientation import calculate_pan_tilt, pan_tilt_to_dmx
+from utils.position_presets import (
+    MARK_PREFIX, compute_presets, group_has_movers, mark_name,
+)
 
 from .arbiter import Frame
 
@@ -93,13 +106,16 @@ class LiveBuskLayer:
             return {}
 
         claimed_groups = []
+        position_groups = []
         for group_name, group in getattr(config, "groups", {}).items():
             has_colour = group_name in state.colours
             has_flash = group_name in state.flash
-            if not has_colour and not has_flash:
-                continue
-            claimed_groups.append((group_name, group, has_colour))
-        if not claimed_groups:
+            if has_colour or has_flash:
+                claimed_groups.append((group_name, group, has_colour))
+            position_id = state.positions.get(group_name)
+            if position_id and group_has_movers(group):
+                position_groups.append((group, position_id))
+        if not claimed_groups and not position_groups:
             return {}
 
         strobe_open = True
@@ -184,4 +200,68 @@ class LiveBuskLayer:
                 # chop happens on the dimmer, not the shutter channel.
                 _write(fixture_map, fixture_map.strobe_channels, 255)
 
+        # -- position palettes: aim each group's movers at its target --
+        # A fixture in several position-holding groups is written once
+        # per group in config-group order - later groups win, same
+        # lane-order-wins call as the colour pass above.
+        if position_groups:
+            presets_by_id = {p.preset_id: p
+                             for p in compute_presets(config)}
+            for group, position_id in position_groups:
+                for fixture in (getattr(group, "fixtures", None) or []):
+                    fixture_map = self._fixture_maps.get(fixture.name)
+                    if fixture_map is None:
+                        continue
+                    if not (fixture_map.pan_channels
+                            or fixture_map.tilt_channels):
+                        continue
+                    target = self._target_for(config, presets_by_id,
+                                              position_id, fixture)
+                    if target is None:
+                        continue
+                    # Orientation comes from the PRIMARY group (groups[0]
+                    # drives orientation - locked first-group-wins), same
+                    # as the playback layer's spot targeting.
+                    primary = config.groups.get(fixture.group) \
+                        if fixture.group else None
+                    mounting, yaw, pitch, roll = \
+                        fixture.get_effective_orientation(primary)
+                    fixture_z = fixture.get_effective_z(primary)
+                    pan_deg, tilt_deg = calculate_pan_tilt(
+                        fixture_x=fixture.x, fixture_y=fixture.y,
+                        fixture_z=fixture_z,
+                        target_x=target[0], target_y=target[1],
+                        target_z=target[2],
+                        mounting=mounting, yaw=yaw, pitch=pitch,
+                        roll=roll,
+                        pan_range=fixture_map.pan_range,
+                        tilt_range=fixture_map.tilt_range,
+                    )
+                    pan_dmx, tilt_dmx = pan_tilt_to_dmx(
+                        pan_deg, tilt_deg,
+                        fixture_map.pan_range, fixture_map.tilt_range)
+                    _write(fixture_map, fixture_map.pan_channels, pan_dmx)
+                    _write(fixture_map, fixture_map.tilt_channels,
+                           tilt_dmx)
+                    # Claim the fine channels to zero: unclaimed, a
+                    # movement block underneath would jitter the aim.
+                    _write(fixture_map, fixture_map.pan_fine_channels, 0)
+                    _write(fixture_map, fixture_map.tilt_fine_channels, 0)
+
         return {u: (bytes(values[u]), bytes(masks[u])) for u in values}
+
+    @staticmethod
+    def _target_for(config, presets_by_id, position_id, fixture):
+        """The stage-space (x, y, z) a position id aims this fixture at,
+        or None when the id is stale (pruning is the state's job; a
+        stale id between prunes must render nothing, not crash)."""
+        if position_id.startswith(MARK_PREFIX):
+            spot = (getattr(config, "spots", None)
+                    or {}).get(mark_name(position_id))
+            if spot is None:
+                return None
+            return (spot.x, spot.y, spot.z)
+        preset = presets_by_id.get(position_id)
+        if preset is None:
+            return None
+        return preset.target_for(fixture)
