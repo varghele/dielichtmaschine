@@ -205,6 +205,107 @@ class TestAddRemove:
             tab.deleteLater()
 
 
+class TestContextMenu:
+    """Right-click add / remove universes (card menu + empty-space menu)."""
+
+    def test_remove_by_id_targets_that_universe_not_the_selection(self, qapp):
+        tab = _make_tab(qapp, ("ArtNet", "E1.31"))
+        try:
+            tab._on_card_clicked(1)          # #1 selected
+            tab._remove_universe_by_id(2)     # remove the OTHER one
+            assert sorted(tab.config.universes) == [1]
+            assert tab._selected_id == 1      # selection untouched
+        finally:
+            tab.deleteLater()
+
+    def test_remove_by_id_ignores_missing_or_none(self, qapp):
+        tab = _make_tab(qapp, ("ArtNet",))
+        try:
+            tab._remove_universe_by_id(99)
+            tab._remove_universe_by_id(None)
+            assert sorted(tab.config.universes) == [1]
+        finally:
+            tab.deleteLater()
+
+    def test_card_menu_selects_and_offers_add_and_remove(self, qapp, monkeypatch):
+        from PyQt6 import QtWidgets
+        from PyQt6.QtCore import QPoint
+
+        tab = _make_tab(qapp, ("ArtNet", "E1.31"))
+        try:
+            captured = {}
+            monkeypatch.setattr(
+                QtWidgets.QMenu, "exec",
+                lambda menu, *a, **k: captured.setdefault(
+                    "texts", [act.text() for act in menu.actions()]))
+            tab._show_card_context_menu(2, QPoint(0, 0))
+            assert tab._selected_id == 2      # right-click selected the card
+            assert captured["texts"] == ["Add Universe", "Remove Universe"]
+        finally:
+            tab.deleteLater()
+
+    def test_empty_space_menu_offers_add_only(self, qapp, monkeypatch):
+        from PyQt6 import QtWidgets
+        from PyQt6.QtCore import QPoint
+
+        tab = _make_tab(qapp, ("ArtNet",))
+        try:
+            captured = {}
+            monkeypatch.setattr(
+                QtWidgets.QMenu, "exec",
+                lambda menu, *a, **k: captured.setdefault(
+                    "texts", [act.text() for act in menu.actions()]))
+            tab._show_list_context_menu(QPoint(5, 5))
+            assert captured["texts"] == ["Add Universe"]
+        finally:
+            tab.deleteLater()
+
+    def test_triggering_menu_remove_deletes_that_universe(self, qapp, monkeypatch):
+        from PyQt6 import QtWidgets
+        from PyQt6.QtCore import QPoint
+
+        tab = _make_tab(qapp, ("ArtNet", "E1.31"))
+        try:
+            def fake_exec(menu, *a, **k):
+                for act in menu.actions():
+                    if act.text() == "Remove Universe":
+                        act.trigger()
+            monkeypatch.setattr(QtWidgets.QMenu, "exec", fake_exec)
+            tab._exec_universe_menu(QPoint(0, 0), 2)
+            assert sorted(tab.config.universes) == [1]
+        finally:
+            tab.deleteLater()
+
+    def test_triggering_menu_add_appends_a_universe(self, qapp, monkeypatch):
+        from PyQt6 import QtWidgets
+        from PyQt6.QtCore import QPoint
+
+        tab = _make_tab(qapp, ("ArtNet",))
+        try:
+            def fake_exec(menu, *a, **k):
+                for act in menu.actions():
+                    if act.text() == "Add Universe":
+                        act.trigger()
+            monkeypatch.setattr(QtWidgets.QMenu, "exec", fake_exec)
+            tab._exec_universe_menu(QPoint(0, 0), None)
+            assert sorted(tab.config.universes) == [1, 2]
+        finally:
+            tab.deleteLater()
+
+    def test_card_emits_context_requested_on_right_click(self, qapp):
+        from PyQt6.QtCore import QPoint
+
+        tab = _make_tab(qapp, ("ArtNet",))
+        try:
+            received = []
+            tab._cards[1].context_requested.connect(
+                lambda uid, pos: received.append(uid))
+            tab._cards[1].context_requested.emit(1, QPoint(0, 0))
+            assert received == [1]
+        finally:
+            tab.deleteLater()
+
+
 class TestReferenceChrome:
     """Deltas closed in the screen-03 diff pass."""
 

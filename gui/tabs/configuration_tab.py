@@ -138,6 +138,7 @@ class UniverseRowCard(QtWidgets.QWidget):
     the inspector. Emits ``selected(universe_id)`` on click."""
 
     clicked = pyqtSignal(int)
+    context_requested = pyqtSignal(int, QtCore.QPoint)
 
     # Shared grid so all cards + the header row align.
     COLUMN_WIDTHS = (52, 170, 110, -1, 190, 90)  # -1 = stretch
@@ -236,6 +237,12 @@ class UniverseRowCard(QtWidgets.QWidget):
         self.clicked.emit(self.universe_id)
         event.accept()
 
+    def contextMenuEvent(self, event):
+        # Right-click a card: Add / Remove-this-universe menu. Accept the
+        # event so it does not also bubble up to the list's own add menu.
+        self.context_requested.emit(self.universe_id, event.globalPos())
+        event.accept()
+
 
 class ConfigurationTab(BaseTab):
     """Universe configuration: card list + inspector (North Star 1d)."""
@@ -313,6 +320,13 @@ class ConfigurationTab(BaseTab):
         self.card_container = QtWidgets.QVBoxLayout()
         self.card_container.setSpacing(0)
         cards_host = QtWidgets.QWidget()
+        # Right-click empty list space to add a universe (cards handle
+        # their own right-click for the per-card menu).
+        self.card_list_host = cards_host
+        cards_host.setContextMenuPolicy(
+            Qt.ContextMenuPolicy.CustomContextMenu)
+        cards_host.customContextMenuRequested.connect(
+            self._show_list_context_menu)
         cards_layout = QtWidgets.QVBoxLayout(cards_host)
         cards_layout.setContentsMargins(0, 0, 0, 0)
         cards_layout.addLayout(self.card_container)
@@ -524,6 +538,7 @@ class ConfigurationTab(BaseTab):
         for universe_id, universe in sorted(universes.items()):
             card = UniverseRowCard(universe_id)
             card.clicked.connect(self._on_card_clicked)
+            card.context_requested.connect(self._show_card_context_menu)
             self.card_container.addWidget(card)
             self._cards[universe_id] = card
         self._refresh_cards()
@@ -738,11 +753,42 @@ class ConfigurationTab(BaseTab):
         self.update_from_config()
 
     def _remove_universe(self):
-        if self._selected_id is None:
+        """The inspector's Remove button: drops the selected universe."""
+        self._remove_universe_by_id(self._selected_id)
+
+    def _remove_universe_by_id(self, universe_id):
+        """Drop one universe by id (shared by the button and the
+        right-click menu). No-op when it is missing/None."""
+        if universe_id is None or universe_id not in self.config.universes:
             return
-        self.config.universes.pop(self._selected_id, None)
-        self._selected_id = None
+        self.config.universes.pop(universe_id, None)
+        if self._selected_id == universe_id:
+            self._selected_id = None
         self.update_from_config()
+
+    # ------------------------------------------------------------------
+    # Right-click context menus (add / remove)
+    # ------------------------------------------------------------------
+    def _show_card_context_menu(self, universe_id: int,
+                                global_pos: QtCore.QPoint):
+        """Menu for a right-clicked card: select it, then offer Add and
+        Remove-this-universe."""
+        self._on_card_clicked(universe_id)
+        self._exec_universe_menu(global_pos, universe_id)
+
+    def _show_list_context_menu(self, pos: QtCore.QPoint):
+        """Menu for empty list space: Add only (nothing to remove)."""
+        global_pos = self.card_list_host.mapToGlobal(pos)
+        self._exec_universe_menu(global_pos, None)
+
+    def _exec_universe_menu(self, global_pos: QtCore.QPoint, universe_id):
+        menu = QtWidgets.QMenu(self)
+        menu.addAction("Add Universe", self._add_universe)
+        if universe_id is not None:
+            menu.addAction(
+                "Remove Universe",
+                lambda: self._remove_universe_by_id(universe_id))
+        menu.exec(global_pos)
 
     def _refresh_devices(self):
         names = get_device_display_names()
