@@ -129,6 +129,52 @@ same convention).
 
 ---
 
+## 4. Swapping two axes MIRRORS the world (stage -> scene mapping)
+
+**Symptom:** the 3D scene looks subtly wrong in a way nobody can name.
+Floor lettering renders as mirror writing. A mover aimed at a spike
+mark appears to hit the mark's mirror image. "Point at the audience"
+sends beams toward the back of the stage. Everything is nonetheless
+self-consistent: beams DO land on their targets, so no test catches it.
+
+**Why:** every renderer places geometry with
+
+```python
+glm.translate(m, glm.vec3(pos['x'], pos['z'], pos['y']))   # stage -> scene
+```
+
+i.e. stage `(x, y, z_height)` -> scene `(x, z_height, y)`. That SWAPS
+two axes, and a two-axis swap has **determinant -1**: it is a
+reflection, not a rotation. The scene was a mirror image of the real
+stage. Self-consistency hides it - the solver
+(`utils/orientation.py`) maps targets into the same mirrored frame, so
+the closed loop works and only the comparison with reality (text,
+left/right, the Stage tab) exposes it.
+
+Compounding it: the default orbit camera (azimuth 45) then sat
+*upstage*, so the first thing you saw was the band from behind.
+
+**How to apply:**
+
+- The correction is ONE change of basis on the view matrix
+  (`visualizer/renderer/camera.py` `DISPLAY_FLIP` = `diag(1, 1, -1)`),
+  giving stage -> display `(x, z, -y)`, determinant +1. No renderer, no
+  model matrix and NO pan/tilt math changes, so DMX output is untouched.
+- Face culling is never enabled in this renderer, so the reflected
+  winding is harmless. If you ever enable `CULL_FACE`, revisit this.
+- Consequence to remember: **the camera orbits in display space**, so a
+  given azimuth now views the stage from the opposite side than it did
+  before. Hand-placed cameras in tests need +180 degrees
+  (`tests/visual/test_beam_chassis_occlusion.py`).
+- Check handedness with a determinant assertion, not by eye:
+  `tests/unit/test_display_frame.py`. And keep a piece of ASYMMETRIC
+  geometry in the scene - the `v AUDIENCE v` stroke lettering on the
+  apron (`visualizer/renderer/stage.py`) is the permanent witness. A
+  mirrored world is instantly visible as backwards text; a symmetric
+  grid tells you nothing.
+
+---
+
 ## Adding new entries
 
 If you spend more than 20 minutes diagnosing a GL or moderngl issue

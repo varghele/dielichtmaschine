@@ -11,6 +11,37 @@ verbatim as the GitHub Release notes (see [docs/releasing.md](docs/releasing.md)
 
 ## [Unreleased]
 
+### Fixed
+
+- **The 3D stage was a mirror image of the real stage.** The renderer
+  mapped stage coordinates by swapping two axes, which is a reflection,
+  not a rotation - so the whole scene was flipped. Beams still landed on
+  their targets inside the mirror, which is why it went unnoticed, but
+  against reality it read as "everything is backwards": aim a mover at a
+  spike mark and it appeared to hit the mark's mirror image; aim at the
+  audience and the beam flew toward the back of the stage. On top of
+  that, the default camera sat behind the band. Both are fixed: the view
+  is now a faithful copy of the stage, seen from the audience. DMX
+  output is unchanged by this fix.
+- **A hanging rig behaved like a wall-mounted one.** Mounting presets
+  lived in two contradictory tables, and neither was right. Configs
+  stored `mounting: hanging` beside zeroed angles, and every consumer
+  used the angles and ignored the mounting - so hanging fixtures aimed
+  sideways, exactly like a wall mount. The orientation dialog's own
+  table made it worse: its "hanging" was a rotation about the beam's own
+  axis, which cannot move the beam at all. There is now ONE table
+  (`utils/orientation.py`), every preset is pinned by a test asserting
+  where the beam actually points, and all four wall presets - each of
+  which was 90 degrees off - are corrected. Existing projects are
+  migrated on load; hand-dialled custom orientations are left alone.
+  **Because fixtures are now oriented correctly, the pan/tilt values
+  written to your rig and to exported QLC+ workspaces change for any rig
+  containing moving heads.** Rigs without movers export byte-identically.
+  Worth a look at your fixtures' mounting before the next show.
+- **The visualizer says where the audience is.** "AUDIENCE" is written
+  on the apron at the front edge of the stage, so the orientation of the
+  3D view is never in doubt.
+
 ### Added
 
 - **Your own fixture library folders.** Settings > Fixture Libraries...

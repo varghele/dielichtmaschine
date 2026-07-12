@@ -46,6 +46,38 @@ screen design first), timeline undo/redo (big), MVR/OSC (own tracks).
 - [x] Build phases 0-3 - done 2026-07-11/12, hashes in the plan doc;
       phase 4 (conductor, pause look, setlist runner) stays v1.7
 
+## Open finding: the pan/tilt yoke model may not match real movers
+
+Found 2026-07-12 while fixing the mirrored stage and the mounting
+presets. NOT yet fixed - it needs a real fixture to settle, and it
+does not affect the visualizer (which is self-consistent).
+
+The solver and the renderer both model a mover as: beam along local
++X, PAN about local Z, TILT about local Y. In that model the beam at
+tilt=0 is always PERPENDICULAR to the pan axis. With the canonical
+`hanging` preset (roll -90, beam down at home) the pan axis therefore
+comes out HORIZONTAL - but a real hanging moving head pans about a
+VERTICAL axis, and at mid-tilt its beam points roughly horizontally,
+not straight down.
+
+Consequence if real fixtures follow the usual convention: the pan/tilt
+DMX we emit aims correctly *in the app* but not on the rig. Worked
+example - a hanging mover 5 m up, target 2 m to +X: we emit pan 21.8
+deg, tilt 0. A real mover at tilt 0 (straight down) would ignore pan
+entirely and stay pointing down.
+
+Deeper cause: the beam's local direction is hard-coded to +X for every
+fixture, but a PAR's emission is fixed to its body while a mover's is
+articulated off its base axis. One (yaw, pitch, roll) cannot make a
+hanging PAR point down AND give a hanging mover a vertical pan axis.
+The beam/base axes likely need to come from the fixture definition
+(GDTF carries the geometry tree for exactly this).
+
+- [ ] Settle with hardware: patch one mover, aim it at a spike mark,
+      compare the rig against the visualizer. If they disagree, model
+      the yoke properly (pan about the mount's base axis; per-fixture
+      tilt-centre convention) rather than patching signs.
+
 ## Pending manual verification (user, needs hardware/desktop)
 
 - [ ] Busk a colour over a playing show against a real ArtNet node or

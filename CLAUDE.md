@@ -62,10 +62,29 @@ ArtNet playback, PyQt6 + ModernGL, developed primarily on Windows.
   `tests/visual/test_widget_clipping.py` enforces this - add new
   fixed-width icon buttons to its collectors.
 - **Coordinate frames:** stage/config space is X centered left-right,
-  Y depth centered (negative = front/audience), Z height. The 3D
-  renderer is Y-up: stage X -> world X, stage Z (height) -> world Y,
-  stage Y -> world Z (front = -Z). `autogen/spatial.py` uses its own
-  0..D depth convention for stage planes - do not mix them up.
+  Y depth centered (negative = front/audience), Z height. Renderers
+  build geometry in the Y-up SCENE frame: stage X -> scene X, stage Z
+  (height) -> scene Y, stage Y -> scene Z. That mapping SWAPS two axes,
+  so it is a REFLECTION (det -1) - the scene is a mirror of the stage.
+  It is corrected once, at the view matrix (`DISPLAY_FLIP` in
+  visualizer/renderer/camera.py, negates scene Z), giving stage ->
+  display (x, z, -y), det +1. Consequences: the camera orbits in
+  DISPLAY space (a given azimuth views the opposite side from what it
+  used to - hand-placed test cameras carry +180), and the solver keeps
+  working in the SCENE frame, so DMX is unaffected by the correction.
+  Full write-up: docs/gl-gotchas.md #4. `autogen/spatial.py` uses its
+  own 0..D depth convention for stage planes - do not mix them up.
+- **Fixture orientation has exactly ONE table**
+  (`utils/orientation.py` `MOUNTING_PRESET_ANGLES`): absolute
+  (yaw, pitch, roll) per mounting, in the scene frame, with
+  R = Ry(yaw) @ Rx(pitch) @ Rz(roll) applied to the beam's local +X.
+  Never write a second copy (the orientation dialog used to have one -
+  its "hanging" was a pitch rotation, which cannot move a +X beam, so
+  hanging rigs aimed sideways like wall mounts). `mounting` is a LABEL;
+  the angles carry the truth, and config load migrates zeroed/legacy
+  angles onto the table (`migrate_orientation_angles`). Assert presets
+  by WHERE THE BEAM POINTS in stage coords (`beam_direction_stage`),
+  never by the angle numbers.
 - The QLC+ workspace XML schema is **identical between QLC+ 4.14.4 and
   5.2.1**; the export version selector only stamps `<Creator><Version>`.
 
@@ -254,6 +273,25 @@ RGB channels (group "Colour") land in color_wheel_channels and the
 safe-idle wheel-open write claims them at 0 (documented in
 tests/unit/test_dmx_masks.py). Phase 4 (conductor, pause look,
 setlist runner) stays v1.7.
+
+**Mirrored stage + mounting presets fixed (2026-07-12, same branch):**
+two long-standing coordinate bugs the user spotted ("everything is
+flipped"; "hanging fixtures behave like wall-back"). (1) The scene
+frame swaps two axes = a REFLECTION, so the 3D view was a mirror of
+the stage and the default camera sat upstage; corrected with one
+DISPLAY_FLIP on the view matrix (DMX untouched, hash-verified). (2)
+The mounting presets lived in two contradictory tables and BOTH were
+wrong (all four wall_* presets 90 deg off; the dialog's hanging was a
+pitch rotation, a no-op on a +X beam). Now one table
+(MOUNTING_PRESET_ANGLES) pinned by beam-direction tests, dialog
+imports it, config load migrates old/zeroed angles. **Export changes
+for any rig with movers** (theatre_static, the only mover-less demo
+rig, stays byte-identical - that is the proof the delta is confined to
+pan/tilt). NEW OPEN FINDING in todo.md + ROADMAP v1.5a: the pan/tilt
+YOKE model (beam +X, pan about local Z) cannot describe a real moving
+head (pan axis must be vertical when hung); the visualizer is
+self-consistent so this is invisible in-app - needs hardware to
+settle. Do not "fix" it by flipping signs.
 
 **Solo pull-ins (2026-07-12 evening, same branch):** two roadmap
 items shipped while the user was away. (1) Headless export CLI (v1.3):
