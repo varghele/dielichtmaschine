@@ -10,6 +10,20 @@ win32 golden. One interpretation call: CROSS's near-centre rule reads
 (sign(0) = +1 counts as stage right, so x = 0 targets -1.5) because
 the stated intent is "so the beam still crosses".
 
+UPDATE 2026-07-12: positions MAKE LIGHT now, per group - the
+"data-only until v1.5a" scoping below is superseded. LiveState grew
+`positions: Dict[group, position_id]` (per-group policy: staging
+applies to the selected groups, second touch releases; colours-style
+mutual exclusion per group) and the busk output layer
+(utils/artnet/live_layer.py) aims each holding group's movers via
+calculate_pan_tilt/pan_tilt_to_dmx at the definition's physical Focus
+ranges (FixtureChannelMap.pan_range/tilt_range, 540/270 fallback),
+claiming pan + tilt + fines-to-zero only (pre-aim dark works).
+group_has_movers moved to utils/position_presets.py so the layer and
+the pool gate share it. Tests: TestPositionClaims in
+tests/unit/test_live_busk_layer.py, per-group cases in
+tests/unit/test_live_tab.py.
+
 ## The idea
 
 The Live tab's POSITION pool lists the stage's spike marks

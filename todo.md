@@ -6,6 +6,15 @@ layers + masks, merge rules, exclusive playback slot, idle-floor
 policy, conductor clock, phased build with tests). That file is now
 the source of truth; the notes that used to live here are folded in.
 
+2026-07-12: the Live POSITION pool was pulled forward from v1.5a/v1.8
+and SHIPPED with a per-group policy (each selected group takes the
+touched position, others keep theirs; second touch releases) - see
+docs/position-presets-plan.md UPDATE and the ROADMAP v1.8 palette
+item. In trade, GDTF Share Phase 4 (in-app login) is deferred; it
+stays in ROADMAP v1.2 behind configurable library paths. Next Live
+gaps by leverage: scenes pool -> light, effects pool -> light (needs a
+clock-driven riff player in the live layer).
+
 ## Pull-in candidates (roadmap items that fit the current polish phase)
 
 Discuss before pulling any of these in - order is by leverage:
@@ -41,6 +50,11 @@ screen design first), timeline undo/redo (big), MVR/OSC (own tracks).
 - [ ] Busk a colour over a playing show against a real ArtNet node or
       the standalone visualizer (merge is unit-tested, never touched
       hardware)
+- [ ] Aim a POSITION palette at real movers (or the visualizer): select
+      a mover group, touch CENTRE and a spike mark, watch the heads
+      converge; touch again and confirm pan/tilt falls back to the
+      show (aim math is unit-tested against the playback spot path,
+      never touched hardware)
 - [ ] Topbar VISUALIZER OPEN end to end: one press = feed up + viewer
       launched + client count ticks to 1 (process launch is stubbed
       in tests)

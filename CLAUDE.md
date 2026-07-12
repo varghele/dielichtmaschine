@@ -255,6 +255,25 @@ safe-idle wheel-open write claims them at 0 (documented in
 tests/unit/test_dmx_masks.py). Phase 4 (conductor, pause look,
 setlist runner) stays v1.7.
 
+**Live position palettes make light (2026-07-12, same branch):**
+pulled forward from v1.5a/v1.8 (GDTF Share Phase 4 deferred in trade).
+Per-group policy: LiveState.positions is Dict[group -> position id]
+(stage_position applies to the selected groups, second touch on a
+fully-held id releases those groups; position_labels carries id ->
+label for the programmer bar; old single-slot position/position_label
+attributes are GONE). The busk layer (utils/artnet/live_layer.py)
+aims each holding mover group via calculate_pan_tilt/pan_tilt_to_dmx,
+claiming pan+tilt+fines-to-zero ONLY (pre-aim dark works; release =
+mask fall-through). Ranges: FixtureChannelMap.pan_range/tilt_range
+now read the definition's <Physical><Focus> (parsed into
+FixtureDefinition.pan_max/tilt_max, exposed via to_legacy_dict
+'physical' key; 540/270 fallback when absent/0) and the native
+playback spot/plane aiming uses them too - the EXPORT pipeline still
+assumes 540/270 (byte-identical invariant; range-aware export is a
+v1.5a leftover). group_has_movers lives in utils/position_presets.py
+(live_tab aliases it). Manual check pending: aim palettes at real
+movers/visualizer (todo.md).
+
 **Output shell polish (2026-07-12, same branch, commits 5820f77 ·
 5170f90 · bb8e046):** Live fade row carries OUT + SYNC status chips
 (#OutputReadout QSS id; OUT polls arbiter.status() via

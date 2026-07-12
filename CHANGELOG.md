@@ -13,6 +13,20 @@ verbatim as the GitHub Release notes (see [docs/releasing.md](docs/releasing.md)
 
 ### Added
 
+- **The Live tab's POSITION pool aims real light, per group.** Select
+  fixture groups and touch a position palette - a computed preset
+  (CENTRE, AUDIENCE, CROSS, FAN OUT, CEILING, one per placed drum
+  riser / keys / FOH / mic stand) or a spike mark from the Stage tab -
+  and the selected groups' moving heads aim at that stage-space target.
+  Each group holds its own position (aim one group at the drums while
+  another washes the audience); touching the same palette again releases
+  that group's pan/tilt back to the running show. Positions claim only
+  pan/tilt, so movers can be pre-aimed while dark, and the aim respects
+  each fixture's mounting, orientation and its definition's physical
+  pan/tilt ranges (from GDTF or .qxf data, with 540°/270° assumed when
+  the definition declares none). Native ArtNet playback aiming at spike
+  marks and stage planes now honours those true ranges too.
+
 - **A Settings toggle for the timeline sub-lane labels.** The faint
   dimmer/colour/movement/special labels drawn on each sub-lane were
   restyled to the brand, and Settings now has a "Show timeline sub-lane
