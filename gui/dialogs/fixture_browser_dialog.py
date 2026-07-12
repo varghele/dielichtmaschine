@@ -70,11 +70,14 @@ class FixtureBrowserDialog(QtWidgets.QDialog):
             key=lambda f: (f['manufacturer'].lower(), f['model'].lower()),
         )
         for entry in fixture_files:
-            label = f"{entry['manufacturer']} — {entry['model']}"
-            if entry.get('source') == 'bundled':
+            label = f"{entry['manufacturer']} · {entry['model']}"
+            source = entry.get('source')
+            if source == 'bundled':
                 label += "   [bundled]"
-            elif entry.get('source') == 'gdtf':
+            elif source in ('gdtf', 'user-gdtf'):
                 label += "   [GDTF]"
+            elif source == 'user-qxf':
+                label += "   [user]"
             item = QtWidgets.QListWidgetItem(label)
             item.setData(QtCore.Qt.ItemDataRole.UserRole, entry['path'])
             self.list_widget.addItem(item)

@@ -237,6 +237,10 @@ class Ui_MainWindow(object):
         self.actionAudioSettings = QAction("Audio Settings...", MainWindow)
         self.actionAudioSettings.setShortcut("Ctrl+,")
         self.menuSettings.addAction(self.actionAudioSettings)
+        # User fixture-library directories (GDTF + .qxf), folded into
+        # the definition search path (gui/dialogs/library_paths_dialog.py).
+        self.actionLibraryPaths = QAction("Fixture Libraries...", MainWindow)
+        self.menuSettings.addAction(self.actionLibraryPaths)
         # Hidden deep setting: toggle the canvas sub-lane purpose labels in
         # the Show Timeline. Checkable, persisted to the
         # "timeline/show_sublane_labels" QSettings key (default on).

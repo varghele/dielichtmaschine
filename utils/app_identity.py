@@ -9,6 +9,7 @@ around for the one-shot settings migration; nothing else may use them.
 """
 
 import os
+import sys
 
 from _version import __version__
 from utils.paths import get_project_root
@@ -35,6 +36,30 @@ APP_VERSION = __version__
 def version_string() -> str:
     """The one-line version string for --version and the About dialog."""
     return f"{APP_NAME} {APP_VERSION}"
+
+
+def user_data_dir() -> str:
+    """The per-user, always-writable app-data directory, per OS.
+
+    - Windows: %LOCALAPPDATA%/dielichtmaschine/Lichtmaschine
+    - macOS: ~/Library/Application Support/dielichtmaschine/Lichtmaschine
+    - Linux: $XDG_DATA_HOME or ~/.local/share/dielichtmaschine/Lichtmaschine
+
+    Logs, user fixture libraries and future per-user state live under
+    here - the packaged app must never depend on writing into its
+    install directory. Not created here; each consumer creates its own
+    subdirectory when it first writes.
+    """
+    home = os.path.expanduser("~")
+    if sys.platform.startswith("win"):
+        base = os.environ.get("LOCALAPPDATA") or os.path.join(
+            home, "AppData", "Local")
+    elif sys.platform == "darwin":
+        base = os.path.join(home, "Library", "Application Support")
+    else:
+        base = os.environ.get("XDG_DATA_HOME") or os.path.join(
+            home, ".local", "share")
+    return os.path.join(base, SETTINGS_ORG, SETTINGS_APP)
 
 
 def brand_dir() -> str:

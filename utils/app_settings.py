@@ -59,6 +59,70 @@ def recent_configs() -> list:
     return [p for p in stored if p and os.path.isfile(p)]
 
 
+# -- user fixture library directories ---------------------------------------
+# Where the user's OWN fixture definitions live (ROADMAP v1.2
+# "Configurable fixture library paths"): a GDTF directory and a .qxf
+# directory, folded into utils/fixture_library.fixture_search_dirs()
+# with priority user GDTF > project gdtf_fixtures/ > bundled
+# custom_fixtures/ > user QXF > platform QLC+ dirs. The defaults sit in
+# the per-user app-data dir - always writable, never the install dir -
+# which is also where GDTF Share downloads will land (Phase 4).
+
+_USER_GDTF_KEY = "library/user_gdtf_dir"
+_USER_QXF_KEY = "library/user_qxf_dir"
+
+
+def default_user_gdtf_dir() -> str:
+    import os
+    from utils.app_identity import user_data_dir
+    return os.path.join(user_data_dir(), "fixtures", "gdtf")
+
+
+def default_user_qxf_dir() -> str:
+    import os
+    from utils.app_identity import user_data_dir
+    return os.path.join(user_data_dir(), "fixtures", "qxf")
+
+
+def user_gdtf_dir() -> str:
+    """The user's GDTF directory: the configured path, or the writable
+    app-data default. May not exist yet; scanners skip missing dirs."""
+    stored = app_settings().value(_USER_GDTF_KEY, "", type=str)
+    return stored or default_user_gdtf_dir()
+
+
+def user_qxf_dir() -> str:
+    """The user's .qxf directory: the configured path, or the writable
+    app-data default. May not exist yet; scanners skip missing dirs."""
+    stored = app_settings().value(_USER_QXF_KEY, "", type=str)
+    return stored or default_user_qxf_dir()
+
+
+def set_user_gdtf_dir(path: str) -> None:
+    """Persist the user GDTF directory ('' resets to the default) and
+    invalidate the fixture-definition cache so the next lookup rescans."""
+    _set_library_dir(_USER_GDTF_KEY, path)
+
+
+def set_user_qxf_dir(path: str) -> None:
+    """Persist the user .qxf directory ('' resets to the default) and
+    invalidate the fixture-definition cache so the next lookup rescans."""
+    _set_library_dir(_USER_QXF_KEY, path)
+
+
+def _set_library_dir(key: str, path: str) -> None:
+    settings = app_settings()
+    if path:
+        settings.setValue(key, path)
+    else:
+        settings.remove(key)
+    settings.sync()
+    # Deferred import: fixture_library must stay importable without Qt,
+    # so it may not be imported here at module level either way round.
+    from utils.fixture_library import clear_library_cache
+    clear_library_cache()
+
+
 def migrate_legacy_settings() -> int:
     """Copy settings from the QLCShowCreator store, once.
 

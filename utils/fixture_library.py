@@ -339,23 +339,46 @@ def project_gdtf_fixtures_dir() -> str:
                         'gdtf_fixtures')
 
 
+def _user_library_dirs() -> Tuple[Optional[str], Optional[str]]:
+    """The user's configured (gdtf_dir, qxf_dir) from Settings, or
+    (None, None) when the settings store is unavailable (Qt missing in
+    a stripped environment must never break definition lookup)."""
+    try:
+        from utils.app_settings import user_gdtf_dir, user_qxf_dir
+        return user_gdtf_dir(), user_qxf_dir()
+    except Exception:
+        return None, None
+
+
 def fixture_search_dirs() -> List[Tuple[str, str]]:
     """All fixture directories as (path, source) in priority order.
 
-    source is 'gdtf' for gdtf_fixtures/, 'bundled' for custom_fixtures/,
-    'library' for QLC+ dirs. GDTF comes first: when both formats define
-    the same (manufacturer, model), the GDTF definition wins (it carries
-    strictly more information). The QLC+ list is the union of every
-    variant the five pre-unification implementations used; non-existent
-    directories are simply skipped by the scanners.
+    source is 'user-gdtf' / 'user-qxf' for the user's own library
+    directories (Settings > Fixture Libraries, utils/app_settings.py),
+    'gdtf' for gdtf_fixtures/, 'bundled' for custom_fixtures/,
+    'library' for QLC+ dirs. Priority: user GDTF > project
+    gdtf_fixtures/ > bundled custom_fixtures/ > user QXF > platform
+    QLC+ dirs - GDTF first because when both formats define the same
+    (manufacturer, model) the GDTF definition wins (it carries strictly
+    more information), and the user's directories beat the shipped ones
+    within each format. The QLC+ list is the union of every variant the
+    five pre-unification implementations used; non-existent directories
+    are simply skipped by the scanners (the user defaults in app-data
+    exist only once something is downloaded/copied there).
     """
+    user_gdtf, user_qxf = _user_library_dirs()
+
     dirs: List[Tuple[str, str]] = []
+    if user_gdtf and os.path.exists(user_gdtf):
+        dirs.append((user_gdtf, 'user-gdtf'))
     gdtf = project_gdtf_fixtures_dir()
     if os.path.exists(gdtf):
         dirs.append((gdtf, 'gdtf'))
     custom = project_custom_fixtures_dir()
     if os.path.exists(custom):
         dirs.append((custom, 'bundled'))
+    if user_qxf and os.path.exists(user_qxf):
+        dirs.append((user_qxf, 'user-qxf'))
 
     if sys.platform.startswith('linux'):
         dirs.append((os.path.expanduser('~/.qlcplus/Fixtures'), 'library'))

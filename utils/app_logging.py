@@ -46,18 +46,7 @@ def log_dir() -> str:
     override = os.environ.get(LOG_DIR_ENV)
     if override:
         return override
-
-    home = os.path.expanduser("~")
-    if sys.platform.startswith("win"):
-        base = os.environ.get("LOCALAPPDATA") or os.path.join(
-            home, "AppData", "Local")
-    elif sys.platform == "darwin":
-        base = os.path.join(home, "Library", "Application Support")
-    else:
-        base = os.environ.get("XDG_DATA_HOME") or os.path.join(
-            home, ".local", "share")
-    return os.path.join(base, app_identity.SETTINGS_ORG,
-                        app_identity.SETTINGS_APP, "logs")
+    return os.path.join(app_identity.user_data_dir(), "logs")
 
 
 def _fallback_dir() -> str:

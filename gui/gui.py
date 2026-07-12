@@ -641,6 +641,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
 
         # Settings menu actions
         self.actionAudioSettings.triggered.connect(self.open_audio_settings)
+        self.actionLibraryPaths.triggered.connect(self.open_library_paths)
 
         # Hidden deep setting: canvas sub-lane purpose labels in the Show
         # Timeline. Reflect the persisted state in the check box, then
@@ -1799,6 +1800,14 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         app_settings().setValue("timeline/show_sublane_labels", checked)
         if hasattr(self, "shows_tab") and self.shows_tab is not None:
             self.shows_tab.refresh_sublane_labels_setting()
+
+    def open_library_paths(self):
+        """Settings > Fixture Libraries: the user's own GDTF / .qxf
+        directories. Accepting persists via app_settings (which
+        invalidates the definition cache), so the next browser open or
+        config load rescans - nothing to push from here."""
+        from gui.dialogs.library_paths_dialog import LibraryPathsDialog
+        LibraryPathsDialog(parent=self).exec()
 
     def open_audio_settings(self):
         """Open audio settings dialog"""
