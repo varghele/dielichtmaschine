@@ -113,11 +113,21 @@ def test_mesh_chassis_renders_synthetic_spot(gl_context, fbo, tmp_path):
 
         # Beam origin takes SOLVER-convention degrees (converted onto
         # the GDTF axes inside, see solver_to_gdtf_axes): home (0, 0)
-        # emits along solver local +X; solver tilt +90 sends it to +Z.
+        # emits along solver local +X. Solver tilt +90 (straight up)
+        # needs 180 deg of physical tilt - beyond the default 135 deg
+        # half-travel - so it PINS at the limit like the real head
+        # (clamp_to_physical), instead of pretending to point up.
         rest = chassis.beam_origin_transform(0.0, 0.0) * glm.vec4(0, 0, 1, 0)
         assert rest.x == pytest.approx(1.0, abs=1e-5)
-        tilted = chassis.beam_origin_transform(0.0, 90.0) * glm.vec4(0, 0, 1, 0)
-        assert tilted.z == pytest.approx(1.0, abs=1e-5)
+        pinned = chassis.beam_origin_transform(0.0, 90.0) * glm.vec4(0, 0, 1, 0)
+        import math
+        expect = math.sin(math.radians(135.0))
+        assert pinned.y == pytest.approx(expect, abs=1e-5)
+        assert pinned.z == pytest.approx(expect, abs=1e-5)
+        # Within travel, conversion is exact: solver tilt +45 -> the
+        # chain's 135-degree pose, right AT the limit.
+        edge = chassis.beam_origin_transform(0.0, 45.0) * glm.vec4(0, 0, 1, 0)
+        assert edge.z == pytest.approx(math.sin(math.radians(45.0)), abs=1e-5)
     finally:
         chassis.release()
 

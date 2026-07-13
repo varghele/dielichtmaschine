@@ -655,10 +655,10 @@ def _spot_config(groups=None, spot_rows=(("DS Centre", 0.0, -2.5, 0.0),
     return cfg
 
 
-# The five geometry presets, in the pool's deterministic order (the
+# The six geometry presets, in the pool's deterministic order (the
 # contract of utils/position_presets.compute_presets).
 GEOMETRY_PRESET_IDS = ["preset:centre", "preset:audience", "preset:cross",
-                       "preset:fanout", "preset:ceiling"]
+                       "preset:fanout", "preset:floor", "preset:ceiling"]
 
 
 @pytest.fixture
@@ -706,7 +706,7 @@ class TestPositionPool:
         assert state.positions == {}
 
     def test_cells_built_presets_then_marks_in_order(self, position_tab):
-        # The five geometry presets, then the marks in config order
+        # The six geometry presets, then the marks in config order
         # (no elements placed in this config -> no element presets).
         assert list(position_tab._position_cells) == \
             GEOMETRY_PRESET_IDS + ["mark:DS Centre", "mark:Drum Riser"]
@@ -729,6 +729,7 @@ class TestPositionPool:
         assert cells["preset:audience"].tag_label.text() == "0.0 · -6.0"
         assert cells["preset:cross"].tag_label.text() == "Per fixture"
         assert cells["preset:fanout"].tag_label.text() == "Per fixture"
+        assert cells["preset:floor"].tag_label.text() == "Per fixture"
         assert cells["preset:ceiling"].tag_label.text() == "Per fixture"
 
     def test_element_preset_cell_built(self, qapp):

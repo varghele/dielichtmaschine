@@ -4,7 +4,7 @@ tab's POSITION pool lists above the spike marks.
 Pure-function tests, no Qt: preset identity/order, the point targets
 (CENTRE, AUDIENCE, one per matching placed stage element with the
 element's layer height folded in), the per-fixture pattern targets
-(CROSS, FAN OUT, CEILING), and the element_preset_ids helper LiveState
+(CROSS, FAN OUT, FLOOR, CEILING), and the element_preset_ids helper LiveState
 prunes against. Coordinate frame is config/stage space: X centered,
 Y depth centered with negative = front/audience, Z height, meters.
 """
@@ -61,12 +61,12 @@ class TestGeometryPresets:
         presets = compute_presets(_config())
         assert [p.preset_id for p in presets] == [
             "preset:centre", "preset:audience", "preset:cross",
-            "preset:fanout", "preset:ceiling"]
+            "preset:fanout", "preset:floor", "preset:ceiling"]
         assert [p.label for p in presets] == [
-            "Centre", "Audience", "Cross", "Fan Out", "Ceiling"]
+            "Centre", "Audience", "Cross", "Fan Out", "Floor", "Ceiling"]
         assert [p.kind for p in presets] == [
             KIND_POINT, KIND_POINT, KIND_PATTERN, KIND_PATTERN,
-            KIND_PATTERN]
+            KIND_PATTERN, KIND_PATTERN]
 
     def test_centre_is_centre_stage_at_focus_height(self):
         preset = _by_id(_config())["preset:centre"]
@@ -114,6 +114,12 @@ class TestGeometryPresets:
         assert preset.target_for(_fixture(x=1.0, y=-2.0, z=3.5)) == \
             (1.0, -2.0, 13.5)
 
+    def test_floor_is_straight_down_to_the_deck(self):
+        # The natural rest for a hanging mover: same x/y, z=0.
+        preset = _by_id(_config())["preset:floor"]
+        assert preset.target_for(_fixture(x=1.0, y=-2.0, z=3.5)) == \
+            (1.0, -2.0, 0.0)
+
 
 class TestElementPresets:
     def test_matching_elements_get_presets_in_config_order(self):
@@ -125,7 +131,7 @@ class TestElementPresets:
             _element("mic-stand", x=0.0, y=-2.0, element_id="e"),
             _element("truss-straight", element_id="f"),  # no preset
         ])
-        presets = compute_presets(cfg)[5:]
+        presets = compute_presets(cfg)[6:]
         assert [p.preset_id for p in presets] == [
             "preset:element:a", "preset:element:c",
             "preset:element:d", "preset:element:e"]
@@ -156,14 +162,14 @@ class TestElementPresets:
         cfg = _config(stage_elements=[
             _element("drum-riser", element_id="a"),
             _element("drum-riser", element_id="b")])
-        labels = [p.label for p in compute_presets(cfg)[5:]]
+        labels = [p.label for p in compute_presets(cfg)[6:]]
         assert labels == ["Drums", "Drums 2"]
 
     def test_element_without_id_gets_a_stable_fallback(self):
         cfg = _config(stage_elements=[
             _element("drum-riser", element_id=""),
             _element("keys", element_id="")])
-        ids = [p.preset_id for p in compute_presets(cfg)[5:]]
+        ids = [p.preset_id for p in compute_presets(cfg)[6:]]
         assert ids == ["preset:element:idx0", "preset:element:idx1"]
         # ...and the prune helper derives the identical ids.
         assert element_preset_ids(cfg) == ids

@@ -6,7 +6,7 @@ preset is computed from the stage setup the config already carries
 elements). A preset is either a POINT (all beams converge on one
 derived point - CENTRE, AUDIENCE, and one preset per placed element
 the catalog knows a focus for) or a PATTERN (each mover derives its
-own target from its own position - CROSS, FAN OUT, CEILING).
+own target from its own position - CROSS, FAN OUT, FLOOR, CEILING).
 
 Presets carry real target data from day one (``target_for``), but no
 pan/tilt math: converting a target into per-fixture pan/tilt is the
@@ -63,6 +63,9 @@ FAN_THROW = 2.0
 FAN_HEIGHT = 4.0
 # CEILING: straight up from wherever the fixture hangs.
 CEILING_RAISE = 10.0
+# FLOOR: straight down to the deck directly beneath the fixture - the
+# natural rest for a hanging mover (CEILING is its standing counterpart).
+FLOOR_Z = 0.0
 # Element presets focus this far above the element's plane (its stage
 # layer's z_height, or the deck at 0).
 ELEMENT_FOCUS_RAISE = 1.2
@@ -159,6 +162,13 @@ def _ceiling_target(fixture) -> Tuple[float, float, float]:
             float(getattr(fixture, "z", 0.0)) + CEILING_RAISE)
 
 
+def _floor_target(fixture) -> Tuple[float, float, float]:
+    """Straight down: the deck point directly beneath the fixture."""
+    return (float(getattr(fixture, "x", 0.0)),
+            float(getattr(fixture, "y", 0.0)),
+            FLOOR_Z)
+
+
 def _element_identity(element, index: int) -> str:
     """A stable identity for the element preset id. Falls back to the
     config position for legacy elements without an element_id (the
@@ -195,6 +205,8 @@ def compute_presets(config) -> List[PositionPreset]:
                        PATTERN_TAG, pattern=_cross_target),
         PositionPreset("preset:fanout", "Fan Out", KIND_PATTERN,
                        PATTERN_TAG, pattern=_make_fan_target(stage_width)),
+        PositionPreset("preset:floor", "Floor", KIND_PATTERN,
+                       PATTERN_TAG, pattern=_floor_target),
         PositionPreset("preset:ceiling", "Ceiling", KIND_PATTERN,
                        PATTERN_TAG, pattern=_ceiling_target),
     ]

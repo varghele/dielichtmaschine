@@ -187,6 +187,39 @@ def _canonicalize_posture(items: List[DrawItem]) -> bool:
     return False
 
 
+def physical_half_ranges(gdtf, mode_name: str,
+                         default_pan: float = 540.0,
+                         default_tilt: float = 270.0
+                         ) -> Tuple[float, float]:
+    """(pan_half, tilt_half) in degrees for one DMX mode, from the GDTF
+    channel physical ranges; the historical defaults when absent."""
+    pan = tilt = None
+    for cp in getattr(gdtf, "channel_physical", []) or []:
+        if cp.mode != mode_name:
+            continue
+        span = abs(float(cp.physical_to) - float(cp.physical_from))
+        if span <= 0:
+            continue
+        if cp.attribute == "Pan" and pan is None:
+            pan = span / 2.0
+        elif cp.attribute == "Tilt" and tilt is None:
+            tilt = span / 2.0
+    return (pan if pan is not None else default_pan / 2.0,
+            tilt if tilt is not None else default_tilt / 2.0)
+
+
+def clamp_to_physical(pan_g: float, tilt_g: float, pan_half: float,
+                      tilt_half: float) -> Tuple[float, float]:
+    """Clamp converted (real-yoke) angles to the fixture's physical
+    travel, mirroring what the DMX encode does on the wire - so the
+    rendered head stops exactly where the real head stops (a hanging
+    mover aimed at the ceiling pins at its tilt limit instead of the
+    visualizer pretending it can point straight up)."""
+    pan_g = max(-pan_half, min(pan_half, pan_g))
+    tilt_g = max(-tilt_half, min(tilt_half, tilt_g))
+    return pan_g, tilt_g
+
+
 def solver_to_gdtf_axes(pan_deg: float, tilt_deg: float,
                         flipped: bool = True) -> Tuple[float, float]:
     """Convert solver-convention pan/tilt into GDTF axis angles.

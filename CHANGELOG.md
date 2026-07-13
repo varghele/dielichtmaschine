@@ -77,6 +77,15 @@ verbatim as the GitHub Release notes (see [docs/releasing.md](docs/releasing.md)
 
 ### Added
 
+- **FLOOR position preset.** The Live tab's POSITION pool gained a
+  Floor preset - every selected mover aims straight down at the deck
+  beneath it, the natural rest for a hanging rig (Ceiling remains its
+  standing counterpart).
+- **The visualizer respects a mover's real tilt travel.** A hanging
+  moving head cannot point at the ceiling, but the 3D view pretended it
+  could; rendered pan/tilt now clamps to the fixture's physical ranges
+  exactly like the values sent to the rig, so an out-of-reach target
+  pins at the travel limit in both places identically.
 - **BUILD look in the standalone visualizer.** A BUILD chip in the
   viewer's header lights the whole received rig with a synthetic look
   (dimmer up, shutter open, pan/tilt centred - the same look the

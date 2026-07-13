@@ -32,6 +32,8 @@ from visualizer.renderer.chassis import ChassisGeometry
 from visualizer.renderer.gdtf_draw_plan import (
     DrawItem,
     build_draw_plan,
+    clamp_to_physical,
+    physical_half_ranges,
     solver_to_gdtf_axes,
 )
 from visualizer.renderer.gl_state import set_depth_mask
@@ -156,8 +158,12 @@ class GdtfMeshChassisGeometry(ChassisGeometry):
 
         plan = build_draw_plan(gdtf, mode_name)
         # Posture decides the solver-to-GDTF-axis conversion signs
-        # (see solver_to_gdtf_axes).
+        # (see solver_to_gdtf_axes); the physical ranges clamp the
+        # converted angles like the wire does, so the rendered head
+        # stops where the real head stops.
         self._flipped = bool(getattr(plan, 'flipped', False))
+        self._pan_half, self._tilt_half = physical_half_ranges(
+            gdtf, mode_name)
         for item in plan:
             if item.is_beam and self._beam_item is None:
                 self._beam_item = item
@@ -192,6 +198,8 @@ class GdtfMeshChassisGeometry(ChassisGeometry):
             float(getattr(state, 'tilt_deg', 0.0) or 0.0),
             self._flipped,
         )
+        pan, tilt = clamp_to_physical(pan, tilt, self._pan_half,
+                                      self._tilt_half)
         self.ctx.disable(moderngl.BLEND)
         set_depth_mask(True)
         for entry in self.entries:
@@ -224,6 +232,9 @@ class GdtfMeshChassisGeometry(ChassisGeometry):
             return glm.mat4(1.0)
         pan_deg, tilt_deg = solver_to_gdtf_axes(pan_deg, tilt_deg,
                                                 self._flipped)
+        pan_deg, tilt_deg = clamp_to_physical(pan_deg, tilt_deg,
+                                              self._pan_half,
+                                              self._tilt_half)
         node = _np_to_glm(self._beam_item.compose(pan_deg, tilt_deg))
         flip = glm.rotate(glm.mat4(1.0), glm.radians(180.0),
                           glm.vec3(1.0, 0.0, 0.0))
