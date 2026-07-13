@@ -507,7 +507,7 @@ class OutputArbiter:
         # Hardware gets the real-yoke conversion (utils/yoke); the mirror
         # and local callback keep the solver-convention frame because
         # the visualizer converts in its own renderer. So the rig and
-        # the 3D view agree. Only GDTF-chain movers are touched.
+        # the 3D view agree. Every mover with a definition is converted.
         hw = self._hardware_frame(merged, fixture_maps)
 
         for universe in sorted(merged):
@@ -535,7 +535,7 @@ class OutputArbiter:
         the physical node only. Returns ``merged`` itself when nothing
         needs converting (the common no-movers / no-GDTF case), so the
         hot path allocates nothing extra."""
-        from utils.yoke import apply_yoke_to_universe, gdtf_chain_yoke
+        from utils.yoke import apply_yoke_to_universe, fixture_yoke
 
         converted: Dict[int, bytearray] = {}
         for fmap in fixture_maps.values():
@@ -545,7 +545,7 @@ class OutputArbiter:
             fx = getattr(fmap, "fixture", None)
             if fx is None:
                 continue
-            uses_chain, flipped = gdtf_chain_yoke(
+            uses_chain, flipped = fixture_yoke(
                 fx.manufacturer, fx.model, getattr(fmap, "mode_name", ""))
             if not uses_chain:
                 continue

@@ -6,7 +6,7 @@ from typing import Dict, List, Tuple, Any, Optional
 from config.models import Configuration, FixtureGroup, FixtureGroupCapabilities
 from utils.effects_utils import get_channels_by_property
 from utils.sublane_presets import COLOUR_PRESETS, DIMMER_PRESETS, MOVEMENT_PRESETS
-from utils.orientation import calculate_pan_tilt, pan_tilt_to_dmx
+from utils.yoke import export_aim_dmx  # noqa: F401 (aiming moved to the yoke helper)
 
 
 # Helper functions for fixture channel detection
@@ -629,15 +629,12 @@ def create_movement_preset_scene(
         fixture_y = getattr(fixture, 'y', 0.0)
         fixture_z = getattr(fixture, 'z', 3.0)
 
-        # Calculate pan/tilt angles to point at target
-        pan_deg, tilt_deg = calculate_pan_tilt(
-            fixture_x, fixture_y, fixture_z,
-            target_x, target_y, target_z,
-            mounting, yaw, pitch, roll
-        )
-
-        # Convert to DMX values
-        pan_dmx, tilt_dmx = pan_tilt_to_dmx(pan_deg, tilt_deg)
+        # Aim like native output: solver at the definition's real
+        # ranges, converted to the real yoke (utils/yoke).
+        from utils.yoke import export_aim_dmx
+        pan_dmx, tilt_dmx = export_aim_dmx(
+            fixture, fixture_z, (target_x, target_y, target_z),
+            mounting, yaw, pitch, roll)
 
         channel_vals = {}
 

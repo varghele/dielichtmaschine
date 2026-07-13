@@ -40,15 +40,16 @@ from typing import Tuple, Optional
 MOUNTING_PRESET_ANGLES = {
     'hanging':    (0.0, 90.0, 0.0),    # chassis flipped, hung from truss
     'standing':   (0.0, -90.0, 0.0),   # chassis upright on the deck
-    'wall_left':  (-90.0, 0.0, 0.0),   # side wall, facing across the stage
-    'wall_right': (90.0, 0.0, 0.0),    # opposite side wall
-    # back/front carried each other's values in the pre-rebrand table
-    # (user-verified against the visualizer 2026-07-13): yaw 0 faces
-    # UPSTAGE, so it is the front-wall mount, and yaw 180 faces the
-    # audience, the back-wall mount. Swapped here; migration corrects
-    # configs saved with the old pair.
-    'wall_back':  (180.0, 0.0, 0.0),   # base against the back wall, facing the audience
-    'wall_front': (0.0, 0.0, 0.0),     # base downstage, facing upstage
+    # ALL FOUR wall presets carried their opposite's yaw in the
+    # pre-rebrand table (user-verified against the visualizer,
+    # back/front 2026-07-13, left/right same day): yaw -90 faces stage
+    # LEFT, so it is the right-wall mount; yaw 0 faces UPSTAGE, the
+    # front-wall mount. Swapped here; migration corrects configs saved
+    # with the old pairs.
+    'wall_left':  (90.0, 0.0, 0.0),    # stage-left wall, facing stage right
+    'wall_right': (-90.0, 0.0, 0.0),   # stage-right wall, facing stage left
+    'wall_back':  (180.0, 0.0, 0.0),   # back wall, facing the audience
+    'wall_front': (0.0, 0.0, 0.0),     # downstage, facing upstage
 }
 
 DEFAULT_MOUNTING = 'hanging'
@@ -66,12 +67,14 @@ _BEAM_MATH_ANGLES = {
 }
 
 # Values the pre-rebrand table (and the 2026-07-13 revert, briefly)
-# shipped for mountings whose pair was swapped: wall_front carried the
-# back-wall yaw. Recognised by migration and corrected to the table
+# shipped for mountings whose pair was swapped: each wall carried its
+# opposite's yaw. Recognised by migration and corrected to the table
 # above. wall_back's old value was all zeros, which the zero rule
 # already migrates.
 _SWAPPED_WALL_ANGLES = {
     'wall_front': (180.0, 0.0, 0.0),
+    'wall_left':  (-90.0, 0.0, 0.0),
+    'wall_right': (90.0, 0.0, 0.0),
 }
 
 

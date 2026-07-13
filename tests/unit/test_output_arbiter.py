@@ -542,7 +542,7 @@ class TestHardwareYokeConversion:
         # Treat MH1 as a GDTF-chain mover and make the conversion a
         # visible sentinel (pan coarse -> 222) so the test sees WHICH
         # frame it touched, independent of the real math.
-        monkeypatch.setattr(yoke, "gdtf_chain_yoke", lambda *a: (True, True))
+        monkeypatch.setattr(yoke, "fixture_yoke", lambda *a: (True, True))
 
         def fake_convert(buf, fmap, flipped):
             _, ch = fmap.get_absolute_address(fmap.pan_channels[0])
@@ -570,7 +570,7 @@ class TestHardwareYokeConversion:
     def test_non_gdtf_mover_is_not_converted(self, config_one_mover,
                                              mock_fixture_def, monkeypatch):
         import utils.yoke as yoke
-        monkeypatch.setattr(yoke, "gdtf_chain_yoke", lambda *a: (False, False))
+        monkeypatch.setattr(yoke, "fixture_yoke", lambda *a: (False, False))
         called = []
         monkeypatch.setattr(yoke, "apply_yoke_to_universe",
                             lambda *a: called.append(1))

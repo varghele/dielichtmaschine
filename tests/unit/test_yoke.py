@@ -12,7 +12,7 @@ import math
 
 from utils.yoke import (
     apply_yoke_to_universe,
-    gdtf_chain_yoke,
+    fixture_yoke,
     solver_to_gdtf_axes,
 )
 
@@ -34,11 +34,11 @@ class _StubMap:
 
 class TestGdtfChainYoke:
     def test_unknown_fixture_does_not_use_the_chain(self):
-        assert gdtf_chain_yoke("NoSuch", "Fixture", "Mode") == (False, False)
+        assert fixture_yoke("NoSuch", "Fixture", "Mode") == (False, False)
 
     def test_result_is_cached(self):
-        a = gdtf_chain_yoke("NoSuch", "Fixture", "Mode")
-        b = gdtf_chain_yoke("NoSuch", "Fixture", "Mode")
+        a = fixture_yoke("NoSuch", "Fixture", "Mode")
+        b = fixture_yoke("NoSuch", "Fixture", "Mode")
         assert a == b == (False, False)
 
 
@@ -84,3 +84,61 @@ class TestApplyYokeToUniverse:
         assert buf[1] != 0 or buf[3] != 0
 
 
+
+
+class TestQxfSyntheticYoke:
+    def test_qxf_only_mover_gets_the_standard_yoke(self, monkeypatch):
+        """A .qxf definition (no GDTF tree) is brought to the GDTF
+        standard: converted with the synthetic hanging-authored yoke,
+        the branch verified on real hardware."""
+        import utils.fixture_library as fl
+
+        class _QxfDefn:
+            gdtf = None
+        monkeypatch.setattr(fl, "get_definition",
+                            lambda m, mo: _QxfDefn())
+        # Unique identity per run so the lru_cache cannot serve a stale
+        # verdict from another test.
+        assert fixture_yoke("QxfMfr-synth", "QxfModel-synth",
+                            "8 Channel") == (True, True)
+
+
+class TestExportAimDmx:
+    """The .qxw export aims like native output: real ranges + the yoke
+    conversion (it used to emit raw solver angles at hardcoded 540/270,
+    which aims a real mover elsewhere)."""
+
+    class _Fx:
+        manufacturer = "ExpMfr-a"
+        model = "ExpModel-a"
+        current_mode = "M"
+        x, y = 0.0, 0.0
+
+    def test_converted_and_range_aware(self, monkeypatch):
+        import utils.yoke as yoke
+        monkeypatch.setattr(yoke, "_physical_ranges",
+                            lambda m, mo: (540.0, 220.0))
+        monkeypatch.setattr(yoke, "fixture_yoke", lambda *a: (True, True))
+        from utils.orientation import preset_angles
+        yaw, pitch, roll = preset_angles("hanging")
+        # Hanging mover 5 m up, target straight below: solver says
+        # tilt +90 (its convention); the REAL yoke value is tilt 0 =
+        # DMX centre. The old export emitted the raw solver angle.
+        pan_dmx, tilt_dmx = yoke.export_aim_dmx(
+            self._Fx(), 5.0, (0.0, 0.0, 0.0), "hanging", yaw, pitch, roll)
+        assert tilt_dmx == 127, "straight down = tilt centre on a real yoke"
+
+    def test_unresolvable_fixture_keeps_solver_values(self, monkeypatch):
+        import utils.yoke as yoke
+        monkeypatch.setattr(yoke, "_physical_ranges",
+                            lambda m, mo: (540.0, 270.0))
+        monkeypatch.setattr(yoke, "fixture_yoke", lambda *a: (False, False))
+        from utils.orientation import (calculate_pan_tilt, pan_tilt_to_dmx,
+                                       preset_angles)
+        yaw, pitch, roll = preset_angles("hanging")
+        got = yoke.export_aim_dmx(
+            self._Fx(), 5.0, (2.0, 0.0, 0.0), "hanging", yaw, pitch, roll)
+        want = pan_tilt_to_dmx(*calculate_pan_tilt(
+            0.0, 0.0, 5.0, 2.0, 0.0, 0.0, "hanging", yaw, pitch, roll,
+            540.0, 270.0), 540.0, 270.0)
+        assert got == want

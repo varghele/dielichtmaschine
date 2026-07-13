@@ -6,7 +6,7 @@ from typing import Dict, List, Tuple, Any, Optional
 from config.models import Configuration, FixtureGroup, FixtureGroupCapabilities
 from utils.effects_utils import get_channels_by_property
 from utils.sublane_presets import COLOUR_PRESETS, DIMMER_PRESETS, MOVEMENT_PRESETS, SPECIAL_PRESETS
-from utils.orientation import calculate_pan_tilt, pan_tilt_to_dmx
+from utils.yoke import export_aim_dmx  # noqa: F401 (aiming moved to the yoke helper)
 from utils.to_xml.preset_scenes_to_xml import MOVEMENT_PRESETS_POS
 
 
@@ -246,15 +246,12 @@ def create_vc_xypad(
             pitch = getattr(fixture_obj, 'pitch', 0.0)
             roll = getattr(fixture_obj, 'roll', 0.0)
 
-            # Calculate pan/tilt angles
-            pan_deg, tilt_deg = calculate_pan_tilt(
-                fixture_x, fixture_y, fixture_z,
-                target_x, target_y, target_z,
-                mounting, yaw, pitch, roll
-            )
-
-            # Convert to DMX values
-            pan_dmx, tilt_dmx = pan_tilt_to_dmx(pan_deg, tilt_deg)
+            # Aim like native output: solver at the definition's real
+            # ranges, converted to the real yoke (utils/yoke).
+            from utils.yoke import export_aim_dmx
+            pan_dmx, tilt_dmx = export_aim_dmx(
+                fixture_obj, fixture_z, (target_x, target_y, target_z),
+                mounting, yaw, pitch, roll)
 
             # Set X and Y as actual DMX values (0-255 range)
             ET.SubElement(preset, "X").text = str(pan_dmx)

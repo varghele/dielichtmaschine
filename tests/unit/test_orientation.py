@@ -34,10 +34,12 @@ class TestMountingPresets:
     @pytest.mark.parametrize("mounting,angles", [
         ('hanging',    (0.0, 90.0, 0.0)),    # chassis flipped, hung
         ('standing',   (0.0, -90.0, 0.0)),   # chassis upright
-        ('wall_left',  (-90.0, 0.0, 0.0)),
-        ('wall_right', (90.0, 0.0, 0.0)),
-        # back/front were swapped in the pre-rebrand table; user-verified
-        # 2026-07-13: yaw 180 faces the audience (back wall mount).
+        # All four walls were swapped with their opposites in the
+        # pre-rebrand table; user-verified 2026-07-13: yaw 180 faces
+        # the audience (back wall), yaw +90 faces stage right (left
+        # wall mount).
+        ('wall_left',  (90.0, 0.0, 0.0)),
+        ('wall_right', (-90.0, 0.0, 0.0)),
         ('wall_back',  (180.0, 0.0, 0.0)),
         ('wall_front', (0.0, 0.0, 0.0)),
     ], ids=lambda v: v if isinstance(v, str) else "")
@@ -92,19 +94,24 @@ class TestMigration:
         assert migrate_orientation_angles('wall_back', 90.0, 0.0, 0.0) == \
             preset_angles('wall_back')        # -> (180, 0, 0)
 
-    def test_swapped_wall_pair_is_corrected(self):
+    def test_swapped_wall_pairs_are_corrected(self):
         # The pre-rebrand table (and the brief 2026-07-13 revert) had
-        # wall_back and wall_front carrying each other's yaw. Configs
-        # saved with either value heal on load: wall_back stored as
-        # zeros hits the zero rule; wall_front stored as yaw 180 hits
-        # the swapped-wall rule.
+        # every wall carrying its opposite's yaw. Configs saved with the
+        # old values heal on load: wall_back stored as zeros hits the
+        # zero rule; the other three hit the swapped-wall rule.
         assert migrate_orientation_angles('wall_back', 0.0, 0.0, 0.0) == \
             (180.0, 0.0, 0.0)
         assert migrate_orientation_angles('wall_front', 180.0, 0.0, 0.0) == \
             (0.0, 0.0, 0.0)
-        # A yaw-180 wall_back (the NEW canonical value) is left alone.
+        assert migrate_orientation_angles('wall_left', -90.0, 0.0, 0.0) == \
+            (90.0, 0.0, 0.0)
+        assert migrate_orientation_angles('wall_right', 90.0, 0.0, 0.0) == \
+            (-90.0, 0.0, 0.0)
+        # The NEW canonical values are left alone (idempotent).
         assert migrate_orientation_angles('wall_back', 180.0, 0.0, 0.0) == \
             (180.0, 0.0, 0.0)
+        assert migrate_orientation_angles('wall_left', 90.0, 0.0, 0.0) == \
+            (90.0, 0.0, 0.0)
 
     def test_custom_orientation_is_left_alone(self):
         assert migrate_orientation_angles('hanging', 33.0, 12.0, -5.0) == \

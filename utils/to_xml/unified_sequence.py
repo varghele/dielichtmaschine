@@ -5,7 +5,7 @@ import math
 import xml.etree.ElementTree as ET
 from typing import List, Dict, Any, Optional, Tuple
 from utils.effects_utils import get_channels_by_property, find_closest_color_dmx
-from utils.orientation import calculate_pan_tilt, pan_tilt_to_dmx
+from utils.yoke import export_aim_dmx  # noqa: F401 (aiming moved to the yoke helper)
 from utils.to_xml.step_compaction import compact_step_values
 from effects.timing import movement_total_cycles
 
@@ -772,22 +772,15 @@ def sample_movement_at_time(
             mounting, yaw, pitch, roll = fixture.get_effective_orientation(group)
             fixture_z = fixture.get_effective_z(group)
 
-            # Calculate pan/tilt angles to point at the spot
-            pan_degrees, tilt_degrees = calculate_pan_tilt(
-                fixture_x=fixture.x,
-                fixture_y=fixture.y,
-                fixture_z=fixture_z,
-                target_x=spot.x,
-                target_y=spot.y,
-                target_z=spot.z,
-                mounting=mounting,
-                yaw=yaw,
-                pitch=pitch,
-                roll=roll
-            )
-
-            # Convert to DMX values (0-255 where 127 = center)
-            pan_dmx, tilt_dmx = pan_tilt_to_dmx(pan_degrees, tilt_degrees)
+            # Aim like native output: solver at the definition's real
+            # ranges, converted to the real yoke (utils/yoke) so QLC+
+            # playback lands the spot where the app and the rig do.
+            # Movement PATTERNS still oscillate in solver DMX space
+            # around this converted centre (v1.5a leftover).
+            from utils.yoke import export_aim_dmx
+            pan_dmx, tilt_dmx = export_aim_dmx(
+                fixture, fixture_z, (spot.x, spot.y, spot.z),
+                mounting, yaw, pitch, roll)
 
             # Use calculated values as center position
             center_pan = float(pan_dmx)

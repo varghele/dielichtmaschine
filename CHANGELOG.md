@@ -36,10 +36,22 @@ verbatim as the GitHub Release notes (see [docs/releasing.md](docs/releasing.md)
   landing) - which also calibrated the rotation direction of the
   physical pan/tilt axes against the model. (QLC+ export still uses
   the old convention - a known follow-up.)
-- **Wall-back and wall-front mounting presets were swapped.** The
-  back-wall preset faced upstage and the front-wall preset faced the
-  audience. Corrected; projects saved with the old values are fixed
-  automatically on load.
+- **All four wall mounting presets were swapped with their opposites.**
+  Wall-back faced upstage, wall-front faced the audience, wall-left
+  faced stage left (a right-wall mount) and vice versa. All corrected;
+  projects saved with the old values are fixed automatically on load.
+- **QLC+ export aims moving heads like the app does.** Spot targets,
+  position presets and the Virtual Console XY-pad presets in exported
+  workspaces now use the fixture's real pan/tilt ranges and the real
+  yoke conversion, so QLC+ playback lands beams where the app and the
+  rig do. Exports of rigs containing movers change accordingly;
+  mover-less rigs are byte-identical as before. (Animated movement
+  patterns still oscillate in the old value space around the corrected
+  centre - a known refinement.)
+- **`.qxf` movers aim correctly too.** Fixtures without a GDTF
+  definition get the standard real-yoke treatment on the wire and in
+  the export, the same convention verified on hardware - real moving
+  heads are built that way regardless of definition format.
 - **The universe's Target IP now drives native ArtNet output.** It was
   honoured only by the QLC+ export - the built-in output always sent to
   broadcast, which on a machine with more than one network interface
