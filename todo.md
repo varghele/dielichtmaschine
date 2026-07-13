@@ -101,11 +101,16 @@ The beam/base axes likely need to come from the fixture definition
 - [ ] Busk a colour over a playing show against a real ArtNet node or
       the standalone visualizer (merge is unit-tested, never touched
       hardware)
-- [ ] Aim a POSITION palette at real movers (or the visualizer): select
-      a mover group, touch CENTRE and a spike mark, watch the heads
-      converge; touch again and confirm pan/tilt falls back to the
-      show (aim math is unit-tested against the playback spot path,
-      never touched hardware)
+- [ ] Aim a POSITION palette at real movers: select a mover group,
+      touch CENTRE and a spike mark, watch the heads converge; touch
+      again and confirm pan/tilt falls back to the show. Verified in
+      the visualizer 2026-07-13 (hit-the-spot closed loop, 16-bit
+      fines); the OPEN hardware question is whether the real fixture
+      interprets our solver-convention DMX the same way the visualizer
+      does (docs/coordinate-frames-and-orientation.md section 4-5) -
+      if the real head misses where the visualizer hits, the solver
+      needs the real-yoke model (solver_to_gdtf_axes exists and is
+      tested; wiring it into the DMX side is the v1.5a follow-up)
 - [ ] Topbar VISUALIZER OPEN end to end: one press = feed up + viewer
       launched + client count ticks to 1 (process launch is stubbed
       in tests)
