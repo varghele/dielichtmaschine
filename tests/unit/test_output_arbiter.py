@@ -492,3 +492,38 @@ class TestArtnetTargetFromConfig:
             "parameters": {"ip": "", "subnet": "0", "universe": "0"}}))
         assert artnet_target_from_config(empty_ip) == BROADCAST_IP
         assert artnet_target_from_config(Configuration()) == BROADCAST_IP
+
+
+class TestBuildFixtureMapsStandalone:
+    """DMXManager.build_fixture_maps: the arbiter gets channel maps from
+    the config directly, so the visible idle floor lights the rig when
+    OUTPUT is toggled with nothing playing (it used to stream an
+    all-zero floor until a playback controller registered maps - found
+    live against the NET-2, 2026-07-13)."""
+
+    def test_builds_the_same_maps_playback_would(self, config_one_mover,
+                                                 mock_fixture_def):
+        from utils.artnet.dmx_manager import DMXManager
+        maps = DMXManager.build_fixture_maps(
+            config_one_mover,
+            {"TestMfr_TestModel": mock_fixture_def})
+        assert set(maps) == {"MH1"}
+        assert maps["MH1"].pan_channels or maps["MH1"].dimmer_channels
+
+    def test_visible_floor_lights_up_from_standalone_maps(
+            self, config_one_mover, mock_fixture_def):
+        from utils.artnet.dmx_manager import DMXManager
+        maps = DMXManager.build_fixture_maps(
+            config_one_mover,
+            {"TestMfr_TestModel": mock_fixture_def})
+        floor = render_visible_floor(maps)
+        assert floor, "floor must not be empty with maps present"
+        values, mask = floor[1]
+        assert any(values), "visible floor must carry non-zero values"
+        assert any(mask)
+
+    def test_missing_definition_is_skipped_not_fatal(self,
+                                                     config_one_mover):
+        from utils.artnet.dmx_manager import DMXManager
+        maps = DMXManager.build_fixture_maps(config_one_mover, {})
+        assert maps == {}

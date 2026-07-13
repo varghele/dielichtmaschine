@@ -155,6 +155,34 @@ class DMXManager:
     exact per frame with no decay bookkeeping.
     """
 
+    @staticmethod
+    def build_fixture_maps(config: Configuration,
+                           fixture_definitions: dict = None) -> dict:
+        """Channel maps for every fixture in ``config``, standalone.
+
+        The same maps :meth:`_build_fixture_maps` builds for a full
+        DMXManager, without constructing one - so the output arbiter
+        can render the "fixtures visible" idle floor before any
+        playback controller exists (OUTPUT toggled on with nothing
+        playing used to stream an all-zero floor because the maps only
+        arrived with playback). Definitions default to the shared
+        cache, loaded for exactly the config's models.
+        """
+        if fixture_definitions is None:
+            from utils.fixture_utils import get_cached_fixture_definitions
+            models = {(f.manufacturer, f.model)
+                      for f in getattr(config, "fixtures", []) or []}
+            fixture_definitions = get_cached_fixture_definitions(models) \
+                if models else {}
+        maps = {}
+        for fixture in getattr(config, "fixtures", []) or []:
+            fixture_def = fixture_definitions.get(
+                f"{fixture.manufacturer}_{fixture.model}")
+            if fixture_def:
+                maps[fixture.name] = FixtureChannelMap(
+                    fixture, fixture_def, config)
+        return maps
+
     def __init__(self, config: Configuration, fixture_definitions: dict, song_structure=None):
         """
         Initialize DMX manager.

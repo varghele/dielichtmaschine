@@ -309,6 +309,20 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         target = artnet_target_from_config(self.config)
         self._output_arbiter.set_target_ip(target)
         self._output_arbiter.set_broadcast_mirror(target != BROADCAST_IP)
+
+        # Register channel maps from the config directly, so the
+        # "fixtures visible" idle floor lights the rig as soon as
+        # OUTPUT is on - previously the maps only arrived when a
+        # playback controller initialized, and OUTPUT-before-PLAY
+        # streamed an all-zero floor (found live against the NET-2,
+        # 2026-07-13). Playback re-registers its own identical maps.
+        try:
+            from utils.artnet.dmx_manager import DMXManager
+            maps = DMXManager.build_fixture_maps(self.config)
+            if maps:
+                self._output_arbiter.set_fixture_maps(maps)
+        except Exception as e:
+            print(f"output arbiter: fixture maps not built: {e}")
         return self._output_arbiter
 
     def _push_live_masters(self):
