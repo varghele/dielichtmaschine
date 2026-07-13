@@ -150,6 +150,15 @@ MOVEMENT_SHAPES: Tuple[Tuple[str, str], ...] = (
 # "intensity" slot, concurrent with a colour riff from EFFECTS.
 INTENSITY_CATEGORY = "intensity"
 
+# Movement-shape orbit sizes (label, radius in meters) - the shapes
+# trace in stage space around their anchor, so size is physical.
+SHAPE_SIZES: Tuple[Tuple[str, float], ...] = (
+    ("S", 0.4),
+    ("M", 0.75),
+    ("L", 1.5),
+)
+DEFAULT_SHAPE_SIZE_M = 0.75
+
 
 def _active_tokens() -> dict:
     """The token dict of the theme currently applied to the app.
@@ -241,6 +250,11 @@ class LiveState(QObject):
         # restages on selection change); anchored per group at the held
         # position. Survives update_from_config like effect/scene.
         self.shape: Optional[str] = None
+        # Orbit radius in METERS (the S/M/L chips) - live shapes trace
+        # in stage space around their anchor, so the size is physical,
+        # not a DMX amplitude. A preference like fade/bpm: survives
+        # release_all and update_from_config.
+        self.shape_size: float = DEFAULT_SHAPE_SIZE_M
         # Staged INTENSITY FX (a bundled "intensity/..." dimmer riff
         # key). Same mechanics as effect on its own engine slot, so a
         # dimmer pattern and a colour riff run concurrently.
@@ -490,6 +504,12 @@ class LiveState(QObject):
         the running stack as kind "intensity"."""
         self.intensity = None if key == self.intensity else key
         self._sync_running("intensity", self.intensity)
+        self.state_changed.emit()
+
+    def set_shape_size(self, meters: float) -> None:
+        """Set the movement-shape orbit radius (meters, clamped to a
+        sane stage range). A running shape restages to the new size."""
+        self.shape_size = max(0.1, min(5.0, float(meters)))
         self.state_changed.emit()
 
     def stage_position(self, position_id: str,
@@ -1507,6 +1527,30 @@ class LiveTab(BaseTab):
         shapes_section_layout.addWidget(
             self._pool_header("Movement shapes", "Movers only",
                               tag_accent=True))
+        # Orbit SIZE chips (S/M/L, meters): physical radius around the
+        # anchor - a running shape restages to the new size live.
+        size_row = QWidget()
+        size_box = QHBoxLayout(size_row)
+        size_box.setContentsMargins(14, 0, 14, 6)
+        size_box.setSpacing(6)
+        size_box.addWidget(MicroLabel("Size", point_size=7,
+                                      tracking_em=0.12))
+        self._shape_size_buttons = []
+        for label, meters in SHAPE_SIZES:
+            btn = QPushButton(label)
+            btn.setCheckable(True)
+            btn.setProperty("role", "output-select")
+            btn.setFont(mono_font(8, QFont.Weight.Medium))
+            btn.setCursor(Qt.CursorShape.PointingHandCursor)
+            btn.setToolTip(f"Orbit radius {meters:g} m around the "
+                           "held position")
+            btn.clicked.connect(
+                lambda _checked=False, m=meters:
+                self.state.set_shape_size(m))
+            size_box.addWidget(btn)
+            self._shape_size_buttons.append((btn, meters))
+        size_box.addStretch(1)
+        shapes_section_layout.addWidget(size_row)
         shapes_host = QWidget()
         shape_grid = QGridLayout(shapes_host)
         shape_grid.setContentsMargins(14, 0, 14, 12)
@@ -2294,10 +2338,13 @@ class LiveTab(BaseTab):
             cell.set_active(name in active_positions)
 
         # MOVEMENT SHAPES: same movers-only gate; outline the staged
-        # rudiment (one active shape, like the effect key).
+        # rudiment (one active shape, like the effect key) and check
+        # the matching orbit-size chip.
         self._shapes_section.setEnabled(self._selection_has_movers())
         for shape_id, cell in self._movement_cells.items():
             cell.set_active(shape_id == state.shape)
+        for btn, meters in self._shape_size_buttons:
+            self._sync_toggle(btn, abs(state.shape_size - meters) < 1e-9)
 
         for name, fader in self._submaster_faders.items():
             fader.set_value(state.submasters.get(name, 100))

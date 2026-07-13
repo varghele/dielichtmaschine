@@ -111,7 +111,12 @@ verbatim as the GitHub Release notes (see [docs/releasing.md](docs/releasing.md)
   anchored at the group's held position palette (stage CENTRE when
   none is held) - hold a position to place the orbit, touch the shape
   to spin it, touch again to release. Shapes claim only pan/tilt, so
-  they run dark until something opens the fixture.
+  they run dark until something opens the fixture. The orbit is
+  measured in real meters on the stage, not in DMX travel: S/M/L SIZE
+  chips choose a 0.4 / 0.75 / 1.5 m radius around the anchor, and the
+  beam stays that close to the target at any throw distance (the
+  first cut orbited a fraction of the fixture's full pan range, which
+  dwarfed nearby targets - found on the bench).
 - **The tempo RESET button resets the tempo.** It used to clear only
   the invisible tap history, which read as a dead button; it now snaps
   the BPM back to 120 as well.

@@ -124,14 +124,13 @@ The beam/base axes likely need to come from the fixture definition
       2026-07-13 ("the riffs work on the bench").
 - [x] Run CIRCLE on the hung mover - CONFIRMED on the bench
       2026-07-13 ("the circle works on the bench"). Follow-up below.
-- [ ] Live shape orbit size (user, 2026-07-13): the orbit does not
-      stay close to the spot target - MovementBlock amplitude is RAW
-      DMX (50/255 of the FULL travel: ~106 deg pan on a 540-deg
-      head), so the radius dwarfs a nearby anchor. Fix direction:
-      angle- or meter-based amplitude for live shapes (scale by the
-      fixture's travel range, or orbit in stage space around the
-      anchor like the target-plane path). Also a candidate for an
-      on-surface SIZE control (the reference's FX-size bank slot).
+- [x] Live shape orbit size - FIXED 2026-07-13: shapes now trace in
+      STAGE SPACE on a horizontal orbit plane at the anchor (the
+      world-plane movement path; per-fixture transient StagePlanes fed
+      to the private manager), radius in METERS via the new S/M/L
+      SIZE chips (0.4 / 0.75 / 1.5 m, LiveState.shape_size, restages
+      live). Raw-DMX amplitude is gone from the live path. Bench
+      re-check: the circle should now hug the spike mark at any throw.
 - [ ] Busk an INTENSITY FX + EFFECT together (live-output-plan phase
       5 checkpoint): select the group, fire PULSE from INTENSITY FX
       and a colour riff from EFFECTS - the dimmer pattern should ride

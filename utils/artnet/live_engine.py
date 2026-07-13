@@ -90,17 +90,20 @@ class LiveEngine:
     # -- staging ----------------------------------------------------------
 
     def stage(self, slot: str, lanes, loop_beats: float,
-              bpm: float, config_override=None) -> None:
+              bpm: float, config_override=None,
+              stage_planes=None) -> None:
         """Stage synthetic lanes into a slot, replacing what ran there.
 
         ``lanes``: iterable of (fixtures, light_blocks) pairs;
         ``loop_beats``: loop length in beats; ``bpm``: the tempo the
         blocks' second-times were built against (usually the live bpm
         at staging time). The loop starts at beat 0 on the next render.
-        ``config_override`` is handed to the manager factory - the
-        movement binder passes a spot-overlay view of the config so
-        anchor spots exist for the private manager only, never in the
-        saved config.
+        ``config_override`` is handed to the manager factory (a
+        transient view of the config, never the saved one).
+        ``stage_planes`` (name -> StagePlane) go to the private
+        manager's world-space movement path - the movement binder's
+        orbit planes live here, one per fixture, so shapes trace in
+        METERS around their anchor instead of raw DMX amplitude.
         """
         if slot not in SLOTS:
             raise ValueError(f"unknown live slot: {slot!r}")
@@ -108,6 +111,8 @@ class LiveEngine:
             raise ValueError("loop_beats and bpm must be positive")
         manager = self._manager_factory(OnePartStructure(bpm),
                                         config_override)
+        if stage_planes:
+            manager.set_stage_planes(dict(stage_planes))
         self._slots[slot] = _Slot(manager, lanes, loop_beats, bpm)
 
     def kill(self, slot: str) -> None:
@@ -323,6 +328,16 @@ class LiveEffectsBinder:
 # contains EXACTLY one cycle and the loop wrap is seamless.
 SHAPE_LOOP_BEATS = 16.0
 
+# Default orbit radius in METERS. Live shapes trace in stage space
+# around their anchor (the world-plane movement path), NOT in raw DMX
+# amplitude - 50 DMX was ~106 degrees of pan on a 540-degree head, so
+# the orbit dwarfed a nearby target (bench finding 2026-07-13).
+# LiveState.shape_size overrides this per session (the S/M/L chips).
+SHAPE_ORBIT_RADIUS_M = 0.75
+# The world-space movement path reads its amplitude in meters as
+# block.pan_amplitude / 20 (dmx_manager._apply_movement_block).
+_AMPLITUDE_PER_METER = 20.0
+
 
 class SpotOverlayConfig:
     """A read-only VIEW of a Configuration with extra transient spots
@@ -345,16 +360,20 @@ class LiveMovementBinder:
 
     Staging a shape (state.shape, a MOVEMENT_REGISTRY rudiment id)
     builds one synthetic lane PER FIXTURE of every selected mover
-    group: a single MovementBlock with effect_type = the rudiment,
-    target_spot_name = a transient anchor spot at the fixture's HELD
-    POSITION target (state.positions, falling back to the CENTRE
-    preset) resolved through the shared resolve_position_target - the
-    spot-targeting path then aims per fixture through the verified
-    solver, and the output arbiter applies the hardware yoke
-    conversion on the wire like any aim. Per-fixture lanes mean the
-    per-group phase-offset spread is not available here (the block
-    defaults have it off); amplitude and speed ride the block
-    defaults, tempo rides the engine clock.
+    group: a single MovementBlock with effect_type = the rudiment and
+    target_plane_name = a transient HORIZONTAL ORBIT PLANE centred at
+    the fixture's HELD POSITION target (state.positions, falling back
+    to the CENTRE preset) resolved through the shared
+    resolve_position_target. The world-space movement path then traces
+    the shape in METERS on that plane (radius = LiveState.shape_size,
+    default SHAPE_ORBIT_RADIUS_M) and aims per fixture through the
+    verified solver each frame, so the beam stays within the chosen
+    radius of the anchor regardless of throw distance - raw DMX
+    amplitude did not (bench finding 2026-07-13). The output arbiter
+    applies the hardware yoke conversion on the wire like any aim.
+    Per-fixture lanes mean the per-group phase-offset spread is not
+    available here (the block defaults have it off); tempo rides the
+    engine clock.
 
     Claims are pan/tilt coarse only (the playback movement path) -
     shapes can run dark, and the busk layer suppresses its own static
@@ -396,14 +415,16 @@ class LiveMovementBinder:
                                  or {}).get(g)))
         anchors = tuple(sorted(
             (g, state.positions.get(g, "")) for g in scope))
-        signature = (key, scope, anchors)
+        radius = float(getattr(state, "shape_size", 0.0)
+                       or SHAPE_ORBIT_RADIUS_M)
+        signature = (key, scope, anchors, radius)
         if signature != self._staged:
-            lanes, spots = self._build_lanes(key, scope, config,
-                                             state.bpm)
+            lanes, planes = self._build_lanes(key, scope, config,
+                                              state.bpm, radius)
             if lanes:
                 engine.stage(
                     "movement", lanes, SHAPE_LOOP_BEATS, state.bpm,
-                    config_override=SpotOverlayConfig(config, spots))
+                    stage_planes=planes)
                 self._covered = scope
             else:
                 engine.kill("movement")
@@ -414,10 +435,14 @@ class LiveMovementBinder:
                        if r.get("kind") == "shape"), None)
         engine.pause("movement", bool(record and record.get("paused")))
 
-    def _build_lanes(self, key: str, scope, config, bpm: float):
-        """(lanes, transient_spots) - one lane per mover fixture, each
-        anchored at its own resolved target."""
-        from config.models import LightBlock, MovementBlock, Spot
+    def _build_lanes(self, key: str, scope, config, bpm: float,
+                     radius: float):
+        """(lanes, orbit_planes) - one lane per mover fixture, each
+        with a horizontal orbit plane centred at its resolved anchor.
+        ``radius`` is the orbit size in meters (block.pan_amplitude
+        carries it as radius * _AMPLITUDE_PER_METER for the world
+        path's amplitude_meters conversion)."""
+        from config.models import LightBlock, MovementBlock, StagePlane
         from utils.position_presets import (
             compute_presets, resolve_position_target,
         )
@@ -425,8 +450,9 @@ class LiveMovementBinder:
             return [], {}
         presets_by_id = {p.preset_id: p for p in compute_presets(config)}
         loop_seconds = SHAPE_LOOP_BEATS * 60.0 / bpm
+        amplitude = max(0.0, radius) * _AMPLITUDE_PER_METER
         lanes = []
-        spots = {}
+        planes = {}
         for group_name in sorted(scope):
             group = (getattr(config, "groups", {}) or {}).get(group_name)
             anchor_id = self._state.positions.get(group_name) \
@@ -439,15 +465,21 @@ class LiveMovementBinder:
                         config, presets_by_id, "preset:centre", fixture)
                 if target is None:
                     continue
-                spot_name = f"live:shape:{group_name}:{fixture.name}"
-                spots[spot_name] = Spot(name=spot_name, x=target[0],
-                                        y=target[1], z=target[2])
+                plane_name = f"live:shape:{group_name}:{fixture.name}"
+                # Horizontal orbit plane: the shape traces on a level
+                # disc at the anchor's height (a circle around a spike
+                # mark reads as a circle ON the mark).
+                planes[plane_name] = StagePlane(
+                    name=plane_name, point=tuple(target),
+                    normal=(0.0, 0.0, 1.0),
+                    u_axis=(1.0, 0.0, 0.0), v_axis=(0.0, 1.0, 0.0))
                 block = MovementBlock(
                     start_time=0.0, end_time=loop_seconds,
-                    effect_type=key, target_spot_name=spot_name)
+                    effect_type=key, target_plane_name=plane_name,
+                    pan_amplitude=amplitude)
                 light_block = LightBlock(start_time=0.0,
                                          end_time=loop_seconds,
                                          effect_name="")
                 light_block.movement_blocks.append(block)
                 lanes.append(([fixture], [light_block]))
-        return lanes, spots
+        return lanes, planes

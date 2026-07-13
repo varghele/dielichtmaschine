@@ -871,6 +871,34 @@ class TestMovementShapesPool:
         state.release_all()
         assert state.shape is None
 
+    def test_size_chips_set_the_orbit_radius(self, position_tab):
+        from gui.tabs.live_tab import DEFAULT_SHAPE_SIZE_M, SHAPE_SIZES
+        state = position_tab.state
+        assert state.shape_size == DEFAULT_SHAPE_SIZE_M
+        # The chips live inside the movers-gated section: enable it.
+        state.toggle_group("Movers")
+        # The M chip starts checked; clicking L moves the radius.
+        buttons = dict(
+            (label, btn) for btn, meters in
+            position_tab._shape_size_buttons
+            for size_label, size_m in SHAPE_SIZES
+            if size_m == meters for label in [size_label])
+        assert buttons["M"].isChecked()
+        buttons["L"].click()
+        assert state.shape_size == dict(SHAPE_SIZES)["L"]
+        assert buttons["L"].isChecked()
+        assert not buttons["M"].isChecked()
+        # Preference, not programmer content: survives RELEASE ALL.
+        state.release_all()
+        assert state.shape_size == dict(SHAPE_SIZES)["L"]
+
+    def test_shape_size_clamps(self, position_tab):
+        state = position_tab.state
+        state.set_shape_size(99.0)
+        assert state.shape_size == 5.0
+        state.set_shape_size(0.0)
+        assert state.shape_size == 0.1
+
 
 class TestPositionPool:
     def test_stage_position_applies_per_selected_group(self, position_tab):

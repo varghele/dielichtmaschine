@@ -557,13 +557,31 @@ class TestMovementBinder:
         return state, engine, binder, config
 
     @staticmethod
-    def _expected(shape, fixture, target, beat_pos):
-        """The DMX pan/tilt the playback resolve produces for a shape
-        anchored at ``target`` at loop position ``beat_pos`` (build
-        bpm 120, 16-beat loop = exactly one shape cycle)."""
+    def _expected(shape, fixture, anchor, beat_pos, radius=0.75):
+        """The DMX pan/tilt the WORLD-PLANE movement path produces for
+        a shape orbiting ``anchor`` (radius in meters, horizontal
+        plane) at loop position ``beat_pos`` (build bpm 120, 16-beat
+        loop = exactly one shape cycle). Mirrors
+        dmx_manager._apply_movement_block's plane branch."""
         import math
         from effects import MOVEMENT_REGISTRY, MovementContext
         from utils.orientation import calculate_pan_tilt, pan_tilt_to_dmx
+        progress = beat_pos / 16.0
+        ctx = MovementContext(
+            t=2 * math.pi * 1.0 * progress, progress=progress,
+            total_cycles=1.0,
+            center_pan=127.5, center_tilt=127.5,
+            pan_amplitude=50.0, tilt_amplitude=50.0,
+            fixture_index=0, total_fixtures=1,
+            phase_offset_enabled=False, phase_offset_degrees=0.0,
+            lissajous_ratio="1:2",
+        )
+        result = MOVEMENT_REGISTRY[shape](ctx)
+        u_off = (result.pan - 127.5) / 50.0
+        v_off = (result.tilt - 127.5) / 50.0
+        target = (anchor[0] + u_off * radius,
+                  anchor[1] + v_off * radius,
+                  anchor[2])
         mounting, yaw, pitch, roll = \
             fixture.get_effective_orientation(None)
         pan_deg, tilt_deg = calculate_pan_tilt(
@@ -573,22 +591,10 @@ class TestMovementBinder:
             mounting=mounting, yaw=yaw, pitch=pitch, roll=roll,
             pan_range=540.0, tilt_range=270.0,
         )
-        center_pan, center_tilt = pan_tilt_to_dmx(
+        pan_dmx, tilt_dmx = pan_tilt_to_dmx(
             pan_deg, tilt_deg, 540.0, 270.0)
-        progress = beat_pos / 16.0
-        ctx = MovementContext(
-            t=2 * math.pi * 1.0 * progress, progress=progress,
-            total_cycles=1.0,
-            center_pan=float(center_pan),
-            center_tilt=float(center_tilt),
-            pan_amplitude=50.0, tilt_amplitude=50.0,
-            fixture_index=0, total_fixtures=1,
-            phase_offset_enabled=False, phase_offset_degrees=0.0,
-            lissajous_ratio="1:2",
-        )
-        result = MOVEMENT_REGISTRY[shape](ctx)
-        return (int(max(0.0, min(255.0, result.pan))),
-                int(max(0.0, min(255.0, result.tilt))))
+        return (int(max(0.0, min(255.0, float(pan_dmx)))),
+                int(max(0.0, min(255.0, float(tilt_dmx)))))
 
     def test_circle_traces_around_the_centre_anchor(
             self, qapp, mock_fixture_def):
@@ -649,14 +655,32 @@ class TestMovementBinder:
         assert mask[DIMMER] == 0                # shapes can run dark
         assert mask[RED] == 0
 
-    def test_transient_spots_never_touch_the_real_config(
+    def test_transient_anchors_never_touch_the_real_config(
             self, qapp, mock_fixture_def):
         state, engine, binder, config = self._bound(mock_fixture_def)
         state.set_selection(["Movers"])
         state.set_shape("circle")
         engine.render(0.0)
         assert not getattr(config, "spots", None), \
-            "anchor spots must live in the overlay view only"
+            "anchors must not leak into the saved config"
+        assert not getattr(config, "live_shape_planes", None)
+
+    def test_orbit_radius_follows_the_size_chips(self, qapp,
+                                                 mock_fixture_def):
+        # The SIZE control is physical: changing it restages the shape
+        # at the new radius in meters.
+        state, engine, binder, config = self._bound(mock_fixture_def)
+        state.set_selection(["Movers"])
+        state.set_shape("circle")
+        engine.render(0.0)
+        state.set_shape_size(1.5)             # the L chip
+        values, _ = engine.render(0.1)[1]
+        large = self._expected("circle", config.fixtures[0],
+                               (0.0, 0.0, 1.5), 0.0, radius=1.5)
+        small = self._expected("circle", config.fixtures[0],
+                               (0.0, 0.0, 1.5), 0.0, radius=0.75)
+        assert (values[PAN], values[6]) == large
+        assert large != small
 
     def test_busk_position_claim_suppressed_for_covered_groups(
             self, qapp, mock_fixture_def):

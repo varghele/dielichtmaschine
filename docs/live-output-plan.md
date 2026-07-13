@@ -226,12 +226,15 @@ Hardware checkpoints after 0/1, 3, and 4 - the bench rig is set up.
   busk suppression) + TestMovementShapesPool in test_live_tab.py.
   **Hardware checkpoint PASSED 2026-07-13 ("the circle works on the
   bench"). Follow-up noted by the user: the orbit strays far from the
-  spot target - the block-default amplitude is 50 in RAW DMX units
+  spot target - the block-default amplitude was 50 in RAW DMX units
   (50/255 of the FULL physical travel: ~106 deg of pan on a 540-deg
-  head), so the orbit radius dwarfs a nearby anchor. Fix direction:
-  angle- or meter-based amplitude for live shapes (scale amplitude by
-  travel range, or orbit in stage space around the anchor like the
-  plane path). Tracked in todo.md, not blocking phase 5.**
+  head), so the orbit radius dwarfed a nearby anchor. FIXED same day:
+  the binder now builds per-fixture horizontal ORBIT PLANES at the
+  anchor (transient StagePlane objects fed to the private manager via
+  engine.stage(stage_planes=...)) and the world-plane movement path
+  traces the shape in METERS - radius = LiveState.shape_size, S/M/L
+  chips (0.4 / 0.75 / 1.5 m) in the pool, size change restages live.
+  Oracle tests mirror the plane branch end to end.**
 - [x] Phase 5 - intensity FX as bundled riffs (2026-07-13). Six
   bundled dimmer-only riffs in riffs/intensity/ (Pulse, Wave, Chase,
   Sparkle, Heartbeat, Strobe Burst - 16 beats, block defaults; the
