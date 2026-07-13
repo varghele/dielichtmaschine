@@ -54,21 +54,19 @@ screen design first), timeline undo/redo (big), MVR/OSC (own tracks).
 - [x] Build phases 0-3 - done 2026-07-11/12, hashes in the plan doc;
       phase 4 (conductor, pause look, setlist runner) stays v1.7
 
-## Open finding: the pan/tilt yoke model may not match real movers
+## RESOLVED: the pan/tilt yoke model (hardware-verified 2026-07-13)
 
 **Full write-up: `docs/coordinate-frames-and-orientation.md` (section 4).**
 
-**Largely resolved 2026-07-13.** The 2026-07-12 "beam-direction" mounting
-table was reverted to the pre-rebrand body-orientation values after the
-user confirmed against real fixtures that the pre-rebrand behaviour was
-correct (`hanging` = pitch +90, chassis flip). The practical convention
-is settled: presets orient the body, pan/tilt does the aiming. What is
-STILL open is only the mixed-rig case below (a hanging PAR wants
-beam-down while a hanging mover wants a vertical pan axis - one Euler
-triple can't serve both; the real fix is per-fixture beam/base axes from
-GDTF, ROADMAP v1.5a). Also deferred: the `wall_*` LABELS may not match
-operator naming (the user reads `wall_left` as "wall back") - cosmetic
-rename, needs the physical-wall mapping from the user.
+Closed on the bench with a real Hero Spot 60: mounting presets restored
+to body-orientation values; the two-yoke translation
+(solver_to_gdtf_axes) runs in the renderer AND on the wire (output
+arbiter, utils/yoke); one measured correction (positive physical
+pan/tilt is opposite-handed about the GDTF axes, negated in
+DrawItem.compose). Three raw poses + four full-pipeline aim targets all
+landed. Remaining (v1.5a): per-fixture beam/base axes for mixed
+PAR/mover rigs, range-aware .qxw export. The wall_back/wall_front swap
+was fixed 2026-07-13; wall_left/wall_right naming still unreviewed.
 
 The solver and the renderer both model a mover as: beam along local
 +X, PAN about local Z, TILT about local Y. In that model the beam at

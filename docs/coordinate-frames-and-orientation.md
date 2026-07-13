@@ -183,9 +183,21 @@ every chassis standing-authored before the presets apply. Pinned by
 
 ---
 
-## 4. OPEN: does the yoke model describe a real moving head?
+## 4. RESOLVED 2026-07-13: the yoke model, verified on real hardware
 
-**This is the one that needs the hardware. It is not fixed.**
+**The hardware protocol below was run on a real Varytec Hero Spot 60
+(standing on the bench, 14-channel, via a Showtec NET-2). Result: the
+two-yoke-model translation is CORRECT, with one measured correction -
+positive physical pan/tilt rotates OPPOSITE to a right-handed rotation
+about the GDTF axis nodes (both axes; the five-pose fit was exact).
+The negation lives in gdtf_draw_plan.DrawItem.compose (the one place
+chain rotations apply) and its mirror in solver_to_gdtf_axes.**
+
+Verified end to end on the bench: three raw poses (rest = beam up,
+tilt+ = beam toward the audience side, pan+ = clockwise from above)
+and four full-pipeline aim targets (right, toward audience, left,
+raised diagonal) all landed. The section below is kept as the original
+analysis and protocol.
 
 ### The claim
 

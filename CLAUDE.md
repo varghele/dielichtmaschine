@@ -320,9 +320,15 @@ triple instead of "any non-zero pitch/roll"; (d) the GDTF chain is the
 REAL yoke (beam along the pan axis at tilt centre) while the solver
 aims beam-perpendicular - solver degrees fed into the chain missed
 every spot, so gdtf_draw_plan.solver_to_gdtf_axes converts at the
-GDTF chassis boundary, pinned by hit-the-spot closed-loop tests.
-Emitted DMX stays solver-convention; real-fixture interpretation is
-still the hardware protocol's question.
+GDTF chassis boundary, pinned by hit-the-spot closed-loop tests; (e)
+the OUTPUT arbiter applies the same conversion to hardware packets
+only (utils/yoke, mirror/callback stay solver-convention); (f)
+HARDWARE-VERIFIED on a real Hero Spot 60 (bench protocol, section 4-5
+of the coordinate doc): positive physical pan/tilt rotates OPPOSITE
+to right-handed about the GDTF axis nodes - negated in
+DrawItem.compose + solver_to_gdtf_axes; three raw poses and four
+full-pipeline aim targets all landed. The yoke finding is CLOSED for
+GDTF movers; per-fixture axes for mixed PAR/mover rigs remain v1.5a.
 
 **Solo pull-ins (2026-07-12 evening, same branch):** two roadmap
 items shipped while the user was away. (1) Headless export CLI (v1.3):

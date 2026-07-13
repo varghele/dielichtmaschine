@@ -31,8 +31,11 @@ verbatim as the GitHub Release notes (see [docs/releasing.md](docs/releasing.md)
   moving head's pan/tilt to the real fixture's yoke on the way to the
   node, so aimed positions and spot targets land where intended. The
   3D visualizer already showed the correct aim and is unchanged; the
-  rig now matches it. (QLC+ export still uses the old convention - a
-  known follow-up.)
+  rig now matches it. **Verified on a real moving head** (bench
+  protocol: rest/tilt/pan reference poses plus four aimed targets, all
+  landing) - which also calibrated the rotation direction of the
+  physical pan/tilt axes against the model. (QLC+ export still uses
+  the old convention - a known follow-up.)
 - **Wall-back and wall-front mounting presets were swapped.** The
   back-wall preset faced upstage and the front-wall preset faced the
   audience. Corrected; projects saved with the old values are fixed
