@@ -66,14 +66,23 @@ class DrawItem:
     is_beam: bool = False              # Beam node: light emission point
 
     def compose(self, pan_deg: float = 0.0, tilt_deg: float = 0.0) -> np.ndarray:
-        """World-from-root transform with live pan/tilt applied."""
+        """World-from-root transform with live pan/tilt applied.
+
+        Angles are PHYSICAL fixture degrees (what the DMX encodes).
+        Positive physical rotation on a real head runs OPPOSITE to a
+        right-handed rotation about the GDTF axis nodes' local Z/X -
+        measured on a real Varytec Hero Spot 60, bench protocol
+        2026-07-13 (all five poses fit pan_sign=-1, tilt_sign=-1 with
+        zero error; docs/coordinate-frames-and-orientation.md section 5).
+        Hence the negation here, the ONE place chain rotations apply.
+        """
         m = np.eye(4)
         for step in self.chain:
             m = m @ step.matrix
             if step.axis_attribute == 'Pan':
-                m = m @ _rot_z(pan_deg)
+                m = m @ _rot_z(-pan_deg)
             elif step.axis_attribute == 'Tilt':
-                m = m @ _rot_x(tilt_deg)
+                m = m @ _rot_x(-tilt_deg)
         return m
 
 
@@ -262,4 +271,9 @@ def solver_to_gdtf_axes(pan_deg: float, tilt_deg: float,
         tilt_g = math.degrees(math.acos(max(-1.0, min(1.0, -dz))))
         pan_g = (math.degrees(math.atan2(-dx, dy))
                  if abs(abs(dz) - 1.0) > 1e-9 else 0.0)
-    return pan_g, tilt_g
+    # The derivation above solves for right-handed chain rotations; the
+    # chain (and the real fixture, measured on the bench 2026-07-13)
+    # rotates opposite per positive physical value - see
+    # DrawItem.compose. Negating both keeps the closed loop exact while
+    # the emitted PHYSICAL values match real hardware.
+    return -pan_g, -tilt_g

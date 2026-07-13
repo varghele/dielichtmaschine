@@ -43,9 +43,11 @@ def test_compose_applies_live_rotations(spot_defn):
     # is pure pan/tilt. -Z (beam direction) must stay -Z under pan only.
     down = np.array([0, 0, -1, 0.0])
     assert np.allclose(beam.compose(90, 0) @ down, down, atol=1e-9)
-    # Tilt 90 about X sends -Z to -Y... (right-handed X rotation).
+    # Positive PHYSICAL rotation runs opposite to right-handed about
+    # the node axes - measured on a real Hero Spot 60, bench protocol
+    # 2026-07-13 (see DrawItem.compose). Tilt 90 sends -Z to -Y.
     tilted = beam.compose(0, 90) @ down
-    assert tilted == pytest.approx([0, 1, 0, 0], abs=1e-9)
+    assert tilted == pytest.approx([0, -1, 0, 0], abs=1e-9)
     # Pan then rotates that within the horizontal plane.
     pan_tilt = beam.compose(90, 90) @ down
     assert pan_tilt == pytest.approx([-1, 0, 0, 0], abs=1e-9)
@@ -298,6 +300,41 @@ class TestOutputYokeHitsThroughRealChain:
         want = np.array(target) - np.array(fixture)
         want = want / np.linalg.norm(want)
         np.testing.assert_allclose(stage, want, atol=5e-3)
+
+
+class TestPhysicalClamp:
+    """The rendered head must stop where the real head stops: converted
+    angles clamp to the mode's physical Pan/Tilt travel, mirroring the
+    DMX encode - a hanging mover aimed at the ceiling pins at its tilt
+    limit in BOTH the visualizer and on the wire (user observation
+    2026-07-13: 'ceiling is not possible with hanging moving heads, the
+    visualizer however allows it')."""
+
+    def test_clamp_pins_out_of_travel_angles(self):
+        from visualizer.renderer.gdtf_draw_plan import clamp_to_physical
+        assert clamp_to_physical(0.0, 180.0, 270.0, 110.0) == (0.0, 110.0)
+        assert clamp_to_physical(-300.0, 45.0, 270.0, 110.0) == \
+            (-270.0, 45.0)
+        assert clamp_to_physical(30.0, 90.0, 270.0, 110.0) == (30.0, 90.0)
+
+    def test_half_ranges_default_when_absent(self):
+        from visualizer.renderer.gdtf_draw_plan import physical_half_ranges
+
+        class _NoPhysical:
+            channel_physical = []
+        assert physical_half_ranges(_NoPhysical(), "Any") == (270.0, 135.0)
+
+    def test_half_ranges_read_the_mode(self):
+        from utils.gdtf_data import GdtfChannelPhysical
+        from visualizer.renderer.gdtf_draw_plan import physical_half_ranges
+
+        class _G:
+            channel_physical = [
+                GdtfChannelPhysical("M", "Pan", "Yoke", 0, -270.0, 270.0),
+                GdtfChannelPhysical("M", "Tilt", "Head", 2, -110.0, 110.0),
+                GdtfChannelPhysical("Other", "Tilt", "Head", 2, -90.0, 90.0),
+            ]
+        assert physical_half_ranges(_G(), "M") == (270.0, 110.0)
 
 
 _HERO_SPOT = glob.glob(os.path.join(REPO_ROOT, "gdtf_fixtures",

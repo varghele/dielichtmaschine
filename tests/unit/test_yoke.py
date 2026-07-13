@@ -55,12 +55,14 @@ class TestApplyYokeToUniverse:
 
         apply_yoke_to_universe(buf, _StubMap(), flipped=True)
 
-        # The buffer now holds the real-yoke angles for the same solver aim.
+        # The buffer now holds the real-yoke angles for the same solver
+        # aim, within the two 16-bit quantisation hops (decode the
+        # solver bytes, convert, re-encode): ~0.01 deg per hop.
         want_pan, want_tilt = solver_to_gdtf_axes(30.0, 60.0, flipped=True)
         got_pan = self._decode(buf, 0, 1, 540.0)
         got_tilt = self._decode(buf, 2, 3, 270.0)
-        assert got_pan == round_trip(want_pan, 540.0)
-        assert got_tilt == round_trip(want_tilt, 270.0)
+        assert abs(got_pan - want_pan) < 0.03
+        assert abs(got_tilt - want_tilt) < 0.03
 
     def test_no_pan_tilt_is_a_noop(self):
         class NoMove(_StubMap):
@@ -82,10 +84,3 @@ class TestApplyYokeToUniverse:
         assert buf[1] != 0 or buf[3] != 0
 
 
-def round_trip(deg, rng):
-    """The degrees that survive a 16-bit encode/decode at this range -
-    what apply_yoke_to_universe stores and _decode reads back."""
-    half = rng / 2
-    norm = max(-1.0, min(1.0, deg / half))
-    val16 = round((norm + 1.0) / 2.0 * 65535)
-    return (val16 / 65535.0 - 0.5) * rng
