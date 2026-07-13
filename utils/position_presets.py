@@ -240,3 +240,25 @@ def element_preset_ids(config) -> List[str]:
             ids.append(ELEMENT_PRESET_PREFIX
                        + _element_identity(element, index))
     return ids
+
+
+def resolve_position_target(config, presets_by_id, position_id, fixture):
+    """The stage-space (x, y, z) a position id aims ``fixture`` at, or
+    None when the id is stale (a mark whose spot left the config, an
+    element preset whose element did - pruning is LiveState's job; a
+    stale id between prunes must resolve to nothing, not crash).
+
+    Shared by the busk output layer's position claims and the live
+    movement binder's shape anchors, so a shape orbits EXACTLY the
+    point the position palette aims at.
+    """
+    if position_id.startswith(MARK_PREFIX):
+        spot = (getattr(config, "spots", None)
+                or {}).get(mark_name(position_id))
+        if spot is None:
+            return None
+        return (spot.x, spot.y, spot.z)
+    preset = presets_by_id.get(position_id)
+    if preset is None:
+        return None
+    return preset.target_for(fixture)

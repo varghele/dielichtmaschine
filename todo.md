@@ -114,23 +114,22 @@ The beam/base axes likely need to come from the fixture definition
 - [ ] Busk a colour over a playing show against a real ArtNet node or
       the standalone visualizer (merge is unit-tested, never touched
       hardware)
-- [ ] Live swatch on the wheel head (live-output-plan phase 0
-      checkpoint): select the mover group, OUTPUT on, touch RED - the
-      Hero Spot should open AND turn its colour wheel to the red slot
-      (it has no RGB emitters; before this fix a swatch was white at
-      best). Also touch a swatch with NOTHING selected - the
-      programmer bar must flash NO GROUP SELECTED.
-- [ ] Busk a SCENE (live-output-plan phase 1 checkpoint): the bench
-      scene file scenes/bench/cyan_wash.json (untracked test data)
-      targets tester.lms's Movers + Movers2 - touch CYAN WASH in the
-      SCENES pool with nothing selected; both groups should light
-      (wheel: light-blue slot); second touch releases.
-- [ ] Fire a RIFF at the bench rig (live-output-plan phase 3
-      checkpoint): select a mover group, touch an EFFECTS cell (the
-      bundled loops/builds/fills), TAP a tempo and watch the pattern
-      rescale mid-play; PAUSE on the playback row must freeze the
-      pose, KILL / second touch must release to the show; QUEUE latch
-      + GO must fire the staged effect.
+- [x] Live swatch on the wheel head - CONFIRMED on the bench
+      2026-07-13 ("working well"); the follow-up (swatches would not
+      release / blocked the scene) shipped same day: second touch
+      releases, toggle contract like positions.
+- [x] Busk a SCENE - exercised on the bench 2026-07-13 (the user saw
+      the scene light the rig while diagnosing swatch release).
+- [x] Fire a RIFF at the bench rig - CONFIRMED on the bench
+      2026-07-13 ("the riffs work on the bench").
+- [ ] Run CIRCLE on the hung mover (live-output-plan phase 4
+      checkpoint): select the mover group, hold a POSITION (or none -
+      CENTRE is the fallback anchor), touch CIRCLE in MOVEMENT
+      SHAPES, open the fixture with FLASH or a swatch - the beam
+      should orbit the held target at the live tempo (16 beats per
+      lap); TAP rescales it; touching the position palette again
+      moves the anchor; second touch on the shape releases pan/tilt
+      to the show.
 - [x] Aim a POSITION palette at real movers - CLOSED on the bench
       2026-07-13 with the yoke protocol: raw poses + four aimed
       targets landed standing AND hanging (the wire carries the

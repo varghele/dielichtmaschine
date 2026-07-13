@@ -47,11 +47,12 @@ def _config(fixtures):
 
 
 def _factory(config, mock_fixture_def):
-    """manager_factory the gui will mirror: private manager, safe idle
-    suppressed."""
+    """manager_factory the gui mirrors: private manager, safe idle
+    suppressed, movement's spot-overlay config honoured."""
     definitions = {"TestMfr_TestModel": mock_fixture_def}
-    return lambda structure: DMXManager(
-        config, definitions, structure, emit_safe_idle=False)
+    return lambda structure, config_override=None: DMXManager(
+        config_override if config_override is not None else config,
+        definitions, structure, emit_safe_idle=False)
 
 
 def _ab_lane(fixtures):
@@ -451,3 +452,171 @@ class TestEngineUnderBuskLayer:
         layer.set_fixture_maps(
             {"MH1": FixtureChannelMap(mh1, mock_fixture_def, config)})
         assert layer.render(0.0) == {}
+
+
+class TestMovementBinder:
+    """LiveMovementBinder: MOVEMENT SHAPES trace the registry rudiment
+    around the held-position anchor through the real solver path
+    (docs/live-output-plan.md phase 4). The oracle rebuilds the same
+    MovementContext the playback resolve builds and compares DMX."""
+
+    TILT, PAN_FINE = 6, 7
+
+    def _bound(self, mock_fixture_def, spots=None):
+        from config.models import Spot
+        from gui.tabs.live_tab import LiveState
+        from utils.artnet.live_engine import LiveMovementBinder
+        mover = _fixture("MH1", 1)
+        par = _fixture("PAR1", 11)
+        par.type = "PAR"
+        config = Configuration(
+            fixtures=[mover, par],
+            groups={"Movers": FixtureGroup(name="Movers",
+                                           fixtures=[mover]),
+                    "Pars": FixtureGroup(name="Pars", fixtures=[par])},
+            universes={1: Universe(id=1, name="U1", output={})},
+        )
+        if spots:
+            config.spots = {name: Spot(name=name, x=x, y=y, z=z)
+                            for name, (x, y, z) in spots.items()}
+        engine = LiveEngine(_factory(config, mock_fixture_def))
+        state = LiveState()
+        state.update_from_config(config.groups.keys(),
+                                 spot_names=list(spots or ()))
+        binder = LiveMovementBinder(
+            state, engine, config_provider=lambda: config)
+        state.state_changed.connect(binder.sync)
+        return state, engine, binder, config
+
+    @staticmethod
+    def _expected(shape, fixture, target, beat_pos):
+        """The DMX pan/tilt the playback resolve produces for a shape
+        anchored at ``target`` at loop position ``beat_pos`` (build
+        bpm 120, 16-beat loop = exactly one shape cycle)."""
+        import math
+        from effects import MOVEMENT_REGISTRY, MovementContext
+        from utils.orientation import calculate_pan_tilt, pan_tilt_to_dmx
+        mounting, yaw, pitch, roll = \
+            fixture.get_effective_orientation(None)
+        pan_deg, tilt_deg = calculate_pan_tilt(
+            fixture_x=fixture.x, fixture_y=fixture.y,
+            fixture_z=fixture.get_effective_z(None),
+            target_x=target[0], target_y=target[1], target_z=target[2],
+            mounting=mounting, yaw=yaw, pitch=pitch, roll=roll,
+            pan_range=540.0, tilt_range=270.0,
+        )
+        center_pan, center_tilt = pan_tilt_to_dmx(
+            pan_deg, tilt_deg, 540.0, 270.0)
+        progress = beat_pos / 16.0
+        ctx = MovementContext(
+            t=2 * math.pi * 1.0 * progress, progress=progress,
+            total_cycles=1.0,
+            center_pan=float(center_pan),
+            center_tilt=float(center_tilt),
+            pan_amplitude=50.0, tilt_amplitude=50.0,
+            fixture_index=0, total_fixtures=1,
+            phase_offset_enabled=False, phase_offset_degrees=0.0,
+            lissajous_ratio="1:2",
+        )
+        result = MOVEMENT_REGISTRY[shape](ctx)
+        return (int(max(0.0, min(255.0, result.pan))),
+                int(max(0.0, min(255.0, result.tilt))))
+
+    def test_circle_traces_around_the_centre_anchor(
+            self, qapp, mock_fixture_def):
+        from utils.position_presets import (
+            compute_presets, resolve_position_target,
+        )
+        state, engine, binder, config = self._bound(mock_fixture_def)
+        state.set_selection(["Movers"])
+        state.set_shape("circle")
+        presets = {p.preset_id: p for p in compute_presets(config)}
+        target = resolve_position_target(
+            config, presets, "preset:centre", config.fixtures[0])
+        # Beat 0, then a quarter cycle later (4 beats = 2.0 s at 120).
+        values, mask = engine.render(0.0)[1]
+        assert mask[PAN] and mask[self.TILT]
+        expected = self._expected("circle", config.fixtures[0],
+                                  target, 0.0)
+        assert (values[PAN], values[self.TILT]) == expected
+        values, _ = engine.render(2.0)[1]
+        quarter = self._expected("circle", config.fixtures[0],
+                                 target, 4.0)
+        assert (values[PAN], values[self.TILT]) == quarter
+        assert quarter != expected                      # it moved
+
+    def test_anchor_follows_the_held_position(self, qapp,
+                                              mock_fixture_def):
+        spots = {"Riser": (1.0, 1.5, 0.6)}
+        state, engine, binder, config = self._bound(mock_fixture_def,
+                                                    spots=spots)
+        state.set_selection(["Movers"])
+        state.stage_position("mark:Riser", "Riser")
+        state.set_shape("circle")
+        values, _ = engine.render(0.0)[1]
+        expected = self._expected("circle", config.fixtures[0],
+                                  (1.0, 1.5, 0.6), 0.0)
+        assert (values[PAN], values[self.TILT]) == expected
+        assert binder.active_groups() == frozenset({"Movers"})
+
+    def test_release_and_non_mover_scope_stay_silent(
+            self, qapp, mock_fixture_def):
+        state, engine, binder, config = self._bound(mock_fixture_def)
+        state.set_selection(["Movers"])
+        state.set_shape("circle")
+        assert engine.render(0.0)
+        state.set_shape("circle")               # toggle off
+        assert engine.render(0.1) == {}
+        assert binder.active_groups() == frozenset()
+        state.set_selection(["Pars"])           # no movers in scope
+        state.set_shape("circle")
+        assert engine.render(0.2) == {}
+
+    def test_shape_claims_pan_tilt_only(self, qapp, mock_fixture_def):
+        state, engine, binder, config = self._bound(mock_fixture_def)
+        state.set_selection(["Movers"])
+        state.set_shape("bounce")
+        _, mask = engine.render(0.0)[1]
+        assert mask[PAN] and mask[self.TILT]
+        assert mask[DIMMER] == 0                # shapes can run dark
+        assert mask[RED] == 0
+
+    def test_transient_spots_never_touch_the_real_config(
+            self, qapp, mock_fixture_def):
+        state, engine, binder, config = self._bound(mock_fixture_def)
+        state.set_selection(["Movers"])
+        state.set_shape("circle")
+        engine.render(0.0)
+        assert not getattr(config, "spots", None), \
+            "anchor spots must live in the overlay view only"
+
+    def test_busk_position_claim_suppressed_for_covered_groups(
+            self, qapp, mock_fixture_def):
+        from gui.tabs.live_tab import COLOUR_SWATCHES
+        from utils.artnet.dmx_manager import FixtureChannelMap
+        from utils.artnet.live_layer import LiveBuskLayer
+        spots = {"Riser": (1.0, 1.5, 0.6)}
+        state, engine, binder, config = self._bound(mock_fixture_def,
+                                                    spots=spots)
+        layer = LiveBuskLayer(
+            state, config_provider=lambda: config,
+            swatches=COLOUR_SWATCHES, engine=engine,
+            shape_groups_provider=binder.active_groups)
+        layer.set_fixture_maps(
+            {"MH1": FixtureChannelMap(config.fixtures[0],
+                                      mock_fixture_def, config)})
+        state.set_selection(["Movers"])
+        state.stage_position("mark:Riser", "Riser")
+        # Position alone: the busk aim claims coarse AND fine bytes.
+        values, mask = layer.render(0.0)[1]
+        assert mask[PAN] and mask[self.PAN_FINE]
+        # Shape staged: the anchor claim yields to the orbit - the
+        # engine's coarse write reaches the frame and the fines are
+        # unclaimed again (a static aim on top would freeze the orbit).
+        state.set_shape("circle")
+        values, mask = layer.render(0.1)[1]
+        assert mask[PAN]
+        assert mask[self.PAN_FINE] == 0
+        expected = self._expected("circle", config.fixtures[0],
+                                  (1.0, 1.5, 0.6), 0.0)
+        assert (values[PAN], values[self.TILT]) == expected

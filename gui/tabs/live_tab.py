@@ -23,7 +23,7 @@ Regions (North Star 3b):
   POSITION PALETTES (a PRESETS subsection of targets computed from the
   stage setup via utils/position_presets.py, then a MARKS subsection
   with one cell per ``config.spots`` spike mark; movers-only gated as a
-  whole) + MOVEMENT SHAPES (placeholder) |
+  whole) + MOVEMENT SHAPES (the registry rudiments, movers-only) |
   INTENSITY FX (placeholder, cell-fixtures gated) | EFFECTS (riffs from
   the shared RiffLibrary, selection-scoped: greyed with no selection) |
   SCENES (whole-rig looks from the SceneLibrary, always enabled). Below
@@ -46,13 +46,13 @@ Honest omissions vs. the reference: the live 3D render / DMX meters,
 the FX-speed/size/white-wash bank slots and the transport clock are
 still placeholders. SCENES make real light (the busk layer renders the
 active scene's colour on its listed groups, below explicit swatches);
-EFFECTS stay state-only until the live engine lands (the dual queue's
-PAUSE and KILL mutate records; playing a riff needs
-docs/live-output-plan.md phase 3). POSITION PALETTES aim for real: the
-busk layer converts a staged target into 16-bit pan/tilt claims. The
-colour PICKER, SONG PALETTE link and "+ REC" capture, and the
-MOVEMENT / INTENSITY pools, are staged for later passes and marked
-"arrives next".
+EFFECTS play riffs through the live engine (one lane per selected
+group on the looping beat clock; PAUSE/KILL/GO are real); MOVEMENT
+SHAPES loop the registry rudiments on the selected mover groups,
+anchored at each group's held position; POSITION PALETTES aim for
+real (16-bit pan/tilt claims). The colour PICKER, SONG PALETTE link
+and "+ REC" capture, and the INTENSITY pool, are staged for later
+passes and marked "arrives next".
 """
 
 from typing import Dict, List, Optional, Tuple
@@ -123,12 +123,27 @@ FADE_OPTIONS: Tuple[Tuple[str, str, Optional[float]], ...] = (
 )
 DEFAULT_FADE_KEY = "2s"
 DEFAULT_FADE_SECONDS = 2.0
+# The tempo RESET target and LiveState's starting bpm.
+DEFAULT_LIVE_BPM = 120.0
 
-# MOVEMENT / INTENSITY pools are placeholders this pass - the labels
-# seed the eventual controls but render as disabled, marked cells.
-# (POSITION PALETTES is real: computed presets from the stage setup
-# plus one cell per config.spots spike mark.)
-MOVEMENT_PLACEHOLDERS = ("Off", "Circle", "Fig-8", "Sweep", "Size")
+# MOVEMENT SHAPES: the effects/movement_effects.MOVEMENT_REGISTRY
+# rudiments (minus "static" - the POSITION palettes above ARE the
+# static aim). Ids are registry keys; the live engine's movement
+# binder replays the touched shape anchored at each group's held
+# position (docs/live-output-plan.md phase 4).
+MOVEMENT_SHAPES: Tuple[Tuple[str, str], ...] = (
+    ("circle", "Circle"),
+    ("figure_8", "Fig-8"),
+    ("diamond", "Diamond"),
+    ("square", "Square"),
+    ("triangle", "Triangle"),
+    ("lissajous", "Lissajous"),
+    ("linear_sweep", "Sweep"),
+    ("bounce", "Bounce"),
+    ("random", "Random"),
+    ("fan", "Fan"),
+)
+# INTENSITY pool stays a placeholder this pass.
 INTENSITY_PLACEHOLDERS = ("Static", "Pulse", "Chase", "Wave", "Sparkle",
                           "Strobe", "Ping-Pong")
 # Cell/pixel FX that only run on cell fixtures - gated "NEEDS CELLS".
@@ -208,7 +223,7 @@ class LiveState(QObject):
         # Tempo reference for rate-based controls (strobe rate, rudiment
         # "1/4" etc.). Free-busk drives it from the TAP cluster; a running
         # show would later sync it. Clamped to the TapBPM range 30-300.
-        self.bpm: float = 120.0
+        self.bpm: float = DEFAULT_LIVE_BPM
         # Busk-on-top mode: the surface is ALWAYS live; "mode" only says
         # whether a predefined show also runs underneath ("show") or not
         # ("live", the default). No engine merges them yet.
@@ -220,6 +235,11 @@ class LiveState(QObject):
         # them alone (like bpm / mode).
         self.effect: Optional[str] = None        # staged riff key
         self.scene: Optional[str] = None         # staged scene key
+        # Staged MOVEMENT SHAPE (a MOVEMENT_REGISTRY rudiment id like
+        # "circle"). Selection-scoped like effect (the movement binder
+        # restages on selection change); anchored per group at the held
+        # position. Survives update_from_config like effect/scene.
+        self.shape: Optional[str] = None
         # Applied position palettes, PER GROUP (group name -> namespaced
         # id: "preset:centre", "preset:element:<id>", "mark:<spot name>"
         # - see utils/position_presets.py). Mirrors ``colours``: staging
@@ -341,6 +361,7 @@ class LiveState(QObject):
         self.selected.clear()
         self.effect = None
         self.scene = None
+        self.shape = None
         self.positions.clear()
         self.running.clear()
         self.state_changed.emit()
@@ -448,6 +469,15 @@ class LiveState(QObject):
         self._sync_running("scene", self.scene)
         self.state_changed.emit()
 
+    def set_shape(self, key: Optional[str]) -> None:
+        """Toggle the staged movement shape (a rudiment id, applied to
+        the selected mover groups by the movement binder). Touching the
+        same key again clears it. Mirrors into the running stack as
+        kind "shape" so the PAUSE/KILL rows work on it."""
+        self.shape = None if key == self.shape else key
+        self._sync_running("shape", self.shape)
+        self.state_changed.emit()
+
     def stage_position(self, position_id: str,
                        label: Optional[str] = None) -> int:
         """Touch a position palette (a namespaced preset or spike-mark
@@ -537,6 +567,8 @@ class LiveState(QObject):
         record = self.running.pop(index)
         if record["kind"] == "scene":
             self.scene = None
+        elif record["kind"] == "shape":
+            self.shape = None
         else:
             self.effect = None
         self.state_changed.emit()
@@ -978,12 +1010,13 @@ class LiveTab(BaseTab):
         self._colour_swatches: Dict[str, _ColourSwatch] = {}
         self._colour_placeholders: Dict[str, QWidget] = {}
         # POSITION PALETTES: computed-preset cells + one cell per
-        # config.spots spike mark, keyed by namespaced position id
-        # (movement shapes stay placeholders in _movement_cells).
+        # config.spots spike mark, keyed by namespaced position id.
         # _position_labels maps id -> display label for the programmer.
+        # MOVEMENT SHAPES: one real cell per registry rudiment, keyed
+        # by the rudiment id (the "static" aim IS the position pool).
         self._position_cells: Dict[str, _LibraryCell] = {}
         self._position_labels: Dict[str, str] = {}
-        self._movement_cells: List[_PlaceholderCell] = []
+        self._movement_cells: Dict[str, _LibraryCell] = {}
         self._intensity_cells: List[_PlaceholderCell] = []
         # Library-backed pools (wired to the shared RiffLibrary and a new
         # SceneLibrary; injected by gui.py, lazily resolved otherwise).
@@ -1207,8 +1240,9 @@ class LiveTab(BaseTab):
         self._tap_reset_btn.setProperty("role", "output-select")
         self._tap_reset_btn.setFont(mono_font(8, QFont.Weight.Medium))
         self._tap_reset_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        self._tap_reset_btn.setToolTip("Clear the tap history (keeps the "
-                                       "current BPM)")
+        self._tap_reset_btn.setToolTip(
+            f"Reset the tempo to {DEFAULT_LIVE_BPM:.0f} BPM and clear "
+            "the tap history")
         self._tap_reset_btn.clicked.connect(self._on_reset_tempo)
         hbox.addWidget(self._tap_reset_btn)
         return row
@@ -1221,10 +1255,13 @@ class LiveTab(BaseTab):
             self.state.set_bpm(bpm)
 
     def _on_reset_tempo(self) -> None:
-        """Clear the tap history. The stored BPM is deliberately kept so a
-        reset does not blank the reference mid-show; the next tap builds a
-        fresh estimate."""
+        """RESET: back to the default tempo and a clean tap history.
+        The first pass only cleared the tap history and kept the BPM,
+        which read as a dead button (bench feedback 2026-07-13) - the
+        readout snaps to the default now, and running engine slots
+        rescale to it like any tempo change."""
         self._tap_bpm.reset()
+        self.state.set_bpm(DEFAULT_LIVE_BPM)
 
     # -- engine-status chips (OUT / SYNC) ---------------------------------
 
@@ -1442,25 +1479,51 @@ class LiveTab(BaseTab):
         layout.addWidget(section)
         self._populate_position_pool()
 
-        layout.addWidget(self._pool_header("Movement shapes"))
-        # A 2-per-row grid (like the palettes above), not one packed row:
-        # five cells side by side in a fifth of the centre truncate their
-        # labels to slivers at 1600x900.
+        # MOVEMENT SHAPES: the 10 registry rudiments as real cells
+        # (movers-only gated like the position section above). The
+        # touched shape loops on every selected mover group, anchored
+        # at the group's held position (CENTRE when none is held).
+        shapes_section = QWidget()
+        shapes_section_layout = QVBoxLayout(shapes_section)
+        shapes_section_layout.setContentsMargins(0, 0, 0, 0)
+        shapes_section_layout.setSpacing(0)
+        shapes_section_layout.addWidget(
+            self._pool_header("Movement shapes", "Movers only",
+                              tag_accent=True))
         shapes_host = QWidget()
         shape_grid = QGridLayout(shapes_host)
         shape_grid.setContentsMargins(14, 0, 14, 12)
         shape_grid.setSpacing(6)
         shape_columns = 2
-        for i, name in enumerate(MOVEMENT_PLACEHOLDERS):
-            cell = _PlaceholderCell(name)
-            cell.setMinimumSize(84, 34)
-            self._movement_cells.append(cell)
-            shape_grid.addWidget(cell, i // shape_columns, i % shape_columns)
+        for i, (shape_id, label) in enumerate(MOVEMENT_SHAPES):
+            cell = _LibraryCell(shape_id, label)
+            cell.setToolTip(
+                f"{label} · loops on the selected mover groups, "
+                "anchored at each group's held position (CENTRE when "
+                "none is held) · touch again to release")
+            cell.clicked.connect(self._on_shape_touched)
+            self._movement_cells[shape_id] = cell
+            shape_grid.addWidget(cell, i // shape_columns,
+                                 i % shape_columns)
         for col in range(shape_columns):
             shape_grid.setColumnStretch(col, 1)
-        layout.addWidget(shapes_host)
+        shapes_section_layout.addWidget(shapes_host)
+        self._shapes_section = shapes_section
+        layout.addWidget(shapes_section)
         layout.addStretch(1)
         return pool
+
+    def _on_shape_touched(self, shape_id: str) -> None:
+        """Fire/toggle a movement shape on the selected mover groups.
+        Fire-only (no QUEUE latch - shapes are not queueable records);
+        selection-scoped like effects, so a touch with no mover
+        selection keeps the state and warns."""
+        self.state.set_shape(shape_id)
+        if self.state.shape == shape_id and not self._selection_has_movers():
+            self._flash_programmer_warning(
+                "NO MOVER GROUP SELECTED · SHAPES RUN ON SELECTED MOVERS")
+        else:
+            self._clear_programmer_warning()
 
     def _add_position_cell(self, grid: QGridLayout, index: int,
                            position_id: str, label: str, tag: str,
@@ -2178,6 +2241,12 @@ class LiveTab(BaseTab):
         for name, cell in self._position_cells.items():
             cell.set_active(name in active_positions)
 
+        # MOVEMENT SHAPES: same movers-only gate; outline the staged
+        # rudiment (one active shape, like the effect key).
+        self._shapes_section.setEnabled(self._selection_has_movers())
+        for shape_id, cell in self._movement_cells.items():
+            cell.set_active(shape_id == state.shape)
+
         for name, fader in self._submaster_faders.items():
             fader.set_value(state.submasters.get(name, 100))
 
@@ -2348,6 +2417,10 @@ class LiveTab(BaseTab):
             text += f" · FX: {self._key_name(state.effect).upper()}"
         if state.scene:
             text += f" · SCENE: {self._key_name(state.scene).upper()}"
+        if state.shape:
+            shape_label = dict(MOVEMENT_SHAPES).get(state.shape,
+                                                    state.shape)
+            text += f" · SHAPE: {shape_label.upper()}"
         # POS shows the selection's applied targets; with no selection,
         # everything held (mirrors the colour HELD branch). Display
         # labels ("CROSS", "DS CENTRE"), not raw namespaced ids; fall
@@ -2388,7 +2461,8 @@ class LiveTab(BaseTab):
             for cell in list(self._colour_placeholders.values()):
                 if isinstance(cell, _PlaceholderCell):
                     cell._restyle()
-            for cell in self._movement_cells + self._intensity_cells:
+            for cell in list(self._movement_cells.values()) \
+                    + self._intensity_cells:
                 cell._restyle()
             for cell in list(self._effect_cells.values()) + \
                     list(self._scene_cells.values()) + \

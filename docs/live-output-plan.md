@@ -149,15 +149,15 @@ Hardware checkpoints after 0/1, 3, and 4 - the bench rig is set up.
   bar (stage_colour/stage_position now return the applied count).
   Tests: TestWheelOnlyFixtures in test_live_busk_layer.py,
   TestNoSelectionFeedback in test_live_tab.py. Hardware checkpoint
-  pending: user confirms swatches light the rig in colour.
+  PASSED 2026-07-13 ("working well" on the bench).
 - [x] Phase 1 - scenes -> light. LiveBuskLayer gained a scene_provider
   (gui.py injects LiveTab.scene_for_key); the active scene claims its
   listed groups like an applied colour, selection-independent, below
   explicit swatches, same level/strobe resolve. Stale "no output
   engine" markers removed from tooltips and docstrings. Tests:
   TestScenePool in test_live_busk_layer.py. Hardware checkpoint
-  pending: user busks a scene (needs an authored scene JSON - the
-  bundled library ships empty). Bench follow-up 2026-07-13: swatches
+  PASSED 2026-07-13 (bench scene scenes/bench/cyan_wash.json, seen
+  live while diagnosing the swatch-release follow-up). Bench follow-up 2026-07-13: swatches
   now RELEASE on second touch (same toggle contract as positions) -
   the user could not un-busk a colour, and a stuck swatch permanently
   outranked the scene on its group. stage_colour toggles; the
@@ -199,7 +199,30 @@ Hardware checkpoints after 0/1, 3, and 4 - the bench rig is set up.
   submaster-scaled engine frame needs per-group channel attribution
   and can ride a later polish pass. Tests: TestEffectsBinder +
   TestEngineUnderBuskLayer in test_live_engine.py.
-  **Hardware checkpoint pending: user fires a riff at the bench rig
-  on TAP tempo.**
-- [ ] Phase 4 - movement shapes pool
+  **Hardware checkpoint PASSED 2026-07-13 ("the riffs work on the
+  bench").**
+- [x] Phase 4 - movement shapes pool (2026-07-13). The placeholder
+  cells became the 10 registry rudiments (LiveState.shape, set_shape
+  toggle, running-stack kind "shape" so PAUSE/KILL rows work,
+  movers-only gating + no-mover programmer warning, SHAPE in the
+  programmer bar). LiveMovementBinder (utils/artnet/live_engine.py)
+  stages one lane PER FIXTURE of every selected mover group into the
+  "movement" slot: a single MovementBlock (effect_type = rudiment,
+  block-default amplitude, SHAPE_LOOP_BEATS = 16 so one full cycle
+  per loop at MOVEMENT_CYCLES_PER_BAR 0.25) whose target_spot_name is
+  a transient anchor spot at the fixture's held-position target
+  (resolve_position_target, shared with the busk aim; CENTRE
+  fallback), overlaid on the config via SpotOverlayConfig - anchor
+  spots never touch the real config. engine.stage grew
+  config_override for exactly this. The busk layer suppresses its
+  static position aim for covered groups (shape_groups_provider ->
+  binder.active_groups): position = anchor, shape = orbit. Restage on
+  key/scope/anchor change; tempo rides the engine clock. Cuts: per-
+  fixture lanes mean the cross-fixture phase-offset spread is
+  unavailable (block default is off anyway); the movement path writes
+  coarse pan/tilt only, so fines fall through to whatever runs below.
+  Tests: TestMovementBinder in test_live_engine.py (registry-oracle
+  trace, anchor follow, release/scope, claim width, config purity,
+  busk suppression) + TestMovementShapesPool in test_live_tab.py.
+  **Hardware checkpoint pending: user runs CIRCLE on the hung mover.**
 - [ ] Phase 5 - intensity FX as bundled riffs

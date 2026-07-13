@@ -61,7 +61,7 @@ from typing import Callable, Dict, Optional, Tuple
 
 from utils.orientation import calculate_pan_tilt, pan_tilt_to_dmx16
 from utils.position_presets import (
-    MARK_PREFIX, compute_presets, group_has_movers, mark_name,
+    compute_presets, group_has_movers, resolve_position_target,
 )
 
 from .arbiter import Frame
@@ -100,7 +100,8 @@ class LiveBuskLayer:
 
     def __init__(self, state, config_provider: Callable,
                  swatches=(), scene_provider: Optional[Callable] = None,
-                 engine=None) -> None:
+                 engine=None,
+                 shape_groups_provider: Optional[Callable] = None) -> None:
         self._state = state
         self._config_provider = config_provider
         self._swatch_colors: Dict[str, Tuple[str, Optional[str]]] = {
@@ -116,6 +117,11 @@ class LiveBuskLayer:
         # slot frame renders BELOW the explicit busk writes - a touched
         # swatch beats a running riff's colour on that group.
         self._engine = engine
+        # Zero-arg callable naming the groups a MOVEMENT SHAPE currently
+        # covers (the movement binder's active_groups). Their held
+        # positions become the shape's ANCHOR instead of a busk aim -
+        # writing the static aim on top would freeze the orbit.
+        self._shape_groups_provider = shape_groups_provider
         self._fixture_maps: Dict = {}
 
     def set_fixture_maps(self, fixture_maps) -> None:
@@ -148,6 +154,13 @@ class LiveBuskLayer:
                 scene_hex = scene.color
                 scene_groups = set(getattr(scene, "groups", ()) or ())
 
+        # Groups a MOVEMENT SHAPE currently covers: their held position
+        # is the shape's anchor (rendered by the engine), so the static
+        # busk aim is suppressed - it would overwrite the orbit.
+        shape_groups = frozenset()
+        if self._shape_groups_provider is not None:
+            shape_groups = self._shape_groups_provider() or frozenset()
+
         claimed_groups = []
         position_groups = []
         for group_name, group in getattr(config, "groups", {}).items():
@@ -158,7 +171,8 @@ class LiveBuskLayer:
                 claimed_groups.append(
                     (group_name, group, has_swatch or has_scene))
             position_id = state.positions.get(group_name)
-            if position_id and group_has_movers(group):
+            if position_id and group_name not in shape_groups \
+                    and group_has_movers(group):
                 position_groups.append((group, position_id))
         if not claimed_groups and not position_groups:
             return engine_frame
@@ -320,15 +334,8 @@ class LiveBuskLayer:
     @staticmethod
     def _target_for(config, presets_by_id, position_id, fixture):
         """The stage-space (x, y, z) a position id aims this fixture at,
-        or None when the id is stale (pruning is the state's job; a
-        stale id between prunes must render nothing, not crash)."""
-        if position_id.startswith(MARK_PREFIX):
-            spot = (getattr(config, "spots", None)
-                    or {}).get(mark_name(position_id))
-            if spot is None:
-                return None
-            return (spot.x, spot.y, spot.z)
-        preset = presets_by_id.get(position_id)
-        if preset is None:
-            return None
-        return preset.target_for(fixture)
+        or None when the id is stale - the shared resolve in
+        utils/position_presets.py (the movement binder anchors shapes
+        through the same function)."""
+        return resolve_position_target(config, presets_by_id,
+                                       position_id, fixture)

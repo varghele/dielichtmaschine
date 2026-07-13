@@ -258,13 +258,12 @@ class TestPools:
         assert live_tab._position_pool is not None
         assert live_tab._intensity_pool is not None
 
-    def test_movement_cells_are_disabled_placeholders(self, live_tab):
-        # MOVEMENT SHAPES stays a marked placeholder (POSITION PALETTES
-        # is real now - see TestPositionPool).
-        assert live_tab._movement_cells
-        for cell in live_tab._movement_cells:
-            assert cell.isEnabled() is False
-            assert cell.property("placeholder") is True
+    def test_movement_cells_are_the_registry_rudiments(self, live_tab):
+        # MOVEMENT SHAPES is real (phase 4): one cell per registry
+        # rudiment minus "static" (the position pool IS the static aim).
+        from effects import MOVEMENT_REGISTRY
+        assert set(live_tab._movement_cells) == \
+            set(MOVEMENT_REGISTRY) - {"static"}
 
     def test_intensity_cells_are_disabled_placeholders(self, live_tab):
         assert live_tab._intensity_cells
@@ -424,13 +423,19 @@ class TestTempoCluster:
         live_tab._tap_btn.click()
         assert live_tab.state.bpm == before
 
-    def test_reset_clears_tap_history_and_keeps_bpm(self, live_tab):
+    def test_reset_returns_to_default_and_clears_tap_history(
+            self, live_tab):
+        # The first pass kept the BPM on reset - which read as a dead
+        # button on the bench (2026-07-13). RESET now snaps the tempo
+        # back to the default AND clears the tap history.
+        from gui.tabs.live_tab import DEFAULT_LIVE_BPM
         live_tab.state.set_bpm(150.0)
         live_tab._tap_bpm.reset = Mock()
         live_tab._tap_reset_btn.click()
         live_tab._tap_bpm.reset.assert_called_once()
-        # RESET only clears tap history; the stored reference is kept.
-        assert live_tab.state.bpm == 150.0
+        assert live_tab.state.bpm == DEFAULT_LIVE_BPM
+        assert f"{DEFAULT_LIVE_BPM:.1f} BPM" \
+            in live_tab._bpm_display.text()
 
     def test_set_bpm_clamps_to_range(self, live_tab):
         live_tab.state.set_bpm(9999)
@@ -752,6 +757,59 @@ def position_tab(qapp):
     tab = LiveTab(_spot_config(), parent=None)
     yield tab
     tab.deleteLater()
+
+
+class TestMovementShapesPool:
+    """The MOVEMENT SHAPES cells (phase 4): stage/toggle through the
+    real state, movers-only gating, no-mover warning, programmer bar.
+    position_tab carries a real MH group ("Movers") plus a PAR group."""
+
+    def test_shape_touch_stages_and_toggles(self, position_tab):
+        position_tab.state.toggle_group("Movers")
+        cell = position_tab._movement_cells["circle"]
+        cell.clicked.emit("circle")
+        assert position_tab.state.shape == "circle"
+        assert cell.is_active()
+        assert any(r["kind"] == "shape"
+                   for r in position_tab.state.running)
+        cell.clicked.emit("circle")             # release
+        assert position_tab.state.shape is None
+        assert not any(r["kind"] == "shape"
+                       for r in position_tab.state.running)
+
+    def test_shapes_section_gates_on_movers(self, position_tab):
+        assert position_tab._shapes_section.isEnabled() is False
+        position_tab.state.toggle_group("Movers")
+        assert position_tab._shapes_section.isEnabled() is True
+        position_tab.state.toggle_group("Movers")
+        position_tab.state.toggle_group("Front Pars")   # PARs only
+        assert position_tab._shapes_section.isEnabled() is False
+
+    def test_shape_without_movers_warns(self, position_tab):
+        position_tab._movement_cells["circle"].clicked.emit("circle")
+        assert "NO MOVER GROUP SELECTED" \
+            in position_tab._programmer_label.text()
+
+    def test_programmer_names_the_shape(self, position_tab):
+        position_tab.state.toggle_group("Movers")
+        position_tab._movement_cells["figure_8"].clicked.emit("figure_8")
+        assert "SHAPE: FIG-8" \
+            in position_tab._programmer_label.text()
+
+    def test_kill_row_clears_the_shape(self, position_tab):
+        state = position_tab.state
+        state.toggle_group("Movers")
+        state.set_shape("bounce")
+        index = next(i for i, r in enumerate(state.running)
+                     if r["kind"] == "shape")
+        state.kill_playback(index)
+        assert state.shape is None
+
+    def test_release_all_clears_the_shape(self, position_tab):
+        state = position_tab.state
+        state.set_shape("fan")
+        state.release_all()
+        assert state.shape is None
 
 
 class TestPositionPool:

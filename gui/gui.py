@@ -271,7 +271,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         if getattr(self, "_output_arbiter", None) is None:
             from utils.artnet.live_layer import LiveBuskLayer
             from utils.artnet.live_engine import (
-                LiveEffectsBinder, LiveEngine,
+                LiveEffectsBinder, LiveEngine, LiveMovementBinder,
             )
             from gui.tabs.live_tab import COLOUR_SWATCHES
 
@@ -283,12 +283,15 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             # clock through private DMXManagers (emit_safe_idle=False:
             # a riff claims ONLY what its blocks drive). The binder
             # follows LiveState on every state change.
-            def _live_manager_factory(structure):
+            def _live_manager_factory(structure, config_override=None):
                 from utils.artnet.dmx_manager import DMXManager
                 from utils.fixture_utils import (
                     load_fixture_definitions_from_qlc,
                 )
-                config = self.live_tab.config
+                # config_override is the movement binder's spot-overlay
+                # view (anchor spots live in the private manager only).
+                config = config_override \
+                    if config_override is not None else self.live_tab.config
                 models = {(f.manufacturer, f.model)
                           for f in config.fixtures}
                 definitions = load_fixture_definitions_from_qlc(models)
@@ -306,6 +309,18 @@ class MainWindow(QMainWindow, Ui_MainWindow):
                 self._live_effects_binder.sync)
             self._live_effects_binder.sync()
 
+            # Movement shapes: same pattern, "movement" slot; the busk
+            # layer suppresses its static position aim for the groups
+            # the shape covers (the position is the shape's anchor).
+            self._live_movement_binder = LiveMovementBinder(
+                state=self.live_tab.state,
+                engine=self._live_engine,
+                config_provider=lambda: self.live_tab.config,
+            )
+            self.live_tab.state.state_changed.connect(
+                self._live_movement_binder.sync)
+            self._live_movement_binder.sync()
+
             # The Live busk surface rides on top of whatever plays
             # (busk-on-top): register its layer once, for the arbiter's
             # lifetime. Channel maps arrive when a playback controller
@@ -317,6 +332,8 @@ class MainWindow(QMainWindow, Ui_MainWindow):
                 swatches=COLOUR_SWATCHES,
                 scene_provider=self.live_tab.scene_for_key,
                 engine=self._live_engine,
+                shape_groups_provider=(
+                    self._live_movement_binder.active_groups),
             )
             arbiter.set_live_layer(self._live_busk_layer)
 

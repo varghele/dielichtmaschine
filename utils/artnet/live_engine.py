@@ -74,11 +74,12 @@ class _Slot:
 class LiveEngine:
     """One looping-clock engine for the Live pools.
 
-    ``manager_factory(song_structure)`` returns a fresh private
-    DMXManager for a slot - the gui wires it with the real config and
-    fixture definitions and MUST pass ``emit_safe_idle=False``; tests
-    inject stubs. A fresh manager per stage() keeps the claims exactly
-    as wide as the staged lanes and follows config changes naturally.
+    ``manager_factory(song_structure, config_override)`` returns a
+    fresh private DMXManager for a slot - the gui wires it with the
+    real config (or the override when given) and fixture definitions
+    and MUST pass ``emit_safe_idle=False``; tests inject stubs. A
+    fresh manager per stage() keeps the claims exactly as wide as the
+    staged lanes and follows config changes naturally.
     """
 
     def __init__(self, manager_factory: Callable) -> None:
@@ -89,19 +90,24 @@ class LiveEngine:
     # -- staging ----------------------------------------------------------
 
     def stage(self, slot: str, lanes, loop_beats: float,
-              bpm: float) -> None:
+              bpm: float, config_override=None) -> None:
         """Stage synthetic lanes into a slot, replacing what ran there.
 
         ``lanes``: iterable of (fixtures, light_blocks) pairs;
         ``loop_beats``: loop length in beats; ``bpm``: the tempo the
         blocks' second-times were built against (usually the live bpm
         at staging time). The loop starts at beat 0 on the next render.
+        ``config_override`` is handed to the manager factory - the
+        movement binder passes a spot-overlay view of the config so
+        anchor spots exist for the private manager only, never in the
+        saved config.
         """
         if slot not in SLOTS:
             raise ValueError(f"unknown live slot: {slot!r}")
         if loop_beats <= 0 or bpm <= 0:
             raise ValueError("loop_beats and bpm must be positive")
-        manager = self._manager_factory(OnePartStructure(bpm))
+        manager = self._manager_factory(OnePartStructure(bpm),
+                                        config_override)
         self._slots[slot] = _Slot(manager, lanes, loop_beats, bpm)
 
     def kill(self, slot: str) -> None:
@@ -299,3 +305,139 @@ class LiveEffectsBinder:
             lanes.append((fixtures,
                           [riff.to_light_block(0.0, structure)]))
         return lanes, loop_beats
+
+
+# Movement shapes loop over this many beats: at effect speed "1" the
+# registry paces one full shape cycle per 4 bars
+# (effects/timing.MOVEMENT_CYCLES_PER_BAR = 0.25), so a 16-beat block
+# contains EXACTLY one cycle and the loop wrap is seamless.
+SHAPE_LOOP_BEATS = 16.0
+
+
+class SpotOverlayConfig:
+    """A read-only VIEW of a Configuration with extra transient spots
+    overlaid - the movement binder's anchor spots exist for the
+    private manager's spot-targeting resolve only and never touch the
+    real (saved) config. Everything else delegates to the base."""
+
+    def __init__(self, base, extra_spots) -> None:
+        self._base = base
+        self.spots = dict(getattr(base, "spots", None) or {})
+        self.spots.update(extra_spots)
+
+    def __getattr__(self, name):
+        return getattr(self._base, name)
+
+
+class LiveMovementBinder:
+    """Maps LiveState's MOVEMENT SHAPES staging onto the engine's
+    "movement" slot (docs/live-output-plan.md phase 4).
+
+    Staging a shape (state.shape, a MOVEMENT_REGISTRY rudiment id)
+    builds one synthetic lane PER FIXTURE of every selected mover
+    group: a single MovementBlock with effect_type = the rudiment,
+    target_spot_name = a transient anchor spot at the fixture's HELD
+    POSITION target (state.positions, falling back to the CENTRE
+    preset) resolved through the shared resolve_position_target - the
+    spot-targeting path then aims per fixture through the verified
+    solver, and the output arbiter applies the hardware yoke
+    conversion on the wire like any aim. Per-fixture lanes mean the
+    per-group phase-offset spread is not available here (the block
+    defaults have it off); amplitude and speed ride the block
+    defaults, tempo rides the engine clock.
+
+    Claims are pan/tilt coarse only (the playback movement path) -
+    shapes can run dark, and the busk layer suppresses its own static
+    position aim for covered groups (active_groups) so the orbit is
+    not frozen by the anchor claim.
+    """
+
+    def __init__(self, state, engine: LiveEngine,
+                 config_provider: Callable) -> None:
+        self._state = state
+        self._engine = engine
+        self._config_provider = config_provider
+        self._staged: Optional[tuple] = None
+        self._covered: frozenset = frozenset()
+
+    def active_groups(self) -> frozenset:
+        """Groups the staged shape currently covers - the busk layer
+        suppresses its static position aim for these."""
+        return self._covered
+
+    def sync(self) -> None:
+        from utils.position_presets import group_has_movers
+        state = self._state
+        engine = self._engine
+        engine.set_bpm(state.bpm)
+
+        key = getattr(state, "shape", None)
+        if not key:
+            if self._staged is not None:
+                engine.kill("movement")
+                self._staged = None
+                self._covered = frozenset()
+            return
+
+        config = self._config_provider()
+        scope = frozenset(
+            g for g in state.selected
+            if group_has_movers((getattr(config, "groups", {})
+                                 or {}).get(g)))
+        anchors = tuple(sorted(
+            (g, state.positions.get(g, "")) for g in scope))
+        signature = (key, scope, anchors)
+        if signature != self._staged:
+            lanes, spots = self._build_lanes(key, scope, config,
+                                             state.bpm)
+            if lanes:
+                engine.stage(
+                    "movement", lanes, SHAPE_LOOP_BEATS, state.bpm,
+                    config_override=SpotOverlayConfig(config, spots))
+                self._covered = scope
+            else:
+                engine.kill("movement")
+                self._covered = frozenset()
+            self._staged = signature
+
+        record = next((r for r in state.running
+                       if r.get("kind") == "shape"), None)
+        engine.pause("movement", bool(record and record.get("paused")))
+
+    def _build_lanes(self, key: str, scope, config, bpm: float):
+        """(lanes, transient_spots) - one lane per mover fixture, each
+        anchored at its own resolved target."""
+        from config.models import LightBlock, MovementBlock, Spot
+        from utils.position_presets import (
+            compute_presets, resolve_position_target,
+        )
+        if config is None or not scope:
+            return [], {}
+        presets_by_id = {p.preset_id: p for p in compute_presets(config)}
+        loop_seconds = SHAPE_LOOP_BEATS * 60.0 / bpm
+        lanes = []
+        spots = {}
+        for group_name in sorted(scope):
+            group = (getattr(config, "groups", {}) or {}).get(group_name)
+            anchor_id = self._state.positions.get(group_name) \
+                or "preset:centre"
+            for fixture in (getattr(group, "fixtures", None) or []):
+                target = resolve_position_target(
+                    config, presets_by_id, anchor_id, fixture)
+                if target is None:      # stale mark: fall back to centre
+                    target = resolve_position_target(
+                        config, presets_by_id, "preset:centre", fixture)
+                if target is None:
+                    continue
+                spot_name = f"live:shape:{group_name}:{fixture.name}"
+                spots[spot_name] = Spot(name=spot_name, x=target[0],
+                                        y=target[1], z=target[2])
+                block = MovementBlock(
+                    start_time=0.0, end_time=loop_seconds,
+                    effect_type=key, target_spot_name=spot_name)
+                light_block = LightBlock(start_time=0.0,
+                                         end_time=loop_seconds,
+                                         effect_name="")
+                light_block.movement_blocks.append(block)
+                lanes.append(([fixture], [light_block]))
+        return lanes, spots

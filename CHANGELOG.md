@@ -97,6 +97,17 @@ verbatim as the GitHub Release notes (see [docs/releasing.md](docs/releasing.md)
   Hero Spot 60) used to light the fixture white at best - the wheel
   channel was never driven. The busk layer now steers the wheel to the
   nearest matching slot, the same mapping timeline playback uses.
+- **The Live MOVEMENT SHAPES pool moves real movers.** The placeholder
+  cells became the ten movement rudiments (circle, figure-8, diamond,
+  square, triangle, lissajous, sweep, bounce, random, fan). Touching
+  one loops the shape on every selected mover group at the live tempo,
+  anchored at the group's held position palette (stage CENTRE when
+  none is held) - hold a position to place the orbit, touch the shape
+  to spin it, touch again to release. Shapes claim only pan/tilt, so
+  they run dark until something opens the fixture.
+- **The tempo RESET button resets the tempo.** It used to clear only
+  the invisible tap history, which read as a dead button; it now snaps
+  the BPM back to 120 as well.
 - **The Live EFFECTS pool plays riffs for real.** Touching an effect
   loops its riff on every selected group at the live tempo: TAP
   changes the speed mid-play without a phase jump, re-selecting
