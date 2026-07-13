@@ -157,7 +157,11 @@ Hardware checkpoints after 0/1, 3, and 4 - the bench rig is set up.
   engine" markers removed from tooltips and docstrings. Tests:
   TestScenePool in test_live_busk_layer.py. Hardware checkpoint
   pending: user busks a scene (needs an authored scene JSON - the
-  bundled library ships empty).
+  bundled library ships empty). Bench follow-up 2026-07-13: swatches
+  now RELEASE on second touch (same toggle contract as positions) -
+  the user could not un-busk a colour, and a stuck swatch permanently
+  outranked the scene on its group. stage_colour toggles; the
+  swatch-beats-scene priority itself is unchanged.
 - [ ] Phase 2 - LiveEngine infrastructure
 - [ ] Phase 3 - effects pool riff player + queue
 - [ ] Phase 4 - movement shapes pool

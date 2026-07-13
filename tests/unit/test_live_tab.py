@@ -158,6 +158,39 @@ class TestColourPool:
         assert live_tab._colour_swatches["cyan"].is_active()
         assert not live_tab._colour_swatches["red"].is_active()
 
+    def test_second_touch_releases_the_colour(self, live_tab):
+        # The same toggle contract as positions: touching the swatch
+        # every selected group already holds releases it (fall-through
+        # to the scene/show underneath).
+        live_tab.state.toggle_group("Movers")
+        live_tab._colour_swatches["red"].clicked.emit("red")
+        assert live_tab.state.colours == {"Movers": "red"}
+        live_tab._colour_swatches["red"].clicked.emit("red")
+        assert live_tab.state.colours == {}
+        assert not live_tab._colour_swatches["red"].is_active()
+
+    def test_release_toggle_is_scoped_to_the_selection(self, live_tab):
+        state = live_tab.state
+        state.set_selection(["Front Pars", "Movers"])
+        assert state.stage_colour("red") == 2
+        # Narrow the selection: the second touch releases ONLY the
+        # selected group; the other keeps its applied colour.
+        state.set_selection(["Movers"])
+        assert state.stage_colour("red") == 1
+        assert state.colours == {"Front Pars": "red"}
+
+    def test_mixed_holdings_apply_before_they_release(self, live_tab):
+        state = live_tab.state
+        state.set_selection(["Front Pars"])
+        state.stage_colour("red")
+        state.set_selection(["Front Pars", "Movers"])
+        # Movers does not hold red yet: the touch applies to both...
+        state.stage_colour("red")
+        assert state.colours == {"Front Pars": "red", "Movers": "red"}
+        # ...and only the NEXT touch releases both.
+        state.stage_colour("red")
+        assert state.colours == {}
+
     def test_touch_with_no_selection_records_nothing(self, live_tab):
         live_tab._colour_swatches["amber"].clicked.emit("amber")
         assert live_tab.state.colours == {}

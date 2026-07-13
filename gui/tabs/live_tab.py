@@ -307,12 +307,21 @@ class LiveState(QObject):
         """Touch a colour swatch: record it as the staged colour and apply
         it to every selected group at the current fade time. Mutual
         exclusion - a group holds at most one colour, newest touch wins.
-        Returns the number of groups the colour was applied to - 0 means
-        nothing was selected and the touch changed no output (the tab
-        turns that into visible feedback instead of silence)."""
+        Touching the swatch every selected group already holds RELEASES
+        it from those groups (the same toggle contract as positions) -
+        the group falls through to the active scene or the show
+        underneath. Returns the number of groups affected (applied or
+        released) - 0 means nothing was selected and the touch changed
+        no output (the tab turns that into visible feedback instead of
+        silence)."""
         self.staged_colour = colour_id
-        for group in self.selected:
-            self.colours[group] = colour_id
+        if self.selected and all(self.colours.get(g) == colour_id
+                                 for g in self.selected):
+            for group in self.selected:
+                self.colours.pop(group, None)
+        else:
+            for group in self.selected:
+                self.colours[group] = colour_id
         self.state_changed.emit()
         return len(self.selected)
 
@@ -445,8 +454,8 @@ class LiveState(QObject):
         id, movers-only): apply it to every selected group, mutual
         exclusion per group like colours. Touching an id every selected
         group already holds RELEASES it from those groups (pan/tilt
-        falls back to the show underneath) - positions toggle where
-        colours only replace. ``label`` is the display name the
+        falls back to the show underneath) - the same toggle contract
+        as colours. ``label`` is the display name the
         programmer bar shows for the id. Not a playback, so it does not
         mirror into the running stack. Returns the number of groups
         affected (applied or released) - 0 means nothing was selected

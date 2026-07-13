@@ -340,6 +340,20 @@ class TestScenePool:
         assert values[RED] == 0xFF           # the swatch wins on Left
         assert values[10 + RED] == 0x4E      # the scene holds Right
 
+    def test_releasing_the_swatch_reveals_the_scene(self, qapp,
+                                                    mock_fixture_def):
+        # Second touch on the held swatch releases it - the group falls
+        # through to the active scene, not to darkness.
+        scene = self._scene(groups=("Left",))
+        state, layer = self._two_group_setup(mock_fixture_def, scene)
+        state.set_scene("general/Wash")
+        state.selected = {"Left"}
+        state.stage_colour("red")
+        assert layer.render(0.0)[1][0][RED] == 0xFF
+        state.stage_colour("red")            # toggle off
+        values, _ = layer.render(0.0)[1]
+        assert values[RED] == 0x4E           # the scene shows again
+
     def test_scene_release_falls_through(self, qapp, mock_fixture_def):
         scene = self._scene(groups=("Left",))
         state, layer = self._two_group_setup(mock_fixture_def, scene)

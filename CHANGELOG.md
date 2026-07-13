@@ -97,6 +97,14 @@ verbatim as the GitHub Release notes (see [docs/releasing.md](docs/releasing.md)
   Hero Spot 60) used to light the fixture white at best - the wheel
   channel was never driven. The busk layer now steers the wheel to the
   nearest matching slot, the same mapping timeline playback uses.
+- **Colour swatches release on second touch.** A busked colour could
+  only be replaced or panic-cleared with RELEASE ALL - touching the
+  held swatch again did nothing, and since an explicit swatch
+  deliberately outranks a scene, a stuck colour also blocked the scene
+  on that group. Swatches now follow the same toggle contract as
+  position palettes: touching the swatch every selected group already
+  holds releases it, and the group falls through to the active scene
+  or the show underneath.
 - **The Live SCENES pool makes real light.** Touching a scene applies
   its colour to the groups it lists - whole-rig, independent of the
   current selection, under the same submaster/strobe treatment as
