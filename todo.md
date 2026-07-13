@@ -132,9 +132,18 @@ The beam/base axes likely need to come from the fixture definition
       live). Raw-DMX amplitude is gone from the live path. Bench
       re-check: the circle should now hug the spike mark at any throw.
 - [ ] Busk an INTENSITY FX + EFFECT together (live-output-plan phase
-      5 checkpoint): select the group, fire PULSE from INTENSITY FX
-      and a colour riff from EFFECTS - the dimmer pattern should ride
-      under the colour, each with its own PAUSE/KILL row.
+      5 checkpoint, RE-TEST after the conjunction fix 2026-07-13): the
+      first bench try failed because a held swatch pinned the dimmer
+      flat over the pattern and a claim-less pattern pumped against a
+      closed shutter (LIVE blackout floor claims nothing). Fixed: the
+      busk static dimmer YIELDS to engine dimmer groups (FLASH still
+      forces full) and their shutters are claimed open. Select the
+      group, fire PULSE (with or without a swatch) - the dimmer
+      pattern must show; add a colour riff from EFFECTS on top.
+- [ ] Try the movement STAGGER fader on the bench (new, user request
+      2026-07-13): with several heads selected and a shape running,
+      pull Stagger up - the heads should fan around the cycle (100 =
+      evenly spread) instead of moving in unison; 0 snaps them back.
 - [x] Aim a POSITION palette at real movers - CLOSED on the bench
       2026-07-13 with the yoke protocol: raw poses + four aimed
       targets landed standing AND hanging (the wire carries the

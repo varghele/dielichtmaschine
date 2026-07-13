@@ -1,0 +1,29 @@
+{
+  "name": "Waterfall",
+  "category": "intensity",
+  "description": "Level cascades across the group by stage position (cell fixtures shine, single dimmers step)",
+  "length_beats": 16,
+  "signature": "4/4",
+  "fixture_types": [],
+  "tags": [
+    "intensity",
+    "waterfall",
+    "cells"
+  ],
+  "author": "preset",
+  "version": "1.0",
+  "dimmer_blocks": [
+    {
+      "start_beat": 0,
+      "end_beat": 16,
+      "intensity": 230,
+      "strobe_speed": 0,
+      "iris": 255,
+      "effect_type": "waterfall",
+      "effect_speed": "1"
+    }
+  ],
+  "colour_blocks": [],
+  "movement_blocks": [],
+  "special_blocks": []
+}

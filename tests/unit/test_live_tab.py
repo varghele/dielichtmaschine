@@ -298,6 +298,18 @@ class TestPools:
             assert not riff.movement_blocks, riff.name
             assert not riff.special_blocks, riff.name
 
+    def test_bundled_riffs_cover_every_dimmer_rudiment(self):
+        # The pool carries EVERY registry rudiment except "static"
+        # (a static level is the submaster, not an FX).
+        from effects import DIMMER_REGISTRY
+        from riffs.riff_library import RiffLibrary
+        lib = RiffLibrary()
+        covered = {block.effect_type
+                   for riff in lib.get_all_riffs()
+                   if riff.category == "intensity"
+                   for block in riff.dimmer_blocks}
+        assert covered == set(DIMMER_REGISTRY) - {"static"}
+
     def test_intensity_riffs_stay_out_of_the_effects_pool(self,
                                                           live_tab):
         self._with_bundled_riffs(live_tab)
@@ -898,6 +910,19 @@ class TestMovementShapesPool:
         assert state.shape_size == 5.0
         state.set_shape_size(0.0)
         assert state.shape_size == 0.1
+
+    def test_stagger_fader_sets_the_spread(self, position_tab):
+        state = position_tab.state
+        assert state.shape_stagger == 0          # unison by default
+        position_tab._stagger_slider.value_changed.emit(60)
+        assert state.shape_stagger == 60
+        # The state sync mirrors the value back onto the fader.
+        assert position_tab._stagger_slider.value() == 60
+        state.set_shape_stagger(999)
+        assert state.shape_stagger == 100        # clamped
+        # A preference like size: survives RELEASE ALL.
+        state.release_all()
+        assert state.shape_stagger == 100
 
 
 class TestPositionPool:

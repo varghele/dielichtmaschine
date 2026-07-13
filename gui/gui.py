@@ -349,6 +349,9 @@ class MainWindow(QMainWindow, Ui_MainWindow):
                 engine=self._live_engine,
                 shape_groups_provider=(
                     self._live_movement_binder.active_groups),
+                dimmer_groups_provider=lambda: (
+                    self._live_effects_binder.dimmer_groups()
+                    | self._live_intensity_binder.dimmer_groups()),
             )
             arbiter.set_live_layer(self._live_busk_layer)
 

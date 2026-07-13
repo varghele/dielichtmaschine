@@ -455,6 +455,110 @@ class TestIntensityBinder:
         assert engine.active_slots() == ["effect"]
 
 
+class TestDimmerConjunction:
+    """The bench finding after phase 5: a held swatch pinned the
+    dimmer flat over the running intensity pattern, and a pattern
+    with no busk claim pumped against a closed shutter (the LIVE
+    blackout floor claims nothing). The busk layer now yields its
+    static dimmer to engine dimmer groups (FLASH still forces full)
+    and opens their shutters."""
+
+    SHUTTER = 10   # extra channel appended to the shared mock def
+
+    def _shutter_def(self, mock_fixture_def):
+        import copy
+        definition = copy.deepcopy(mock_fixture_def)
+        definition["channels"].append(
+            {"name": "Shutter", "preset": "ShutterStrobeOpen",
+             "group": "Shutter", "capabilities": []})
+        definition["modes"][0]["channels"].append(
+            {"number": self.SHUTTER, "name": "Shutter"})
+        return definition
+
+    def _stack(self, mock_fixture_def):
+        from config.models import RiffColourBlock
+        from gui.tabs.live_tab import COLOUR_SWATCHES, LiveState
+        from utils.artnet.dmx_manager import FixtureChannelMap
+        from utils.artnet.live_layer import LiveBuskLayer
+        definition = self._shutter_def(mock_fixture_def)
+        mh1 = _fixture("MH1", 1)
+        config = Configuration(
+            fixtures=[mh1],
+            groups={"Left": FixtureGroup(name="Left", fixtures=[mh1])},
+            universes={1: Universe(id=1, name="U1", output={})},
+        )
+        engine = LiveEngine(_factory(config, definition))
+        state = LiveState()
+        state.update_from_config(["Left"])
+        colour_riff = Riff(name="RedWash", category="looks",
+                           length_beats=4.0)
+        colour_riff.colour_blocks.append(
+            RiffColourBlock(start_beat=0.0, end_beat=4.0, red=255.0))
+        riffs = {"intensity/Pulse": _riff(),
+                 "looks/RedWash": colour_riff}
+        effects = LiveEffectsBinder(
+            state, engine, config_provider=lambda: config,
+            riff_provider=riffs.get)
+        intensity = LiveEffectsBinder(
+            state, engine, config_provider=lambda: config,
+            riff_provider=riffs.get,
+            slot="intensity", state_attr="intensity",
+            record_kind="intensity")
+        state.state_changed.connect(effects.sync)
+        state.state_changed.connect(intensity.sync)
+        layer = LiveBuskLayer(
+            state, config_provider=lambda: config,
+            swatches=COLOUR_SWATCHES, engine=engine,
+            dimmer_groups_provider=lambda: (effects.dimmer_groups()
+                                            | intensity.dimmer_groups()))
+        layer.set_fixture_maps(
+            {"MH1": FixtureChannelMap(mh1, definition, config)})
+        return state, layer, (effects, intensity)
+
+    def test_swatch_dimmer_yields_to_the_intensity_pattern(
+            self, qapp, mock_fixture_def):
+        state, layer, _binders = self._stack(mock_fixture_def)
+        state.set_selection(["Left"])
+        state.stage_colour("red")
+        state.set_intensity("intensity/Pulse")
+        values, mask = layer.render(0.0)[1]
+        assert values[RED] == 0xFF               # the swatch colour holds
+        assert mask[self.SHUTTER] and values[self.SHUTTER] == 255
+        # +1.0 s = pattern half B: the dimmer MOVES with the pattern
+        # instead of sitting pinned at the swatch's static 255.
+        values, _ = layer.render(1.0)[1]
+        assert values[DIMMER] == 100
+        assert values[RED] == 0xFF
+
+    def test_flash_still_forces_full(self, qapp, mock_fixture_def):
+        state, layer, _binders = self._stack(mock_fixture_def)
+        state.set_selection(["Left"])
+        state.set_intensity("intensity/Pulse")
+        state.set_flash("Left", True)
+        layer.render(0.0)
+        values, _ = layer.render(1.0)[1]          # pattern half B...
+        assert values[DIMMER] == 255              # ...but FLASH wins
+
+    def test_pattern_alone_gets_an_open_shutter(self, qapp,
+                                                mock_fixture_def):
+        state, layer, _binders = self._stack(mock_fixture_def)
+        state.set_selection(["Left"])
+        state.set_intensity("intensity/Pulse")    # no busk claim at all
+        values, mask = layer.render(0.0)[1]
+        assert mask[DIMMER] and values[DIMMER] == 255
+        assert mask[self.SHUTTER] and values[self.SHUTTER] == 255
+
+    def test_colour_only_riff_keeps_the_busk_dimmer(
+            self, qapp, mock_fixture_def):
+        state, layer, _binders = self._stack(mock_fixture_def)
+        state.set_selection(["Left"])
+        state.stage_colour("red")
+        state.set_effect("looks/RedWash")         # NO dimmer sublanes
+        values, mask = layer.render(1.0)[1]
+        # dimmer_groups is empty: the swatch's static dimmer applies.
+        assert mask[DIMMER] and values[DIMMER] == 255
+
+
 class TestEngineUnderBuskLayer:
     """The busk layer composes the engine frame BELOW its explicit
     writes (a touched swatch beats the running riff on that group)."""
@@ -664,6 +768,41 @@ class TestMovementBinder:
         assert not getattr(config, "spots", None), \
             "anchors must not leak into the saved config"
         assert not getattr(config, "live_shape_planes", None)
+
+    def test_stagger_fans_the_heads_around_the_loop(
+            self, qapp, mock_fixture_def):
+        from gui.tabs.live_tab import LiveState
+        from utils.artnet.live_engine import LiveMovementBinder
+        mh1 = _fixture("MH1", 1)          # x = 0.0 (default)
+        mh2 = _fixture("MH2", 11)
+        mh1.x, mh2.x = -1.0, 1.0
+        config = Configuration(
+            fixtures=[mh1, mh2],
+            groups={"Movers": FixtureGroup(name="Movers",
+                                           fixtures=[mh1, mh2])},
+            universes={1: Universe(id=1, name="U1", output={})},
+        )
+        engine = LiveEngine(_factory(config, mock_fixture_def))
+        state = LiveState()
+        state.update_from_config(["Movers"])
+        binder = LiveMovementBinder(state, engine,
+                                    config_provider=lambda: config)
+        state.state_changed.connect(binder.sync)
+        state.set_selection(["Movers"])
+        state.set_shape("circle")
+        # Unison (stagger 0): both heads trace the same phase.
+        values, _ = engine.render(0.0)[1]
+        at_zero_1 = self._expected("circle", mh1, (0.0, 0.0, 1.5), 0.0)
+        at_zero_2 = self._expected("circle", mh2, (0.0, 0.0, 1.5), 0.0)
+        assert (values[PAN], values[6]) == at_zero_1
+        assert (values[10 + PAN], values[10 + 6]) == at_zero_2
+        # Full stagger: head 2 of 2 leads by HALF the 16-beat loop.
+        state.set_shape_stagger(100)
+        values, _ = engine.render(0.1)[1]     # restaged, fresh beat 0
+        assert (values[PAN], values[6]) == at_zero_1
+        half_lap_2 = self._expected("circle", mh2, (0.0, 0.0, 1.5), 8.0)
+        assert (values[10 + PAN], values[10 + 6]) == half_lap_2
+        assert half_lap_2 != at_zero_2
 
     def test_orbit_radius_follows_the_size_chips(self, qapp,
                                                  mock_fixture_def):

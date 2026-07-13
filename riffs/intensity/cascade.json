@@ -1,0 +1,29 @@
+{
+  "name": "Cascade",
+  "category": "intensity",
+  "description": "Build-and-release rolling through the group (cell fixtures shine, single dimmers step)",
+  "length_beats": 16,
+  "signature": "4/4",
+  "fixture_types": [],
+  "tags": [
+    "intensity",
+    "cascade",
+    "cells"
+  ],
+  "author": "preset",
+  "version": "1.0",
+  "dimmer_blocks": [
+    {
+      "start_beat": 0,
+      "end_beat": 16,
+      "intensity": 230,
+      "strobe_speed": 0,
+      "iris": 255,
+      "effect_type": "cascade",
+      "effect_speed": "1"
+    }
+  ],
+  "colour_blocks": [],
+  "movement_blocks": [],
+  "special_blocks": []
+}

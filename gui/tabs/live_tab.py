@@ -255,6 +255,11 @@ class LiveState(QObject):
         # not a DMX amplitude. A preference like fade/bpm: survives
         # release_all and update_from_config.
         self.shape_size: float = DEFAULT_SHAPE_SIZE_M
+        # Stagger (0-100): spreads the mover heads of each group
+        # around the shape's loop instead of moving in unison - 0 is
+        # lockstep, 100 fans the heads evenly across the whole cycle.
+        # A preference like shape_size.
+        self.shape_stagger: int = 0
         # Staged INTENSITY FX (a bundled "intensity/..." dimmer riff
         # key). Same mechanics as effect on its own engine slot, so a
         # dimmer pattern and a colour riff run concurrently.
@@ -510,6 +515,13 @@ class LiveState(QObject):
         """Set the movement-shape orbit radius (meters, clamped to a
         sane stage range). A running shape restages to the new size."""
         self.shape_size = max(0.1, min(5.0, float(meters)))
+        self.state_changed.emit()
+
+    def set_shape_stagger(self, percent: int) -> None:
+        """Set the movement-shape stagger (0-100): how far each
+        group's heads spread around the loop instead of moving in
+        unison. A running shape restages to the new spread."""
+        self.shape_stagger = max(0, min(100, int(percent)))
         self.state_changed.emit()
 
     def stage_position(self, position_id: str,
@@ -1551,6 +1563,23 @@ class LiveTab(BaseTab):
             self._shape_size_buttons.append((btn, meters))
         size_box.addStretch(1)
         shapes_section_layout.addWidget(size_row)
+        # STAGGER fader: 0 = the group's heads trace in unison, 100 =
+        # evenly fanned around the whole cycle. A running shape
+        # restages live as the fader moves.
+        stagger_row = QWidget()
+        stagger_box = QHBoxLayout(stagger_row)
+        stagger_box.setContentsMargins(14, 0, 14, 6)
+        stagger_box.setSpacing(6)
+        stagger_box.addWidget(MicroLabel("Stagger", point_size=7,
+                                         tracking_em=0.12))
+        self._stagger_slider = _RateSlider()
+        self._stagger_slider.setToolTip(
+            "Spread the heads around the shape's cycle · 0 moves them "
+            "in unison, 100 fans them evenly")
+        self._stagger_slider.value_changed.connect(
+            self.state.set_shape_stagger)
+        stagger_box.addWidget(self._stagger_slider, 1)
+        shapes_section_layout.addWidget(stagger_row)
         shapes_host = QWidget()
         shape_grid = QGridLayout(shapes_host)
         shape_grid.setContentsMargins(14, 0, 14, 12)
@@ -2345,6 +2374,7 @@ class LiveTab(BaseTab):
             cell.set_active(shape_id == state.shape)
         for btn, meters in self._shape_size_buttons:
             self._sync_toggle(btn, abs(state.shape_size - meters) < 1e-9)
+        self._stagger_slider.set_value(state.shape_stagger)
 
         for name, fader in self._submaster_faders.items():
             fader.set_value(state.submasters.get(name, 100))

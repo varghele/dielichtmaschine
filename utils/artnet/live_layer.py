@@ -101,7 +101,9 @@ class LiveBuskLayer:
     def __init__(self, state, config_provider: Callable,
                  swatches=(), scene_provider: Optional[Callable] = None,
                  engine=None,
-                 shape_groups_provider: Optional[Callable] = None) -> None:
+                 shape_groups_provider: Optional[Callable] = None,
+                 dimmer_groups_provider: Optional[Callable] = None
+                 ) -> None:
         self._state = state
         self._config_provider = config_provider
         self._swatch_colors: Dict[str, Tuple[str, Optional[str]]] = {
@@ -122,6 +124,13 @@ class LiveBuskLayer:
         # positions become the shape's ANCHOR instead of a busk aim -
         # writing the static aim on top would freeze the orbit.
         self._shape_groups_provider = shape_groups_provider
+        # Zero-arg callable naming the groups whose ENGINE riff drives
+        # dimmer sublanes (the riff binders' dimmer_groups union). On
+        # these the busked colour keeps its colour/shutter claims but
+        # its STATIC dimmer write yields to the pattern (FLASH still
+        # forces full), and claim-less engine groups get shutter-open
+        # so the pattern can emit over the LIVE blackout floor.
+        self._dimmer_groups_provider = dimmer_groups_provider
         self._fixture_maps: Dict = {}
 
     def set_fixture_maps(self, fixture_maps) -> None:
@@ -161,6 +170,14 @@ class LiveBuskLayer:
         if self._shape_groups_provider is not None:
             shape_groups = self._shape_groups_provider() or frozenset()
 
+        # Groups whose engine riff drives dimmer sublanes: the busked
+        # colour's STATIC dimmer yields to the running pattern there,
+        # and claim-less groups still get their shutter opened below.
+        engine_dimmer_groups = frozenset()
+        if self._dimmer_groups_provider is not None:
+            engine_dimmer_groups = self._dimmer_groups_provider() \
+                or frozenset()
+
         claimed_groups = []
         position_groups = []
         for group_name, group in getattr(config, "groups", {}).items():
@@ -174,7 +191,8 @@ class LiveBuskLayer:
             if position_id and group_name not in shape_groups \
                     and group_has_movers(group):
                 position_groups.append((group, position_id))
-        if not claimed_groups and not position_groups:
+        if not claimed_groups and not position_groups \
+                and not engine_dimmer_groups:
             return engine_frame
 
         strobe_open = True
@@ -210,6 +228,12 @@ class LiveBuskLayer:
                         state.colours[group_name], (None, None))
                 else:
                     primary_hex, secondary_hex = scene_hex, None
+            # FLASH always forces full; otherwise an engine dimmer
+            # pattern on this group shows through the busked colour
+            # (the static dimmer write would pin the pattern flat -
+            # the bench finding behind live-output phase 5's fix).
+            dimmer_yields = group_name in engine_dimmer_groups \
+                and group_name not in state.flash
 
             fixtures = sorted(getattr(group, "fixtures", None) or [],
                               key=lambda f: f.x)
@@ -229,8 +253,9 @@ class LiveBuskLayer:
                     red = green = blue = None   # no colour claim
 
                 if fixture_map.dimmer_channels:
-                    _write(fixture_map, fixture_map.dimmer_channels,
-                           round(255 * effective))
+                    if not dimmer_yields:
+                        _write(fixture_map, fixture_map.dimmer_channels,
+                               round(255 * effective))
                     colour_scale = 1.0
                 else:
                     # Colour IS the intensity on dimmerless fixtures.
@@ -275,6 +300,18 @@ class LiveBuskLayer:
                 # Open the shutter so movers actually emit; the strobe
                 # chop happens on the dimmer, not the shutter channel.
                 _write(fixture_map, fixture_map.strobe_channels, 255)
+
+        # Engine-driven dimmer groups WITHOUT a busk claim still need
+        # their shutter opened: the LIVE blackout floor claims nothing,
+        # so a riff's dimmer pattern on a shutter fixture would pump
+        # against a closed shutter and never emit.
+        claimed_names = {name for name, _g, _c in claimed_groups}
+        for group_name in engine_dimmer_groups - claimed_names:
+            group = (getattr(config, "groups", {}) or {}).get(group_name)
+            for fixture in (getattr(group, "fixtures", None) or []):
+                fixture_map = self._fixture_maps.get(fixture.name)
+                if fixture_map is not None:
+                    _write(fixture_map, fixture_map.strobe_channels, 255)
 
         # -- position palettes: aim each group's movers at its target --
         # A fixture in several position-holding groups is written once

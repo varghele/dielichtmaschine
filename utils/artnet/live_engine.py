@@ -180,9 +180,31 @@ class LiveEngine:
 
     def _render_slot(self, record: _Slot) -> Frame:
         t = record.beat_pos * 60.0 / record.build_bpm
+        loop_seconds = record.loop_beats * 60.0 / record.build_bpm
         manager = record.manager
+        # Lanes may carry a per-lane TIME OFFSET as an optional third
+        # element (the movement binder's stagger): update_dmx evaluates
+        # every active block at ONE time, so offset groups render in
+        # separate passes whose frames merge. Per-fixture lanes claim
+        # disjoint channels, so pass order cannot conflict.
+        by_offset: Dict[float, list] = {}
+        for entry in record.lanes:
+            fixtures, light_blocks = entry[0], entry[1]
+            offset = float(entry[2]) if len(entry) > 2 else 0.0
+            by_offset.setdefault(offset, []).append(
+                (fixtures, light_blocks))
+        frames = []
+        for offset in sorted(by_offset):
+            t_lane = (t + offset) % loop_seconds if loop_seconds > 0 \
+                else t
+            frames.append(self._render_lanes(manager,
+                                             by_offset[offset], t_lane))
+        return self._merge(frames)
+
+    @staticmethod
+    def _render_lanes(manager, lanes, t: float) -> Frame:
         manager.clear_active_blocks()
-        for index, (fixtures, light_blocks) in enumerate(record.lanes):
+        for index, (fixtures, light_blocks) in enumerate(lanes):
             lane_key = f"live_lane_{index}"
             for light_block in light_blocks:
                 for block_type in _SUBLANES:
@@ -273,6 +295,15 @@ class LiveEffectsBinder:
         self._record_kind = record_kind
         # (staged key, frozenset of selected groups) actually staged.
         self._staged: Optional[tuple] = None
+        self._dimmer_groups: frozenset = frozenset()
+
+    def dimmer_groups(self) -> frozenset:
+        """Groups whose STAGED riff drives dimmer sublanes. The busk
+        layer lets the engine's pattern through on these (its own
+        static dimmer write yields; FLASH still forces full) and
+        claims shutter-open so the pattern can emit on shutter
+        fixtures over the LIVE blackout floor."""
+        return self._dimmer_groups
 
     def sync(self) -> None:
         state = self._state
@@ -284,15 +315,20 @@ class LiveEffectsBinder:
             if self._staged is not None:
                 engine.kill(self._slot)
                 self._staged = None
+                self._dimmer_groups = frozenset()
             return
 
         scope = frozenset(state.selected)
         if (key, scope) != self._staged:
-            lanes, loop_beats = self._build_lanes(key, scope, state.bpm)
+            lanes, loop_beats, has_dimmer = self._build_lanes(
+                key, scope, state.bpm)
             if lanes:
                 engine.stage(self._slot, lanes, loop_beats, state.bpm)
+                self._dimmer_groups = scope if has_dimmer \
+                    else frozenset()
             else:
                 engine.kill(self._slot)
+                self._dimmer_groups = frozenset()
             self._staged = (key, scope)
 
         record = next((r for r in state.running
@@ -300,15 +336,16 @@ class LiveEffectsBinder:
         engine.pause(self._slot, bool(record and record.get("paused")))
 
     def _build_lanes(self, key: str, scope, bpm: float):
-        """(lanes, loop_beats) for a riff key over the selected groups;
-        ([], 0) when the riff or every group resolves empty."""
+        """(lanes, loop_beats, has_dimmer) for a riff key over the
+        selected groups; ([], 0, False) when the riff or every group
+        resolves empty."""
         riff = self._riff_provider(key)
         config = self._config_provider()
         if riff is None or config is None:
-            return [], 0.0
+            return [], 0.0, False
         loop_beats = float(getattr(riff, "length_beats", 0.0) or 0.0)
         if loop_beats <= 0:
-            return [], 0.0
+            return [], 0.0, False
         structure = OnePartStructure(bpm)
         lanes = []
         for group_name in sorted(scope):
@@ -319,7 +356,8 @@ class LiveEffectsBinder:
                 continue
             lanes.append((fixtures,
                           [riff.to_light_block(0.0, structure)]))
-        return lanes, loop_beats
+        return lanes, loop_beats, bool(getattr(riff, "dimmer_blocks",
+                                               None))
 
 
 # Movement shapes loop over this many beats: at effect speed "1" the
@@ -417,10 +455,13 @@ class LiveMovementBinder:
             (g, state.positions.get(g, "")) for g in scope))
         radius = float(getattr(state, "shape_size", 0.0)
                        or SHAPE_ORBIT_RADIUS_M)
-        signature = (key, scope, anchors, radius)
+        stagger = max(0.0, min(1.0, float(
+            getattr(state, "shape_stagger", 0)) / 100.0))
+        signature = (key, scope, anchors, radius, stagger)
         if signature != self._staged:
             lanes, planes = self._build_lanes(key, scope, config,
-                                              state.bpm, radius)
+                                              state.bpm, radius,
+                                              stagger)
             if lanes:
                 engine.stage(
                     "movement", lanes, SHAPE_LOOP_BEATS, state.bpm,
@@ -436,12 +477,16 @@ class LiveMovementBinder:
         engine.pause("movement", bool(record and record.get("paused")))
 
     def _build_lanes(self, key: str, scope, config, bpm: float,
-                     radius: float):
+                     radius: float, stagger: float = 0.0):
         """(lanes, orbit_planes) - one lane per mover fixture, each
         with a horizontal orbit plane centred at its resolved anchor.
         ``radius`` is the orbit size in meters (block.pan_amplitude
         carries it as radius * _AMPLITUDE_PER_METER for the world
-        path's amplitude_meters conversion)."""
+        path's amplitude_meters conversion). ``stagger`` (0..1)
+        spreads the fixtures of each group around the loop: fixture i
+        of n (sorted by stage x) leads by stagger * i/n of a full
+        cycle via the per-lane time offset - 0 is unison, 1 an even
+        fan around the whole shape."""
         from config.models import LightBlock, MovementBlock, StagePlane
         from utils.position_presets import (
             compute_presets, resolve_position_target,
@@ -457,7 +502,10 @@ class LiveMovementBinder:
             group = (getattr(config, "groups", {}) or {}).get(group_name)
             anchor_id = self._state.positions.get(group_name) \
                 or "preset:centre"
-            for fixture in (getattr(group, "fixtures", None) or []):
+            fixtures = sorted(getattr(group, "fixtures", None) or [],
+                              key=lambda f: f.x)
+            total = len(fixtures)
+            for index, fixture in enumerate(fixtures):
                 target = resolve_position_target(
                     config, presets_by_id, anchor_id, fixture)
                 if target is None:      # stale mark: fall back to centre
@@ -481,5 +529,7 @@ class LiveMovementBinder:
                                          end_time=loop_seconds,
                                          effect_name="")
                 light_block.movement_blocks.append(block)
-                lanes.append(([fixture], [light_block]))
+                offset = stagger * loop_seconds * index / total \
+                    if total > 1 else 0.0
+                lanes.append(([fixture], [light_block], offset))
         return lanes, planes
