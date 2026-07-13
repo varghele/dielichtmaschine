@@ -23,6 +23,15 @@ verbatim as the GitHub Release notes (see [docs/releasing.md](docs/releasing.md)
   that, the default camera sat behind the band. Both are fixed: the view
   is now a faithful copy of the stage, seen from the audience. DMX
   output is unchanged by this fix.
+- **GDTF fixtures rendered upside down.** GDTF authors a fixture
+  hanging from its attachment point (the geometry tree extends downward),
+  while the app's own fixture bodies are authored standing - so the
+  mounting flip that hangs a standing body turned GDTF meshes the wrong
+  way up: a hung rig rendered standing, with its beams firing at the
+  ceiling (and effectively invisible in the 3D view). GDTF geometry is
+  now rotated upright on load when it is authored hanging, so hanging
+  and standing read correctly and the beams point where they should.
+  Floor-standing GDTF fixtures (bars authored upward) are untouched.
 - **The visualizer says where the audience is.** "AUDIENCE" is written
   on the apron at the front edge of the stage, so the orientation of the
   3D view is never in doubt.

@@ -56,6 +56,86 @@ def test_unknown_mode_falls_back_to_first_tree(spot_defn):
     assert any(i.is_beam for i in plan)
 
 
+def _translate_z(z):
+    m = np.eye(4)
+    m[2, 3] = z
+    return m
+
+
+def _item(name, z, is_beam=False):
+    from visualizer.renderer.gdtf_draw_plan import ChainStep, DrawItem
+    return DrawItem(node_name=name, model_name=name,
+                    chain=[ChainStep(matrix=_translate_z(z),
+                                     axis_attribute=None)],
+                    is_beam=is_beam)
+
+
+class TestPostureCanonicalization:
+    """GDTF suspends fixtures below their attachment origin (tree at
+    negative Z); the chassis frame is standing-authored (+Z up), and the
+    mounting presets flip a STANDING body. A hanging-authored plan must
+    be rotated upright or hung rigs render standing with beams at the
+    ceiling (the tester.lms Hero Spot 60 bug, 2026-07-13)."""
+
+    def test_hanging_authored_tree_is_rotated_upright(self):
+        from visualizer.renderer.gdtf_draw_plan import _canonicalize_posture
+        items = [_item("Base", 0.0), _item("Head", -0.24),
+                 _item("Beam", -0.33, is_beam=True)]
+        _canonicalize_posture(items)
+        zs = {i.node_name: i.compose(0, 0)[2, 3] for i in items}
+        assert zs["Base"] == pytest.approx(0.0)
+        assert zs["Head"] == pytest.approx(0.24), "head above the base"
+        assert zs["Beam"] == pytest.approx(0.33), "beam above the head"
+
+    def test_standing_authored_tree_is_untouched(self):
+        from visualizer.renderer.gdtf_draw_plan import _canonicalize_posture
+        items = [_item("Base", 0.0), _item("Cell", 0.04)]
+        _canonicalize_posture(items)
+        assert items[0].compose(0, 0)[2, 3] == pytest.approx(0.0)
+        assert items[1].compose(0, 0)[2, 3] == pytest.approx(0.04)
+        assert len(items[0].chain) == 1, "no flip step prepended"
+
+    def test_flat_tree_is_untouched(self):
+        from visualizer.renderer.gdtf_draw_plan import _canonicalize_posture
+        items = [_item("Body", 0.0)]
+        _canonicalize_posture(items)
+        assert len(items[0].chain) == 1
+
+    def test_axis_rotations_survive_the_flip(self):
+        # Pan/tilt still articulate the flipped subtree about the GDTF
+        # axis nodes; the flip is a rigid root rotation, not a re-rig.
+        from visualizer.renderer.gdtf_draw_plan import (
+            ChainStep, DrawItem, _canonicalize_posture,
+        )
+        beam = DrawItem(
+            node_name="Beam", model_name="Beam",
+            chain=[ChainStep(matrix=_translate_z(-0.2),
+                             axis_attribute="Pan")],
+            is_beam=True)
+        _canonicalize_posture([beam])
+        no_pan = beam.compose(0, 0)
+        panned = beam.compose(90, 0)
+        # Position is on the pan axis, so it must not move under pan...
+        assert panned[:3, 3] == pytest.approx(no_pan[:3, 3], abs=1e-9)
+        # ...but the frame must have rotated.
+        assert not np.allclose(panned[:3, :3], no_pan[:3, :3])
+
+
+_HERO_SPOT = glob.glob(os.path.join(REPO_ROOT, "gdtf_fixtures",
+                                    "Varytec@Hero Spot 60@*.gdtf"))
+
+
+@pytest.mark.skipif(not _HERO_SPOT,
+                    reason="local Share download not present (not committed)")
+def test_real_hero_spot_is_canonicalized_upright():
+    defn = parse_gdtf_file(_HERO_SPOT[0])
+    plan = build_draw_plan(defn.gdtf, "14-channel DMX mode")
+    beam = next(i for i in plan if i.is_beam)
+    # Authored hanging (beam at z=-0.325); canonicalized it sits above
+    # the attachment origin so the hanging preset flips it back down.
+    assert beam.compose(0, 0)[2, 3] > 0.3
+
+
 _MAGICBLADE = glob.glob(os.path.join(REPO_ROOT, "gdtf_fixtures",
                                      "Ayrton@MagicBlade R@*.gdtf"))
 

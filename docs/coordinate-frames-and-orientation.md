@@ -163,6 +163,17 @@ pan/tilt: mover-less rigs such as `theatre_static` are unaffected.
 **Pinned by:** `tests/unit/test_orientation.py`
 (`TestMountingPresets`, `TestMigration`, `TestAimingEndToEnd`).
 
+**GDTF authoring posture (2026-07-13):** the presets flip a
+STANDING-authored body, but GDTF authors suspended fixtures HANGING
+(origin = attachment point, tree extending down -Z, beams emitting
+down; 9 of the 10 local Share files). Fed through the hanging preset,
+such a mesh rendered upside down - standing, beams at the ceiling.
+`visualizer/renderer/gdtf_draw_plan.py::_canonicalize_posture` rotates
+hanging-authored plans upright (root 180-degree X rotation, chosen by
+the tree's z-extent so floor bars authored upward pass through), making
+every chassis standing-authored before the presets apply. Pinned by
+`tests/unit/test_gdtf_draw_plan.py::TestPostureCanonicalization`.
+
 ---
 
 ## 4. OPEN: does the yoke model describe a real moving head?

@@ -9,12 +9,25 @@ chain per frame; this module is plain numpy so the chain math is
 unit-testable headless.
 
 GDTF conventions (docs/gdtf-integration-plan.md Phase 3): right-handed
-Z-up, origin at the base plate, node Position matrices are relative to
-the PARENT, pan axes are Z-aligned, tilt axes X-aligned, Beam nodes
-emit along their local -Z. The chassis-local frame of the renderer is
-also Z-up (visualizer/renderer/reference.md), so no global basis change
-is needed; only the beam cone (built along +Z) needs a 180-degree flip
-onto -Z at the Beam node.
+Z-up, node Position matrices are relative to the PARENT, pan axes are
+Z-aligned, tilt axes X-aligned, Beam nodes emit along their local -Z.
+
+AUTHORING POSTURE (found 2026-07-13, the "hanging looks standing" bug):
+the GDTF origin is the ATTACHMENT point, and suspended fixtures (moving
+heads, washes, blinders - 9 of the 10 local Share files) are authored
+HANGING: the tree extends along -Z below the origin, beams emitting
+down. The renderer's chassis-local frame is the opposite posture -
+STANDING, geometry above the origin, +Z up - and the mounting presets
+flip a standing-authored body (hanging = pitch +90). Feeding a
+hanging-authored mesh through that flip turned it upside down: hung
+rigs rendered standing with their beams firing at the ceiling.
+:func:`build_draw_plan` therefore canonicalizes: when the tree extends
+predominantly downward it prepends a root 180-degree X rotation, so
+every plan is standing-authored like the procedural chassis. Trees
+authored upward (floor bars like the Giga Bar Pix 8) pass through
+unchanged. The beam cone (built along +Z) still needs its local
+180-degree flip onto the Beam node's -Z, applied in
+GdtfMeshChassisGeometry.beam_origin_transform.
 """
 
 from __future__ import annotations
@@ -136,4 +149,25 @@ def build_draw_plan(gdtf: GdtfData, mode_name: str) -> List[DrawItem]:
             visit(child, chain, depth + 1)
 
     visit(root, [], 0)
+    _canonicalize_posture(items)
     return items
+
+
+def _canonicalize_posture(items: List[DrawItem]) -> None:
+    """Rotate a hanging-authored tree into the standing chassis frame.
+
+    GDTF suspends fixtures from their attachment origin (nodes at
+    negative Z); the renderer's chassis-local convention is standing
+    (geometry above the origin). When the composed node origins extend
+    further below the origin than above it, prepend a 180-degree X
+    rotation to every chain so the mounting presets - which flip a
+    STANDING body - hang it the right way up. See the module docstring.
+    """
+    if not items:
+        return
+    zs = [item.compose(0.0, 0.0)[2, 3] for item in items]
+    min_z, max_z = min(zs), max(zs)
+    if min_z < -1e-6 and abs(min_z) > abs(max_z):
+        flip = ChainStep(matrix=_rot_x(180.0), axis_attribute=None)
+        for item in items:
+            item.chain.insert(0, flip)
