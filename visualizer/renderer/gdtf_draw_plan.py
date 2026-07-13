@@ -32,12 +32,20 @@ GdtfMeshChassisGeometry.beam_origin_transform.
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass, field
-from typing import List, Optional
+from typing import List, Optional, Tuple
 
 import numpy as np
 
 from utils.gdtf_data import GdtfData, GdtfGeometryNode
+
+
+class DrawPlan(list):
+    """The flattened draw items, plus whether the tree was posture-
+    flipped by :func:`_canonicalize_posture`. A list subclass so every
+    existing consumer that iterates the plan keeps working."""
+    flipped: bool = False
 
 
 @dataclass
@@ -100,7 +108,7 @@ def _resolve_axis(node: GdtfGeometryNode) -> Optional[str]:
     return None
 
 
-def build_draw_plan(gdtf: GdtfData, mode_name: str) -> List[DrawItem]:
+def build_draw_plan(gdtf: GdtfData, mode_name: str) -> DrawPlan:
     """Flatten the geometry tree for one DMX mode into draw items.
 
     GeometryReference nodes are expanded by instancing the referenced
@@ -115,9 +123,9 @@ def build_draw_plan(gdtf: GdtfData, mode_name: str) -> List[DrawItem]:
     if root is None and gdtf.geometry_trees:
         root = gdtf.geometry_trees[0]
     if root is None:
-        return []
+        return DrawPlan()
 
-    items: List[DrawItem] = []
+    items: DrawPlan = DrawPlan()
 
     def visit(node: GdtfGeometryNode, chain: List[ChainStep], depth: int) -> None:
         if depth > 16:   # wild-file cycle guard (reference loops)
@@ -149,11 +157,11 @@ def build_draw_plan(gdtf: GdtfData, mode_name: str) -> List[DrawItem]:
             visit(child, chain, depth + 1)
 
     visit(root, [], 0)
-    _canonicalize_posture(items)
+    items.flipped = _canonicalize_posture(items)
     return items
 
 
-def _canonicalize_posture(items: List[DrawItem]) -> None:
+def _canonicalize_posture(items: List[DrawItem]) -> bool:
     """Rotate a hanging-authored tree into the standing chassis frame.
 
     GDTF suspends fixtures from their attachment origin (nodes at
@@ -162,12 +170,63 @@ def _canonicalize_posture(items: List[DrawItem]) -> None:
     further below the origin than above it, prepend a 180-degree X
     rotation to every chain so the mounting presets - which flip a
     STANDING body - hang it the right way up. See the module docstring.
+    Returns whether the flip was applied.
     """
     if not items:
-        return
+        return False
     zs = [item.compose(0.0, 0.0)[2, 3] for item in items]
     min_z, max_z = min(zs), max(zs)
-    if min_z < -1e-6 and abs(min_z) > abs(max_z):
+    # Hanging-authored: the tree reaches further below the origin than
+    # above it - or lives entirely below it (a wild file with no node
+    # at the attachment origin).
+    if min_z < -1e-6 and (abs(min_z) > abs(max_z) or max_z < 1e-6):
         flip = ChainStep(matrix=_rot_x(180.0), axis_attribute=None)
         for item in items:
             item.chain.insert(0, flip)
+        return True
+    return False
+
+
+def solver_to_gdtf_axes(pan_deg: float, tilt_deg: float,
+                        flipped: bool = True) -> Tuple[float, float]:
+    """Convert solver-convention pan/tilt into GDTF axis angles.
+
+    THE TWO YOKE MODELS (the reason aimed beams missed their spots,
+    2026-07-13): the app's solver (utils/orientation.calculate_pan_tilt,
+    mirrored by MovementComponent and the procedural yoke chassis) uses
+    beam +X at home, pan about local Z, tilt about local Y - the beam at
+    tilt 0 is PERPENDICULAR to the pan axis. The GDTF geometry chain is
+    the REAL yoke: pan about the base's Z axis, tilt about the head's X
+    axis, beam along the Beam node's -Z - the beam at tilt 0 is ALONG
+    the pan axis. Feeding solver degrees straight into the chain aims
+    the mesh (and its light cone) somewhere else entirely.
+
+    This maps the solver's intended local beam direction
+    d = Rz(pan) @ Ry(-tilt) @ +X onto the chain's angles, assuming the
+    static node transforms between the axes are pure translations (true
+    for the local Share files; wild trees with rotated axis nodes would
+    need a numeric solve):
+
+    - flipped (hanging-authored tree, posture-canonicalized):
+      beam(panG, tiltG) = Rx(180) @ Rz(panG) @ Rx(tiltG) @ -Z
+      -> tiltG = acos(dz), panG = atan2(-dx, -dy)
+    - unflipped (standing-authored tree):
+      beam(panG, tiltG) = Rz(panG) @ Rx(tiltG) @ -Z
+      -> tiltG = acos(-dz), panG = atan2(-dx, dy)
+
+    At the straight-up/straight-down singularity pan is undefined and
+    returned as 0.
+    """
+    p, t = math.radians(pan_deg), math.radians(tilt_deg)
+    dx = math.cos(t) * math.cos(p)
+    dy = math.cos(t) * math.sin(p)
+    dz = math.sin(t)
+    if flipped:
+        tilt_g = math.degrees(math.acos(max(-1.0, min(1.0, dz))))
+        pan_g = (math.degrees(math.atan2(-dx, -dy))
+                 if abs(abs(dz) - 1.0) > 1e-9 else 0.0)
+    else:
+        tilt_g = math.degrees(math.acos(max(-1.0, min(1.0, -dz))))
+        pan_g = (math.degrees(math.atan2(-dx, dy))
+                 if abs(abs(dz) - 1.0) > 1e-9 else 0.0)
+    return pan_g, tilt_g

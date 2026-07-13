@@ -29,7 +29,11 @@ from utils.gdtf_data import GdtfData
 from utils.gdtf_mesh import BakedMesh, load_glb_mesh
 from utils.geometry import GeometryBuilder
 from visualizer.renderer.chassis import ChassisGeometry
-from visualizer.renderer.gdtf_draw_plan import DrawItem, build_draw_plan
+from visualizer.renderer.gdtf_draw_plan import (
+    DrawItem,
+    build_draw_plan,
+    solver_to_gdtf_axes,
+)
 from visualizer.renderer.gl_state import set_depth_mask
 from visualizer.renderer.shaders import (
     GDTF_MESH_FRAGMENT_SHADER,
@@ -151,6 +155,9 @@ class GdtfMeshChassisGeometry(ChassisGeometry):
         self._beam_item: Optional[DrawItem] = None
 
         plan = build_draw_plan(gdtf, mode_name)
+        # Posture decides the solver-to-GDTF-axis conversion signs
+        # (see solver_to_gdtf_axes).
+        self._flipped = bool(getattr(plan, 'flipped', False))
         for item in plan:
             if item.is_beam and self._beam_item is None:
                 self._beam_item = item
@@ -178,8 +185,13 @@ class GdtfMeshChassisGeometry(ChassisGeometry):
                 f"GDTF geometry tree of {gdtf_path} yields nothing drawable")
 
     def render(self, mvp: glm.mat4, model: glm.mat4, state=None) -> None:
-        pan = float(getattr(state, 'pan_deg', 0.0) or 0.0)
-        tilt = float(getattr(state, 'tilt_deg', 0.0) or 0.0)
+        # state carries SOLVER-convention degrees (MovementComponent);
+        # the chain rotates at the GDTF axes, a different yoke model.
+        pan, tilt = solver_to_gdtf_axes(
+            float(getattr(state, 'pan_deg', 0.0) or 0.0),
+            float(getattr(state, 'tilt_deg', 0.0) or 0.0),
+            self._flipped,
+        )
         self.ctx.disable(moderngl.BLEND)
         set_depth_mask(True)
         for entry in self.entries:
@@ -205,9 +217,13 @@ class GdtfMeshChassisGeometry(ChassisGeometry):
     def beam_origin_transform(self, pan_deg: float = 0.0,
                               tilt_deg: float = 0.0) -> glm.mat4:
         """Place the beam cone (built along +Z) at the GDTF Beam node,
-        emitting along the node's -Z (GDTF convention)."""
+        emitting along the node's -Z (GDTF convention). Takes
+        SOLVER-convention degrees, converted like :meth:`render` so the
+        cone leaves through the same lens the head shows."""
         if self._beam_item is None:
             return glm.mat4(1.0)
+        pan_deg, tilt_deg = solver_to_gdtf_axes(pan_deg, tilt_deg,
+                                                self._flipped)
         node = _np_to_glm(self._beam_item.compose(pan_deg, tilt_deg))
         flip = glm.rotate(glm.mat4(1.0), glm.radians(180.0),
                           glm.vec3(1.0, 0.0, 0.0))

@@ -27,6 +27,17 @@ verbatim as the GitHub Release notes (see [docs/releasing.md](docs/releasing.md)
   back-wall preset faced upstage and the front-wall preset faced the
   audience. Corrected; projects saved with the old values are fixed
   automatically on load.
+- **Aimed beams missed their targets on GDTF fixtures.** The aiming
+  math and the GDTF geometry describe two different yokes: the solver
+  aims with the beam perpendicular to the pan axis at tilt centre,
+  while a GDTF tree (like a real moving head) has the beam along the
+  pan axis at tilt centre. Feeding the solver's pan/tilt into the GDTF
+  chain unchanged pointed the head - and its light cone - somewhere
+  else entirely, so position presets and spot targets never landed.
+  The renderer now converts between the two conventions at the GDTF
+  chassis, verified closed-loop: a hanging mover aimed at a stage spot
+  through the real solver, DMX and render chain hits it to within a
+  few thousandths of a degree.
 - **GDTF fixtures rendered upside down.** GDTF authors a fixture
   hanging from its attachment point (the geometry tree extends downward),
   while the app's own fixture bodies are authored standing - so the

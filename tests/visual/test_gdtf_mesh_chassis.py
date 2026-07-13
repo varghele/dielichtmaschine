@@ -111,11 +111,13 @@ def test_mesh_chassis_renders_synthetic_spot(gl_context, fbo, tmp_path):
         chassis.render(_mvp(), glm.mat4(1.0))
         assert _rendered_pixels(fbo) > 50, "mesh chassis must draw pixels"
 
-        # Beam origin: at the GDTF Beam node, emitting -Z; tilt moves it.
+        # Beam origin takes SOLVER-convention degrees (converted onto
+        # the GDTF axes inside, see solver_to_gdtf_axes): home (0, 0)
+        # emits along solver local +X; solver tilt +90 sends it to +Z.
         rest = chassis.beam_origin_transform(0.0, 0.0) * glm.vec4(0, 0, 1, 0)
-        assert rest.z == pytest.approx(-1.0, abs=1e-5)  # cone +Z flipped onto -Z
+        assert rest.x == pytest.approx(1.0, abs=1e-5)
         tilted = chassis.beam_origin_transform(0.0, 90.0) * glm.vec4(0, 0, 1, 0)
-        assert abs(tilted.z) < 1e-5 and abs(tilted.y) == pytest.approx(1.0, abs=1e-5)
+        assert tilted.z == pytest.approx(1.0, abs=1e-5)
     finally:
         chassis.release()
 

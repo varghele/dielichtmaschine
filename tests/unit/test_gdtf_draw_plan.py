@@ -121,8 +121,150 @@ class TestPostureCanonicalization:
         assert not np.allclose(panned[:3, :3], no_pan[:3, :3])
 
 
+def _beam_dir_local(item, pan_g, tilt_g):
+    """The emitted beam direction in chassis-local space: the Beam
+    node's -Z after composing the chain (the same math the cone uses)."""
+    M = item.compose(pan_g, tilt_g)
+    return -M[:3, 2]
+
+
+def _solver_local_dir(pan_deg, tilt_deg):
+    """The solver's intended local beam direction for its (pan, tilt):
+    Rz(pan) @ Ry(-tilt) applied to +X (calculate_pan_tilt's model)."""
+    import math
+    p, t = math.radians(pan_deg), math.radians(tilt_deg)
+    return np.array([math.cos(t) * math.cos(p),
+                     math.cos(t) * math.sin(p),
+                     math.sin(t)])
+
+
+class TestSolverToGdtfAxes:
+    """The two yoke models: the solver aims with beam +X / tilt about Y,
+    the GDTF chain with beam -Z / tilt about X. The conversion must make
+    the chain emit exactly where the solver aimed - this is why aimed
+    beams missed their spots (2026-07-13)."""
+
+    def _mover_beam_item(self):
+        """A synthetic flipped mover: Pan axis at the base, Tilt at the
+        head, beam node below - the Hero Spot 60's shape."""
+        from visualizer.renderer.gdtf_draw_plan import (
+            ChainStep, DrawItem, _canonicalize_posture,
+        )
+        beam = DrawItem(
+            node_name="Beam", model_name="Beam", is_beam=True,
+            chain=[ChainStep(matrix=_translate_z(0.0), axis_attribute="Pan"),
+                   ChainStep(matrix=_translate_z(-0.2), axis_attribute="Tilt"),
+                   ChainStep(matrix=_translate_z(-0.1), axis_attribute=None)])
+        flipped = _canonicalize_posture([beam])
+        assert flipped
+        return beam
+
+    @pytest.mark.parametrize("pan,tilt", [
+        (0.0, 0.0), (30.0, 0.0), (-45.0, 20.0), (90.0, -35.0),
+        (170.0, 60.0), (-120.0, -80.0), (21.8, 0.0),
+    ])
+    def test_chain_emits_where_the_solver_aimed(self, pan, tilt):
+        from visualizer.renderer.gdtf_draw_plan import solver_to_gdtf_axes
+        beam = self._mover_beam_item()
+        pan_g, tilt_g = solver_to_gdtf_axes(pan, tilt, flipped=True)
+        np.testing.assert_allclose(
+            _beam_dir_local(beam, pan_g, tilt_g),
+            _solver_local_dir(pan, tilt), atol=1e-9)
+
+    def test_straight_down_is_the_pan_singularity(self):
+        from visualizer.renderer.gdtf_draw_plan import solver_to_gdtf_axes
+        # Solver tilt +90 = local +Z; for a flipped chain that is tilt 0
+        # (beam along the pan axis), pan undefined -> 0.
+        pan_g, tilt_g = solver_to_gdtf_axes(0.0, 90.0, flipped=True)
+        assert tilt_g == pytest.approx(0.0, abs=1e-9)
+        assert pan_g == 0.0
+
+    def test_unflipped_tree_uses_the_other_signs(self):
+        from visualizer.renderer.gdtf_draw_plan import (
+            ChainStep, DrawItem, solver_to_gdtf_axes,
+        )
+        beam = DrawItem(
+            node_name="Beam", model_name="Beam", is_beam=True,
+            chain=[ChainStep(matrix=_translate_z(0.0), axis_attribute="Pan"),
+                   ChainStep(matrix=_translate_z(0.2), axis_attribute="Tilt")])
+        for pan, tilt in ((0.0, 0.0), (40.0, 25.0), (-60.0, -10.0)):
+            pan_g, tilt_g = solver_to_gdtf_axes(pan, tilt, flipped=False)
+            np.testing.assert_allclose(
+                _beam_dir_local(beam, pan_g, tilt_g),
+                _solver_local_dir(pan, tilt), atol=1e-9)
+
+
+class TestAimedBeamHitsTheSpot:
+    """THE closed loop the user asked for: aim a hanging GDTF mover at a
+    stage-space spot through the real solver, drive the real chain with
+    the converted angles, and the emitted beam (in stage coordinates)
+    must point exactly at the spot - no eyes needed."""
+
+    FIXTURE = (0.0, 0.0, 5.0)   # hung 5 m above centre stage
+
+    @pytest.mark.parametrize("target", [
+        (2.0, 0.0, 0.0),     # floor, stage right
+        (-2.0, 0.0, 0.0),    # floor, stage left
+        (0.0, -2.0, 0.0),    # floor, toward the audience
+        (0.0, 2.0, 0.0),     # floor, upstage
+        (1.5, -1.5, 1.0),    # off-axis, raised (a lit spot on a riser)
+        (0.0, 0.0, 0.0),     # straight down
+    ], ids=lambda t: f"({t[0]},{t[1]},{t[2]})")
+    def test_hanging_gdtf_mover_hits_the_spot(self, target):
+        from utils.orientation import (
+            calculate_pan_tilt, fixture_rotation_matrix, preset_angles,
+        )
+        from visualizer.renderer.gdtf_draw_plan import solver_to_gdtf_axes
+
+        yaw, pitch, roll = preset_angles('hanging')
+        pan, tilt = calculate_pan_tilt(
+            *self.FIXTURE, *target, 'hanging', yaw, pitch, roll)
+
+        beam = TestSolverToGdtfAxes()._mover_beam_item()
+        pan_g, tilt_g = solver_to_gdtf_axes(pan, tilt, flipped=True)
+        local = _beam_dir_local(beam, pan_g, tilt_g)
+
+        # chassis local -> scene (the renderer's model matrix), then
+        # scene (x, y_up, z_depth) -> stage (x, depth, height).
+        scene = fixture_rotation_matrix(yaw, pitch, roll) @ local
+        stage_dir = np.array([scene[0], scene[2], scene[1]])
+
+        want = np.array(target) - np.array(self.FIXTURE)
+        want = want / np.linalg.norm(want)
+        np.testing.assert_allclose(stage_dir, want, atol=1e-6)
+
+
 _HERO_SPOT = glob.glob(os.path.join(REPO_ROOT, "gdtf_fixtures",
                                     "Varytec@Hero Spot 60@*.gdtf"))
+
+
+@pytest.mark.skipif(not _HERO_SPOT,
+                    reason="local Share download not present (not committed)")
+def test_real_hero_spot_hits_the_spot():
+    """The same closed loop through the REAL Hero Spot 60 chain."""
+    from utils.orientation import (
+        calculate_pan_tilt, fixture_rotation_matrix, preset_angles,
+    )
+    from visualizer.renderer.gdtf_draw_plan import solver_to_gdtf_axes
+
+    defn = parse_gdtf_file(_HERO_SPOT[0])
+    plan = build_draw_plan(defn.gdtf, "14-channel DMX mode")
+    assert plan.flipped
+    beam = next(i for i in plan if i.is_beam)
+
+    fixture = (0.0, 0.0, 5.0)
+    yaw, pitch, roll = preset_angles('hanging')
+    for target in ((2.0, 0.0, 0.0), (0.0, -2.0, 0.0), (-1.0, 1.0, 0.0)):
+        pan, tilt = calculate_pan_tilt(
+            *fixture, *target, 'hanging', yaw, pitch, roll)
+        pan_g, tilt_g = solver_to_gdtf_axes(pan, tilt, flipped=True)
+        local = _beam_dir_local(beam, pan_g, tilt_g)
+        scene = fixture_rotation_matrix(yaw, pitch, roll) @ local
+        stage_dir = np.array([scene[0], scene[2], scene[1]])
+        want = np.array(target) - np.array(fixture)
+        want = want / np.linalg.norm(want)
+        np.testing.assert_allclose(stage_dir, want, atol=1e-6,
+                                   err_msg=f"missed the spot at {target}")
 
 
 @pytest.mark.skipif(not _HERO_SPOT,
