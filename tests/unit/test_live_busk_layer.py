@@ -62,6 +62,31 @@ def rgb_par_def():
     }
 
 
+@pytest.fixture
+def wheel_spot_def():
+    """A wheel-only mover (the Hero Spot 60 shape): dimmer, shutter and
+    a colour WHEEL - no RGB emitters. Unless the busk layer steers the
+    wheel, such a fixture can never show a busked colour (the phase 0
+    root cause in docs/live-output-plan.md: swatches lit the bench rig
+    white at best)."""
+    return {
+        "manufacturer": "TestMfr", "model": "WheelModel",
+        "channels": [
+            {"name": "Dimmer", "preset": "IntensityMasterDimmer",
+             "group": "Intensity", "capabilities": []},
+            {"name": "Shutter", "preset": "ShutterStrobeOpen",
+             "group": "Shutter", "capabilities": []},
+            {"name": "Colour Wheel", "preset": "ColorWheel",
+             "group": "Colour", "capabilities": []},
+        ],
+        "modes": [{"name": "Standard", "channels": [
+            {"number": 0, "name": "Dimmer"},
+            {"number": 1, "name": "Shutter"},
+            {"number": 2, "name": "Colour Wheel"},
+        ]}],
+    }
+
+
 def _setup(mock_fixture_def, fixtures=None, groups=None):
     """(state, layer, config, maps) for a config; default one two-mover
     group."""
@@ -191,6 +216,166 @@ class TestDimmerlessFixtures:
         assert values[99 + 0] == 255
         assert values[99 + 1] == 255
         assert values[99 + 2] == 255
+
+
+class TestWheelOnlyFixtures:
+    """Wheel-only movers show a busked colour on the WHEEL channel via
+    the same rgb_to_color_wheel mapping playback uses; fixtures with
+    RGB emitters keep their wheel untouched."""
+
+    DIM, SHUTTER, WHEEL = 0, 1, 2
+
+    def _wheel_setup(self, wheel_spot_def):
+        mh = _fixture("WMH1", 1, model="WheelModel")
+        config = Configuration(
+            fixtures=[mh],
+            groups={"Spots": FixtureGroup(name="Spots", fixtures=[mh])},
+            universes={1: Universe(id=1, name="U1", output={})},
+        )
+        maps = {"WMH1": FixtureChannelMap(mh, wheel_spot_def, config)}
+        # The channel buckets under its preset AND its group (the
+        # get_channels_by_property quirk pinned in test_dmx_masks.py),
+        # so compare as sets.
+        assert set(maps["WMH1"].color_wheel_channels) == {self.WHEEL}
+        assert not maps["WMH1"].red_channels
+        state = LiveState()
+        state.update_from_config(["Spots"])
+        layer = LiveBuskLayer(state, config_provider=lambda: config,
+                              swatches=COLOUR_SWATCHES)
+        layer.set_fixture_maps(maps)
+        return state, layer
+
+    def test_swatch_steers_the_colour_wheel(self, qapp, wheel_spot_def):
+        from utils.artnet.dmx_manager import rgb_to_color_wheel
+        state, layer = self._wheel_setup(wheel_spot_def)
+        state.selected = {"Spots"}
+        state.stage_colour("red")            # FF2850
+        values, mask = layer.render(0.0)[1]
+        assert mask[self.DIM] and values[self.DIM] == 255
+        assert mask[self.SHUTTER] and values[self.SHUTTER] == 255
+        assert mask[self.WHEEL]
+        assert values[self.WHEEL] == rgb_to_color_wheel(0xFF, 0x28, 0x50)
+        assert values[self.WHEEL] == 37      # the red slot, not white
+
+    def test_flash_only_leaves_the_wheel_to_the_show(self, qapp,
+                                                     wheel_spot_def):
+        state, layer = self._wheel_setup(wheel_spot_def)
+        state.set_flash("Spots", True)
+        values, mask = layer.render(0.0)[1]
+        assert mask[self.DIM] and values[self.DIM] == 255
+        assert mask[self.WHEEL] == 0         # show colour survives
+
+    def test_rgb_fixture_wheel_write_is_guarded(self, qapp,
+                                                mock_fixture_def):
+        # The shared mock def's RGBW channels sit in group "Colour" so
+        # they ALSO bucket into color_wheel_channels (the
+        # get_channels_by_property quirk pinned in test_dmx_masks.py).
+        # Without the red/green/blue guard the wheel write would
+        # clobber the just-written swatch RGB with a wheel slot value.
+        state, layer, _, maps = _setup(mock_fixture_def)
+        assert set(maps["MH1"].color_wheel_channels) \
+            >= set(maps["MH1"].red_channels)
+        state.selected = {"Movers"}
+        state.stage_colour("red")
+        values, mask = layer.render(0.0)[1]
+        assert values[RED] == 0xFF           # swatch RGB, not slot 37
+        assert values[GREEN] == 0x28
+        assert values[BLUE] == 0x50
+        assert mask[GOBO] == 0
+
+
+class TestScenePool:
+    """Phase 1 of docs/live-output-plan.md: the active scene claims its
+    listed groups like an applied colour - selection-independent,
+    below explicit swatches, released on second touch (state contract:
+    set_scene(None))."""
+
+    def _scene(self, color="#4ECBD4", groups=("Left",)):
+        from config.models import Scene
+        return Scene(name="Wash", category="general", color=color,
+                     groups=list(groups))
+
+    def _two_group_setup(self, mock_fixture_def, scene):
+        mh1 = _fixture("MH1", 1, x=-1.0)
+        mh2 = _fixture("MH2", 11, x=1.0)
+        groups = {"Left": FixtureGroup(name="Left", fixtures=[mh1]),
+                  "Right": FixtureGroup(name="Right", fixtures=[mh2])}
+        config = Configuration(
+            fixtures=[mh1, mh2], groups=groups,
+            universes={1: Universe(id=1, name="U1", output={})},
+        )
+        maps = {f.name: FixtureChannelMap(f, mock_fixture_def, config)
+                for f in (mh1, mh2)}
+        state = LiveState()
+        state.update_from_config(groups.keys())
+        provider = lambda key: scene if key == "general/Wash" else None
+        layer = LiveBuskLayer(state, config_provider=lambda: config,
+                              swatches=COLOUR_SWATCHES,
+                              scene_provider=provider)
+        layer.set_fixture_maps(maps)
+        return state, layer
+
+    def test_scene_lights_its_groups_without_selection(
+            self, qapp, mock_fixture_def):
+        scene = self._scene(groups=("Left",))
+        state, layer = self._two_group_setup(mock_fixture_def, scene)
+        state.set_scene("general/Wash")
+        values, mask = layer.render(0.0)[1]
+        # Left (base 0): dimmer at the submaster, the scene hex 4ECBD4.
+        assert mask[DIMMER] and values[DIMMER] == 255
+        assert values[RED] == 0x4E
+        assert values[GREEN] == 0xCB
+        assert values[BLUE] == 0xD4
+        # Right is not in the scene: nothing claimed.
+        assert mask[10 + DIMMER] == 0
+
+    def test_swatch_overrides_scene_per_group(self, qapp,
+                                              mock_fixture_def):
+        scene = self._scene(groups=("Left", "Right"))
+        state, layer = self._two_group_setup(mock_fixture_def, scene)
+        state.set_scene("general/Wash")
+        state.selected = {"Left"}
+        state.stage_colour("red")            # FF2850
+        values, _ = layer.render(0.0)[1]
+        assert values[RED] == 0xFF           # the swatch wins on Left
+        assert values[10 + RED] == 0x4E      # the scene holds Right
+
+    def test_scene_release_falls_through(self, qapp, mock_fixture_def):
+        scene = self._scene(groups=("Left",))
+        state, layer = self._two_group_setup(mock_fixture_def, scene)
+        state.set_scene("general/Wash")
+        assert layer.render(0.0)
+        state.set_scene(None)                # second touch releases
+        assert layer.render(0.0) == {}
+
+    def test_unknown_key_or_colourless_scene_renders_nothing(
+            self, qapp, mock_fixture_def):
+        scene = self._scene(color="", groups=("Left",))
+        state, layer = self._two_group_setup(mock_fixture_def, scene)
+        state.set_scene("general/Wash")      # scene has no colour
+        assert layer.render(0.0) == {}
+        state.set_scene("general/Ghost")     # provider returns None
+        assert layer.render(0.0) == {}
+
+    def test_scene_ghost_group_is_ignored(self, qapp, mock_fixture_def):
+        scene = self._scene(groups=("Left", "Ghost"))
+        state, layer = self._two_group_setup(mock_fixture_def, scene)
+        state.set_scene("general/Wash")
+        values, mask = layer.render(0.0)[1]
+        assert mask[DIMMER]                  # Left still lights
+        assert mask[10 + DIMMER] == 0        # no stray claims
+
+    def test_scene_takes_the_group_level_and_strobe(self, qapp,
+                                                    mock_fixture_def):
+        scene = self._scene(groups=("Left",))
+        state, layer = self._two_group_setup(mock_fixture_def, scene)
+        state.set_scene("general/Wash")
+        state.set_submaster("Left", 50)
+        values, _ = layer.render(0.0)[1]
+        assert values[DIMMER] == 128         # same resolve as swatches
+        state.set_strobe_on(True)
+        state.set_strobe_rate(0)             # 1 Hz chop
+        assert layer.render(0.75)[1][0][DIMMER] == 0
 
 
 class TestStrobe:

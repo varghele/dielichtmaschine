@@ -44,15 +44,15 @@ Regions (North Star 3b):
 
 Honest omissions vs. the reference: the live 3D render / DMX meters,
 the FX-speed/size/white-wash bank slots and the transport clock are
-still placeholders. EFFECTS and SCENES stay state-only (the dual
-queue's PAUSE and KILL mutate records; playing a riff/scene needs the
-v1.7 engine). POSITION PALETTES lists computed presets (targets
-derived from the real stage setup) and the stage's real spike marks
-(``config.spots``) as selectable cells, but staging one only mutates
-``LiveState`` - converting a target into pan/tilt is the v1.5a focus
-geometry milestone, so no fixture moves yet. The colour PICKER, SONG
-PALETTE link and "+ REC" capture, and the MOVEMENT / INTENSITY pools,
-are staged for later passes and marked "arrives next".
+still placeholders. SCENES make real light (the busk layer renders the
+active scene's colour on its listed groups, below explicit swatches);
+EFFECTS stay state-only until the live engine lands (the dual queue's
+PAUSE and KILL mutate records; playing a riff needs
+docs/live-output-plan.md phase 3). POSITION PALETTES aim for real: the
+busk layer converts a staged target into 16-bit pan/tilt claims. The
+colour PICKER, SONG PALETTE link and "+ REC" capture, and the
+MOVEMENT / INTENSITY pools, are staged for later passes and marked
+"arrives next".
 """
 
 from typing import Dict, List, Optional, Tuple
@@ -303,14 +303,18 @@ class LiveState(QObject):
         self.state_changed.emit()
 
     # -- colour palettes ------------------------------------------------
-    def stage_colour(self, colour_id: str) -> None:
+    def stage_colour(self, colour_id: str) -> int:
         """Touch a colour swatch: record it as the staged colour and apply
         it to every selected group at the current fade time. Mutual
-        exclusion - a group holds at most one colour, newest touch wins."""
+        exclusion - a group holds at most one colour, newest touch wins.
+        Returns the number of groups the colour was applied to - 0 means
+        nothing was selected and the touch changed no output (the tab
+        turns that into visible feedback instead of silence)."""
         self.staged_colour = colour_id
         for group in self.selected:
             self.colours[group] = colour_id
         self.state_changed.emit()
+        return len(self.selected)
 
     def active_colour_ids(self) -> set:
         """Swatch ids currently applied to any selected group - the
@@ -436,7 +440,7 @@ class LiveState(QObject):
         self.state_changed.emit()
 
     def stage_position(self, position_id: str,
-                       label: Optional[str] = None) -> None:
+                       label: Optional[str] = None) -> int:
         """Touch a position palette (a namespaced preset or spike-mark
         id, movers-only): apply it to every selected group, mutual
         exclusion per group like colours. Touching an id every selected
@@ -444,10 +448,12 @@ class LiveState(QObject):
         falls back to the show underneath) - positions toggle where
         colours only replace. ``label`` is the display name the
         programmer bar shows for the id. Not a playback, so it does not
-        mirror into the running stack."""
+        mirror into the running stack. Returns the number of groups
+        affected (applied or released) - 0 means nothing was selected
+        and the touch was a no-op the tab must surface, not swallow."""
         if not self.selected:
             self.state_changed.emit()
-            return
+            return 0
         if label is not None:
             self.position_labels[position_id] = label
         if all(self.positions.get(g) == position_id
@@ -458,6 +464,7 @@ class LiveState(QObject):
             for group in self.selected:
                 self.positions[group] = position_id
         self.state_changed.emit()
+        return len(self.selected)
 
     def active_position_ids(self) -> set:
         """Position ids applied to any selected group - the cells the
@@ -941,7 +948,11 @@ class _LibraryCell(QWidget):
 class LiveTab(BaseTab):
     """Live busking palette surface (reference screen 09, layout 3b).
 
-    A UI shell over :class:`LiveState`; no output engine is wired yet.
+    A UI shell over :class:`LiveState`. Output happens in
+    utils/artnet/live_layer.py, which renders this state as the
+    arbiter's LIVE layer whenever ArtNet output is enabled: colours,
+    scenes, submasters, flash, strobe and position aims are real;
+    effects wait on the live engine (docs/live-output-plan.md).
     """
 
     def __init__(self, config: Configuration, parent=None):
@@ -1054,8 +1065,8 @@ class LiveTab(BaseTab):
         self._mode_group = QButtonGroup(self)
         self._mode_group.setExclusive(True)
         self._show_mode_btn = self._mode_chip("SHOW", "show",
-            "Run a predefined show underneath the live surface (merge "
-            "arrives with the output engine)")
+            "Run a predefined show underneath the live surface · the "
+            "busk rides on top (busk-on-top merge)")
         self._live_mode_btn = self._mode_chip("LIVE", "live",
             "Free-busk: nothing else runs underneath the live surface")
         hbox.addWidget(self._show_mode_btn)
@@ -1471,8 +1482,7 @@ class LiveTab(BaseTab):
                 self._preset_grid, i, preset.preset_id, preset.label,
                 preset.tag,
                 f"{preset.label} · computed from the stage setup · "
-                f"{where} · touch to point the selected movers at it "
-                "(state-only, no output engine yet)")
+                f"{where} · touch to point the selected movers at it")
         for col in range(2):
             self._preset_grid.setColumnStretch(col, 1)
 
@@ -1489,7 +1499,7 @@ class LiveTab(BaseTab):
                 f"{spot.x:.1f} · {spot.y:.1f}",
                 f"{name} · stage {spot.x:.1f} / {spot.y:.1f} / "
                 f"{spot.z:.1f} m · touch to point the selected movers "
-                "at it (state-only, no output engine yet)")
+                "at it")
         for col in range(2):
             self._marks_grid.setColumnStretch(col, 1)
 
@@ -1666,6 +1676,14 @@ class LiveTab(BaseTab):
         for col in range(columns):
             self._scenes_grid.setColumnStretch(col, 1)
 
+    def scene_for_key(self, key: Optional[str]):
+        """The Scene behind a "category/name" pool key, or None. The
+        busk output layer (utils/artnet/live_layer.py) resolves the
+        active LiveState.scene through this."""
+        if not key:
+            return None
+        return self._resolve_scene_library().scenes.get(key)
+
     def set_effect_library(self, library) -> None:
         """Inject the shared RiffLibrary and rebuild the EFFECTS pool."""
         self._effect_library = library if library is not None \
@@ -1686,7 +1704,11 @@ class LiveTab(BaseTab):
         # Colour swatches stay fire-only this pass: the QUEUE latch only
         # covers EFFECTS and SCENES cells (queueing colours can come
         # later once a queued colour has a defined target selection).
-        self.state.stage_colour(colour_id)
+        if not self.state.stage_colour(colour_id):
+            self._flash_programmer_warning(
+                "NO GROUP SELECTED · PICK GROUPS, THEN TOUCH A COLOUR")
+        else:
+            self._clear_programmer_warning()
 
     def _on_effect_touched(self, key: str) -> None:
         """Latched QUEUE stages the effect in next_up (cell stays
@@ -1708,8 +1730,12 @@ class LiveTab(BaseTab):
         (per-group, like colours). Fire-only - the QUEUE latch covers
         EFFECTS/SCENES cells; positions are not playbacks. The busk
         output layer aims each group's movers at its applied target."""
-        self.state.stage_position(position_id,
-                                  self._position_labels.get(position_id))
+        if not self.state.stage_position(
+                position_id, self._position_labels.get(position_id)):
+            self._flash_programmer_warning(
+                "NO GROUP SELECTED · PICK GROUPS, THEN TOUCH A POSITION")
+        else:
+            self._clear_programmer_warning()
 
     def _on_select_all(self) -> None:
         self.state.set_selection(self.config.groups.keys())
@@ -1729,7 +1755,27 @@ class LiveTab(BaseTab):
         self._programmer_label.setStyleSheet(
             f"color: {_active_tokens()['accent_line']};")
         row.addWidget(self._programmer_label, 1)
+        # Transient no-op feedback: a palette touch with nothing
+        # selected changes no output; instead of silence the bar shows
+        # a warning until the timer runs out (or real state replaces
+        # it - _refresh_programmer prefers the warning while active).
+        self._programmer_warning = ""
+        self._programmer_warning_timer = QTimer(self)
+        self._programmer_warning_timer.setSingleShot(True)
+        self._programmer_warning_timer.timeout.connect(
+            self._clear_programmer_warning)
         return bar
+
+    def _flash_programmer_warning(self, text: str,
+                                  duration_ms: int = 2500) -> None:
+        self._programmer_warning = text
+        self._programmer_warning_timer.start(duration_ms)
+        self._refresh_programmer()
+
+    def _clear_programmer_warning(self) -> None:
+        self._programmer_warning = ""
+        self._programmer_warning_timer.stop()
+        self._refresh_programmer()
 
     # -- RIGHT: playbacks, strobe, kills ---------------------------------
 
@@ -2249,6 +2295,10 @@ class LiveTab(BaseTab):
             button.blockSignals(False)
 
     def _refresh_programmer(self) -> None:
+        if self._programmer_warning \
+                and self._programmer_warning_timer.isActive():
+            self._programmer_label.setText(self._programmer_warning)
+            return
         state = self.state
         selected = sorted(state.selected)
         if selected:

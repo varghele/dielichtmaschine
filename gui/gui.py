@@ -284,6 +284,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
                 state=self.live_tab.state,
                 config_provider=lambda: self.live_tab.config,
                 swatches=COLOUR_SWATCHES,
+                scene_provider=self.live_tab.scene_for_key,
             )
             arbiter.set_live_layer(self._live_busk_layer)
 

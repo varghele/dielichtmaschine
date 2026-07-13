@@ -180,6 +180,45 @@ class TestColourPool:
             assert cell.isEnabled() is False
 
 
+class TestNoSelectionFeedback:
+    """A palette touch with nothing selected changes no output; the
+    programmer bar must say so instead of staying silent (phase 0 of
+    docs/live-output-plan.md)."""
+
+    def test_swatch_with_no_selection_flashes_a_warning(self, live_tab):
+        live_tab._colour_swatches["red"].clicked.emit("red")
+        assert "NO GROUP SELECTED" in live_tab._programmer_label.text()
+        assert live_tab._programmer_warning_timer.isActive()
+
+    def test_position_with_no_selection_flashes_a_warning(self, live_tab):
+        live_tab._on_position_touched("preset:centre")
+        assert "NO GROUP SELECTED" in live_tab._programmer_label.text()
+
+    def test_warning_expires_back_to_programmer_text(self, live_tab):
+        live_tab._colour_swatches["red"].clicked.emit("red")
+        live_tab._clear_programmer_warning()      # the timer firing
+        text = live_tab._programmer_label.text()
+        assert "NO GROUP SELECTED" not in text
+        assert "PROGRAMMER" in text
+
+    def test_touch_with_selection_shows_no_warning(self, live_tab):
+        live_tab.state.toggle_group("Front Pars")
+        live_tab._colour_swatches["red"].clicked.emit("red")
+        assert "NO GROUP SELECTED" not in live_tab._programmer_label.text()
+
+    def test_state_mutators_report_the_applied_count(self, live_tab):
+        state = live_tab.state
+        assert state.stage_colour("red") == 0
+        assert state.stage_position("preset:centre", "Centre") == 0
+        state.toggle_group("Front Pars")
+        state.toggle_group("Movers")
+        assert state.stage_colour("red") == 2
+        assert state.stage_position("preset:centre", "Centre") == 2
+        # The release toggle (second touch on a fully-held id) still
+        # counts as an action, not a no-op.
+        assert state.stage_position("preset:centre", "Centre") == 2
+
+
 class TestPools:
     def test_three_pools_exist(self, live_tab):
         assert live_tab._colour_pool is not None
@@ -631,6 +670,16 @@ class TestScenesPool:
         live_tab.state.set_scene("looks/Warm Wash")  # toggle off
         assert len(hits) == 2
         assert live_tab.state.scene is None
+
+    def test_scene_for_key_resolves_the_pool_key(self, live_tab,
+                                                 tmp_path):
+        # The busk output layer resolves LiveState.scene through this.
+        live_tab.set_scene_library(_scene_library(
+            tmp_path, [("Warm Wash", "looks", "#F0562E")]))
+        scene = live_tab.scene_for_key("looks/Warm Wash")
+        assert scene is not None and scene.color == "#F0562E"
+        assert live_tab.scene_for_key("looks/Ghost") is None
+        assert live_tab.scene_for_key(None) is None
 
     def test_programmer_bar_shows_scene(self, live_tab, tmp_path):
         live_tab.set_scene_library(_scene_library(

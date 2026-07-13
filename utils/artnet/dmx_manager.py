@@ -23,6 +23,42 @@ DEFAULT_PAN_RANGE = 540.0
 DEFAULT_TILT_RANGE = 270.0
 
 
+def rgb_to_color_wheel(r: float, g: float, b: float) -> int:
+    """
+    Map RGB to color wheel position.
+
+    Simple mapping to closest standard color.
+    DMX values are set to mid-range of typical color wheel positions
+    to work with most fixtures (Varytec Hero Spot 60, etc.)
+
+    Module-level so the Live busk layer (utils/artnet/live_layer.py)
+    steers wheel-only movers the same way playback does.
+    """
+    # Standard color wheel positions (using mid-range DMX values)
+    # Most color wheels have ~25 DMX values per color
+    wheel_colors = [
+        (255, 255, 255, 12),   # White (typically 0-24)
+        (255, 0, 0, 37),       # Red (typically 25-50)
+        (255, 255, 0, 63),     # Yellow (typically 51-75)
+        (173, 216, 230, 88),   # Light Blue (typically 76-100)
+        (0, 255, 0, 113),      # Green (typically 101-125)
+        (255, 170, 0, 138),    # Amber/Orange (typically 126-150)
+        (238, 130, 238, 163),  # Violet (typically 151-175)
+        (0, 0, 255, 188),      # Blue (typically 176-200)
+    ]
+
+    min_distance = float('inf')
+    closest_value = 12  # Default to white
+
+    for wr, wg, wb, dmx_value in wheel_colors:
+        distance = ((r - wr) ** 2 + (g - wg) ** 2 + (b - wb) ** 2) ** 0.5
+        if distance < min_distance:
+            min_distance = distance
+            closest_value = dmx_value
+
+    return closest_value
+
+
 class FixtureChannelMap:
     """
     Maps a fixture's capabilities to its DMX channel addresses.
@@ -1012,33 +1048,4 @@ class DMXManager:
                 self.set_dmx_value(universe, channel, int(block.zoom))
 
     def _rgb_to_color_wheel(self, r: float, g: float, b: float) -> int:
-        """
-        Map RGB to color wheel position.
-
-        Simple mapping to closest standard color.
-        DMX values are set to mid-range of typical color wheel positions
-        to work with most fixtures (Varytec Hero Spot 60, etc.)
-        """
-        # Standard color wheel positions (using mid-range DMX values)
-        # Most color wheels have ~25 DMX values per color
-        wheel_colors = [
-            (255, 255, 255, 12),   # White (typically 0-24)
-            (255, 0, 0, 37),       # Red (typically 25-50)
-            (255, 255, 0, 63),     # Yellow (typically 51-75)
-            (173, 216, 230, 88),   # Light Blue (typically 76-100)
-            (0, 255, 0, 113),      # Green (typically 101-125)
-            (255, 170, 0, 138),    # Amber/Orange (typically 126-150)
-            (238, 130, 238, 163),  # Violet (typically 151-175)
-            (0, 0, 255, 188),      # Blue (typically 176-200)
-        ]
-
-        min_distance = float('inf')
-        closest_value = 12  # Default to white
-
-        for wr, wg, wb, dmx_value in wheel_colors:
-            distance = ((r - wr) ** 2 + (g - wg) ** 2 + (b - wb) ** 2) ** 0.5
-            if distance < min_distance:
-                min_distance = distance
-                closest_value = dmx_value
-
-        return closest_value
+        return rgb_to_color_wheel(r, g, b)

@@ -135,8 +135,29 @@ Hardware checkpoints after 0/1, 3, and 4 - the bench rig is set up.
 
 ## Status
 
-- [ ] Phase 0 - swatch bug + no-selection feedback
-- [ ] Phase 1 - scenes -> light
+- [x] Phase 0 - swatch bug + no-selection feedback. Root cause found in
+  code review before the bench even fired: the busk layer only wrote
+  RGB/CMY emitter channels, and the bench rig's Hero Spot 60 has NONE -
+  it is a colour-wheel fixture, so a swatch opened dimmer + shutter
+  (white at best) and could never show a colour. The layer now steers
+  color_wheel_channels via the shared rgb_to_color_wheel mapping
+  (extracted to module level in utils/artnet/dmx_manager.py; playback
+  behaviour unchanged), guarded on RGB-channel absence - the guard
+  matters because group "Colour" RGB channels also bucket into
+  color_wheel_channels (the get_channels_by_property quirk). Palettes
+  touched with no selection flash NO GROUP SELECTED in the programmer
+  bar (stage_colour/stage_position now return the applied count).
+  Tests: TestWheelOnlyFixtures in test_live_busk_layer.py,
+  TestNoSelectionFeedback in test_live_tab.py. Hardware checkpoint
+  pending: user confirms swatches light the rig in colour.
+- [x] Phase 1 - scenes -> light. LiveBuskLayer gained a scene_provider
+  (gui.py injects LiveTab.scene_for_key); the active scene claims its
+  listed groups like an applied colour, selection-independent, below
+  explicit swatches, same level/strobe resolve. Stale "no output
+  engine" markers removed from tooltips and docstrings. Tests:
+  TestScenePool in test_live_busk_layer.py. Hardware checkpoint
+  pending: user busks a scene (needs an authored scene JSON - the
+  bundled library ships empty).
 - [ ] Phase 2 - LiveEngine infrastructure
 - [ ] Phase 3 - effects pool riff player + queue
 - [ ] Phase 4 - movement shapes pool

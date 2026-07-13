@@ -961,6 +961,10 @@ class TestOutputShellWiring:
         assert window.output_arbiter() is arbiter   # accessor is stable
         # The Live tab's OUT chip polls this arbiter.
         assert window.live_tab._status_arbiter is arbiter
+        # The busk layer resolves the SCENES pool through the tab
+        # (live-output-plan phase 1).
+        assert window._live_busk_layer._scene_provider == \
+            window.live_tab.scene_for_key
 
     def test_live_masters_push_into_the_arbiter(self, wired_window):
         window, arbiter = wired_window

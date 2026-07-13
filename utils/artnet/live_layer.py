@@ -12,7 +12,14 @@ busk programmer actually drives:
   two-colour swatches alternate primary/secondary across the group's
   fixtures by stage X) and shutter-open. A claim to zero on the unused
   colour channels is deliberate: a red busk over a blue show must read
-  red, not purple.
+  red, not purple. Fixtures with NO RGB emitters but a colour wheel
+  (wheel-only movers) get the wheel steered to the nearest slot via
+  the same rgb_to_color_wheel mapping playback uses.
+- The ACTIVE SCENE (LiveState.scene, resolved through the injected
+  scene_provider) claims its listed groups exactly like an applied
+  colour - selection-independent, same level/strobe treatment - but
+  BELOW explicit swatches: a touched swatch on a group overrides the
+  scene on that group. Second touch releases (the state contract).
 - A group HELD ON FLASH without a colour claims only dimmer +
   shutter - the show's colour keeps showing through underneath at
   busk intensity (dimmer merges HTP in the arbiter).
@@ -53,6 +60,7 @@ from utils.position_presets import (
 )
 
 from .arbiter import Frame
+from .dmx_manager import rgb_to_color_wheel
 
 # Strobe rate fader (0-100) maps linearly onto this chop frequency
 # band (Hz); 50% duty cycle against the arbiter clock.
@@ -86,13 +94,19 @@ class LiveBuskLayer:
     """
 
     def __init__(self, state, config_provider: Callable,
-                 swatches=()) -> None:
+                 swatches=(), scene_provider: Optional[Callable] = None
+                 ) -> None:
         self._state = state
         self._config_provider = config_provider
         self._swatch_colors: Dict[str, Tuple[str, Optional[str]]] = {
             swatch_id: (primary, secondary)
             for swatch_id, _label, primary, secondary in swatches
         }
+        # Zero-arg-plus-key resolver for the SCENES pool: maps a
+        # "category/name" LiveState.scene key to the Scene object (or
+        # None). Injected (the tab owns the SceneLibrary) so this
+        # module stays gui-free.
+        self._scene_provider = scene_provider
         self._fixture_maps: Dict = {}
 
     def set_fixture_maps(self, fixture_maps) -> None:
@@ -106,13 +120,28 @@ class LiveBuskLayer:
         if config is None or not self._fixture_maps:
             return {}
 
+        # The active SCENE (LiveState.scene): a whole-rig look claiming
+        # its listed groups, selection-independent, BELOW explicit
+        # swatches - a touched swatch on a group overrides the scene on
+        # that group. A scene without a colour (data shell) or an
+        # unknown key renders nothing.
+        scene_hex = ""
+        scene_groups: set = set()
+        if state.scene and self._scene_provider is not None:
+            scene = self._scene_provider(state.scene)
+            if scene is not None and getattr(scene, "color", ""):
+                scene_hex = scene.color
+                scene_groups = set(getattr(scene, "groups", ()) or ())
+
         claimed_groups = []
         position_groups = []
         for group_name, group in getattr(config, "groups", {}).items():
-            has_colour = group_name in state.colours
+            has_swatch = group_name in state.colours
+            has_scene = bool(scene_hex) and group_name in scene_groups
             has_flash = group_name in state.flash
-            if has_colour or has_flash:
-                claimed_groups.append((group_name, group, has_colour))
+            if has_swatch or has_scene or has_flash:
+                claimed_groups.append(
+                    (group_name, group, has_swatch or has_scene))
             position_id = state.positions.get(group_name)
             if position_id and group_has_movers(group):
                 position_groups.append((group, position_id))
@@ -144,8 +173,11 @@ class LiveBuskLayer:
             effective = level if strobe_open else 0.0
             primary_hex, secondary_hex = (None, None)
             if has_colour:
-                primary_hex, secondary_hex = self._swatch_colors.get(
-                    state.colours[group_name], (None, None))
+                if group_name in state.colours:      # swatch beats scene
+                    primary_hex, secondary_hex = self._swatch_colors.get(
+                        state.colours[group_name], (None, None))
+                else:
+                    primary_hex, secondary_hex = scene_hex, None
 
             fixtures = sorted(getattr(group, "fixtures", None) or [],
                               key=lambda f: f.x)
@@ -196,6 +228,17 @@ class LiveBuskLayer:
                     for attr in ("amber_channels", "uv_channels",
                                  "lime_channels"):
                         _write(fixture_map, getattr(fixture_map, attr), 0)
+                    # Wheel-only fixtures (no RGB emitters, e.g. the
+                    # Hero Spot 60) show the swatch by steering the
+                    # colour wheel to the nearest slot - the same
+                    # mapping playback uses. A slot is a position, not
+                    # an intensity: never scaled. Fixtures WITH RGB
+                    # keep their wheel untouched (open/white floor).
+                    if not (fixture_map.red_channels
+                            or fixture_map.green_channels
+                            or fixture_map.blue_channels):
+                        _write(fixture_map, fixture_map.color_wheel_channels,
+                               rgb_to_color_wheel(red, green, blue))
 
                 # Open the shutter so movers actually emit; the strobe
                 # chop happens on the dimmer, not the shutter channel.

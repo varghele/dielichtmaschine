@@ -92,6 +92,20 @@ verbatim as the GitHub Release notes (see [docs/releasing.md](docs/releasing.md)
 
 ### Added
 
+- **Live colour swatches reach colour-wheel fixtures.** A busked swatch
+  on a mover without RGB emitters (colour wheel only, like the Varytec
+  Hero Spot 60) used to light the fixture white at best - the wheel
+  channel was never driven. The busk layer now steers the wheel to the
+  nearest matching slot, the same mapping timeline playback uses.
+- **The Live SCENES pool makes real light.** Touching a scene applies
+  its colour to the groups it lists - whole-rig, independent of the
+  current selection, under the same submaster/strobe treatment as
+  swatches. An explicitly touched swatch still wins on its group, and
+  a second touch releases the scene to whatever plays underneath.
+- **Touching a palette with nothing selected now says so.** Colour and
+  position palettes are selection-scoped; touching one with no group
+  selected used to be pure silence. The programmer bar now flashes
+  "NO GROUP SELECTED" for a moment instead.
 - **OUTPUT turns on with one press.** The topbar's OUTPUT switch needed
   two clicks when nothing was running yet, because it flipped a stored
   flag that started out claiming output was already on. It now derives

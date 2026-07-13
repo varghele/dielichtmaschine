@@ -114,16 +114,22 @@ The beam/base axes likely need to come from the fixture definition
 - [ ] Busk a colour over a playing show against a real ArtNet node or
       the standalone visualizer (merge is unit-tested, never touched
       hardware)
-- [ ] Aim a POSITION palette at real movers: select a mover group,
-      touch CENTRE and a spike mark, watch the heads converge; touch
-      again and confirm pan/tilt falls back to the show. Verified in
-      the visualizer 2026-07-13 (hit-the-spot closed loop, 16-bit
-      fines); the OPEN hardware question is whether the real fixture
-      interprets our solver-convention DMX the same way the visualizer
-      does (docs/coordinate-frames-and-orientation.md section 4-5) -
-      if the real head misses where the visualizer hits, the solver
-      needs the real-yoke model (solver_to_gdtf_axes exists and is
-      tested; wiring it into the DMX side is the v1.5a follow-up)
+- [ ] Live swatch on the wheel head (live-output-plan phase 0
+      checkpoint): select the mover group, OUTPUT on, touch RED - the
+      Hero Spot should open AND turn its colour wheel to the red slot
+      (it has no RGB emitters; before this fix a swatch was white at
+      best). Also touch a swatch with NOTHING selected - the
+      programmer bar must flash NO GROUP SELECTED.
+- [ ] Busk a SCENE (live-output-plan phase 1 checkpoint): the bench
+      scene file scenes/bench/cyan_wash.json (untracked test data)
+      targets tester.lms's Movers + Movers2 - touch CYAN WASH in the
+      SCENES pool with nothing selected; both groups should light
+      (wheel: light-blue slot); second touch releases.
+- [x] Aim a POSITION palette at real movers - CLOSED on the bench
+      2026-07-13 with the yoke protocol: raw poses + four aimed
+      targets landed standing AND hanging (the wire carries the
+      solver->GDTF yoke conversion; docs/coordinate-frames-and-
+      orientation.md section 4).
 - [ ] Topbar VISUALIZER OPEN end to end: one press = feed up + viewer
       launched + client count ticks to 1 (process launch is stubbed
       in tests)
