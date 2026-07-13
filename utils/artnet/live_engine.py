@@ -226,8 +226,9 @@ class LiveEngine:
 
 
 class LiveEffectsBinder:
-    """Maps LiveState's EFFECTS staging onto the engine's "effect" slot
-    (docs/live-output-plan.md phase 3).
+    """Maps a LiveState riff-staging field onto an engine slot -
+    EFFECTS on "effect" (phase 3) and, with the slot/state_attr/
+    record_kind parameters, INTENSITY FX on "intensity" (phase 5).
 
     ``sync()`` is idempotent and cheap; the gui connects it to
     ``LiveState.state_changed`` (Qt main thread - the engine's slot
@@ -251,12 +252,21 @@ class LiveEffectsBinder:
 
     def __init__(self, state, engine: LiveEngine,
                  config_provider: Callable,
-                 riff_provider: Callable) -> None:
+                 riff_provider: Callable,
+                 slot: str = "effect",
+                 state_attr: str = "effect",
+                 record_kind: str = "effect") -> None:
         self._state = state
         self._engine = engine
         self._config_provider = config_provider
         self._riff_provider = riff_provider
-        # (effect key, frozenset of selected groups) actually staged.
+        # The INTENSITY FX pool reuses this binder verbatim on its own
+        # slot: same riff mechanics, different state field and running-
+        # stack kind (docs/live-output-plan.md phase 5).
+        self._slot = slot
+        self._state_attr = state_attr
+        self._record_kind = record_kind
+        # (staged key, frozenset of selected groups) actually staged.
         self._staged: Optional[tuple] = None
 
     def sync(self) -> None:
@@ -264,10 +274,10 @@ class LiveEffectsBinder:
         engine = self._engine
         engine.set_bpm(state.bpm)
 
-        key = getattr(state, "effect", None)
+        key = getattr(state, self._state_attr, None)
         if not key:
             if self._staged is not None:
-                engine.kill("effect")
+                engine.kill(self._slot)
                 self._staged = None
             return
 
@@ -275,14 +285,14 @@ class LiveEffectsBinder:
         if (key, scope) != self._staged:
             lanes, loop_beats = self._build_lanes(key, scope, state.bpm)
             if lanes:
-                engine.stage("effect", lanes, loop_beats, state.bpm)
+                engine.stage(self._slot, lanes, loop_beats, state.bpm)
             else:
-                engine.kill("effect")
+                engine.kill(self._slot)
             self._staged = (key, scope)
 
         record = next((r for r in state.running
-                       if r.get("kind") == "effect"), None)
-        engine.pause("effect", bool(record and record.get("paused")))
+                       if r.get("kind") == self._record_kind), None)
+        engine.pause(self._slot, bool(record and record.get("paused")))
 
     def _build_lanes(self, key: str, scope, bpm: float):
         """(lanes, loop_beats) for a riff key over the selected groups;

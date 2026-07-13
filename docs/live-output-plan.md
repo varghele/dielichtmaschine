@@ -224,5 +224,26 @@ Hardware checkpoints after 0/1, 3, and 4 - the bench rig is set up.
   Tests: TestMovementBinder in test_live_engine.py (registry-oracle
   trace, anchor follow, release/scope, claim width, config purity,
   busk suppression) + TestMovementShapesPool in test_live_tab.py.
-  **Hardware checkpoint pending: user runs CIRCLE on the hung mover.**
-- [ ] Phase 5 - intensity FX as bundled riffs
+  **Hardware checkpoint PASSED 2026-07-13 ("the circle works on the
+  bench"). Follow-up noted by the user: the orbit strays far from the
+  spot target - the block-default amplitude is 50 in RAW DMX units
+  (50/255 of the FULL physical travel: ~106 deg of pan on a 540-deg
+  head), so the orbit radius dwarfs a nearby anchor. Fix direction:
+  angle- or meter-based amplitude for live shapes (scale amplitude by
+  travel range, or orbit in stage space around the anchor like the
+  plane path). Tracked in todo.md, not blocking phase 5.**
+- [x] Phase 5 - intensity FX as bundled riffs (2026-07-13). Six
+  bundled dimmer-only riffs in riffs/intensity/ (Pulse, Wave, Chase,
+  Sparkle, Heartbeat, Strobe Burst - 16 beats, block defaults; the
+  strobe burst is one active bar + three bars of fall-through).
+  LiveState.intensity + set_intensity (running-stack kind
+  "intensity"), the INTENSITY FX pool lists exactly the "intensity"
+  category (excluded from the EFFECTS pool so riffs are not listed
+  twice), selection-scoped gating + no-selection warning, DIM in the
+  programmer bar. LiveEffectsBinder grew slot/state_attr/record_kind
+  parameters - the intensity binder is the same class on the
+  "intensity" slot, so a dimmer pattern runs concurrently under a
+  colour riff (SLOTS order: intensity dimmer overrides effect dimmer
+  on shared channels). Tests: TestIntensityBinder in
+  test_live_engine.py, intensity pool tests in test_live_tab.py
+  (bundled files pinned dimmer-only).

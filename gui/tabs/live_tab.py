@@ -24,8 +24,9 @@ Regions (North Star 3b):
   stage setup via utils/position_presets.py, then a MARKS subsection
   with one cell per ``config.spots`` spike mark; movers-only gated as a
   whole) + MOVEMENT SHAPES (the registry rudiments, movers-only) |
-  INTENSITY FX (placeholder, cell-fixtures gated) | EFFECTS (riffs from
-  the shared RiffLibrary, selection-scoped: greyed with no selection) |
+  INTENSITY FX (bundled dimmer riffs, selection-scoped) | EFFECTS
+  (riffs from the shared RiffLibrary, selection-scoped: greyed with no
+  selection) |
   SCENES (whole-rig looks from the SceneLibrary, always enabled). Below
   it a PROGRAMMER state bar names the current live look.
 - RIGHT (330px) - the dual queue: an ACTIVE PLAYBACKS stack (in SHOW
@@ -49,10 +50,11 @@ active scene's colour on its listed groups, below explicit swatches);
 EFFECTS play riffs through the live engine (one lane per selected
 group on the looping beat clock; PAUSE/KILL/GO are real); MOVEMENT
 SHAPES loop the registry rudiments on the selected mover groups,
-anchored at each group's held position; POSITION PALETTES aim for
-real (16-bit pan/tilt claims). The colour PICKER, SONG PALETTE link
-and "+ REC" capture, and the INTENSITY pool, are staged for later
-passes and marked "arrives next".
+anchored at each group's held position; INTENSITY FX loops the
+bundled dimmer riffs on its own concurrent slot; POSITION PALETTES
+aim for real (16-bit pan/tilt claims). The colour PICKER, SONG
+PALETTE link and "+ REC" capture are staged for later passes and
+marked "arrives next".
 """
 
 from typing import Dict, List, Optional, Tuple
@@ -143,11 +145,10 @@ MOVEMENT_SHAPES: Tuple[Tuple[str, str], ...] = (
     ("random", "Random"),
     ("fan", "Fan"),
 )
-# INTENSITY pool stays a placeholder this pass.
-INTENSITY_PLACEHOLDERS = ("Static", "Pulse", "Chase", "Wave", "Sparkle",
-                          "Strobe", "Ping-Pong")
-# Cell/pixel FX that only run on cell fixtures - gated "NEEDS CELLS".
-INTENSITY_CELL_PLACEHOLDERS = ("Waterfall", "Cascade")
+# INTENSITY FX: the riff-library category the pool lists (bundled
+# dimmer-only riffs in riffs/intensity/). Staged on the engine's own
+# "intensity" slot, concurrent with a colour riff from EFFECTS.
+INTENSITY_CATEGORY = "intensity"
 
 
 def _active_tokens() -> dict:
@@ -240,6 +241,10 @@ class LiveState(QObject):
         # restages on selection change); anchored per group at the held
         # position. Survives update_from_config like effect/scene.
         self.shape: Optional[str] = None
+        # Staged INTENSITY FX (a bundled "intensity/..." dimmer riff
+        # key). Same mechanics as effect on its own engine slot, so a
+        # dimmer pattern and a colour riff run concurrently.
+        self.intensity: Optional[str] = None
         # Applied position palettes, PER GROUP (group name -> namespaced
         # id: "preset:centre", "preset:element:<id>", "mark:<spot name>"
         # - see utils/position_presets.py). Mirrors ``colours``: staging
@@ -362,6 +367,7 @@ class LiveState(QObject):
         self.effect = None
         self.scene = None
         self.shape = None
+        self.intensity = None
         self.positions.clear()
         self.running.clear()
         self.state_changed.emit()
@@ -478,6 +484,14 @@ class LiveState(QObject):
         self._sync_running("shape", self.shape)
         self.state_changed.emit()
 
+    def set_intensity(self, key: Optional[str]) -> None:
+        """Toggle the staged intensity FX (a bundled dimmer riff key,
+        selection-scoped like effect, own engine slot). Mirrors into
+        the running stack as kind "intensity"."""
+        self.intensity = None if key == self.intensity else key
+        self._sync_running("intensity", self.intensity)
+        self.state_changed.emit()
+
     def stage_position(self, position_id: str,
                        label: Optional[str] = None) -> int:
         """Touch a position palette (a namespaced preset or spike-mark
@@ -569,6 +583,8 @@ class LiveState(QObject):
             self.scene = None
         elif record["kind"] == "shape":
             self.shape = None
+        elif record["kind"] == "intensity":
+            self.intensity = None
         else:
             self.effect = None
         self.state_changed.emit()
@@ -1017,7 +1033,8 @@ class LiveTab(BaseTab):
         self._position_cells: Dict[str, _LibraryCell] = {}
         self._position_labels: Dict[str, str] = {}
         self._movement_cells: Dict[str, _LibraryCell] = {}
-        self._intensity_cells: List[_PlaceholderCell] = []
+        # INTENSITY FX: bundled dimmer riffs, keyed "intensity/<name>".
+        self._intensity_cells: Dict[str, _LibraryCell] = {}
         # Library-backed pools (wired to the shared RiffLibrary and a new
         # SceneLibrary; injected by gui.py, lazily resolved otherwise).
         self._effect_library = None
@@ -1611,30 +1628,57 @@ class LiveTab(BaseTab):
 
     def _build_intensity_pool(self) -> QWidget:
         pool, layout = self._pool_shell()
-        # Title shortened from "Rudiments · Intensity FX" so the Rate tag
-        # fits beside it in the narrow five-column header.
-        layout.addWidget(self._pool_header("Intensity FX", "Rate 1/4"))
-        layout.addWidget(self._marker("Arrives next"))
-
+        # Curated dimmer-only riffs from the library's "intensity"
+        # category (riffs/intensity/, bundled) on the engine's own
+        # concurrent slot: a dimmer pattern under a colour riff.
+        # Selection-scoped like the EFFECTS pool.
+        layout.addWidget(self._pool_header("Intensity FX",
+                                           "Selection", tag_accent=True))
         grid_host = QWidget()
         grid = QGridLayout(grid_host)
         grid.setContentsMargins(14, 0, 14, 8)
         grid.setSpacing(6)
-        columns = 2
-        cells: List[_PlaceholderCell] = []
-        for name in INTENSITY_PLACEHOLDERS:
-            cells.append(_PlaceholderCell(name))
-        for name in INTENSITY_CELL_PLACEHOLDERS:
-            cells.append(_PlaceholderCell(name, sub="Needs cells"))
-        for i, cell in enumerate(cells):
-            self._intensity_cells.append(cell)
-            grid.addWidget(cell, i // columns, i % columns)
-        for col in range(columns):
-            grid.setColumnStretch(col, 1)
+        self._intensity_grid = grid
+        self._intensity_grid_host = grid_host
         layout.addWidget(grid_host)
-        layout.addWidget(self._marker("Greyed = needs cell fixtures"))
         layout.addStretch(1)
+        self._populate_intensity_pool()
         return pool
+
+    def _populate_intensity_pool(self) -> None:
+        self._clear_grid(self._intensity_grid)
+        self._intensity_cells = {}
+        library = self._resolve_effect_library()
+        riffs = [r for r in (library.get_all_riffs() if library else [])
+                 if r.category == INTENSITY_CATEGORY]
+        if not riffs:
+            self._intensity_grid.addWidget(
+                self._marker("No intensity FX · bundled riffs missing"),
+                0, 0, 1, 2)
+            return
+        columns = 2
+        for i, riff in enumerate(riffs):
+            key = f"{riff.category}/{riff.name}"
+            cell = _LibraryCell(key, riff.name)
+            cell.setToolTip(f"{riff.name} · {riff.description} · "
+                            "dimmer-only, loops on the selected groups "
+                            "· touch again to release")
+            cell.clicked.connect(self._on_intensity_touched)
+            self._intensity_cells[key] = cell
+            self._intensity_grid.addWidget(cell, i // columns,
+                                           i % columns)
+        for col in range(columns):
+            self._intensity_grid.setColumnStretch(col, 1)
+
+    def _on_intensity_touched(self, key: str) -> None:
+        """Fire/toggle an intensity FX (selection-scoped, own engine
+        slot - runs under a colour riff). Fire-only like shapes."""
+        self.state.set_intensity(key)
+        if self.state.intensity == key and not self.state.selected:
+            self._flash_programmer_warning(
+                "NO GROUP SELECTED · INTENSITY FX RUN ON SELECTED GROUPS")
+        else:
+            self._clear_programmer_warning()
 
     # -- library pools (effects / scenes) --------------------------------
 
@@ -1714,7 +1758,9 @@ class LiveTab(BaseTab):
         self._clear_grid(self._effects_grid)
         self._effect_cells = {}
         library = self._resolve_effect_library()
-        riffs = library.get_all_riffs() if library is not None else []
+        riffs = [r for r in (library.get_all_riffs()
+                             if library is not None else [])
+                 if r.category != INTENSITY_CATEGORY]
         if not riffs:
             self._effects_grid.addWidget(
                 self._marker("No effects yet · save riffs from the timeline"),
@@ -1768,10 +1814,12 @@ class LiveTab(BaseTab):
         return self._resolve_effect_library().riffs.get(key)
 
     def set_effect_library(self, library) -> None:
-        """Inject the shared RiffLibrary and rebuild the EFFECTS pool."""
+        """Inject the shared RiffLibrary and rebuild the EFFECTS pool
+        AND the INTENSITY FX pool (same library, different category)."""
         self._effect_library = library if library is not None \
             else self._empty_riff_library()
         self._populate_effects_pool()
+        self._populate_intensity_pool()
         self._sync_from_state()
 
     def set_scene_library(self, library) -> None:
@@ -2225,11 +2273,15 @@ class LiveTab(BaseTab):
         for colour_id, swatch in self._colour_swatches.items():
             swatch.set_active(colour_id in active_ids)
 
-        # EFFECTS: selection-scoped. Grey the whole pool with no selection,
-        # then outline the active effect. SCENES: whole-rig, always enabled.
+        # EFFECTS and INTENSITY FX: selection-scoped. Grey the pools
+        # with no selection, then outline the active key. SCENES:
+        # whole-rig, always enabled.
         self._effects_pool.setEnabled(bool(state.selected))
         for key, cell in self._effect_cells.items():
             cell.set_active(key == state.effect)
+        self._intensity_pool.setEnabled(bool(state.selected))
+        for key, cell in self._intensity_cells.items():
+            cell.set_active(key == state.intensity)
         for key, cell in self._scene_cells.items():
             cell.set_active(key == state.scene)
 
@@ -2421,6 +2473,8 @@ class LiveTab(BaseTab):
             shape_label = dict(MOVEMENT_SHAPES).get(state.shape,
                                                     state.shape)
             text += f" · SHAPE: {shape_label.upper()}"
+        if state.intensity:
+            text += f" · DIM: {self._key_name(state.intensity).upper()}"
         # POS shows the selection's applied targets; with no selection,
         # everything held (mirrors the colour HELD branch). Display
         # labels ("CROSS", "DS CENTRE"), not raw namespaced ids; fall
@@ -2462,7 +2516,7 @@ class LiveTab(BaseTab):
                 if isinstance(cell, _PlaceholderCell):
                     cell._restyle()
             for cell in list(self._movement_cells.values()) \
-                    + self._intensity_cells:
+                    + list(self._intensity_cells.values()):
                 cell._restyle()
             for cell in list(self._effect_cells.values()) + \
                     list(self._scene_cells.values()) + \

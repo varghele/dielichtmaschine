@@ -122,14 +122,20 @@ The beam/base axes likely need to come from the fixture definition
       the scene light the rig while diagnosing swatch release).
 - [x] Fire a RIFF at the bench rig - CONFIRMED on the bench
       2026-07-13 ("the riffs work on the bench").
-- [ ] Run CIRCLE on the hung mover (live-output-plan phase 4
-      checkpoint): select the mover group, hold a POSITION (or none -
-      CENTRE is the fallback anchor), touch CIRCLE in MOVEMENT
-      SHAPES, open the fixture with FLASH or a swatch - the beam
-      should orbit the held target at the live tempo (16 beats per
-      lap); TAP rescales it; touching the position palette again
-      moves the anchor; second touch on the shape releases pan/tilt
-      to the show.
+- [x] Run CIRCLE on the hung mover - CONFIRMED on the bench
+      2026-07-13 ("the circle works on the bench"). Follow-up below.
+- [ ] Live shape orbit size (user, 2026-07-13): the orbit does not
+      stay close to the spot target - MovementBlock amplitude is RAW
+      DMX (50/255 of the FULL travel: ~106 deg pan on a 540-deg
+      head), so the radius dwarfs a nearby anchor. Fix direction:
+      angle- or meter-based amplitude for live shapes (scale by the
+      fixture's travel range, or orbit in stage space around the
+      anchor like the target-plane path). Also a candidate for an
+      on-surface SIZE control (the reference's FX-size bank slot).
+- [ ] Busk an INTENSITY FX + EFFECT together (live-output-plan phase
+      5 checkpoint): select the group, fire PULSE from INTENSITY FX
+      and a colour riff from EFFECTS - the dimmer pattern should ride
+      under the colour, each with its own PAUSE/KILL row.
 - [x] Aim a POSITION palette at real movers - CLOSED on the bench
       2026-07-13 with the yoke protocol: raw poses + four aimed
       targets landed standing AND hanging (the wire carries the

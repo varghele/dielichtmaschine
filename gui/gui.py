@@ -309,6 +309,21 @@ class MainWindow(QMainWindow, Ui_MainWindow):
                 self._live_effects_binder.sync)
             self._live_effects_binder.sync()
 
+            # Intensity FX: the same binder class on its own slot, fed
+            # from LiveState.intensity (bundled dimmer riffs) - a
+            # dimmer pattern runs under a colour riff concurrently.
+            self._live_intensity_binder = LiveEffectsBinder(
+                state=self.live_tab.state,
+                engine=self._live_engine,
+                config_provider=lambda: self.live_tab.config,
+                riff_provider=self.live_tab.riff_for_key,
+                slot="intensity", state_attr="intensity",
+                record_kind="intensity",
+            )
+            self.live_tab.state.state_changed.connect(
+                self._live_intensity_binder.sync)
+            self._live_intensity_binder.sync()
+
             # Movement shapes: same pattern, "movement" slot; the busk
             # layer suppresses its static position aim for the groups
             # the shape covers (the position is the shape's anchor).

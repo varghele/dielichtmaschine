@@ -97,6 +97,13 @@ verbatim as the GitHub Release notes (see [docs/releasing.md](docs/releasing.md)
   Hero Spot 60) used to light the fixture white at best - the wheel
   channel was never driven. The busk layer now steers the wheel to the
   nearest matching slot, the same mapping timeline playback uses.
+- **The Live INTENSITY FX pool plays bundled dimmer patterns.** Six
+  curated dimmer-only riffs ship with the app (Pulse, Wave, Chase,
+  Sparkle, Heartbeat, Strobe Burst) and loop on the selected groups at
+  the live tempo - on their own playback slot, so a dimmer pattern
+  runs underneath a colour effect from the EFFECTS pool at the same
+  time. Same contract as effects: second touch releases, PAUSE
+  freezes, KILL clears.
 - **The Live MOVEMENT SHAPES pool moves real movers.** The placeholder
   cells became the ten movement rudiments (circle, figure-8, diamond,
   square, triangle, lissajous, sweep, bounce, random, fan). Touching

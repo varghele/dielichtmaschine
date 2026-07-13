@@ -265,17 +265,77 @@ class TestPools:
         assert set(live_tab._movement_cells) == \
             set(MOVEMENT_REGISTRY) - {"static"}
 
-    def test_intensity_cells_are_disabled_placeholders(self, live_tab):
-        assert live_tab._intensity_cells
-        for cell in live_tab._intensity_cells:
-            assert cell.isEnabled() is False
-            assert cell.property("placeholder") is True
+    @staticmethod
+    def _with_bundled_riffs(live_tab):
+        """Inject the real bundled RiffLibrary (the fixture tab
+        resolves an empty one - no main window)."""
+        from riffs.riff_library import RiffLibrary
+        live_tab.set_effect_library(RiffLibrary())
+        return live_tab
 
-    def test_intensity_gates_cell_fx(self, live_tab):
-        # At least one intensity cell is gated "NEEDS CELLS".
-        subs = [c.sub_label.text() for c in live_tab._intensity_cells
-                if c.sub_label is not None]
-        assert any("NEEDS CELLS" in text for text in subs)
+    def test_intensity_cells_are_the_bundled_dimmer_riffs(self,
+                                                          live_tab):
+        # INTENSITY FX is real (phase 5): the pool lists the bundled
+        # riffs/intensity/ category (dimmer-only riffs by authoring).
+        self._with_bundled_riffs(live_tab)
+        assert live_tab._intensity_cells
+        assert all(key.startswith("intensity/")
+                   for key in live_tab._intensity_cells)
+        expected = {"intensity/Pulse", "intensity/Wave",
+                    "intensity/Chase", "intensity/Sparkle",
+                    "intensity/Heartbeat", "intensity/Strobe Burst"}
+        assert expected <= set(live_tab._intensity_cells)
+
+    def test_bundled_intensity_riffs_are_dimmer_only(self):
+        from riffs.riff_library import RiffLibrary
+        lib = RiffLibrary()
+        riffs = [r for r in lib.get_all_riffs()
+                 if r.category == "intensity"]
+        assert riffs
+        for riff in riffs:
+            assert riff.dimmer_blocks, riff.name
+            assert not riff.colour_blocks, riff.name
+            assert not riff.movement_blocks, riff.name
+            assert not riff.special_blocks, riff.name
+
+    def test_intensity_riffs_stay_out_of_the_effects_pool(self,
+                                                          live_tab):
+        self._with_bundled_riffs(live_tab)
+        assert live_tab._effect_cells        # bundled loops etc. listed
+        assert not any(key.startswith("intensity/")
+                       for key in live_tab._effect_cells)
+
+    def test_intensity_touch_stages_and_toggles(self, live_tab):
+        self._with_bundled_riffs(live_tab)
+        live_tab.state.toggle_group("Movers")
+        cell = live_tab._intensity_cells["intensity/Pulse"]
+        cell.clicked.emit("intensity/Pulse")
+        assert live_tab.state.intensity == "intensity/Pulse"
+        assert cell.is_active()
+        assert any(r["kind"] == "intensity"
+                   for r in live_tab.state.running)
+        cell.clicked.emit("intensity/Pulse")    # release
+        assert live_tab.state.intensity is None
+
+    def test_intensity_pool_gates_on_selection(self, live_tab):
+        assert live_tab._intensity_pool.isEnabled() is False
+        live_tab.state.toggle_group("Movers")
+        assert live_tab._intensity_pool.isEnabled() is True
+
+    def test_intensity_without_selection_warns(self, live_tab):
+        self._with_bundled_riffs(live_tab)
+        live_tab._intensity_cells["intensity/Pulse"].clicked.emit(
+            "intensity/Pulse")
+        assert "NO GROUP SELECTED" \
+            in live_tab._programmer_label.text()
+
+    def test_kill_row_clears_the_intensity(self, live_tab):
+        state = live_tab.state
+        state.set_intensity("intensity/Pulse")
+        index = next(i for i, r in enumerate(state.running)
+                     if r["kind"] == "intensity")
+        state.kill_playback(index)
+        assert state.intensity is None
 
 
 class TestFade:

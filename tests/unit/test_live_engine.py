@@ -387,6 +387,74 @@ class TestEffectsBinder:
         assert engine.render(0.1) == {}
 
 
+class TestIntensityBinder:
+    """The SAME binder class on the "intensity" slot (phase 5): a
+    dimmer riff from LiveState.intensity runs CONCURRENTLY with a
+    colour riff from LiveState.effect, and the intensity slot's dimmer
+    overrides the effect slot's on shared channels (SLOTS order)."""
+
+    def _bound(self, mock_fixture_def):
+        from config.models import RiffColourBlock
+        from gui.tabs.live_tab import LiveState
+        mh1 = _fixture("MH1", 1)
+        config = Configuration(
+            fixtures=[mh1],
+            groups={"Left": FixtureGroup(name="Left", fixtures=[mh1])},
+            universes={1: Universe(id=1, name="U1", output={})},
+        )
+        engine = LiveEngine(_factory(config, mock_fixture_def))
+        state = LiveState()
+        state.update_from_config(["Left"])
+        colour_riff = Riff(name="RedWash", category="looks",
+                           length_beats=4.0)
+        colour_riff.colour_blocks.append(
+            RiffColourBlock(start_beat=0.0, end_beat=4.0, red=255.0))
+        dim_riff = _riff()      # dimmer 255 / 100 halves
+        riffs = {"looks/RedWash": colour_riff,
+                 "intensity/Pulse": dim_riff}
+        effects = LiveEffectsBinder(
+            state, engine, config_provider=lambda: config,
+            riff_provider=riffs.get)
+        intensity = LiveEffectsBinder(
+            state, engine, config_provider=lambda: config,
+            riff_provider=riffs.get,
+            slot="intensity", state_attr="intensity",
+            record_kind="intensity")
+        state.state_changed.connect(effects.sync)
+        state.state_changed.connect(intensity.sync)
+        return state, engine, (effects, intensity)
+
+    def test_dimmer_riff_runs_under_the_colour_riff(
+            self, qapp, mock_fixture_def):
+        state, engine, _binders = self._bound(mock_fixture_def)
+        state.set_selection(["Left"])
+        state.set_effect("looks/RedWash")
+        state.set_intensity("intensity/Pulse")
+        values, mask = engine.render(0.0)[1]
+        assert values[RED] == 255                # effect slot colour
+        assert mask[DIMMER] and values[DIMMER] == 255   # intensity dim
+        assert engine.active_slots() == ["effect", "intensity"]
+        # The intensity riff keeps looping on its own clock.
+        values, _ = engine.render(1.0)[1]
+        assert values[DIMMER] == 100
+        assert values[RED] == 255
+
+    def test_kill_and_pause_address_their_own_slot(
+            self, qapp, mock_fixture_def):
+        state, engine, _binders = self._bound(mock_fixture_def)
+        state.set_selection(["Left"])
+        state.set_effect("looks/RedWash")
+        state.set_intensity("intensity/Pulse")
+        engine.render(0.0)
+        index = next(i for i, r in enumerate(state.running)
+                     if r["kind"] == "intensity")
+        state.kill_playback(index)
+        values, mask = engine.render(0.1)[1]
+        assert mask[DIMMER] == 0                 # dimmer released
+        assert values[RED] == 255                # colour still runs
+        assert engine.active_slots() == ["effect"]
+
+
 class TestEngineUnderBuskLayer:
     """The busk layer composes the engine frame BELOW its explicit
     writes (a touched swatch beats the running riff on that group)."""
