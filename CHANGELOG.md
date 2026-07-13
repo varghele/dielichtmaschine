@@ -92,6 +92,11 @@ verbatim as the GitHub Release notes (see [docs/releasing.md](docs/releasing.md)
 
 ### Added
 
+- **OUTPUT turns on with one press.** The topbar's OUTPUT switch needed
+  two clicks when nothing was running yet, because it flipped a stored
+  flag that started out claiming output was already on. It now derives
+  the toggle from the actual output state (the same cure the
+  VISUALIZER button received earlier).
 - **The local visualizer always receives output.** Every merged frame
   is now also sent to the local machine (loopback), regardless of what
   the universes' Target IPs say - previously, output aimed at a

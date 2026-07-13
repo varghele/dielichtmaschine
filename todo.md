@@ -101,6 +101,13 @@ The beam/base axes likely need to come from the fixture definition
 
 ## Pending manual verification (user, needs hardware/desktop)
 
+- [ ] QLC+ export aim check: export tester.lms (or any mover project)
+      to .qxw, open in QLC+, fire a position preset from the Virtual
+      Console at the hung head - the beam should land where
+      Lichtmaschine lands it (the export now goes through
+      utils/yoke.export_aim_dmx: real ranges + the hardware-verified
+      yoke conversion; this check closes the last interop link)
+
 - [ ] Busk a colour over a playing show against a real ArtNet node or
       the standalone visualizer (merge is unit-tested, never touched
       hardware)

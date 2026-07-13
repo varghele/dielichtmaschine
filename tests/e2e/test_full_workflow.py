@@ -1004,6 +1004,41 @@ class TestOutputShellWiring:
         assert arbiter._mirror_enabled
 
 
+class TestOutputButton:
+    """The topbar OUTPUT action: ONE press enables output (regression:
+    artnet_enabled defaults True while nothing runs, and flipping the
+    flag made the first press a no-op disable - the same stale-flag
+    double-press the VISUALIZER chip had)."""
+
+    def test_single_press_enables_output(self, main_window, monkeypatch):
+        window = main_window
+        tab = window.shows_tab
+        # Force the stale condition the shipped default produces: flag
+        # says enabled while no controller runs.
+        tab.artnet_enabled = True
+        assert tab.artnet_controller is None
+
+        seen = []
+        monkeypatch.setattr(tab, "_on_artnet_toggle",
+                            lambda checked: seen.append(checked))
+        tab.toggle_artnet()                    # ONE press
+        assert seen == [True], "first press must ENABLE, not no-op disable"
+
+    def test_press_disables_when_actually_running(self, main_window,
+                                                  monkeypatch):
+        tab = main_window.shows_tab
+
+        class _Ctl:
+            output_enabled = True
+        tab.artnet_controller = _Ctl()
+        seen = []
+        monkeypatch.setattr(tab, "_on_artnet_toggle",
+                            lambda checked: seen.append(checked))
+        tab.toggle_artnet()
+        assert seen == [False]
+        tab.artnet_controller = None           # do not leak the stub
+
+
 class TestVisualizerButton:
     """The topbar VISUALIZER action: ONE press starts the feed and
     launches the viewer (regression: a stale tcp_enabled default made

@@ -2075,8 +2075,16 @@ class ShowsTab(BaseTab):
                 self.artnet_controller = None
 
     def toggle_artnet(self):
-        """Toggle ArtNet output on/off. Called from MainWindow toolbar."""
-        self._on_artnet_toggle(not self.artnet_enabled)
+        """Toggle ArtNet output on/off. Called from MainWindow toolbar.
+        Derives the flip from the controller's ACTUAL output state, not
+        the stored flag: artnet_enabled defaults True while nothing
+        runs, so flipping the flag made the first OUTPUT press a no-op
+        "disable" and demanded a double press - the same stale-flag
+        disease toggle_tcp was cured of."""
+        active = (self.artnet_controller is not None
+                  and getattr(self.artnet_controller, "output_enabled",
+                              False))
+        self._on_artnet_toggle(not active)
 
     def toggle_tcp(self):
         """Toggle TCP server on/off. Called from MainWindow toolbar.
