@@ -206,6 +206,20 @@ the aiming, and the closed loop lands the beam. What remains genuinely
 open below is only the **mixed-rig** case (hanging PARs vs hanging movers
 in one show), where a single Euler triple cannot serve both.
 
+**Update 2026-07-13 (later): the two yoke models now coexist.** The
+GDTF geometry chain IS the real yoke (pan about the base axis, beam
+along the pan axis at tilt centre), and rendering it with the solver's
+degrees aimed the mesh and its cone off-target. The renderer now
+translates at the GDTF chassis boundary:
+`gdtf_draw_plan.solver_to_gdtf_axes` maps the solver's intended beam
+direction onto the chain's axis angles (per authoring posture), so a
+mover aimed at a spot hits it in the visualizer regardless of which
+chassis draws it. Pinned closed-loop by
+`test_gdtf_draw_plan.py::TestAimedBeamHitsTheSpot` (synthetic chain +
+the real Hero Spot 60). NOTE: the DMX we emit is still the SOLVER
+convention - whether real fixtures interpret it that way is exactly the
+hardware protocol below.
+
 ### Worked example (the discriminating prediction)
 
 Hanging mover 5 m up at stage `(0, 0, 5)`. Target on the floor 2 m to

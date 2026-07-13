@@ -316,7 +316,13 @@ build_draw_plan now canonicalizes posture by tree z-extent
 carried each other's yaw in the pre-rebrand table - swapped
 (user-verified), migration heals both old values; (c) the stage
 canvas's custom-orientation ring now compares against the preset
-triple instead of "any non-zero pitch/roll".
+triple instead of "any non-zero pitch/roll"; (d) the GDTF chain is the
+REAL yoke (beam along the pan axis at tilt centre) while the solver
+aims beam-perpendicular - solver degrees fed into the chain missed
+every spot, so gdtf_draw_plan.solver_to_gdtf_axes converts at the
+GDTF chassis boundary, pinned by hit-the-spot closed-loop tests.
+Emitted DMX stays solver-convention; real-fixture interpretation is
+still the hardware protocol's question.
 
 **Solo pull-ins (2026-07-12 evening, same branch):** two roadmap
 items shipped while the user was away. (1) Headless export CLI (v1.3):
