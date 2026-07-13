@@ -527,3 +527,59 @@ class TestBuildFixtureMapsStandalone:
         from utils.artnet.dmx_manager import DMXManager
         maps = DMXManager.build_fixture_maps(config_one_mover, {})
         assert maps == {}
+
+
+class TestHardwareYokeConversion:
+    """The physical node gets the real-yoke conversion (utils/yoke); the
+    mirror and local callback keep the solver-convention frame, because
+    the visualizer converts in its own renderer - so the rig matches the
+    3D view (found on hardware 2026-07-13). Only GDTF-chain movers are
+    touched."""
+
+    def test_hardware_converted_mirror_and_callback_untouched(
+            self, config_one_mover, mock_fixture_def, monkeypatch):
+        import utils.yoke as yoke
+        # Treat MH1 as a GDTF-chain mover and make the conversion a
+        # visible sentinel (pan coarse -> 222) so the test sees WHICH
+        # frame it touched, independent of the real math.
+        monkeypatch.setattr(yoke, "gdtf_chain_yoke", lambda *a: (True, True))
+
+        def fake_convert(buf, fmap, flipped):
+            _, ch = fmap.get_absolute_address(fmap.pan_channels[0])
+            buf[ch] = 222
+        monkeypatch.setattr(yoke, "apply_yoke_to_universe", fake_convert)
+
+        maps = {"MH1": FixtureChannelMap(config_one_mover.fixtures[0],
+                                         mock_fixture_def, config_one_mover)}
+        hw, mirror = StubSender(), StubSender()
+        seen = []
+        arbiter = OutputArbiter(config=config_one_mover, sender=hw)
+        arbiter.set_broadcast_mirror(True, sender=mirror)
+        arbiter.set_local_dmx_callback(lambda u, d: seen.append((u, d)))
+        arbiter.set_fixture_maps(maps)
+        arbiter.set_playback_layer(StaticLayer(frame(1, ch5=90)))  # pan
+        arbiter.tick_once(0.0)
+
+        hw_buf = {u: d for u, d, _ in hw.sent}[0]       # wire universe 0
+        mir_buf = {u: d for u, d, _ in mirror.sent}[0]
+        cb_buf = {u: d for u, d in seen}[1]             # callback keyed by config id
+        assert hw_buf[5] == 222, "hardware pan converted"
+        assert mir_buf[5] == 90, "mirror keeps solver-convention pan"
+        assert cb_buf[5] == 90, "local callback keeps solver-convention pan"
+
+    def test_non_gdtf_mover_is_not_converted(self, config_one_mover,
+                                             mock_fixture_def, monkeypatch):
+        import utils.yoke as yoke
+        monkeypatch.setattr(yoke, "gdtf_chain_yoke", lambda *a: (False, False))
+        called = []
+        monkeypatch.setattr(yoke, "apply_yoke_to_universe",
+                            lambda *a: called.append(1))
+        maps = {"MH1": FixtureChannelMap(config_one_mover.fixtures[0],
+                                         mock_fixture_def, config_one_mover)}
+        hw = StubSender()
+        arbiter = OutputArbiter(config=config_one_mover, sender=hw)
+        arbiter.set_fixture_maps(maps)
+        arbiter.set_playback_layer(StaticLayer(frame(1, ch5=90)))
+        arbiter.tick_once(0.0)
+        assert called == [], "procedural mover must not be yoke-converted"
+        assert {u: d for u, d, _ in hw.sent}[0][5] == 90

@@ -495,10 +495,17 @@ class OutputArbiter:
             mapping = dict(self._universe_mapping)
             callback = self._local_dmx_callback
             mirror = self._mirror_sender if self._mirror_enabled else None
+            fixture_maps = dict(self._fixture_maps)
+
+        # Hardware gets the real-yoke conversion (utils/yoke); the mirror
+        # and local callback keep the solver-convention frame because
+        # the visualizer converts in its own renderer. So the rig and
+        # the 3D view agree. Only GDTF-chain movers are touched.
+        hw = self._hardware_frame(merged, fixture_maps)
 
         for universe in sorted(merged):
             wire_universe = mapping.get(universe, universe - 1)
-            self._sender.send_dmx(wire_universe, merged[universe],
+            self._sender.send_dmx(wire_universe, hw[universe],
                                   force=True)
             if mirror is not None:
                 try:
@@ -513,6 +520,38 @@ class OutputArbiter:
                     logger.exception("local DMX callback failed")
         self._frames_sent += 1
         return merged
+
+    def _hardware_frame(self, merged: Dict[int, bytearray],
+                        fixture_maps: Dict) -> Dict[int, bytearray]:
+        """A copy of the merged frame with each GDTF-chain mover's
+        pan/tilt converted from solver convention to the real yoke, for
+        the physical node only. Returns ``merged`` itself when nothing
+        needs converting (the common no-movers / no-GDTF case), so the
+        hot path allocates nothing extra."""
+        from utils.yoke import apply_yoke_to_universe, gdtf_chain_yoke
+
+        converted: Dict[int, bytearray] = {}
+        for fmap in fixture_maps.values():
+            if not (getattr(fmap, "pan_channels", None)
+                    and getattr(fmap, "tilt_channels", None)):
+                continue
+            fx = getattr(fmap, "fixture", None)
+            if fx is None:
+                continue
+            uses_chain, flipped = gdtf_chain_yoke(
+                fx.manufacturer, fx.model, getattr(fmap, "mode_name", ""))
+            if not uses_chain:
+                continue
+            universe = fmap.universe
+            buf = merged.get(universe)
+            if buf is None:
+                continue
+            if universe not in converted:
+                converted[universe] = bytearray(buf)
+            apply_yoke_to_universe(converted[universe], fmap, flipped)
+        if not converted:
+            return merged
+        return {u: converted.get(u, merged[u]) for u in merged}
 
     def status(self) -> dict:
         """A cheap snapshot for status displays: whether the loop is

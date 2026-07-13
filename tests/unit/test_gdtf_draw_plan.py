@@ -234,6 +234,72 @@ class TestAimedBeamHitsTheSpot:
         np.testing.assert_allclose(stage_dir, want, atol=1e-6)
 
 
+class TestOutputYokeHitsThroughRealChain:
+    """The OUTPUT-boundary conversion (utils/yoke.apply_yoke_to_universe)
+    must make the EMITTED DMX, read back and fed to the real yoke (the
+    GDTF chain), land the beam on the target - the bug the bench found
+    2026-07-13 (a straight-down target came out horizontal on the wire).
+    Synthetic chain, so it runs in CI without the Share file."""
+
+    class _Map:
+        universe = 1
+        pan_channels = [0]
+        pan_fine_channels = [1]
+        tilt_channels = [2]
+        tilt_fine_channels = [3]
+        pan_range = 540.0
+        tilt_range = 220.0
+
+        def get_absolute_address(self, offset):
+            return (1, offset)
+
+    def _hanging_mover_beam(self):
+        from visualizer.renderer.gdtf_draw_plan import (
+            ChainStep, DrawItem, _canonicalize_posture,
+        )
+        beam = DrawItem(
+            node_name="Beam", model_name="Beam", is_beam=True,
+            chain=[ChainStep(matrix=_translate_z(0.0), axis_attribute="Pan"),
+                   ChainStep(matrix=_translate_z(-0.2), axis_attribute="Tilt"),
+                   ChainStep(matrix=_translate_z(-0.1), axis_attribute=None)])
+        assert _canonicalize_posture([beam])
+        return beam
+
+    @pytest.mark.parametrize("target", [
+        (2.0, 0.0, 0.0), (-2.0, 0.0, 0.0), (0.0, -2.0, 0.0),
+        (0.0, 2.0, 0.0), (0.0, 0.0, 0.0), (1.5, -1.5, 1.0),
+    ], ids=lambda t: f"({t[0]},{t[1]},{t[2]})")
+    def test_emitted_dmx_hits_the_spot_on_the_real_yoke(self, target):
+        from utils.orientation import (
+            calculate_pan_tilt, fixture_rotation_matrix,
+            pan_tilt_to_dmx16, preset_angles,
+        )
+        from utils.yoke import apply_yoke_to_universe
+
+        beam = self._hanging_mover_beam()
+        fixture = (0.0, 0.0, 5.0)
+        yaw, pitch, roll = preset_angles("hanging")
+
+        # solver aim -> emit solver DMX -> output boundary converts in
+        # place -> read back as the real head would -> drive the chain.
+        pan_s, tilt_s = calculate_pan_tilt(
+            *fixture, *target, "hanging", yaw, pitch, roll, 540.0, 220.0)
+        buf = bytearray(512)
+        buf[0], buf[1], buf[2], buf[3] = pan_tilt_to_dmx16(
+            pan_s, tilt_s, 540.0, 220.0)
+
+        apply_yoke_to_universe(buf, self._Map(), flipped=True)
+
+        pan_phys = ((buf[0] * 256 + buf[1]) / 65535.0 - 0.5) * 540.0
+        tilt_phys = ((buf[2] * 256 + buf[3]) / 65535.0 - 0.5) * 220.0
+        local = -np.array(beam.compose(pan_phys, tilt_phys))[:3, 2]
+        scene = fixture_rotation_matrix(yaw, pitch, roll) @ local
+        stage = np.array([scene[0], scene[2], scene[1]])
+        want = np.array(target) - np.array(fixture)
+        want = want / np.linalg.norm(want)
+        np.testing.assert_allclose(stage, want, atol=5e-3)
+
+
 _HERO_SPOT = glob.glob(os.path.join(REPO_ROOT, "gdtf_fixtures",
                                     "Varytec@Hero Spot 60@*.gdtf"))
 

@@ -23,6 +23,16 @@ verbatim as the GitHub Release notes (see [docs/releasing.md](docs/releasing.md)
   that, the default camera sat behind the band. Both are fixed: the view
   is now a faithful copy of the stage, seen from the audience. DMX
   output is unchanged by this fix.
+- **Moving heads aimed to the wrong place on real hardware.** The
+  pan/tilt values sent to a physical fixture were computed in the app's
+  internal yoke model, which differs from how a real moving head is
+  built - so a fixture told to point straight down at a target aimed
+  flat/horizontal instead. Native ArtNet output now converts each
+  moving head's pan/tilt to the real fixture's yoke on the way to the
+  node, so aimed positions and spot targets land where intended. The
+  3D visualizer already showed the correct aim and is unchanged; the
+  rig now matches it. (QLC+ export still uses the old convention - a
+  known follow-up.)
 - **Wall-back and wall-front mounting presets were swapped.** The
   back-wall preset faced upstage and the front-wall preset faced the
   audience. Corrected; projects saved with the old values are fixed
