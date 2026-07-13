@@ -114,7 +114,11 @@ The beam/base axes likely need to come from the fixture definition
       Console at the hung head - the beam should land where
       Lichtmaschine lands it (the export now goes through
       utils/yoke.export_aim_dmx: real ranges + the hardware-verified
-      yoke conversion; this check closes the last interop link)
+      yoke conversion; this check closes the last interop link).
+      EXTENDED 2026-07-14: also run an animated movement pattern
+      (circle) from the exported show in QLC+ - the export now
+      converts every sequence step through the yoke, so the figure
+      should match native output on the rig.
 
 - [ ] Busk a colour over a playing show against a real ArtNet node or
       the standalone visualizer (merge is unit-tested, never touched
