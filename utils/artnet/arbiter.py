@@ -47,6 +47,32 @@ IDLE_BLACKOUT = "blackout"
 
 TICK_HZ = 44  # ArtNet ceiling; the two legacy senders looped at 30.
 
+BROADCAST_IP = "255.255.255.255"
+
+
+def artnet_target_from_config(config) -> str:
+    """The native output's ArtNet destination, from the configured
+    universes: the first ArtNet-plugin universe (by id) with a target
+    IP set. Falls back to limited broadcast when nothing is configured.
+
+    Before 2026-07-13 the universe's "Target IP" was only honoured by
+    the .qxw export - native output always broadcast, which on a
+    multi-homed machine leaves via ONE interface (the default route)
+    and never reaches a node on a secondary NIC (the classic 2.x.x.x
+    ArtNet network). Unicast to the configured node fixes that; the
+    arbiter's broadcast mirror keeps the local visualizer fed.
+    """
+    universes = getattr(config, "universes", {}) or {}
+    for _uid, universe in sorted(universes.items()):
+        output = getattr(universe, "output", None) or {}
+        if output.get("plugin") != "ArtNet":
+            continue
+        ip = ((output.get("parameters") or {}).get("ip") or "").strip()
+        if ip:
+            return ip
+    return BROADCAST_IP
+
+
 # set_fixtures_visible() equivalents for the visible floor (values by
 # channel class; colour wheel 0 = open/white, pan/tilt 127 = centered).
 _VISIBLE_FULL = 255

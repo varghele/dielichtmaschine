@@ -27,6 +27,14 @@ verbatim as the GitHub Release notes (see [docs/releasing.md](docs/releasing.md)
   back-wall preset faced upstage and the front-wall preset faced the
   audience. Corrected; projects saved with the old values are fixed
   automatically on load.
+- **The universe's Target IP now drives native ArtNet output.** It was
+  honoured only by the QLC+ export - the built-in output always sent to
+  broadcast, which on a machine with more than one network interface
+  leaves via the default one and never reaches a node wired to a
+  second NIC (the classic 2.x.x.x ArtNet network). Output now unicasts
+  to the configured node IP (re-read whenever output is toggled or
+  playback starts), with a broadcast mirror so the local visualizer
+  keeps receiving. No IP configured keeps the old broadcast behaviour.
 - **Live position palettes aim with 16-bit precision.** The busk
   layer's position claims now write the pan/tilt fine channels with the
   real 16-bit remainder instead of zero. Coarse-only aim quantizes a

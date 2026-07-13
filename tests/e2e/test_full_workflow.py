@@ -981,6 +981,28 @@ class TestOutputShellWiring:
         window.tabWidget.setCurrentIndex(5)   # LIVE section (Auto screen)
         assert arbiter._idle_policy == IDLE_BLACKOUT
 
+    def test_configured_artnet_ip_reaches_the_wire(self, wired_window):
+        """The universe's Target IP drives native output (it used to be
+        export-only: the sender always broadcast, which never reaches a
+        node on a secondary NIC). Editing the IP and re-accessing the
+        arbiter re-resolves it, and unicast switches the broadcast
+        mirror on for the local visualizer."""
+        from config.models import Universe
+        window, arbiter = wired_window
+        window.config.universes[1] = Universe(id=1, name="U1", output={
+            "plugin": "ArtNet", "line": "0",
+            "parameters": {"ip": "2.0.0.1", "subnet": "0",
+                           "universe": "0"}})
+        assert window.output_arbiter() is arbiter   # same instance
+        assert arbiter._sender.target_ip == "2.0.0.1"
+        assert arbiter._mirror_enabled
+
+        # Clearing the IP falls back to broadcast, mirror off.
+        window.config.universes[1].output["parameters"]["ip"] = ""
+        window.output_arbiter()
+        assert arbiter._sender.target_ip == "255.255.255.255"
+        assert not arbiter._mirror_enabled
+
 
 class TestVisualizerButton:
     """The topbar VISUALIZER action: ONE press starts the feed and

@@ -443,3 +443,52 @@ class TestBroadcastMirror:
         arbiter.stop(blackout=True)
         assert mirror.sent
         assert all(data == bytes(512) for _, data, _ in mirror.sent)
+
+
+class TestArtnetTargetFromConfig:
+    """The native output's destination comes from the configured
+    universes (before 2026-07-13 the universe's Target IP was export-
+    only and native output always broadcast, which never reaches a
+    node on a secondary NIC)."""
+
+    def _config(self, *universes):
+        config = Configuration()
+        config.universes = {u.id: u for u in universes}
+        return config
+
+    def test_picks_the_first_artnet_universe_ip(self):
+        from utils.artnet.arbiter import artnet_target_from_config
+        config = self._config(
+            Universe(id=1, name="U1", output={
+                "plugin": "ArtNet", "line": "0",
+                "parameters": {"ip": "2.0.0.1", "subnet": "0",
+                               "universe": "0"}}),
+            Universe(id=2, name="U2", output={
+                "plugin": "ArtNet", "line": "0",
+                "parameters": {"ip": "10.0.0.9", "subnet": "0",
+                               "universe": "1"}}),
+        )
+        assert artnet_target_from_config(config) == "2.0.0.1"
+
+    def test_skips_non_artnet_universes(self):
+        from utils.artnet.arbiter import artnet_target_from_config
+        config = self._config(
+            Universe(id=1, name="U1", output={
+                "plugin": "E1.31", "line": "0",
+                "parameters": {"ip": "239.255.0.1", "universe": "1"}}),
+            Universe(id=2, name="U2", output={
+                "plugin": "ArtNet", "line": "0",
+                "parameters": {"ip": "2.0.0.1", "subnet": "0",
+                               "universe": "1"}}),
+        )
+        assert artnet_target_from_config(config) == "2.0.0.1"
+
+    def test_broadcast_when_nothing_configured(self):
+        from utils.artnet.arbiter import (
+            BROADCAST_IP, artnet_target_from_config,
+        )
+        empty_ip = self._config(Universe(id=1, name="U1", output={
+            "plugin": "ArtNet", "line": "0",
+            "parameters": {"ip": "", "subnet": "0", "universe": "0"}}))
+        assert artnet_target_from_config(empty_ip) == BROADCAST_IP
+        assert artnet_target_from_config(Configuration()) == BROADCAST_IP

@@ -265,12 +265,16 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         into it, so the exclusive playback slot and the merge actually
         arbitrate across features. Created lazily - most sessions
         never enable output."""
+        from utils.artnet.arbiter import (
+            BROADCAST_IP, OutputArbiter, artnet_target_from_config,
+        )
         if getattr(self, "_output_arbiter", None) is None:
-            from utils.artnet.arbiter import OutputArbiter
             from utils.artnet.live_layer import LiveBuskLayer
             from gui.tabs.live_tab import COLOUR_SWATCHES
 
-            arbiter = OutputArbiter(config=self.config)
+            arbiter = OutputArbiter(
+                config=self.config,
+                target_ip=artnet_target_from_config(self.config))
 
             # The Live busk surface rides on top of whatever plays
             # (busk-on-top): register its layer once, for the arbiter's
@@ -296,6 +300,15 @@ class MainWindow(QMainWindow, Ui_MainWindow):
 
             # The Live tab's OUT chip polls this arbiter's status.
             self.live_tab.set_status_arbiter(arbiter)
+
+        # Re-resolve the ArtNet destination on EVERY access (OUTPUT
+        # toggle, PLAY): the user edits the universe's Target IP in the
+        # Setup tab and expects the wire to follow without a restart.
+        # Unicast to a node would starve the local visualizer's
+        # listener, so the broadcast mirror comes on with it.
+        target = artnet_target_from_config(self.config)
+        self._output_arbiter.set_target_ip(target)
+        self._output_arbiter.set_broadcast_mirror(target != BROADCAST_IP)
         return self._output_arbiter
 
     def _push_live_masters(self):
