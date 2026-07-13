@@ -20,6 +20,7 @@ from utils.orientation import (
     fixture_rotation_matrix,
     migrate_orientation_angles,
     pan_tilt_to_dmx,
+    pan_tilt_to_dmx16,
     preset_angles,
     get_direction_for_tilt_calculation,
 )
@@ -172,6 +173,52 @@ class TestCalculatePanTilt:
         pan, tilt = calculate_pan_tilt(0, 0, 5, 3, 3, 0, 'hanging', 0, -90, 0)
         assert -270 <= pan <= 270
         assert -135 <= tilt <= 135
+
+
+class TestPanTiltToDmx16:
+    """16-bit encode: coarse + fine, decoded as coarse*256 + fine by
+    the visualizer's MovementComponent and real fixtures alike."""
+
+    def test_center_is_exact_half_travel(self):
+        pan_c, pan_f, tilt_c, tilt_f = pan_tilt_to_dmx16(0.0, 0.0)
+        assert (pan_c * 256 + pan_f) == 32768   # 32768/65535 = 0.5
+        assert (tilt_c * 256 + tilt_f) == 32768
+
+    def test_extremes_hit_the_rails(self):
+        pan_c, pan_f, tilt_c, tilt_f = pan_tilt_to_dmx16(270.0, -135.0)
+        assert (pan_c, pan_f) == (255, 255)     # +half range -> 65535
+        assert (tilt_c, tilt_f) == (0, 0)       # -half range -> 0
+
+    def test_clamps_beyond_range(self):
+        pan_c, pan_f, _, _ = pan_tilt_to_dmx16(9999.0, 0.0)
+        assert (pan_c, pan_f) == (255, 255)
+
+    def test_inversion(self):
+        normal = pan_tilt_to_dmx16(90.0, 0.0)
+        inverted = pan_tilt_to_dmx16(90.0, 0.0, pan_inverted=True)
+        # Mirrored around the centre of travel (rounding may split a
+        # half-step either way).
+        total = (normal[0] * 256 + normal[1]) + \
+            (inverted[0] * 256 + inverted[1])
+        assert total in (65535, 65536)
+
+    def test_round_trip_accuracy_beats_8_bit(self):
+        # 21.8 deg pan on a 540 range: the 8-bit step is ~2.1 deg; the
+        # 16-bit decode must come back within one 16-bit step.
+        pan_deg = 21.8
+        pan_c, pan_f, _, _ = pan_tilt_to_dmx16(pan_deg, 0.0, 540.0, 270.0)
+        decoded = ((pan_c * 256 + pan_f) / 65535.0 - 0.5) * 540.0
+        assert abs(decoded - pan_deg) < 540.0 / 65535 + 1e-9
+
+    def test_coarse_stays_close_to_the_8_bit_encode(self):
+        # The legacy 8-bit encoder spans 0..254 (127 +- 127) while the
+        # 16-bit coarse byte spans the full 0..255, so the two may
+        # differ by up to 2 steps - close enough that swapping in
+        # 16-bit cannot jump the aim, just refine it.
+        for pan in (-200.0, -21.8, 0.0, 45.0, 180.0):
+            coarse16 = pan_tilt_to_dmx16(pan, 0.0)[0]
+            coarse8 = pan_tilt_to_dmx(pan, 0.0)[0]
+            assert abs(coarse16 - coarse8) <= 2
 
 
 def _aimed_beam_stage(fixture_xyz, target_xyz, mounting):

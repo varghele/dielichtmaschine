@@ -26,7 +26,7 @@ from gui.tabs.live_tab import COLOUR_SWATCHES, LiveState
 from utils.artnet.arbiter import IDLE_BLACKOUT, OutputArbiter
 from utils.artnet.dmx_manager import FixtureChannelMap
 from utils.artnet.live_layer import LiveBuskLayer
-from utils.orientation import calculate_pan_tilt, pan_tilt_to_dmx
+from utils.orientation import calculate_pan_tilt, pan_tilt_to_dmx16
 
 DIMMER, RED, GREEN, BLUE, WHITE, PAN = 0, 1, 2, 3, 4, 5
 TILT, PAN_FINE, TILT_FINE, GOBO = 6, 7, 8, 9
@@ -316,11 +316,12 @@ class TestBuskOverShow:
         assert layer.render(0.0)             # busk lights up
 
 
-def _expected_aim(fixture, target, pan_range=540.0, tilt_range=270.0):
-    """Reference pan/tilt DMX for a fixture aimed at a stage-space
-    target - the exact calculate_pan_tilt/pan_tilt_to_dmx contract the
-    playback layer's spot targeting uses (no group in these configs, so
-    orientation comes from the fixture's own fields)."""
+def _expected_aim16(fixture, target, pan_range=540.0, tilt_range=270.0):
+    """Reference 16-bit pan/tilt DMX for a fixture aimed at a
+    stage-space target - the calculate_pan_tilt/pan_tilt_to_dmx16
+    contract of the busk layer's position claims (no group in these
+    configs, so orientation comes from the fixture's own fields).
+    Returns (pan_coarse, pan_fine, tilt_coarse, tilt_fine)."""
     mounting, yaw, pitch, roll = fixture.get_effective_orientation(None)
     pan_deg, tilt_deg = calculate_pan_tilt(
         fixture_x=fixture.x, fixture_y=fixture.y,
@@ -329,7 +330,14 @@ def _expected_aim(fixture, target, pan_range=540.0, tilt_range=270.0):
         mounting=mounting, yaw=yaw, pitch=pitch, roll=roll,
         pan_range=pan_range, tilt_range=tilt_range,
     )
-    return pan_tilt_to_dmx(pan_deg, tilt_deg, pan_range, tilt_range)
+    return pan_tilt_to_dmx16(pan_deg, tilt_deg, pan_range, tilt_range)
+
+
+def _expected_aim(fixture, target, pan_range=540.0, tilt_range=270.0):
+    """The coarse bytes only, for tests that assert just pan/tilt."""
+    pan_c, _, tilt_c, _ = _expected_aim16(fixture, target,
+                                          pan_range, tilt_range)
+    return pan_c, tilt_c
 
 
 class TestPositionClaims:
@@ -343,10 +351,12 @@ class TestPositionClaims:
                                         y=mh1.y, z=mh1.z)}
         state.positions = {"Movers": "mark:On Head"}
         values, mask = layer.render(0.0)[1]
-        assert mask[PAN] and values[PAN] == 127
-        assert mask[TILT] and values[TILT] == 127
-        # Fine channels claimed to zero so a movement block underneath
-        # cannot jitter the busked aim.
+        # 16-bit centre: value16 = 32768 -> coarse 128, fine 0 (the
+        # exact 0.5 of full travel; the old 8-bit centre was 127).
+        assert mask[PAN] and values[PAN] == 128
+        assert mask[TILT] and values[TILT] == 128
+        # Fine channels carry the 16-bit remainder (and being claimed
+        # keeps a movement block underneath from jittering the aim).
         assert mask[PAN_FINE] and values[PAN_FINE] == 0
         assert mask[TILT_FINE] and values[TILT_FINE] == 0
         # Position claims NO intensity, NO shutter, nothing else: movers
@@ -354,9 +364,13 @@ class TestPositionClaims:
         assert mask[DIMMER] == 0
         assert mask[RED] == 0
         assert mask[GOBO] == 0
-        # MH2 (base 10) aims at the same mark from its own position.
-        expected = _expected_aim(config.fixtures[1], (mh1.x, mh1.y, mh1.z))
-        assert (values[10 + PAN], values[10 + TILT]) == expected
+        # MH2 (base 10) aims at the same mark from its own position,
+        # fine bytes included.
+        pan_c, pan_f, tilt_c, tilt_f = _expected_aim16(
+            config.fixtures[1], (mh1.x, mh1.y, mh1.z))
+        assert (values[10 + PAN], values[10 + TILT]) == (pan_c, tilt_c)
+        assert (values[10 + PAN_FINE], values[10 + TILT_FINE]) == \
+            (pan_f, tilt_f)
 
     def test_point_preset_converges_pattern_preset_per_fixture(
             self, qapp, mock_fixture_def):

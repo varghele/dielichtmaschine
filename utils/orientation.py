@@ -292,6 +292,39 @@ def pan_tilt_to_dmx(
     return pan_dmx, tilt_dmx
 
 
+def pan_tilt_to_dmx16(
+    pan_degrees: float, tilt_degrees: float,
+    pan_range: float = 540.0, tilt_range: float = 270.0,
+    pan_inverted: bool = False, tilt_inverted: bool = False
+) -> Tuple[int, int, int, int]:
+    """Convert pan/tilt angles to 16-bit DMX (coarse + fine bytes).
+
+    The 8-bit :func:`pan_tilt_to_dmx` quantizes a 540-degree pan to
+    ~2.1 degrees per step (~18 cm at a 5 m throw); fixtures with fine
+    channels resolve ~0.008 degrees. Consumers decode the standard way,
+    value16 = coarse * 256 + fine (the visualizer's MovementComponent
+    and real 16-bit fixtures alike).
+
+    Returns:
+        (pan_coarse, pan_fine, tilt_coarse, tilt_fine), each 0-255.
+    """
+    half_pan = pan_range / 2
+    half_tilt = tilt_range / 2
+
+    pan_normalized = pan_degrees / half_pan if half_pan > 0 else 0.0
+    tilt_normalized = tilt_degrees / half_tilt if half_tilt > 0 else 0.0
+    if pan_inverted:
+        pan_normalized = -pan_normalized
+    if tilt_inverted:
+        tilt_normalized = -tilt_normalized
+    pan_normalized = max(-1.0, min(1.0, pan_normalized))
+    tilt_normalized = max(-1.0, min(1.0, tilt_normalized))
+
+    pan16 = round((pan_normalized + 1.0) / 2.0 * 65535)
+    tilt16 = round((tilt_normalized + 1.0) / 2.0 * 65535)
+    return pan16 >> 8, pan16 & 0xFF, tilt16 >> 8, tilt16 & 0xFF
+
+
 # REMOVED 2026-07-12: get_rotation_matrix / get_beam_direction /
 # get_fill_direction / is_fixture_pointing_down. They built a THIRD
 # rotation convention (ZYX with yaw around a Z-up axis, plus a hidden

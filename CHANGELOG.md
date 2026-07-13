@@ -27,6 +27,12 @@ verbatim as the GitHub Release notes (see [docs/releasing.md](docs/releasing.md)
   back-wall preset faced upstage and the front-wall preset faced the
   audience. Corrected; projects saved with the old values are fixed
   automatically on load.
+- **Live position palettes aim with 16-bit precision.** The busk
+  layer's position claims now write the pan/tilt fine channels with the
+  real 16-bit remainder instead of zero. Coarse-only aim quantizes a
+  540-degree pan to about 2 degrees per step - roughly 18 cm of drift
+  at a 5 m throw; with the fine bytes the aim resolves to the
+  fixture's true precision.
 - **Aimed beams missed their targets on GDTF fixtures.** The aiming
   math and the GDTF geometry describe two different yokes: the solver
   aims with the beam perpendicular to the pan axis at tilt centre,

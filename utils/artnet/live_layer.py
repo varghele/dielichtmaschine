@@ -23,14 +23,15 @@ busk programmer actually drives:
   level instead (and flash-only reads as a white flash).
 - A mover group with an APPLIED POSITION (LiveState.positions, per
   group) claims pan + tilt on its pan/tilt-capable fixtures, aimed at
-  the palette's stage-space target through the same
-  calculate_pan_tilt/pan_tilt_to_dmx path the playback layer uses for
-  spot-targeted MovementBlocks, at the definition's physical ranges
-  (FixtureChannelMap.pan_range/tilt_range). The fine channels are
-  claimed to zero so a movement block underneath cannot jitter the
-  busked aim. Position claims NO dimmer and NO shutter: movers can be
-  pre-aimed dark, and intensity stays whatever the show (or a busk
-  colour/flash) says.
+  the palette's stage-space target through the same calculate_pan_tilt
+  path the playback layer uses for spot-targeted MovementBlocks, at the
+  definition's physical ranges (FixtureChannelMap.pan_range/tilt_range),
+  encoded 16-bit (pan_tilt_to_dmx16): coarse + fine bytes, so the aim
+  resolves to the fixture's real precision instead of the ~2-degree
+  coarse step - and the claimed fines keep a movement block underneath
+  from jittering the busked aim. Position claims NO dimmer and NO
+  shutter: movers can be pre-aimed dark, and intensity stays whatever
+  the show (or a busk colour/flash) says.
 - Groups without busk content claim nothing - RELEASE ALL clears the
   programmer, the claims vanish, and every channel falls through to
   whatever runs underneath. That IS busk-on-top.
@@ -46,7 +47,7 @@ timeline/Auto playback too.
 
 from typing import Callable, Dict, Optional, Tuple
 
-from utils.orientation import calculate_pan_tilt, pan_tilt_to_dmx
+from utils.orientation import calculate_pan_tilt, pan_tilt_to_dmx16
 from utils.position_presets import (
     MARK_PREFIX, compute_presets, group_has_movers, mark_name,
 )
@@ -237,16 +238,21 @@ class LiveBuskLayer:
                         pan_range=fixture_map.pan_range,
                         tilt_range=fixture_map.tilt_range,
                     )
-                    pan_dmx, tilt_dmx = pan_tilt_to_dmx(
+                    # 16-bit aim: the coarse byte alone quantizes a
+                    # 540-degree pan to ~2 degrees (~18 cm at 5 m);
+                    # writing the fine bytes takes the aim to the
+                    # fixture's real resolution. Claiming the fines also
+                    # keeps a movement block underneath from jittering
+                    # the busked aim.
+                    pan_c, pan_f, tilt_c, tilt_f = pan_tilt_to_dmx16(
                         pan_deg, tilt_deg,
                         fixture_map.pan_range, fixture_map.tilt_range)
-                    _write(fixture_map, fixture_map.pan_channels, pan_dmx)
-                    _write(fixture_map, fixture_map.tilt_channels,
-                           tilt_dmx)
-                    # Claim the fine channels to zero: unclaimed, a
-                    # movement block underneath would jitter the aim.
-                    _write(fixture_map, fixture_map.pan_fine_channels, 0)
-                    _write(fixture_map, fixture_map.tilt_fine_channels, 0)
+                    _write(fixture_map, fixture_map.pan_channels, pan_c)
+                    _write(fixture_map, fixture_map.tilt_channels, tilt_c)
+                    _write(fixture_map, fixture_map.pan_fine_channels,
+                           pan_f)
+                    _write(fixture_map, fixture_map.tilt_fine_channels,
+                           tilt_f)
 
         return {u: (bytes(values[u]), bytes(masks[u])) for u in values}
 
