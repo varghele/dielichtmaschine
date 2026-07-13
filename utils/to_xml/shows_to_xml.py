@@ -682,9 +682,17 @@ def _generate_movement_shape_steps(movement_block, fixture_def, mode_name, fixtu
                 pan = center_pan
                 tilt = center_tilt
 
-            # Apply clipping to boundaries
+            # Apply clipping to boundaries (solver DMX space, like the
+            # native renderer's clamp)
             pan = max(pan_min, min(pan_max, pan))
             tilt = max(tilt_min, min(tilt_max, tilt))
+
+            # Convert the finished solver-space step to the fixture's
+            # real yoke - the per-step equivalent of the arbiter's
+            # hardware pass (identity for fixtures without a resolvable
+            # definition, so non-mover exports are untouched).
+            from utils.yoke import convert_solver_dmx
+            pan, tilt = convert_solver_dmx(fixture, pan, tilt)
 
             # Build channel values for this fixture
             channel_value_pairs = []

@@ -772,13 +772,17 @@ def sample_movement_at_time(
             mounting, yaw, pitch, roll = fixture.get_effective_orientation(group)
             fixture_z = fixture.get_effective_z(group)
 
-            # Aim like native output: solver at the definition's real
-            # ranges, converted to the real yoke (utils/yoke) so QLC+
-            # playback lands the spot where the app and the rig do.
-            # Movement PATTERNS still oscillate in solver DMX space
-            # around this converted centre (v1.5a leftover).
-            from utils.yoke import export_aim_dmx
-            pan_dmx, tilt_dmx = export_aim_dmx(
+            # Aim with the solver at the definition's real ranges,
+            # UNCONVERTED: the shape math below runs in solver DMX
+            # space (exactly like the native renderer), and the WHOLE
+            # step converts to the real yoke at the end
+            # (convert_solver_dmx) - so QLC+ playback traces the same
+            # figure the app and the rig do. Before 2026-07-13 only
+            # the centre was converted and the pattern oscillated in
+            # solver space around it, a mixed frame that traced the
+            # wrong figure on a real head.
+            from utils.yoke import export_solver_aim_dmx
+            pan_dmx, tilt_dmx = export_solver_aim_dmx(
                 fixture, fixture_z, (spot.x, spot.y, spot.z),
                 mounting, yaw, pitch, roll)
 
@@ -919,10 +923,16 @@ def sample_movement_at_time(
         pan = center_pan
         tilt = center_tilt
 
-    # Apply clipping to boundaries
+    # Apply clipping to boundaries (solver DMX space, like the native
+    # renderer's clamp).
     pan = max(pan_min, min(pan_max, pan))
     tilt = max(tilt_min, min(tilt_max, tilt))
 
+    # Convert the finished solver-space step to the fixture's real
+    # yoke - the per-step equivalent of the arbiter's hardware pass.
+    if fixture is not None:
+        from utils.yoke import convert_solver_dmx
+        return convert_solver_dmx(fixture, pan, tilt)
     return (int(pan), int(tilt))
 
 

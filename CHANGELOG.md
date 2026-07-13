@@ -13,6 +13,15 @@ verbatim as the GitHub Release notes (see [docs/releasing.md](docs/releasing.md)
 
 ### Fixed
 
+- **Exported movement patterns now trace the right figure on real
+  rigs.** A `.qxw` export converted only the CENTRE of a moving-head
+  pattern to the real fixture's yoke and layered the shape's offsets
+  on top in the app's internal convention - a mix of two coordinate
+  conventions that traced a distorted figure in QLC+ playback. Every
+  sequence step is now computed internally first and converted whole,
+  so QLC+ moves the heads exactly like the app's native output (which
+  was hardware-verified). Rigs without moving heads export
+  byte-identically, as before.
 - **The 3D stage was a mirror image of the real stage.** The renderer
   mapped stage coordinates by swapping two axes, which is a reflection,
   not a rotation - so the whole scene was flipped. Beams still landed on

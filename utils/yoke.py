@@ -137,6 +137,57 @@ def export_aim_dmx(fixture, fixture_z: float,
     return pan_tilt_to_dmx(pan_deg, tilt_deg, pan_range, tilt_range)
 
 
+def export_solver_aim_dmx(fixture, fixture_z: float,
+                          target: Tuple[float, float, float],
+                          mounting: str, yaw: float, pitch: float,
+                          roll: float) -> Tuple[int, int]:
+    """SOLVER-convention 8-bit pan/tilt for a spot aim at the
+    definition's physical ranges - NO yoke conversion.
+
+    The export's movement-sequence path builds its shape math on this
+    (offsets in solver DMX space, exactly like the native renderer),
+    then converts EACH STEP through :func:`convert_solver_dmx`.
+    :func:`export_aim_dmx` remains the one-shot static aim (degrees
+    end to end, one quantisation)."""
+    pan_range, tilt_range = _physical_ranges(fixture.manufacturer,
+                                             fixture.model)
+    pan_deg, tilt_deg = calculate_pan_tilt(
+        fixture_x=fixture.x, fixture_y=fixture.y, fixture_z=fixture_z,
+        target_x=target[0], target_y=target[1], target_z=target[2],
+        mounting=mounting, yaw=yaw, pitch=pitch, roll=roll,
+        pan_range=pan_range, tilt_range=tilt_range)
+    return pan_tilt_to_dmx(pan_deg, tilt_deg, pan_range, tilt_range)
+
+
+def convert_solver_dmx(fixture, pan_dmx: float,
+                       tilt_dmx: float) -> Tuple[int, int]:
+    """An 8-bit SOLVER-convention pan/tilt pair -> the real-yoke 8-bit
+    pair for the .qxw export's movement-sequence steps, at the
+    fixture's physical ranges - the per-step equivalent of what the
+    output arbiter does to native packets (apply_yoke_to_universe).
+
+    Before 2026-07-13 the exported movement patterns oscillated in
+    solver DMX space around a yoke-converted centre - a mixed frame
+    that traced the wrong figure on a real head. Now the whole step is
+    computed in solver space and converted here, so QLC+ playback
+    moves like native output. Identity (int-clamped) when no
+    definition resolves, so fixtures without a known yoke export
+    unchanged."""
+    pan_dmx = max(0.0, min(255.0, float(pan_dmx)))
+    tilt_dmx = max(0.0, min(255.0, float(tilt_dmx)))
+    convert, flipped = fixture_yoke(fixture.manufacturer, fixture.model,
+                                    getattr(fixture, "current_mode", ""))
+    if not convert:
+        return int(pan_dmx), int(tilt_dmx)
+    pan_range, tilt_range = _physical_ranges(fixture.manufacturer,
+                                             fixture.model)
+    # Inverse of pan_tilt_to_dmx's 8-bit encode (127 = centre).
+    pan_deg = (pan_dmx - 127.0) / 127.0 * (pan_range / 2.0)
+    tilt_deg = (tilt_dmx - 127.0) / 127.0 * (tilt_range / 2.0)
+    pan_g, tilt_g = solver_to_gdtf_axes(pan_deg, tilt_deg, flipped)
+    return pan_tilt_to_dmx(pan_g, tilt_g, pan_range, tilt_range)
+
+
 def _decode16(buf, fmap, coarse_offsets, fine_offsets, rng: float) -> float:
     """Decode a channel's coarse(+fine) bytes to degrees from centre."""
     if not coarse_offsets:

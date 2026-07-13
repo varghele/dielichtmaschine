@@ -71,10 +71,15 @@ landed, standing and hanging. Follow-ups shipped same day: all four
 wall presets unswapped (migration heals), .qxf movers get the synthetic
 standard yoke (fixture_yoke), and the .qxw export aims like native
 output (export_aim_dmx: real ranges + conversion in spot targets,
-preset scenes, VC XY-pads). Last remaining sliver (v1.5a): animated
-movement PATTERNS in the export still oscillate in solver DMX space
-around the converted centre (per-step conversion), and per-fixture
-DMX-direction invert flags for movers whose hardware runs opposite.
+preset scenes, VC XY-pads). Movement PATTERNS closed 2026-07-14
+(overnight): the export now computes each sequence step in solver DMX
+space (like the native renderer) and converts the WHOLE step through
+the yoke (utils/yoke.convert_solver_dmx + export_solver_aim_dmx;
+tests/unit/test_export_movement_yoke.py pins step==wire against
+apply_yoke_to_universe; demo-show hashes: theatre_static byte-identical,
+mover shows changed as intended). Last remaining sliver (v1.5a):
+per-fixture DMX-direction invert flags for movers whose hardware runs
+opposite.
 
 The solver and the renderer both model a mover as: beam along local
 +X, PAN about local Z, TILT about local Y. In that model the beam at

@@ -332,9 +332,11 @@ full-pipeline aim targets all landed, standing AND hanging. The yoke
 finding is CLOSED: .qxf movers get the synthetic standard yoke
 (utils/yoke.fixture_yoke) and the .qxw export aims like native output
 (export_aim_dmx in the three to_xml sites - spot targets, preset
-scenes, VC XY-pads; mover-less rigs stay byte-identical). Last v1.5a
-slivers: per-step conversion of animated movement PATTERNS in the
-export, and per-fixture DMX-direction invert flags.
+scenes, VC XY-pads; mover-less rigs stay byte-identical). Movement-pattern
+export closed 2026-07-14: sequence steps compute in solver DMX space
+and convert whole through the yoke (utils/yoke.convert_solver_dmx,
+test_export_movement_yoke.py). Last v1.5a sliver: per-fixture
+DMX-direction invert flags.
 
 **Solo pull-ins (2026-07-12 evening, same branch):** two roadmap
 items shipped while the user was away. (1) Headless export CLI (v1.3):
