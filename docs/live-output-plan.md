@@ -162,7 +162,21 @@ Hardware checkpoints after 0/1, 3, and 4 - the bench rig is set up.
   the user could not un-busk a colour, and a stuck swatch permanently
   outranked the scene on its group. stage_colour toggles; the
   swatch-beats-scene priority itself is unchanged.
-- [ ] Phase 2 - LiveEngine infrastructure
+- [x] Phase 2 - LiveEngine infrastructure (2026-07-13).
+  utils/artnet/live_engine.py: LiveEngine(manager_factory) with the
+  three SLOTS, per-slot private DMXManager (factory must pass the new
+  emit_safe_idle=False - the flag landed on DMXManager.__init__ with
+  True as the unchanged playback default), OnePartStructure for the
+  constant-tempo structure, stateless per-render block scheduling
+  (active sublane block per type at the looped virtual time, latest
+  start wins), incremental beat clock (set_bpm rescales phase-
+  continuously without restaging - blocks keep their build_bpm
+  timescale), pause freezes the exact frame, kill drops claims,
+  restage replaces, slot frames merge in SLOTS order (later overrides
+  earlier per claimed channel). Not yet wired to any UI - phase 3
+  consumes it. Tests: tests/unit/test_live_engine.py (loop rate, bpm
+  rescale, claim width, pause/resume without time jump, kill, restage,
+  concurrent slots, safe-idle suppression + playback default pinned).
 - [ ] Phase 3 - effects pool riff player + queue
 - [ ] Phase 4 - movement shapes pool
 - [ ] Phase 5 - intensity FX as bundled riffs

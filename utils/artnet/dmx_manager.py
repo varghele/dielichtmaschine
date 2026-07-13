@@ -219,7 +219,8 @@ class DMXManager:
                     fixture, fixture_def, config)
         return maps
 
-    def __init__(self, config: Configuration, fixture_definitions: dict, song_structure=None):
+    def __init__(self, config: Configuration, fixture_definitions: dict, song_structure=None,
+                 emit_safe_idle: bool = True):
         """
         Initialize DMX manager.
 
@@ -227,10 +228,18 @@ class DMXManager:
             config: Configuration with fixtures and universes
             fixture_definitions: Dictionary of parsed fixture definitions
             song_structure: Optional SongStructure for BPM-aware timing
+            emit_safe_idle: When True (default, playback behaviour),
+                update_dmx claims safe idle values on EVERY fixture
+                (shutter open, colour wheel white, pan/tilt centre).
+                The Live engine's private managers pass False - they
+                must claim ONLY what their staged blocks drive, so the
+                busk rides on top of the show instead of grabbing every
+                mover's wheel and yoke (docs/live-output-plan.md).
         """
         self.config = config
         self.fixture_definitions = fixture_definitions
         self.song_structure = song_structure
+        self.emit_safe_idle = emit_safe_idle
 
         # DMX state - universe_id -> 512-byte array, plus the parallel
         # claim mask (see class docstring): 1 = channel deliberately
@@ -526,7 +535,9 @@ class DMXManager:
 
         # Set safe default values for ALL fixtures to prevent strobe/weird modes
         # This ensures shutters are open, dimmers at 0, etc. for non-targeted fixtures
-        self._set_safe_idle_state()
+        # (suppressed for the Live engine's private managers - see __init__).
+        if self.emit_safe_idle:
+            self._set_safe_idle_state()
 
         # Process each lane's active blocks
         # Make a copy of items to avoid issues during iteration
