@@ -312,9 +312,10 @@ Follow-ups landed 2026-07-13: (a) GDTF meshes are authored HANGING
 (tree extends -Z below the attachment origin) while the chassis frame
 is standing-authored, so the presets flipped them upside down -
 build_draw_plan now canonicalizes posture by tree z-extent
-(gdtf_draw_plan._canonicalize_posture); (b) wall_back/wall_front
-carried each other's yaw in the pre-rebrand table - swapped
-(user-verified), migration heals both old values; (c) the stage
+(gdtf_draw_plan._canonicalize_posture); (b) ALL FOUR wall presets
+carried their opposite's yaw in the pre-rebrand table - swapped
+(user-verified, back/front then left/right), migration heals the old
+values; (c) the stage
 canvas's custom-orientation ring now compares against the preset
 triple instead of "any non-zero pitch/roll"; (d) the GDTF chain is the
 REAL yoke (beam along the pan axis at tilt centre) while the solver
@@ -327,8 +328,13 @@ HARDWARE-VERIFIED on a real Hero Spot 60 (bench protocol, section 4-5
 of the coordinate doc): positive physical pan/tilt rotates OPPOSITE
 to right-handed about the GDTF axis nodes - negated in
 DrawItem.compose + solver_to_gdtf_axes; three raw poses and four
-full-pipeline aim targets all landed. The yoke finding is CLOSED for
-GDTF movers; per-fixture axes for mixed PAR/mover rigs remain v1.5a.
+full-pipeline aim targets all landed, standing AND hanging. The yoke
+finding is CLOSED: .qxf movers get the synthetic standard yoke
+(utils/yoke.fixture_yoke) and the .qxw export aims like native output
+(export_aim_dmx in the three to_xml sites - spot targets, preset
+scenes, VC XY-pads; mover-less rigs stay byte-identical). Last v1.5a
+slivers: per-step conversion of animated movement PATTERNS in the
+export, and per-fixture DMX-direction invert flags.
 
 **Solo pull-ins (2026-07-12 evening, same branch):** two roadmap
 items shipped while the user was away. (1) Headless export CLI (v1.3):

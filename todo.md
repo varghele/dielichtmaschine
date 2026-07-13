@@ -64,9 +64,14 @@ to body-orientation values; the two-yoke translation
 arbiter, utils/yoke); one measured correction (positive physical
 pan/tilt is opposite-handed about the GDTF axes, negated in
 DrawItem.compose). Three raw poses + four full-pipeline aim targets all
-landed. Remaining (v1.5a): per-fixture beam/base axes for mixed
-PAR/mover rigs, range-aware .qxw export. The wall_back/wall_front swap
-was fixed 2026-07-13; wall_left/wall_right naming still unreviewed.
+landed, standing and hanging. Follow-ups shipped same day: all four
+wall presets unswapped (migration heals), .qxf movers get the synthetic
+standard yoke (fixture_yoke), and the .qxw export aims like native
+output (export_aim_dmx: real ranges + conversion in spot targets,
+preset scenes, VC XY-pads). Last remaining sliver (v1.5a): animated
+movement PATTERNS in the export still oscillate in solver DMX space
+around the converted centre (per-step conversion), and per-fixture
+DMX-direction invert flags for movers whose hardware runs opposite.
 
 The solver and the renderer both model a mover as: beam along local
 +X, PAN about local Z, TILT about local Y. In that model the beam at
