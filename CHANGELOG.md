@@ -111,6 +111,10 @@ verbatim as the GitHub Release notes (see [docs/releasing.md](docs/releasing.md)
   could; rendered pan/tilt now clamps to the fixture's physical ranges
   exactly like the values sent to the rig, so an out-of-reach target
   pins at the travel limit in both places identically.
+- **Riff tags.** Riffs can carry tags: right-click a riff in the
+  library rail for Edit Tags (comma-separated), the tags show on the
+  riff card, and the rail search matches them - a query starting with
+  `#` (like `#chorus`) searches tags only.
 - **BUILD look in the standalone visualizer.** A BUILD chip in the
   viewer's header lights the whole received rig with a synthetic look
   (dimmer up, shutter open, pan/tilt centred - the same look the

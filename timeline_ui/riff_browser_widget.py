@@ -109,6 +109,16 @@ class RiffItemWidget(QFrame):
         info_label.setProperty("role", "micro")
         layout.addWidget(info_label)
 
+        # Tags line ('#punchy #chorus'), only when the riff has any -
+        # searchable via the rail search (a '#tag' query matches tags
+        # only), editable via the tree's right-click Edit Tags.
+        if self.riff.tags:
+            tags_label = QLabel(" ".join(f"#{t}" for t in self.riff.tags))
+            tags_label.setProperty("role", "micro")
+            tags_label.setStyleSheet(
+                f"color: {t['accent']};")
+            layout.addWidget(tags_label)
+
     def mousePressEvent(self, event):
         if event.button() == Qt.MouseButton.LeftButton:
             self._drag_start_pos = event.pos()
@@ -441,6 +451,11 @@ class RiffBrowserPanel(QWidget):
         self.tree.setAnimated(True)
         self.tree.setExpandsOnDoubleClick(True)
         self.tree.setDragEnabled(False)  # We handle drag manually
+        # Right-click a riff row for Edit Tags (tags feed the search;
+        # a '#tag' query matches tags only).
+        self.tree.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        self.tree.customContextMenuRequested.connect(
+            self._show_tree_context_menu)
         layout.addWidget(self.tree, 1)
 
         # Status label - secondary micro caption.
@@ -611,6 +626,46 @@ class RiffBrowserPanel(QWidget):
         self.riff_library.refresh()
         self._populate_tree()
         self._update_status()
+
+    def _show_tree_context_menu(self, pos):
+        """Right-click menu on the library tree: Edit Tags on riff rows."""
+        from PyQt6.QtWidgets import QMenu
+
+        item = self.tree.itemAt(pos)
+        data = (item.data(0, Qt.ItemDataRole.UserRole) or {}) if item \
+            else {}
+        if data.get("type") != "riff":
+            return
+        riff = data["riff"]
+        menu = QMenu(self)
+        menu.addAction("Edit Tags...", lambda: self._edit_riff_tags(riff))
+        menu.exec(self.tree.viewport().mapToGlobal(pos))
+
+    def _edit_riff_tags(self, riff):
+        """Comma-separated tag editor. Tags render on the riff card and
+        feed the search (a '#tag' query matches tags only); the riff is
+        saved back to its library file."""
+        from PyQt6.QtWidgets import QInputDialog
+
+        text, ok = QInputDialog.getText(
+            self, "Edit Tags",
+            f"Tags for '{riff.name}' (comma-separated):",
+            text=", ".join(riff.tags))
+        if not ok:
+            return
+        from riffs.riff_library import parse_tags
+        riff.tags = parse_tags(text)
+        try:
+            self.riff_library.save_riff(riff)
+        except Exception as e:
+            print(f"riff tags: save failed: {e}")
+        # Rebuild so the card shows the new tags; keep an active search
+        # consistent with them.
+        query = self.search_input.text().strip()
+        if query:
+            self._on_search_changed(query)
+        else:
+            self._populate_tree()
 
     def _update_status(self, message: str = None):
         """Update status label."""

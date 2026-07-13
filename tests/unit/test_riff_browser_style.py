@@ -233,3 +233,88 @@ def test_tree_selection_is_accent_in_rendered_dark_theme():
     accent = THEMES["dark"]["accent"]
     assert f"selection-background-color: {accent}" in qss
     assert "#0078d4" not in qss
+
+
+# =============================================================================
+# Riff tagging in the browser (v1.3): tags on the card, Edit Tags menu
+# =============================================================================
+
+@pytest.fixture
+def tag_panel(qapp, tmp_path):
+    from riffs.riff_library import RiffLibrary
+    library = RiffLibrary(str(tmp_path))
+    library.save_riff(Riff(name="warm_wash", tags=["chorus", "slow"]),
+                      "loops")
+    library.save_riff(Riff(name="plain", tags=[]), "loops")
+    p = RiffBrowserPanel(riff_library=library)
+    yield p, library
+    p.deleteLater()
+
+
+def _riff_items(panel):
+    """{riff name: (tree item, riff)} for every riff row."""
+    from PyQt6.QtCore import Qt
+    out = {}
+    for i in range(panel.tree.topLevelItemCount()):
+        cat = panel.tree.topLevelItem(i)
+        for j in range(cat.childCount()):
+            child = cat.child(j)
+            data = child.data(0, Qt.ItemDataRole.UserRole) or {}
+            if data.get("type") == "riff":
+                out[data["riff"].name] = (child, data["riff"])
+    return out
+
+
+def test_card_shows_tags_when_present(tag_panel):
+    panel, _ = tag_panel
+    item, _riff = _riff_items(panel)["warm_wash"]
+    widget = panel.tree.itemWidget(item, 0)
+    labels = [l.text() for l in widget.findChildren(QLabel)]
+    assert "#chorus #slow" in labels
+
+    item, _riff = _riff_items(panel)["plain"]
+    widget = panel.tree.itemWidget(item, 0)
+    assert not any(t.startswith("#") for t in
+                   (l.text() for l in widget.findChildren(QLabel)))
+
+
+def test_edit_tags_saves_and_rerenders(tag_panel, monkeypatch, tmp_path):
+    from PyQt6.QtWidgets import QInputDialog
+    from riffs.riff_library import RiffLibrary
+    panel, library = tag_panel
+
+    _item, riff = _riff_items(panel)["plain"]
+    monkeypatch.setattr(
+        QInputDialog, "getText",
+        staticmethod(lambda *a, **k: ("Punchy, #drop", True)))
+    panel._edit_riff_tags(riff)
+
+    assert riff.tags == ["Punchy", "drop"]
+    # Persisted: a fresh library reads the tags back from disk.
+    assert RiffLibrary(str(tmp_path)).get_riff("loops/plain").tags == \
+        ["Punchy", "drop"]
+    # ...and the rebuilt card shows them.
+    item, _r = _riff_items(panel)["plain"]
+    widget = panel.tree.itemWidget(item, 0)
+    labels = [l.text() for l in widget.findChildren(QLabel)]
+    assert "#Punchy #drop" in labels
+
+
+def test_edit_tags_cancel_changes_nothing(tag_panel, monkeypatch, tmp_path):
+    from PyQt6.QtWidgets import QInputDialog
+    from riffs.riff_library import RiffLibrary
+    panel, _library = tag_panel
+    _item, riff = _riff_items(panel)["warm_wash"]
+    monkeypatch.setattr(QInputDialog, "getText",
+                        staticmethod(lambda *a, **k: ("ignored", False)))
+    panel._edit_riff_tags(riff)
+    assert riff.tags == ["chorus", "slow"]
+    assert RiffLibrary(str(tmp_path)).get_riff(
+        "loops/warm_wash").tags == ["chorus", "slow"]
+
+
+def test_search_by_hash_tag_filters_the_tree(tag_panel):
+    panel, _ = tag_panel
+    panel._on_search_changed("#chorus")
+    names = set(_riff_items(panel))
+    assert names == {"warm_wash"}

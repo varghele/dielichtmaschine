@@ -39,8 +39,11 @@ Discuss before pulling any of these in - order is by leverage:
       the North Star rebuild of the Fixtures tab (read-only table +
       inspector editing, no cell widgets). Experiment files deleted,
       qt-gotchas #3 + ROADMAP updated 2026-07-12.
-- [ ] **Riff tagging + search** (v1.3): rail search exists; tags are a
-      small model addition.
+- [x] **Riff tagging + search** (v1.3): done 2026-07-13 - the model and
+      library search already knew tags; added the missing UI (tags line
+      on the riff card, right-click Edit Tags with parse_tags cleanup,
+      #tag search scoped to tags only). Favourites pin folded into the
+      Library topbar roadmap item.
 
 Deliberately NOT pulled: Library topbar section (wants a Bibliothek
 screen design first), timeline undo/redo (big), MVR/OSC (own tracks).
