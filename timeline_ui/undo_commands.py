@@ -112,12 +112,19 @@ class DeleteBlockCommand(QUndoCommand):
 
 
 class MoveBlockCommand(QUndoCommand):
-    """Command to move a LightBlock to a new position."""
+    """Command to move a LightBlock to a new position.
+
+    Pass ``already_applied=True`` when the move has ALREADY happened
+    (the live drag mutated the block per pixel and the command is
+    pushed on mouse release): QUndoStack.push() calls redo()
+    immediately, and re-applying would shift the sublane blocks a
+    second time.
+    """
 
     def __init__(self, lane_widget: 'LightLaneWidget', block: LightBlock,
                  old_start: float, old_end: float,
                  new_start: float, new_end: float,
-                 description: str = None):
+                 description: str = None, already_applied: bool = False):
         """Create move block command.
 
         Args:
@@ -128,6 +135,7 @@ class MoveBlockCommand(QUndoCommand):
             new_start: New start time
             new_end: New end time
             description: Optional description
+            already_applied: The first redo() is a no-op (see class doc)
         """
         super().__init__(description or "Move Block")
         self.lane_widget = lane_widget
@@ -136,9 +144,13 @@ class MoveBlockCommand(QUndoCommand):
         self.old_end = old_end
         self.new_start = new_start
         self.new_end = new_end
+        self._skip_first_redo = already_applied
 
     def redo(self):
         """Apply the move."""
+        if self._skip_first_redo:
+            self._skip_first_redo = False
+            return
         self.block.start_time = self.new_start
         self.block.end_time = self.new_end
         self._update_sublane_times(self.old_start, self.new_start)
@@ -223,6 +235,59 @@ class ResizeBlockCommand(QUndoCommand):
             if widget.block is self.block:
                 widget.update_position()
                 break
+
+
+class AddLaneCommand(QUndoCommand):
+    """Command for adding a whole lane to the Shows tab timeline.
+
+    Built AFTER the lane was created and its widget added (the first
+    redo is a no-op); undo/redo then remove/re-add the SAME runtime
+    lane object through the tab's helpers, so block identities (and
+    every block widget's ``.block`` reference) survive round trips.
+    """
+
+    def __init__(self, shows_tab, lane, description: str = None):
+        super().__init__(description or "Add Lane")
+        self.shows_tab = shows_tab
+        self.lane = lane
+        self._skip_first_redo = True
+
+    def redo(self):
+        if self._skip_first_redo:
+            self._skip_first_redo = False
+            return
+        self.shows_tab._add_lane_widget(self.lane)
+
+    def undo(self):
+        for widget in list(self.shows_tab.lane_widgets):
+            if widget.lane is self.lane:
+                self.shows_tab._remove_lane_widget(widget)
+                break
+
+
+class RemoveLaneCommand(QUndoCommand):
+    """Command for removing a lane.
+
+    Undo re-adds the SAME runtime lane object (its widget is rebuilt
+    from lane.light_blocks by the LightLaneWidget constructor, so every
+    block survives). The restored lane appears at the BOTTOM of the
+    timeline - the grid only appends rows; index-preserving restore is
+    a future nicety.
+    """
+
+    def __init__(self, shows_tab, lane_widget, description: str = None):
+        super().__init__(description or "Remove Lane")
+        self.shows_tab = shows_tab
+        self.lane = lane_widget.lane
+
+    def redo(self):
+        for widget in list(self.shows_tab.lane_widgets):
+            if widget.lane is self.lane:
+                self.shows_tab._remove_lane_widget(widget)
+                break
+
+    def undo(self):
+        self.shows_tab._add_lane_widget(self.lane)
 
 
 class AddBlockCommand(QUndoCommand):

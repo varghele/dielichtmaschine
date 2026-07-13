@@ -1004,6 +1004,95 @@ class TestOutputShellWiring:
         assert arbiter._mirror_enabled
 
 
+class TestTimelineUndo:
+    """Undo/redo through the REAL ShowsTab: add lane, add block, delete,
+    remove lane - each round-trips, and the config timeline data stays
+    in sync (undo/redo mutate the runtime lanes directly, so the
+    arbiter's indexChanged resync must write them back)."""
+
+    @pytest.fixture
+    def timeline(self, main_window):
+        from config.models import FixtureGroup, ShowPart, Song
+        window = main_window
+        window.config.groups["Wash"] = FixtureGroup(name="Wash",
+                                                     fixtures=[])
+        window.config.songs["Undo Song"] = Song(
+            name="Undo Song",
+            parts=[ShowPart(name="A", color="#888", signature="4/4",
+                            bpm=120.0, num_bars=8, transition="cut")])
+        tab = window.shows_tab
+        tab._populate_show_combo(select="Undo Song")
+        tab._load_show("Undo Song")
+        return window, tab
+
+    def _timeline_data(self, window):
+        return window.config.songs["Undo Song"].timeline_data
+
+    def test_add_lane_and_block_undo_redo(self, timeline):
+        window, tab = timeline
+        stack = window.undo_stack
+
+        tab.add_lane_btn.click()
+        assert len(tab.lane_widgets) == 1
+        lane = tab.lane_widgets[0]
+        lane.timeline_widget.playhead_position = 0.0
+        lane.add_block_button.click()
+        assert len(lane.lane.light_blocks) == 1
+        block = lane.lane.light_blocks[0]
+
+        # Undo the block: gone from the lane AND resynced to the config.
+        stack.undo()
+        assert lane.lane.light_blocks == []
+        td = self._timeline_data(window)
+        assert td is not None and td.lanes[0].light_blocks == []
+
+        # Redo restores the SAME block object.
+        stack.redo()
+        assert lane.lane.light_blocks == [block]
+        assert self._timeline_data(window).lanes[0].light_blocks
+
+        # Undo again past the block, then the lane itself.
+        stack.undo()          # remove block
+        stack.undo()          # remove lane
+        assert tab.lane_widgets == []
+        stack.redo()          # lane back (same runtime object)
+        assert len(tab.lane_widgets) == 1
+        assert tab.lane_widgets[0].lane is lane.lane
+
+    def test_delete_selection_is_one_undo(self, timeline):
+        window, tab = timeline
+        stack = window.undo_stack
+        tab.add_lane_btn.click()
+        lane = tab.lane_widgets[0]
+        for t in (0.0, 6.0):
+            lane.timeline_widget.playhead_position = t
+            lane.add_block_button.click()
+        assert len(lane.lane.light_blocks) == 2
+
+        tab.selection_manager.select_multiple(
+            lane.get_all_block_widgets(), extend=False)
+        tab._delete_selected_blocks()
+        assert lane.lane.light_blocks == []
+
+        # ONE undo brings BOTH blocks back (macro).
+        stack.undo()
+        assert len(lane.lane.light_blocks) == 2
+        assert self._timeline_data(window).lanes[0].light_blocks
+
+    def test_switching_song_clears_the_stack(self, timeline):
+        from config.models import Song
+        window, tab = timeline
+        stack = window.undo_stack
+        tab.add_lane_btn.click()
+        assert stack.count() > 0
+        window.config.songs["Other"] = Song(name="Other", parts=[])
+        tab._populate_show_combo(select="Other")
+        tab._load_show("Other")
+        # The stack held references to the old song's lane widgets;
+        # loading another song must clear it (no cross-song replay).
+        assert stack.count() == 0
+
+
 class TestOutputButton:
     """The topbar OUTPUT action: ONE press enables output (regression:
     artnet_enabled defaults True while nothing runs, and flipping the

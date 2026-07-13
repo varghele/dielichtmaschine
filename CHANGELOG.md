@@ -111,6 +111,11 @@ verbatim as the GitHub Release notes (see [docs/releasing.md](docs/releasing.md)
   could; rendered pan/tilt now clamps to the fixture's physical ranges
   exactly like the values sent to the rig, so an out-of-reach target
   pins at the travel limit in both places identically.
+- **Undo / redo on the timeline.** Ctrl+Z / Ctrl+Y now cover the Shows
+  tab: adding, moving, resizing, deleting and pasting effect blocks, and
+  adding or removing whole lanes. A multi-block delete undoes in one
+  step, and a moved or resized block is now saved (that edit previously
+  slipped past auto-save). Switching songs starts a fresh history.
 - **Untangle and Compact for DMX addresses.** Right-click the patch
   table for two one-shot repairs: **Untangle addresses** fixes address
   conflicts by moving only the offending fixtures to the nearest free

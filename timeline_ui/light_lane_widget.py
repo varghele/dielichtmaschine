@@ -548,6 +548,14 @@ class LightLaneWidget(QFrame):
         )
         self.create_light_block_widget(block)
 
+        # Undo: the block is already in the lane with its widget built,
+        # so AddBlockCommand's push-time redo is a guarded no-op; undo
+        # removes it, redo re-adds it.
+        undo_stack = self._get_undo_stack()
+        if undo_stack is not None:
+            undo_stack.push(AddBlockCommand(self, block, "Add Block"))
+        self.block_edited.emit()
+
     def remove_light_block_widget(self, block_widget, use_undo=True):
         """Remove a light block widget and its data.
 
@@ -762,11 +770,22 @@ class LightLaneWidget(QFrame):
                 # Get all lane widgets from shows_tab
                 lane_widgets = shows_tab.lane_widgets
                 results = paste_multiple_effects(target_time, lane_widgets)
+                undo_stack = self._get_undo_stack()
+                if undo_stack is not None and results:
+                    # One macro so a single Ctrl+Z removes the whole paste.
+                    undo_stack.beginMacro(
+                        f"Paste {len(results)} Effect"
+                        f"{'s' if len(results) != 1 else ''}")
                 for lane_widget, new_block in results:
                     # Add to lane data
                     lane_widget.lane.light_blocks.append(new_block)
                     # Create widget
                     lane_widget.create_light_block_widget(new_block)
+                    if undo_stack is not None:
+                        undo_stack.push(AddBlockCommand(
+                            lane_widget, new_block, "Paste Effect"))
+                if undo_stack is not None and results:
+                    undo_stack.endMacro()
                 if results:
                     shows_tab.save_to_config()
                 return
@@ -781,6 +800,12 @@ class LightLaneWidget(QFrame):
 
         # Create widget for the new block
         self.create_light_block_widget(new_block)
+
+        # Already applied, so the push-time redo is a guarded no-op.
+        undo_stack = self._get_undo_stack()
+        if undo_stack is not None:
+            undo_stack.push(AddBlockCommand(self, new_block, "Paste Effect"))
+        self.block_edited.emit()
 
     def _get_shows_tab(self):
         """Get the ShowsTab parent widget if available."""

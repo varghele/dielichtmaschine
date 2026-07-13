@@ -1264,7 +1264,21 @@ class ShowsTab(BaseTab):
         Selection is dropped first: the selected block widgets are children
         of these lanes, and SelectionManager touches every selected block
         when it clears.
+
+        The undo stack is cleared too: its commands hold references to
+        these lane widgets, and replaying them against a different song
+        (or a torn-down timeline) would corrupt it. The teardown guard
+        stops the stack's indexChanged resync from writing the OLD
+        song's lanes into the newly selected song (current_song_name
+        switches before the lanes do).
         """
+        self._tearing_down_lanes = True
+        try:
+            undo_stack = self._get_undo_stack()
+            if undo_stack is not None:
+                undo_stack.clear()
+        finally:
+            self._tearing_down_lanes = False
         self.selection_manager.clear_selection()
         for lane_widget in self.lane_widgets:
             try:
@@ -1292,8 +1306,9 @@ class ShowsTab(BaseTab):
         lane_widget.set_playhead_position(self.playhead_position)
 
         # Connect signals — TimelineGrid handles horizontal scroll sync, so
-        # the per-lane scroll_position_changed wiring is gone.
-        lane_widget.remove_requested.connect(self._remove_lane_widget)
+        # the per-lane scroll_position_changed wiring is gone. The header
+        # "x" routes through the undo stack (_on_lane_remove_requested).
+        lane_widget.remove_requested.connect(self._on_lane_remove_requested)
         lane_widget.zoom_changed.connect(self._on_external_zoom_changed)
         lane_widget.playhead_moved.connect(self._on_playhead_moved)
         lane_widget.block_edited.connect(self.save_to_config)  # Auto-save on effect edit
@@ -1307,6 +1322,13 @@ class ShowsTab(BaseTab):
         self.timeline_grid.add_light_lane(lane_widget)
         self.lane_widgets.append(lane_widget)
         self._update_status_line()
+
+        # Every add path (button, show load, undo-restore) keeps the
+        # playback controller's lane list current.
+        if self.artnet_controller:
+            self.artnet_controller.set_light_lanes(
+                [widget.lane for widget in self.lane_widgets]
+            )
 
     def _add_new_lane(self):
         """Add a new empty light lane."""
@@ -1330,11 +1352,12 @@ class ShowsTab(BaseTab):
         lane = LightLane(f"Lane {lane_num}")
         self._add_lane_widget(lane)
 
-        # Update ArtNet controller with the new lane list
-        if self.artnet_controller:
-            self.artnet_controller.set_light_lanes(
-                [widget.lane for widget in self.lane_widgets]
-            )
+        # Undoable: pushed already-applied (the widget exists), so the
+        # push-time redo is a no-op; Ctrl+Z removes the lane again.
+        undo_stack = self._get_undo_stack()
+        if undo_stack is not None:
+            from timeline_ui.undo_commands import AddLaneCommand
+            undo_stack.push(AddLaneCommand(self, lane))
 
         if progress:
             progress.finish_status()
@@ -1485,6 +1508,25 @@ class ShowsTab(BaseTab):
             self._inspector_window.close()
             self._inspector_window = None
 
+    def _on_lane_remove_requested(self, lane_widget: LightLaneWidget):
+        """The lane header's "x": remove through the undo stack so
+        Ctrl+Z brings the lane (and every block on it) back."""
+        undo_stack = self._get_undo_stack()
+        if undo_stack is not None:
+            from timeline_ui.undo_commands import RemoveLaneCommand
+            undo_stack.push(RemoveLaneCommand(self, lane_widget))
+        else:
+            self._remove_lane_widget(lane_widget)
+
+    def _get_undo_stack(self):
+        """The MainWindow's shared undo stack, or None standalone."""
+        widget = self.parent()
+        while widget is not None:
+            if hasattr(widget, "get_undo_stack"):
+                return widget.get_undo_stack()
+            widget = widget.parent()
+        return None
+
     def _remove_lane_widget(self, lane_widget: LightLaneWidget):
         """Remove a lane widget."""
         if lane_widget in self.lane_widgets:
@@ -1545,6 +1587,25 @@ class ShowsTab(BaseTab):
 
             if lane.light_blocks:
                 show.timeline_data.lanes.append(lane)
+
+    def on_undo_stack_changed(self):
+        """Called by MainWindow after every undo-stack index change
+        (push, undo, redo): prune the selection of block widgets that
+        an undo removed, resync the config timeline data (undo/redo
+        mutate the runtime lanes directly and would otherwise drift
+        from config.songs until the next edit), and refresh chrome."""
+        if getattr(self, "_tearing_down_lanes", False):
+            return   # song switch: stale lanes must not resync
+        live = set()
+        for lane_widget in self.lane_widgets:
+            live.update(id(w) for w in lane_widget.get_all_block_widgets())
+        for block_widget in list(
+                self.selection_manager.get_selected_blocks()):
+            if id(block_widget) not in live:
+                self.selection_manager.remove_block(block_widget)
+        self.save_to_config()
+        self._update_status_line()
+        self._refresh_block_inspector()
 
     def save_to_config(self):
         """Save timeline state to configuration."""
@@ -2848,12 +2909,17 @@ class ShowsTab(BaseTab):
         menu.exec(global_pos)
 
     def _delete_selected_blocks(self):
-        """Delete all selected blocks."""
+        """Delete all selected blocks - one undo macro, so a single
+        Ctrl+Z restores the whole selection."""
         selected = self.selection_manager.get_selected_blocks()
         if not selected:
             return
 
         count = len(selected)
+        undo_stack = self._get_undo_stack()
+        if undo_stack is not None:
+            undo_stack.beginMacro(
+                f"Delete {count} Block{'s' if count != 1 else ''}")
 
         for block_widget in selected:
             # Find the lane widget this block belongs to
@@ -2861,8 +2927,11 @@ class ShowsTab(BaseTab):
             if lane_widget:
                 # Remove from selection first
                 self.selection_manager.remove_block(block_widget)
-                # Remove the block (without using undo to avoid issues)
-                lane_widget.remove_light_block_widget(block_widget, use_undo=False)
+                lane_widget.remove_light_block_widget(
+                    block_widget, use_undo=undo_stack is not None)
+
+        if undo_stack is not None:
+            undo_stack.endMacro()
 
         print(f"Deleted {count} block(s)")
         self.save_to_config()

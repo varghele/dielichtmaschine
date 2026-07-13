@@ -510,7 +510,18 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         # Connect clean state changed for save indicator (optional)
         self.undo_stack.cleanChanged.connect(self._on_undo_clean_changed)
 
+        # Undo/redo mutate the runtime timeline lanes directly; without
+        # this resync the config's timeline data drifts until the next
+        # ordinary edit (and stale selections would dangle).
+        self.undo_stack.indexChanged.connect(self._on_undo_index_changed)
+
         self._init_autosave()
+
+    def _on_undo_index_changed(self, _index: int) -> None:
+        shows_tab = getattr(self, "shows_tab", None)
+        if shows_tab is not None and hasattr(shows_tab,
+                                             "on_undo_stack_changed"):
+            shows_tab.on_undo_stack_changed()
 
     def _rebind_tabs_to_config(self):
         """Point every tab and 3D preview at the current self.config and

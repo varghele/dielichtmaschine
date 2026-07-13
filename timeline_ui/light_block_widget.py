@@ -1914,6 +1914,12 @@ class LightBlockWidget(QWidget):
                 self.overlap_detected = False
                 self.update()
 
+            # One undo command per COMPLETED envelope drag (the live
+            # drag already mutated the block per pixel, so the command
+            # is pushed already-applied). Also emits block_edited -
+            # moves/resizes previously never triggered auto-save.
+            self._push_envelope_drag_undo()
+
             self.dragging = False
             self.resizing_left = False
             self.resizing_right = False
@@ -1926,6 +1932,42 @@ class LightBlockWidget(QWidget):
             self.dragging_sublane = None
             self.dragging_intensity_handle = None
             # Note: We keep self.selected_sublane_block so the selection persists after release
+
+    def _push_envelope_drag_undo(self):
+        """Push ONE Move/Resize command for a completed envelope drag.
+
+        Called from mouseReleaseEvent while the drag flags are still
+        set. The drag mutated the block live, so commands are pushed
+        already-applied (a Move's first redo must not shift the sublane
+        blocks a second time). A click without movement pushes nothing.
+        """
+        if self.drag_start_time is None or self.drag_start_duration is None:
+            return
+        moved = self.dragging and not self.shift_drag_copying
+        resized = self.resizing_left or self.resizing_right
+        if not (moved or resized):
+            return
+        old_start = self.drag_start_time
+        old_end = self.drag_start_time + self.drag_start_duration
+        new_start, new_end = self.block.start_time, self.block.end_time
+        if abs(new_start - old_start) < 1e-9 and abs(new_end - old_end) < 1e-9:
+            return
+        stack = None
+        if hasattr(self.lane_widget, "_get_undo_stack"):
+            stack = self.lane_widget._get_undo_stack()
+        if stack is not None:
+            from .undo_commands import MoveBlockCommand, ResizeBlockCommand
+            if moved:
+                stack.push(MoveBlockCommand(
+                    self.lane_widget, self.block, old_start, old_end,
+                    new_start, new_end, already_applied=True))
+            else:
+                # ResizeBlockCommand.redo sets absolute times, so the
+                # push-time redo is a harmless re-set of current values.
+                stack.push(ResizeBlockCommand(
+                    self.lane_widget, self.block, old_start, old_end,
+                    new_start, new_end))
+        self.block_edited.emit()
 
     def mouseDoubleClickEvent(self, event: QMouseEvent):
         """Handle double-click to open effect editor or sublane block editor."""
