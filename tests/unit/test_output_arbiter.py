@@ -583,3 +583,24 @@ class TestHardwareYokeConversion:
         arbiter.tick_once(0.0)
         assert called == [], "procedural mover must not be yoke-converted"
         assert {u: d for u, d, _ in hw.sent}[0][5] == 90
+
+
+class TestLocalMirrorTarget:
+    def test_default_mirror_goes_to_loopback(self, arbiter_config,
+                                             monkeypatch):
+        """The local visualizer must ALWAYS hear output: the default
+        mirror unicasts to 127.0.0.1 (limited broadcast leaves via one
+        interface on a multi-homed machine and is not reliably heard
+        locally - the viewer went dark when output learned unicast)."""
+        import utils.artnet.arbiter as arb_mod
+        created = []
+
+        class _Recorder(StubSender):
+            def __init__(self, target_ip="255.255.255.255",
+                         target_port=6454):
+                super().__init__()
+                created.append(target_ip)
+        monkeypatch.setattr(arb_mod, "ArtNetSender", _Recorder)
+        arbiter = OutputArbiter(config=arbiter_config, sender=StubSender())
+        arbiter.set_broadcast_mirror(True)   # no injected sender
+        assert created == ["127.0.0.1"]

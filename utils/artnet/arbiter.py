@@ -368,16 +368,23 @@ class OutputArbiter:
 
     def set_broadcast_mirror(self, enabled: bool,
                              sender: Optional[ArtNetSender] = None) -> None:
-        """Repeat every merged frame to broadcast on a second sender
-        (for the standalone visualizer when the primary target is a
-        unicast node). Pass ``sender`` to inject a stub in tests."""
+        """Repeat every merged frame on a second sender so the LOCAL
+        standalone visualizer always receives ArtNet, whatever the
+        primary target is. The default mirror goes to loopback
+        (127.0.0.1): a 255.255.255.255 broadcast leaves via ONE
+        interface on a multi-homed machine (the default route), which
+        is typically NOT the lighting NIC and does not reliably reach
+        local listeners - the viewer went dark exactly that way once
+        output learned to unicast to the node (2026-07-13). A viewer on
+        ANOTHER machine should be fed by pointing the primary target at
+        it or at broadcast. Pass ``sender`` to inject a stub in tests."""
         with self._lock:
             self._mirror_enabled = bool(enabled)
             if sender is not None:
                 self._mirror_sender = sender
             elif enabled and self._mirror_sender is None:
                 self._mirror_sender = ArtNetSender(
-                    target_ip="255.255.255.255")
+                    target_ip="127.0.0.1")
 
     # -- layer slots -------------------------------------------------------
 

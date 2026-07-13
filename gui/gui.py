@@ -266,7 +266,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         arbitrate across features. Created lazily - most sessions
         never enable output."""
         from utils.artnet.arbiter import (
-            BROADCAST_IP, OutputArbiter, artnet_target_from_config,
+            OutputArbiter, artnet_target_from_config,
         )
         if getattr(self, "_output_arbiter", None) is None:
             from utils.artnet.live_layer import LiveBuskLayer
@@ -304,11 +304,14 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         # Re-resolve the ArtNet destination on EVERY access (OUTPUT
         # toggle, PLAY): the user edits the universe's Target IP in the
         # Setup tab and expects the wire to follow without a restart.
-        # Unicast to a node would starve the local visualizer's
-        # listener, so the broadcast mirror comes on with it.
+        # The loopback mirror is ALWAYS on so the local standalone
+        # visualizer receives every frame regardless of the universe
+        # IPs (a unicast primary would otherwise starve it, and a
+        # broadcast primary is not reliably heard locally on a
+        # multi-homed machine).
         target = artnet_target_from_config(self.config)
         self._output_arbiter.set_target_ip(target)
-        self._output_arbiter.set_broadcast_mirror(target != BROADCAST_IP)
+        self._output_arbiter.set_broadcast_mirror(True)
 
         # Register channel maps from the config directly, so the
         # "fixtures visible" idle floor lights the rig as soon as

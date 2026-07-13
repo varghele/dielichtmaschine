@@ -985,8 +985,8 @@ class TestOutputShellWiring:
         """The universe's Target IP drives native output (it used to be
         export-only: the sender always broadcast, which never reaches a
         node on a secondary NIC). Editing the IP and re-accessing the
-        arbiter re-resolves it, and unicast switches the broadcast
-        mirror on for the local visualizer."""
+        arbiter re-resolves it; the local mirror stays ALWAYS on so the
+        standalone visualizer receives frames regardless of the IPs."""
         from config.models import Universe
         window, arbiter = wired_window
         window.config.universes[1] = Universe(id=1, name="U1", output={
@@ -997,11 +997,11 @@ class TestOutputShellWiring:
         assert arbiter._sender.target_ip == "2.0.0.1"
         assert arbiter._mirror_enabled
 
-        # Clearing the IP falls back to broadcast, mirror off.
+        # Clearing the IP falls back to broadcast; the mirror STAYS on.
         window.config.universes[1].output["parameters"]["ip"] = ""
         window.output_arbiter()
         assert arbiter._sender.target_ip == "255.255.255.255"
-        assert not arbiter._mirror_enabled
+        assert arbiter._mirror_enabled
 
 
 class TestVisualizerButton:

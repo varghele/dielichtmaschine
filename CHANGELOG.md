@@ -80,6 +80,11 @@ verbatim as the GitHub Release notes (see [docs/releasing.md](docs/releasing.md)
 
 ### Added
 
+- **The local visualizer always receives output.** Every merged frame
+  is now also sent to the local machine (loopback), regardless of what
+  the universes' Target IPs say - previously, output aimed at a
+  hardware node could leave the 3D viewer dark, since broadcast is not
+  reliably heard locally on machines with several network interfaces.
 - **FLOOR position preset.** The Live tab's POSITION pool gained a
   Floor preset - every selected mover aims straight down at the deck
   beneath it, the natural rest for a hanging rig (Ceiling remains its

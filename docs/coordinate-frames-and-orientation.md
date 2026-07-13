@@ -196,8 +196,9 @@ chain rotations apply) and its mirror in solver_to_gdtf_axes.**
 Verified end to end on the bench: three raw poses (rest = beam up,
 tilt+ = beam toward the audience side, pan+ = clockwise from above)
 and four full-pipeline aim targets (right, toward audience, left,
-raised diagonal) all landed. The section below is kept as the original
-analysis and protocol.
+raised diagonal) all landed - STANDING, and subsequently confirmed
+HANGING after re-rigging (the mounting flip holds on hardware). The
+section below is kept as the original analysis and protocol.
 
 ### The claim
 
