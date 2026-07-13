@@ -42,6 +42,11 @@ busk programmer actually drives:
 - Groups without busk content claim nothing - RELEASE ALL clears the
   programmer, the claims vanish, and every channel falls through to
   whatever runs underneath. That IS busk-on-top.
+- A LiveEngine (utils/artnet/live_engine.py), when injected, renders
+  the running riff/intensity/shape slots as the layer's BASE frame:
+  the explicit writes above overlay it per claimed channel, so a
+  touched swatch beats a running riff's colour on that group while
+  the riff's other claims keep playing.
 
 A fixture in several claimed groups is written once per group in
 config-group order - later groups win, mirroring the playback layer's
@@ -94,8 +99,8 @@ class LiveBuskLayer:
     """
 
     def __init__(self, state, config_provider: Callable,
-                 swatches=(), scene_provider: Optional[Callable] = None
-                 ) -> None:
+                 swatches=(), scene_provider: Optional[Callable] = None,
+                 engine=None) -> None:
         self._state = state
         self._config_provider = config_provider
         self._swatch_colors: Dict[str, Tuple[str, Optional[str]]] = {
@@ -107,6 +112,10 @@ class LiveBuskLayer:
         # None). Injected (the tab owns the SceneLibrary) so this
         # module stays gui-free.
         self._scene_provider = scene_provider
+        # Optional LiveEngine (utils/artnet/live_engine.py): its merged
+        # slot frame renders BELOW the explicit busk writes - a touched
+        # swatch beats a running riff's colour on that group.
+        self._engine = engine
         self._fixture_maps: Dict = {}
 
     def set_fixture_maps(self, fixture_maps) -> None:
@@ -117,8 +126,14 @@ class LiveBuskLayer:
     def render(self, now: float) -> Frame:
         state = self._state
         config = self._config_provider()
+        # The engine's slot frame (running riffs/intensity FX/shapes)
+        # is the layer's BASE: explicit busk writes below overlay it,
+        # so a touched swatch beats a running riff on that group while
+        # the riff keeps every other claim.
+        engine_frame: Frame = self._engine.render(now) \
+            if self._engine is not None else {}
         if config is None or not self._fixture_maps:
-            return {}
+            return engine_frame
 
         # The active SCENE (LiveState.scene): a whole-rig look claiming
         # its listed groups, selection-independent, BELOW explicit
@@ -146,7 +161,7 @@ class LiveBuskLayer:
             if position_id and group_has_movers(group):
                 position_groups.append((group, position_id))
         if not claimed_groups and not position_groups:
-            return {}
+            return engine_frame
 
         strobe_open = True
         if state.strobe_on:
@@ -154,8 +169,11 @@ class LiveBuskLayer:
                 * (state.strobe_rate / 100.0)
             strobe_open = (now * frequency) % 1.0 < 0.5
 
-        values: Dict[int, bytearray] = {}
-        masks: Dict[int, bytearray] = {}
+        # Seed the buffers with the engine frame; busk writes overlay.
+        values: Dict[int, bytearray] = {
+            u: bytearray(v) for u, (v, _m) in engine_frame.items()}
+        masks: Dict[int, bytearray] = {
+            u: bytearray(m) for u, (_v, m) in engine_frame.items()}
 
         def _write(fixture_map, offsets, value) -> None:
             universe = fixture_map.universe

@@ -177,6 +177,29 @@ Hardware checkpoints after 0/1, 3, and 4 - the bench rig is set up.
   consumes it. Tests: tests/unit/test_live_engine.py (loop rate, bpm
   rescale, claim width, pause/resume without time jump, kill, restage,
   concurrent slots, safe-idle suppression + playback default pinned).
-- [ ] Phase 3 - effects pool riff player + queue
+- [x] Phase 3 - effects pool riff player + queue (2026-07-13).
+  LiveEffectsBinder (utils/artnet/live_engine.py) connects
+  LiveState.state_changed to the engine's "effect" slot: staging
+  builds one lane per selected group via Riff.to_light_block at the
+  current bpm (loop = riff.length_beats), restages on key or
+  selection-scope change (loop restarts at beat 0), follows TAP bpm
+  phase-continuously without restaging, maps the running record's
+  paused flag onto the slot clock (engine.pause is idempotent so
+  unrelated state churn cannot re-anchor the clock), and kills the
+  slot on second touch / KILL row / RELEASE ALL / empty scope. GO
+  (fire_next) works unchanged because it flows through set_effect.
+  The busk layer takes the engine frame as its BASE and overlays its
+  explicit writes (swatch beats riff per channel); with no busk
+  claims the engine frame passes through. gui.py builds the engine
+  with a manager factory (config + load_fixture_definitions_from_qlc,
+  emit_safe_idle=False). Effects touched with no selection flash the
+  programmer-bar warning and start when groups get selected. Known
+  scope cuts: the soft LIVE blackout and group submasters do not
+  scale a running riff (grand/DBO cap it post-merge as always) - a
+  submaster-scaled engine frame needs per-group channel attribution
+  and can ride a later polish pass. Tests: TestEffectsBinder +
+  TestEngineUnderBuskLayer in test_live_engine.py.
+  **Hardware checkpoint pending: user fires a riff at the bench rig
+  on TAP tempo.**
 - [ ] Phase 4 - movement shapes pool
 - [ ] Phase 5 - intensity FX as bundled riffs

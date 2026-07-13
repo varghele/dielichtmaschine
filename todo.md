@@ -125,6 +125,12 @@ The beam/base axes likely need to come from the fixture definition
       targets tester.lms's Movers + Movers2 - touch CYAN WASH in the
       SCENES pool with nothing selected; both groups should light
       (wheel: light-blue slot); second touch releases.
+- [ ] Fire a RIFF at the bench rig (live-output-plan phase 3
+      checkpoint): select a mover group, touch an EFFECTS cell (the
+      bundled loops/builds/fills), TAP a tempo and watch the pattern
+      rescale mid-play; PAUSE on the playback row must freeze the
+      pose, KILL / second touch must release to the show; QUEUE latch
+      + GO must fire the staged effect.
 - [x] Aim a POSITION palette at real movers - CLOSED on the bench
       2026-07-13 with the yoke protocol: raw poses + four aimed
       targets landed standing AND hanging (the wire carries the

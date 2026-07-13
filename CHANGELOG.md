@@ -97,6 +97,14 @@ verbatim as the GitHub Release notes (see [docs/releasing.md](docs/releasing.md)
   Hero Spot 60) used to light the fixture white at best - the wheel
   channel was never driven. The busk layer now steers the wheel to the
   nearest matching slot, the same mapping timeline playback uses.
+- **The Live EFFECTS pool plays riffs for real.** Touching an effect
+  loops its riff on every selected group at the live tempo: TAP
+  changes the speed mid-play without a phase jump, re-selecting
+  groups moves the effect to them, the queue's GO fires the next
+  staged effect, PAUSE freezes the pattern mid-pose (and keeps
+  streaming that pose), KILL and a second touch release everything to
+  the show underneath. Explicit palette touches still win on top: a
+  held swatch overrides the running riff's colour on that group.
 - **Colour swatches release on second touch.** A busked colour could
   only be replaced or panic-cleared with RELEASE ALL - touching the
   held swatch again did nothing, and since an explicit swatch

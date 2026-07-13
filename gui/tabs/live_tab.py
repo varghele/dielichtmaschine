@@ -530,7 +530,8 @@ class LiveState(QObject):
 
     def kill_playback(self, index: int) -> None:
         """Remove a running record and clear the matching staged
-        effect/scene (state-only - no output engine yet)."""
+        effect/scene - the engine binder and busk layer drop the
+        output on the next state sync."""
         if not 0 <= index < len(self.running):
             return
         record = self.running.pop(index)
@@ -541,8 +542,10 @@ class LiveState(QObject):
         self.state_changed.emit()
 
     def toggle_pause(self, index: int) -> None:
-        """Flip a running record's paused flag. Honest: state-only until
-        the output engine lands - nothing actually pauses."""
+        """Flip a running record's paused flag. The engine binder maps
+        an "effect" record's flag onto the slot clock - a paused riff
+        freezes mid-pose and keeps streaming that frame; scenes are
+        static, so pausing one only marks the record."""
         if not 0 <= index < len(self.running):
             return
         self.running[index]["paused"] = not self.running[index]["paused"]
@@ -1693,6 +1696,14 @@ class LiveTab(BaseTab):
             return None
         return self._resolve_scene_library().scenes.get(key)
 
+    def riff_for_key(self, key: Optional[str]):
+        """The Riff behind a "category/name" pool key, or None. The
+        live engine binder (utils/artnet/live_engine.py) resolves the
+        staged LiveState.effect through this."""
+        if not key:
+            return None
+        return self._resolve_effect_library().riffs.get(key)
+
     def set_effect_library(self, library) -> None:
         """Inject the shared RiffLibrary and rebuild the EFFECTS pool."""
         self._effect_library = library if library is not None \
@@ -1721,11 +1732,20 @@ class LiveTab(BaseTab):
 
     def _on_effect_touched(self, key: str) -> None:
         """Latched QUEUE stages the effect in next_up (cell stays
-        inactive); unlatched fires it live via the toggle."""
+        inactive); unlatched fires it live via the toggle. Effects are
+        selection-scoped (one engine lane per selected group): staging
+        one with nothing selected keeps the state but plays silence, so
+        the programmer bar says so - it starts the moment groups are
+        selected (the binder restages on selection change)."""
         if self._queue_latch_btn.isChecked():
             self.state.enqueue("effect", key, self._key_name(key))
+            return
+        self.state.set_effect(key)
+        if self.state.effect == key and not self.state.selected:
+            self._flash_programmer_warning(
+                "NO GROUP SELECTED · THE EFFECT PLAYS ON SELECTED GROUPS")
         else:
-            self.state.set_effect(key)
+            self._clear_programmer_warning()
 
     def _on_scene_touched(self, key: str) -> None:
         """Latched QUEUE stages the scene in next_up; unlatched fires."""

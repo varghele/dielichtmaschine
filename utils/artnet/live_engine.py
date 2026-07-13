@@ -114,9 +114,11 @@ class LiveEngine:
     def pause(self, slot: str, paused: bool = True) -> None:
         """Freeze (or resume) a slot's clock. While paused the last
         frame keeps streaming - a paused chase holds its pose instead
-        of going dark."""
+        of going dark. Idempotent: repeating the current flag is a
+        no-op (the state binder calls this on every state change, and
+        an unchanged flag must not re-anchor the running clock)."""
         record = self._slots.get(slot)
-        if record is None:
+        if record is None or record.paused == bool(paused):
             return
         record.paused = bool(paused)
         if not paused:
@@ -191,6 +193,12 @@ class LiveEngine:
         return frame
 
     @staticmethod
+    def merge_frames(frames: List[Frame]) -> Frame:
+        """Public alias of the slot merge - later frames override
+        earlier ones per claimed channel."""
+        return LiveEngine._merge(frames)
+
+    @staticmethod
     def _merge(frames: List[Frame]) -> Frame:
         if not frames:
             return {}
@@ -209,3 +217,85 @@ class LiveEngine:
                         out_v[channel] = frame_values[channel]
                         out_m[channel] = 1
         return {u: (bytes(values[u]), bytes(masks[u])) for u in values}
+
+
+class LiveEffectsBinder:
+    """Maps LiveState's EFFECTS staging onto the engine's "effect" slot
+    (docs/live-output-plan.md phase 3).
+
+    ``sync()`` is idempotent and cheap; the gui connects it to
+    ``LiveState.state_changed`` (Qt main thread - the engine's slot
+    swaps are build-then-assign, safe against the arbiter's render
+    thread). It:
+
+    - stages the riff behind ``state.effect`` when the key or the
+      SELECTION SCOPE changes (riff scoping rule: one synthetic lane
+      per selected group, blocks from Riff.to_light_block at the bpm
+      current at staging time, loop = riff.length_beats). A restage
+      restarts the loop at beat 0 - the plan's "restage on selection
+      change" call.
+    - follows LiveState.bpm every sync (phase-continuous - the engine
+      rescales, the lanes are NOT rebuilt).
+    - maps the "effect" running record's paused flag onto the slot
+      clock (the queue's pause row freezes the riff mid-pose).
+    - kills the slot when the effect clears (second touch, KILL row,
+      RELEASE ALL) or when the scope resolves to no fixtures - silence
+      is a kill, not an empty stage.
+    """
+
+    def __init__(self, state, engine: LiveEngine,
+                 config_provider: Callable,
+                 riff_provider: Callable) -> None:
+        self._state = state
+        self._engine = engine
+        self._config_provider = config_provider
+        self._riff_provider = riff_provider
+        # (effect key, frozenset of selected groups) actually staged.
+        self._staged: Optional[tuple] = None
+
+    def sync(self) -> None:
+        state = self._state
+        engine = self._engine
+        engine.set_bpm(state.bpm)
+
+        key = getattr(state, "effect", None)
+        if not key:
+            if self._staged is not None:
+                engine.kill("effect")
+                self._staged = None
+            return
+
+        scope = frozenset(state.selected)
+        if (key, scope) != self._staged:
+            lanes, loop_beats = self._build_lanes(key, scope, state.bpm)
+            if lanes:
+                engine.stage("effect", lanes, loop_beats, state.bpm)
+            else:
+                engine.kill("effect")
+            self._staged = (key, scope)
+
+        record = next((r for r in state.running
+                       if r.get("kind") == "effect"), None)
+        engine.pause("effect", bool(record and record.get("paused")))
+
+    def _build_lanes(self, key: str, scope, bpm: float):
+        """(lanes, loop_beats) for a riff key over the selected groups;
+        ([], 0) when the riff or every group resolves empty."""
+        riff = self._riff_provider(key)
+        config = self._config_provider()
+        if riff is None or config is None:
+            return [], 0.0
+        loop_beats = float(getattr(riff, "length_beats", 0.0) or 0.0)
+        if loop_beats <= 0:
+            return [], 0.0
+        structure = OnePartStructure(bpm)
+        lanes = []
+        for group_name in sorted(scope):
+            group = (getattr(config, "groups", {}) or {}).get(group_name)
+            fixtures = list(getattr(group, "fixtures", None) or []) \
+                if group is not None else []
+            if not fixtures:
+                continue
+            lanes.append((fixtures,
+                          [riff.to_light_block(0.0, structure)]))
+        return lanes, loop_beats

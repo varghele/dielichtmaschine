@@ -270,21 +270,53 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         )
         if getattr(self, "_output_arbiter", None) is None:
             from utils.artnet.live_layer import LiveBuskLayer
+            from utils.artnet.live_engine import (
+                LiveEffectsBinder, LiveEngine,
+            )
             from gui.tabs.live_tab import COLOUR_SWATCHES
 
             arbiter = OutputArbiter(
                 config=self.config,
                 target_ip=artnet_target_from_config(self.config))
 
+            # The Live engine replays staged riffs on a looping beat
+            # clock through private DMXManagers (emit_safe_idle=False:
+            # a riff claims ONLY what its blocks drive). The binder
+            # follows LiveState on every state change.
+            def _live_manager_factory(structure):
+                from utils.artnet.dmx_manager import DMXManager
+                from utils.fixture_utils import (
+                    load_fixture_definitions_from_qlc,
+                )
+                config = self.live_tab.config
+                models = {(f.manufacturer, f.model)
+                          for f in config.fixtures}
+                definitions = load_fixture_definitions_from_qlc(models)
+                return DMXManager(config, definitions, structure,
+                                  emit_safe_idle=False)
+
+            self._live_engine = LiveEngine(_live_manager_factory)
+            self._live_effects_binder = LiveEffectsBinder(
+                state=self.live_tab.state,
+                engine=self._live_engine,
+                config_provider=lambda: self.live_tab.config,
+                riff_provider=self.live_tab.riff_for_key,
+            )
+            self.live_tab.state.state_changed.connect(
+                self._live_effects_binder.sync)
+            self._live_effects_binder.sync()
+
             # The Live busk surface rides on top of whatever plays
             # (busk-on-top): register its layer once, for the arbiter's
             # lifetime. Channel maps arrive when a playback controller
-            # registers its own (the arbiter forwards them).
+            # registers its own (the arbiter forwards them). The engine
+            # frame renders BELOW the layer's explicit writes.
             self._live_busk_layer = LiveBuskLayer(
                 state=self.live_tab.state,
                 config_provider=lambda: self.live_tab.config,
                 swatches=COLOUR_SWATCHES,
                 scene_provider=self.live_tab.scene_for_key,
+                engine=self._live_engine,
             )
             arbiter.set_live_layer(self._live_busk_layer)
 
