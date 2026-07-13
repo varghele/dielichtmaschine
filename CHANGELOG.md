@@ -42,6 +42,13 @@ verbatim as the GitHub Release notes (see [docs/releasing.md](docs/releasing.md)
 
 ### Added
 
+- **BUILD look in the standalone visualizer.** A BUILD chip in the
+  viewer's header lights the whole received rig with a synthetic look
+  (dimmer up, shutter open, pan/tilt centred - the same look the
+  in-app 3D preview uses while building) so mounting orientation and
+  beam direction can be checked without playing a show. Live DMX is
+  ignored while the chip is on; switching it off returns the view to
+  the real output (dark until data arrives).
 - **Native `.lms` project files.** Projects now save with the `.lms`
   extension (Die Lichtmaschine project); Save and Save As default to it,
   and a bare typed name gets `.lms` automatically. The file is still

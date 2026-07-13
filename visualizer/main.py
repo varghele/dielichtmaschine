@@ -31,6 +31,7 @@ from utils.app_identity import APP_NAME, APP_WORDMARK, app_icon_path
 from visualizer.tcp import VisualizerTCPClient
 from visualizer.artnet import ArtNetListener
 from visualizer.renderer import RenderEngine
+from visualizer.build_mode import build_mode_buffers
 
 
 class VisualizerWindow(QMainWindow):
@@ -65,6 +66,12 @@ class VisualizerWindow(QMainWindow):
         # Connection state
         self.tcp_connected: bool = False
         self.artnet_receiving: bool = False
+
+        # BUILD look: synthesise a full-on buffer from the received rig
+        # (dimmer up, shutter open, pan/tilt centred) so orientation and
+        # beam direction can be checked without live DMX. While on, live
+        # DMX is ignored.
+        self.build_mode: bool = False
 
         # TCP client for receiving configuration
         self.tcp_client = VisualizerTCPClient()
@@ -104,6 +111,8 @@ class VisualizerWindow(QMainWindow):
 
     def _on_dmx_received(self, universe: int, dmx_data: bytes):
         """Handle DMX data received from ArtNet."""
+        if self.build_mode:
+            return  # BUILD look owns the frame; live DMX is ignored
         # Convert 0-based ArtNet universe to 1-based internal universe
         internal_universe = universe + 1
         # Update render engine with DMX data
@@ -198,7 +207,7 @@ class VisualizerWindow(QMainWindow):
 
         row.addSpacing(16)
 
-        def _chip(text: str, tip: str, slot) -> QPushButton:
+        def _chip(text: str, tip: str, slot=None) -> QPushButton:
             btn = QPushButton(text)
             btn.setProperty("role", "output-select")
             btn.setProperty("density", "compact")
@@ -206,7 +215,8 @@ class VisualizerWindow(QMainWindow):
             btn.setFixedHeight(22)
             btn.setCursor(Qt.CursorShape.PointingHandCursor)
             btn.setToolTip(tip)
-            btn.clicked.connect(slot)
+            if slot is not None:
+                btn.clicked.connect(slot)
             row.addWidget(btn)
             return btn
 
@@ -216,6 +226,15 @@ class VisualizerWindow(QMainWindow):
         self.reset_view_btn = _chip(
             "RESET VIEW", "Reset camera to default position",
             self._on_reset_view)
+        self.build_btn = _chip(
+            "BUILD",
+            "Light the whole rig with a synthetic look (dimmer up, "
+            "shutter open, pan/tilt centred) to check orientation and "
+            "beam direction. Live DMX is ignored while on.")
+        # A mode toggle, not an action: checkable, wired via toggled so
+        # setChecked() from code follows the same path as a click.
+        self.build_btn.setCheckable(True)
+        self.build_btn.toggled.connect(self._on_build_toggled)
         self.help_btn = _chip(
             "HELP", "How to feed DMX into the visualizer",
             self._on_help_clicked)
@@ -330,6 +349,31 @@ class VisualizerWindow(QMainWindow):
             self.render_engine.reset_camera()
             print("Camera reset to default position")
 
+    def _on_build_toggled(self, checked: bool):
+        """BUILD chip: synthesise a full-on rig look, or return to live.
+
+        Off pushes zeroed buffers for the universes the look filled, so
+        the view goes back to reality (dark until DMX arrives) instead
+        of freezing the synthetic frame."""
+        self.build_mode = checked
+        if checked:
+            self._push_build_look()
+            print("BUILD look on (live DMX ignored)")
+        else:
+            engine = getattr(self, 'render_engine', None)
+            if engine:
+                for universe in build_mode_buffers(self.fixtures):
+                    engine.update_dmx(universe, bytes(512))
+            print("BUILD look off (live DMX)")
+
+    def _push_build_look(self):
+        """Push the synthetic build-look buffers for the current rig."""
+        engine = getattr(self, 'render_engine', None)
+        if not engine:
+            return
+        for universe, buffer in build_mode_buffers(self.fixtures).items():
+            engine.update_dmx(universe, buffer)
+
     def _on_help_clicked(self):
         """Show help dialog for feeding DMX into the visualizer."""
         QMessageBox.information(
@@ -385,6 +429,11 @@ class VisualizerWindow(QMainWindow):
         if hasattr(self, 'render_engine') and self.render_engine:
             self.render_engine.update_fixtures(fixtures_data)
 
+        # A rig update while the BUILD look is on refreshes the look so
+        # newly patched fixtures light immediately.
+        if self.build_mode:
+            self._push_build_look()
+
         print(f"Loaded {len(fixtures_data)} fixtures")
 
     def set_groups(self, groups_data: list):
@@ -407,6 +456,8 @@ class VisualizerWindow(QMainWindow):
             universe: DMX universe number
             channels: 512 bytes of DMX channel data
         """
+        if self.build_mode:
+            return  # BUILD look owns the frame; live DMX is ignored
         # Update render engine with DMX data
         if hasattr(self, 'render_engine') and self.render_engine:
             self.render_engine.update_dmx(universe, channels)
