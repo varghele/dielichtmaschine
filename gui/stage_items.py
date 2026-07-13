@@ -377,11 +377,18 @@ class FixtureItem(QGraphicsItem):
                 painter.drawEllipse(QRectF(-indicator_size/2, -indicator_size/2, indicator_size, indicator_size))
 
     def _is_custom_orientation(self) -> bool:
-        """Check if this fixture has a custom (non-preset) orientation.
+        """Whether pitch/roll differ from the mounting's preset.
 
-        Returns True if pitch or roll are non-zero, indicating user customization.
+        Compared against the canonical preset values: the presets are
+        body orientations with non-zero components (hanging = pitch 90),
+        so the old "any non-zero pitch/roll" test would flag every
+        preset as custom. Yaw is excluded - the item's rotation_angle is
+        free on-plan rotation, not an orientation override.
         """
-        return abs(self.pitch) > 0.1 or abs(self.roll) > 0.1
+        from utils.orientation import preset_angles
+        _, preset_pitch, preset_roll = preset_angles(self.mounting)
+        return (abs(self.pitch - preset_pitch) > 0.1
+                or abs(self.roll - preset_roll) > 0.1)
 
     def _get_2d_rotation_angle(self) -> float:
         """2D rotation for the top-down view — see projected_bar_angle_2d."""

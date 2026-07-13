@@ -23,6 +23,10 @@ verbatim as the GitHub Release notes (see [docs/releasing.md](docs/releasing.md)
   that, the default camera sat behind the band. Both are fixed: the view
   is now a faithful copy of the stage, seen from the audience. DMX
   output is unchanged by this fix.
+- **Wall-back and wall-front mounting presets were swapped.** The
+  back-wall preset faced upstage and the front-wall preset faced the
+  audience. Corrected; projects saved with the old values are fixed
+  automatically on load.
 - **GDTF fixtures rendered upside down.** GDTF authors a fixture
   hanging from its attachment point (the geometry tree extends downward),
   while the app's own fixture bodies are authored standing - so the

@@ -308,8 +308,15 @@ rig with movers** (mover-less rigs like theatre_static unaffected).
 Still open (mixed rigs): a hanging PAR wants beam-down while a hanging
 mover wants a vertical pan axis - one Euler triple can't do both;
 per-fixture beam/base axes from GDTF are the real fix (ROADMAP v1.5a).
-Also unconfirmed: the `wall_*` LABELS may not match operator naming
-(user reads wall_left as "wall back") - cosmetic, a rename, deferred.
+Follow-ups landed 2026-07-13: (a) GDTF meshes are authored HANGING
+(tree extends -Z below the attachment origin) while the chassis frame
+is standing-authored, so the presets flipped them upside down -
+build_draw_plan now canonicalizes posture by tree z-extent
+(gdtf_draw_plan._canonicalize_posture); (b) wall_back/wall_front
+carried each other's yaw in the pre-rebrand table - swapped
+(user-verified), migration heals both old values; (c) the stage
+canvas's custom-orientation ring now compares against the preset
+triple instead of "any non-zero pitch/roll".
 
 **Solo pull-ins (2026-07-12 evening, same branch):** two roadmap
 items shipped while the user was away. (1) Headless export CLI (v1.3):

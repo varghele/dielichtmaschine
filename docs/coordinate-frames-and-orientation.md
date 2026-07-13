@@ -126,12 +126,19 @@ restored:
 MOUNTING_PRESET_ANGLES = {            # absolute (yaw, pitch, roll)
     'hanging':    (0.0,  90.0, 0.0),   # chassis flipped, hung from truss
     'standing':   (0.0, -90.0, 0.0),   # chassis upright on the deck
-    'wall_left':  (-90.0, 0.0, 0.0),   # base against the stage-left wall
-    'wall_right': (90.0,  0.0, 0.0),   # base against the stage-right wall
-    'wall_back':  (0.0,   0.0, 0.0),   # base against the back wall
-    'wall_front': (180.0, 0.0, 0.0),   # base downstage, facing upstage
+    'wall_left':  (-90.0, 0.0, 0.0),   # side wall, facing across
+    'wall_right': (90.0,  0.0, 0.0),   # opposite side wall
+    'wall_back':  (180.0, 0.0, 0.0),   # back wall, facing the audience
+    'wall_front': (0.0,   0.0, 0.0),   # downstage, facing upstage
 }
 ```
+
+One correction ON TOP of the pre-rebrand values: `wall_back` and
+`wall_front` carried each other's yaw in that table (yaw 0 faces
+upstage, which is a front-wall mount). Swapped 2026-07-13 after the
+user verified it in the visualizer; `migrate_orientation_angles`
+corrects configs saved with the old pair (a zeros `wall_back` via the
+all-zero rule, a yaw-180 `wall_front` via `_SWAPPED_WALL_ANGLES`).
 
 **Rules that keep this fixed:**
 

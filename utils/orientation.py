@@ -40,10 +40,15 @@ from typing import Tuple, Optional
 MOUNTING_PRESET_ANGLES = {
     'hanging':    (0.0, 90.0, 0.0),    # chassis flipped, hung from truss
     'standing':   (0.0, -90.0, 0.0),   # chassis upright on the deck
-    'wall_left':  (-90.0, 0.0, 0.0),   # base against the stage-left wall
-    'wall_right': (90.0, 0.0, 0.0),    # base against the stage-right wall
-    'wall_back':  (0.0, 0.0, 0.0),     # base against the back wall
-    'wall_front': (180.0, 0.0, 0.0),   # base downstage, facing upstage
+    'wall_left':  (-90.0, 0.0, 0.0),   # side wall, facing across the stage
+    'wall_right': (90.0, 0.0, 0.0),    # opposite side wall
+    # back/front carried each other's values in the pre-rebrand table
+    # (user-verified against the visualizer 2026-07-13): yaw 0 faces
+    # UPSTAGE, so it is the front-wall mount, and yaw 180 faces the
+    # audience, the back-wall mount. Swapped here; migration corrects
+    # configs saved with the old pair.
+    'wall_back':  (180.0, 0.0, 0.0),   # base against the back wall, facing the audience
+    'wall_front': (0.0, 0.0, 0.0),     # base downstage, facing upstage
 }
 
 DEFAULT_MOUNTING = 'hanging'
@@ -58,6 +63,15 @@ _BEAM_MATH_ANGLES = {
     'wall_right': (180.0, 0.0, 0.0),
     'wall_back':  (90.0, 0.0, 0.0),
     'wall_front': (-90.0, 0.0, 0.0),
+}
+
+# Values the pre-rebrand table (and the 2026-07-13 revert, briefly)
+# shipped for mountings whose pair was swapped: wall_front carried the
+# back-wall yaw. Recognised by migration and corrected to the table
+# above. wall_back's old value was all zeros, which the zero rule
+# already migrates.
+_SWAPPED_WALL_ANGLES = {
+    'wall_front': (180.0, 0.0, 0.0),
 }
 
 
@@ -81,19 +95,26 @@ def migrate_orientation_angles(mounting: str, yaw: float, pitch: float,
     - EXACTLY the wrong 2026-07-12 "beam-direction" preset for this
       mounting (:data:`_BEAM_MATH_ANGLES`) - a config saved by that
       version, so its damage is undone on the next load.
+    - EXACTLY the swapped wall value an earlier table shipped for this
+      mounting (:data:`_SWAPPED_WALL_ANGLES` - wall_front carried the
+      back-wall yaw).
     - ALL ZERO - a fixture placed but never given an explicit
       orientation; take the mounting's preset so a `hanging` fixture
-      actually hangs.
+      actually hangs (and an old-table `wall_back`, stored as zeros,
+      faces the audience again).
 
     Anything else is a deliberate custom orientation and is left alone.
-    Idempotent: the canonical angles are neither all-zero (except
-    wall_back, which maps to itself) nor any beam-math value.
+    Idempotent: no canonical value is all-zero (except wall_front,
+    which maps to itself), a beam-math value, or its own mounting's
+    swapped value.
     """
     angles = (yaw, pitch, roll)
     if mounting not in MOUNTING_PRESET_ANGLES:
         return angles
     if _same_angles(angles, (0.0, 0.0, 0.0)) or \
-            _same_angles(angles, _BEAM_MATH_ANGLES[mounting]):
+            _same_angles(angles, _BEAM_MATH_ANGLES[mounting]) or \
+            (mounting in _SWAPPED_WALL_ANGLES and
+             _same_angles(angles, _SWAPPED_WALL_ANGLES[mounting])):
         return preset_angles(mounting)
     return angles
 
