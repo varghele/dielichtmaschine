@@ -111,3 +111,112 @@ def lint_dmx_addresses(fixtures) -> DmxLint:
                 )
 
     return lint
+
+
+# ---------------------------------------------------------------------------
+# Auto-repair: Untangle (fix overlaps in place) and Compact (remove gaps)
+# ---------------------------------------------------------------------------
+
+def _occupied_overlaps(occupied: List[Tuple[int, int]], start: int,
+                       end: int) -> bool:
+    return any(not (end < s or start > e) for s, e in occupied)
+
+
+def untangle_addresses(fixtures) -> Tuple[Dict[int, int], List[int]]:
+    """Resolve address overlaps/overflow by moving ONLY the offenders.
+
+    Clean fixtures stay exactly where they are. Flagged fixtures are
+    visited per universe in (address, name) order; each keeps its
+    current address if that is free by now (so the lower-addressed
+    member of an overlapping pair stays put), else it moves to the
+    free slot NEAREST its current address (ties break toward the lower
+    address). A fixture whose footprint fits nowhere is left unchanged
+    and reported.
+
+    Returns ``(moves, unresolved)``: ``moves`` maps fixture index ->
+    new address (only actual changes), ``unresolved`` lists indices
+    that could not be placed.
+    """
+    lint = lint_dmx_addresses(fixtures)
+    flagged = set(lint.by_fixture())
+    moves: Dict[int, int] = {}
+    unresolved: List[int] = []
+
+    by_universe: Dict[int, List[int]] = {}
+    for i, fixture in enumerate(fixtures):
+        by_universe.setdefault(fixture.universe, []).append(i)
+
+    for universe, indices in sorted(by_universe.items()):
+        occupied: List[Tuple[int, int]] = []
+        # Clean fixtures are pinned first.
+        for i in indices:
+            if i not in flagged:
+                occupied.append(fixture_address_range(fixtures[i]))
+
+        ordered = sorted((i for i in indices if i in flagged),
+                         key=lambda i: (fixtures[i].address,
+                                        getattr(fixtures[i], "name", "")))
+
+        # Pass 1: every flagged fixture that can KEEP its current
+        # address (free against the pinned and already-kept ranges)
+        # does, in address order - so incumbents whose ranges work stay
+        # put and only the actual intruders relocate. Keeping runs
+        # BEFORE any relocation so a mover can never grab an address an
+        # incumbent was about to keep.
+        to_relocate: List[int] = []
+        for i in ordered:
+            start, end = fixture_address_range(fixtures[i])
+            if end <= DMX_MAX_ADDRESS and \
+                    not _occupied_overlaps(occupied, start, end):
+                occupied.append((start, end))
+            else:
+                to_relocate.append(i)
+
+        # Pass 2: relocate the rest, each to the nearest free slot.
+        for i in to_relocate:
+            footprint = fixture_channel_count(fixtures[i])
+            current = fixtures[i].address
+            candidates = [
+                s for s in range(1, DMX_MAX_ADDRESS - footprint + 2)
+                if not _occupied_overlaps(occupied, s, s + footprint - 1)
+            ]
+            if not candidates:
+                unresolved.append(i)
+                continue
+            best = min(candidates, key=lambda s: (abs(s - current), s))
+            moves[i] = best
+            occupied.append((best, best + footprint - 1))
+
+    return moves, unresolved
+
+
+def compact_addresses(fixtures) -> Tuple[Dict[int, int], List[int]]:
+    """Repack every universe to consecutive addresses with no gaps.
+
+    Fixtures keep their relative (address, name) order and get packed
+    from address 1 up. Fixtures whose footprint no longer fits inside
+    the universe are left unchanged and reported.
+
+    Returns ``(moves, unresolved)`` like :func:`untangle_addresses`.
+    """
+    moves: Dict[int, int] = {}
+    unresolved: List[int] = []
+
+    by_universe: Dict[int, List[int]] = {}
+    for i, fixture in enumerate(fixtures):
+        by_universe.setdefault(fixture.universe, []).append(i)
+
+    for universe, indices in sorted(by_universe.items()):
+        next_address = 1
+        for i in sorted(indices, key=lambda i: (fixtures[i].address,
+                                                getattr(fixtures[i],
+                                                        "name", ""))):
+            footprint = fixture_channel_count(fixtures[i])
+            if next_address + footprint - 1 > DMX_MAX_ADDRESS:
+                unresolved.append(i)
+                continue
+            if fixtures[i].address != next_address:
+                moves[i] = next_address
+            next_address += footprint
+
+    return moves, unresolved

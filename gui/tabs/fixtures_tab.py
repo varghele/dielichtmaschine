@@ -1665,6 +1665,25 @@ class FixturesTab(BaseTab):
         menu = QtWidgets.QMenu(self.table)
         add_action = menu.addAction("Add fixture...")
         add_action.triggered.connect(self._add_fixture)
+
+        # Addressing actions are table-wide, so they ride along whether
+        # or not a row is under the cursor. Untangle only lights up
+        # when the lint actually flags something.
+        menu.addSeparator()
+        untangle_action = menu.addAction("Untangle addresses")
+        untangle_action.setToolTip(
+            "Move only the conflicting fixtures to the nearest free "
+            "addresses; everything else stays put.")
+        untangle_action.setEnabled(
+            not lint_dmx_addresses(self.config.fixtures).is_clean)
+        untangle_action.triggered.connect(self._untangle_addresses)
+        compact_action = menu.addAction("Compact addresses")
+        compact_action.setToolTip(
+            "Repack each universe to consecutive addresses with no "
+            "gaps, keeping the current order.")
+        compact_action.setEnabled(bool(self.config.fixtures))
+        compact_action.triggered.connect(self._compact_addresses)
+
         if not has_row:
             return menu
         menu.addSeparator()
@@ -1716,6 +1735,34 @@ class FixturesTab(BaseTab):
                 act.triggered.connect(
                     lambda _checked, g=name: self._make_selected_primary(g))
         return menu
+
+    def _untangle_addresses(self):
+        """Resolve DMX overlaps by moving only the offenders (pure
+        logic in utils/dmx_conflicts.untangle_addresses)."""
+        from utils.dmx_conflicts import untangle_addresses
+        self._apply_address_moves(*untangle_addresses(self.config.fixtures))
+
+    def _compact_addresses(self):
+        """Repack each universe to consecutive gap-free addresses."""
+        from utils.dmx_conflicts import compact_addresses
+        self._apply_address_moves(*compact_addresses(self.config.fixtures))
+
+    def _apply_address_moves(self, moves: dict, unresolved: list):
+        """Write bulk address changes into the config and refresh the
+        table + lint; fixtures that could not be placed are named."""
+        for index, address in moves.items():
+            if 0 <= index < len(self.config.fixtures):
+                self.config.fixtures[index].address = address
+        if moves:
+            self.update_from_config(force=True)
+        if unresolved:
+            names = ", ".join(
+                self.config.fixtures[i].name for i in unresolved
+                if 0 <= i < len(self.config.fixtures))
+            QtWidgets.QMessageBox.warning(
+                self, "Addresses",
+                "No free address range fits these fixtures in their "
+                f"universe; they were left unchanged:\n{names}")
 
     def _assign_selected_to_group(self, group_name: str):
         """Toggle ``group_name`` membership on every selected fixture.

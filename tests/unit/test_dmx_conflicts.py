@@ -146,3 +146,95 @@ class TestOverflow:
         f = make_fixture("A", 1, 510, channels=10)
         by_fixture = lint_dmx_addresses([f]).by_fixture()
         assert 0 in by_fixture
+
+
+class TestUntangleAddresses:
+    """Untangle: move ONLY the offenders, each to the nearest free
+    range; the lower-addressed member of a pair stays put."""
+
+    def test_clean_patch_is_untouched(self):
+        fixtures = [make_fixture("A", 1, 1), make_fixture("B", 1, 11)]
+        from utils.dmx_conflicts import untangle_addresses
+        assert untangle_addresses(fixtures) == ({}, [])
+
+    def test_second_of_a_pair_moves_to_nearest_free(self):
+        # A 1-10, B 5-14 overlap; C 21-30 is clean and pins its range.
+        fixtures = [make_fixture("A", 1, 1), make_fixture("B", 1, 5),
+                    make_fixture("C", 1, 21)]
+        from utils.dmx_conflicts import untangle_addresses
+        moves, unresolved = untangle_addresses(fixtures)
+        assert unresolved == []
+        assert 0 not in moves, "lower-addressed member stays put"
+        assert 2 not in moves, "clean fixture stays put"
+        # Nearest free 10-wide slot for B (current 5): 11-20 (delta 6).
+        assert moves[1] == 11
+
+    def test_result_is_lint_clean(self):
+        fixtures = [make_fixture("A", 1, 1), make_fixture("B", 1, 5),
+                    make_fixture("C", 1, 8), make_fixture("D", 1, 30)]
+        from utils.dmx_conflicts import untangle_addresses
+        moves, unresolved = untangle_addresses(fixtures)
+        assert unresolved == []
+        for i, address in moves.items():
+            fixtures[i].address = address
+        assert lint_dmx_addresses(fixtures).is_clean
+
+    def test_overflow_is_pulled_back_into_range(self):
+        fixtures = [make_fixture("A", 1, 510)]   # runs past 512
+        from utils.dmx_conflicts import untangle_addresses
+        moves, unresolved = untangle_addresses(fixtures)
+        assert unresolved == []
+        assert moves[0] == 503                  # nearest fit: 503-512
+
+    def test_universes_are_independent(self):
+        fixtures = [make_fixture("A", 1, 1), make_fixture("B", 2, 1)]
+        from utils.dmx_conflicts import untangle_addresses
+        assert untangle_addresses(fixtures) == ({}, [])
+
+    def test_unplaceable_fixture_is_reported_not_moved(self):
+        # 52 ten-channel fixtures fill 1-520 > 512: the universe is
+        # genuinely full, the last flagged one cannot fit anywhere.
+        fixtures = [make_fixture(f"F{i}", 1, 1 + i * 10) for i in range(51)]
+        fixtures.append(make_fixture("Extra", 1, 5))   # overlaps F0/F1
+        from utils.dmx_conflicts import untangle_addresses
+        moves, unresolved = untangle_addresses(fixtures)
+        assert unresolved == [51]
+        assert 51 not in moves
+        assert fixtures[51].address == 5
+
+
+class TestCompactAddresses:
+    """Compact: gap-free repack per universe, order preserved."""
+
+    def test_gaps_close_and_order_holds(self):
+        fixtures = [make_fixture("A", 1, 41), make_fixture("B", 1, 101),
+                    make_fixture("C", 1, 1)]
+        from utils.dmx_conflicts import compact_addresses
+        moves, unresolved = compact_addresses(fixtures)
+        assert unresolved == []
+        # Order by current address: C(1) A(41) B(101) -> 1, 11, 21.
+        assert moves == {0: 11, 1: 21}          # C already at 1
+        for i, address in moves.items():
+            fixtures[i].address = address
+        assert [f.address for f in fixtures] == [11, 21, 1]
+        assert lint_dmx_addresses(fixtures).is_clean
+
+    def test_universes_pack_independently(self):
+        fixtures = [make_fixture("A", 1, 50), make_fixture("B", 2, 50)]
+        from utils.dmx_conflicts import compact_addresses
+        moves, _ = compact_addresses(fixtures)
+        assert moves == {0: 1, 1: 1}
+
+    def test_already_compact_is_a_no_op(self):
+        fixtures = [make_fixture("A", 1, 1), make_fixture("B", 1, 11)]
+        from utils.dmx_conflicts import compact_addresses
+        assert compact_addresses(fixtures) == ({}, [])
+
+    def test_overfull_universe_reports_the_rest(self):
+        fixtures = [make_fixture(f"F{i}", 1, 1 + i * 10, channels=200)
+                    for i in range(3)]
+        from utils.dmx_conflicts import compact_addresses
+        moves, unresolved = compact_addresses(fixtures)
+        # 200+200 fit (1, 201); the third would end at 600 -> reported.
+        assert moves == {1: 201}                 # F0 already at 1
+        assert unresolved == [2]

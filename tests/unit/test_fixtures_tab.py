@@ -627,14 +627,17 @@ def test_context_menu_selects_row_under_cursor(qapp, sample_configuration,
         tab.deleteLater()
 
 
-def test_empty_click_menu_only_offers_add(qapp, sample_configuration):
-    """Right-clicking past the last row offers just Add fixture (no row to
-    duplicate/remove/assign)."""
+def test_empty_click_menu_offers_add_and_table_wide_actions(
+        qapp, sample_configuration):
+    """Right-clicking past the last row offers Add fixture plus the
+    table-wide addressing actions (Untangle/Compact operate on the
+    whole patch, so they need no row) - but none of the row CRUD."""
     tab = _make_tab(qapp, sample_configuration)
     try:
         menu = tab._build_table_context_menu(has_row=False)
         labels = [a.text() for a in menu.actions() if a.text()]
-        assert labels == ["Add fixture..."]
+        assert labels == ["Add fixture...", "Untangle addresses",
+                          "Compact addresses"]
     finally:
         tab.deleteLater()
 
@@ -1360,5 +1363,86 @@ def test_overflow_past_universe_end_is_flagged(qapp, sample_configuration):
         item = tab.table.item(0, COL_ADDRESS)
         assert item.background().color().name() == CONFLICT_BG
         assert "ends at channel 519" in item.toolTip()
+    finally:
+        tab.deleteLater()
+
+
+# ---------------------------------------------------------------------------
+# Untangle / Compact addressing actions (v1.3)
+# ---------------------------------------------------------------------------
+
+def _addressed_config(addresses, channels=10):
+    """A config with N fixtures on universe 1 at the given addresses."""
+    from config.models import Configuration, Fixture, FixtureMode
+    fixtures = [
+        Fixture(universe=1, address=a, manufacturer="M", model="X",
+                name=f"F{i}", group="G", current_mode="Std",
+                available_modes=[FixtureMode(name="Std",
+                                             channels=channels)])
+        for i, a in enumerate(addresses)
+    ]
+    return Configuration(fixtures=fixtures, universes={})
+
+
+def test_menu_offers_addressing_actions_even_without_row(qapp,
+                                                         sample_configuration):
+    tab = _make_tab(qapp, sample_configuration)
+    try:
+        for has_row in (True, False):
+            menu = tab._build_table_context_menu(has_row=has_row)
+            names = {a.text() for a in menu.actions() if a.text()}
+            assert {"Untangle addresses", "Compact addresses"} <= names
+    finally:
+        tab.deleteLater()
+
+
+def test_untangle_enabled_follows_the_lint(qapp):
+    clean = _addressed_config([1, 11])
+    tangled = _addressed_config([1, 5])
+    for config, expected in ((clean, False), (tangled, True)):
+        tab = _make_tab(qapp, config)
+        try:
+            menu = tab._build_table_context_menu()
+            action = next(a for a in menu.actions()
+                          if a.text() == "Untangle addresses")
+            assert action.isEnabled() is expected
+        finally:
+            tab.deleteLater()
+
+
+def test_untangle_resolves_the_config_and_clears_the_chip(qapp):
+    tab = _make_tab(qapp, _addressed_config([1, 5]))
+    try:
+        assert not tab.conflict_label.isHidden()
+        tab._untangle_addresses()
+        from utils.dmx_conflicts import lint_dmx_addresses
+        assert lint_dmx_addresses(tab.config.fixtures).is_clean
+        assert tab.config.fixtures[0].address == 1   # incumbent stays
+        assert tab.config.fixtures[1].address == 11  # nearest free
+        assert tab.conflict_label.isHidden()
+    finally:
+        tab.deleteLater()
+
+
+def test_compact_packs_the_universe(qapp):
+    tab = _make_tab(qapp, _addressed_config([41, 101, 1]))
+    try:
+        tab._compact_addresses()
+        assert [f.address for f in tab.config.fixtures] == [11, 21, 1]
+    finally:
+        tab.deleteLater()
+
+
+def test_unresolved_fixtures_are_named_in_a_warning(qapp, monkeypatch):
+    from PyQt6 import QtWidgets
+    tab = _make_tab(qapp, _addressed_config([1, 5], channels=300))
+    try:
+        warnings = []
+        monkeypatch.setattr(
+            QtWidgets.QMessageBox, "warning",
+            staticmethod(lambda parent, title, text: warnings.append(text)))
+        tab._untangle_addresses()   # two 300-wide fixtures cannot both fit
+        assert warnings and "F1" in warnings[0]
+        assert tab.config.fixtures[1].address == 5   # left unchanged
     finally:
         tab.deleteLater()

@@ -111,6 +111,13 @@ verbatim as the GitHub Release notes (see [docs/releasing.md](docs/releasing.md)
   could; rendered pan/tilt now clamps to the fixture's physical ranges
   exactly like the values sent to the rig, so an out-of-reach target
   pins at the travel limit in both places identically.
+- **Untangle and Compact for DMX addresses.** Right-click the patch
+  table for two one-shot repairs: **Untangle addresses** fixes address
+  conflicts by moving only the offending fixtures to the nearest free
+  ranges (fixtures that can stay put do - including the lower-addressed
+  half of an overlapping pair), and **Compact addresses** repacks each
+  universe to consecutive addresses with no gaps, keeping the order.
+  Fixtures that genuinely cannot fit are left alone and named.
 - **Riff tags.** Riffs can carry tags: right-click a riff in the
   library rail for Edit Tags (comma-separated), the tags show on the
   riff card, and the rail search matches them - a query starting with
