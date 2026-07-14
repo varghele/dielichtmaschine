@@ -11,6 +11,7 @@ from .tc import (
     Timecode,
 )
 from .ltc import LTCDecoder, LTCFrame
+from .chase import ChaseState, TimecodeChase
 from .generator import generate_ltc, write_ltc_wav
 
 __all__ = [
@@ -23,6 +24,8 @@ __all__ = [
     "Timecode",
     "LTCDecoder",
     "LTCFrame",
+    "ChaseState",
+    "TimecodeChase",
     "generate_ltc",
     "write_ltc_wav",
 ]

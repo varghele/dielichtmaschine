@@ -276,7 +276,11 @@ the cable mid-song must NOT stop the show, replugging must re-lock.
       test_timecode.py + test_ltc_decoder.py, all four rates round-trip
       incl. the drop-frame boundary, noise/polarity/DC/48k robustness,
       dropout re-lock < 0.2 s, chunked feed == one-shot exactly)
-- [ ] Phase 1 - chase
+- [x] Phase 1 - chase (2026-07-14: 15 tests in test_timecode_chase.py -
+      lock/coherence, jitter and 2% skew tracking, rate clamp, unity
+      freewheel, expiry, seamless short-dropout relock, forward and
+      backward locates reported exactly once, drop-frame real-seconds
+      positions)
 - [ ] Phase 2 - input service
 - [ ] Phase 3 - runner + shell integration + SYNC chip
 - [ ] Manual checkpoint on the bench
