@@ -408,7 +408,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
     def _sync_idle_policy(self, tab_index: int):
         """The shell owns the idle-floor policy: SETUP/SHOW keep the
         rig visible for authoring, the LIVE section idles to blackout
-        (the pause look replaces blackout in v1.7)."""
+        (the pause look replaces blackout in v1.8)."""
         arbiter = getattr(self, "_output_arbiter", None)
         if arbiter is None:
             return
@@ -1587,7 +1587,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         The picker lists every show in the source config with its part
         count, name conflicts, and any fixture groups this config doesn't
         have. Missing groups are reported, not fixed — those lanes stay
-        dormant until re-pointed (retargeting is the v1.4 morphing work).
+        dormant until re-pointed (retargeting is the v1.5b morphing work).
         Audio files are copied into this config's audiofiles/ bundle.
         """
         from utils.config_merge import list_import_candidates, merge_shows

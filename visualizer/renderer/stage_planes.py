@@ -5,7 +5,7 @@
 # (Floor / Ceiling / Front / Back / Left / Right) draws that face as a
 # translucent quad + outline in the 3D view so the operator can see which
 # Z-plane / wall they are about to work with. Display-only — plane
-# *targeting* from movement blocks is v1.4a.
+# *targeting* from movement blocks is v1.5a.
 
 from typing import List, Optional, Tuple
 

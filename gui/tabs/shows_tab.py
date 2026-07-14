@@ -577,7 +577,7 @@ class ShowsTab(BaseTab):
         transitions between colours) - then the DIM/COL/MOV/SPC count
         tiles. The reference also shows an OVERLAP row (XFADE / 1 BAR):
         per-block overlap functions do not exist in the data model
-        (roadmap v1.6, see docs/timeline-v3-plan.md "Deferred"), so that
+        (roadmap v1.7, see docs/timeline-v3-plan.md "Deferred"), so that
         row is deliberately absent - everything here reflects real state.
         """
         panel = QWidget()

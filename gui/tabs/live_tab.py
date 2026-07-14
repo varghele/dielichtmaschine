@@ -1248,8 +1248,8 @@ class LiveTab(BaseTab):
         # Engine-status chips (left of the tempo cluster, same glance
         # line as the BPM): OUT shows what is actually on the wire -
         # the arbiter's stream, polled via set_status_arbiter - and
-        # SYNC names the clock reference (internal TAP until the v1.7
-        # engine slaves external sources).
+        # SYNC names the clock reference (internal TAP until the sync
+        # work slaves external sources: LTC/SMPTE v1.4, the rest v1.8).
         self._out_chip = QLabel()
         self._out_chip.setObjectName("OutputReadout")
         hbox.addWidget(self._out_chip)
@@ -1258,7 +1258,7 @@ class LiveTab(BaseTab):
         self._sync_chip.setProperty("state", "on")
         self._sync_chip.setToolTip(
             "Tempo reference: internal (TAP). External sync - MIDI "
-            "clock, MTC, LTC - arrives with the v1.7 engine and will "
+            "clock, MTC, LTC - arrives with the sync engine and will "
             "slave the clock shown here")
         hbox.addWidget(self._sync_chip)
         hbox.addSpacing(8)

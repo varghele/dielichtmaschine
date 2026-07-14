@@ -7,7 +7,7 @@ frames on demand and nobody else touches a socket. The stack, top
 wins:
 
     DBO (post-merge kill)  >  Live busk  >  playback slot
-    (timeline XOR auto)    >  pause look (v1.7)  >  idle floor
+    (timeline XOR auto)    >  pause look (v1.8)  >  idle floor
 
 Merge rules (locked 2026-07-11): strict priority (LTP) for every
 channel except dimmer-class channels, which merge HTP (max) BETWEEN
@@ -41,7 +41,7 @@ Frame = Dict[int, Tuple[bytes, bytes]]
 
 # Idle floor policies (user decision 2026-07-11): the editor keeps the
 # rig visible for authoring, live contexts drop to blackout (the pause
-# look replaces blackout in v1.7).
+# look replaces blackout in v1.8).
 IDLE_VISIBLE = "visible"
 IDLE_BLACKOUT = "blackout"
 
@@ -242,7 +242,7 @@ class OutputArbiter:
     Layers plug into named SLOTS (never a free-form priority list):
     ``set_playback_layer`` is the exclusive playback slot (timeline
     XOR auto - phase 2 enforces the swap), ``set_live_layer`` the busk
-    surface (phase 3), ``set_pause_look_layer`` v1.7. A layer is any
+    surface (phase 3), ``set_pause_look_layer`` v1.8. A layer is any
     object with ``render(now) -> Frame``; returning {} means "nothing
     running, let lower layers through".
 

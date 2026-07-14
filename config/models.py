@@ -1338,8 +1338,9 @@ class SongTrigger:
     ``value`` = program number), "midi_note" (``value`` = note number),
     "mtc" / "smpte" (chase to ``timecode``, e.g. "00:14:32:00"), and
     "follow" (chains automatically after the previous song's pause look).
-    The engine that listens is v1.7 work; until then this is stored and
-    edited data only.
+    The engine that listens arrives in slices: SMPTE/LTC with v1.4,
+    the rest (MIDI, MTC, follow) with v1.8; until then this is stored
+    and edited data only.
     """
     mode: str = "manual"   # "manual" | "midi_pc" | "midi_note" | "mtc" | "smpte" | "follow"
     value: int = 0         # program / note number (midi_pc, midi_note)

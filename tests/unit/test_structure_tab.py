@@ -1392,7 +1392,7 @@ class TestSongTriggerSection:
         assert setlist_tab.learn_btn.text() == "LEARN"
         assert not setlist_tab.learn_btn.isEnabled()
         assert setlist_tab.learn_btn.toolTip() == \
-            "Arrives with the sync engine (v1.7)"
+            "Arrives with the sync engine"
 
     def test_micro_hint_names_the_timecode_format(self, setlist_tab):
         assert setlist_tab.trigger_micro_hint.text() == \
@@ -1496,7 +1496,7 @@ class TestPauseLookSection:
     def test_micro_hint_is_honest_about_the_engine(self, setlist_tab):
         assert setlist_tab.pause_micro_hint.text() == (
             "Ambient loop = the screensaver rig behaviour · engine "
-            "arrives with v1.7")
+            "arrives in a later release")
 
     def test_pause_edits_mark_the_config_dirty_via_auto_save(self,
                                                              setlist_tab,

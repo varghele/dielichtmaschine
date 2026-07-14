@@ -18,7 +18,7 @@ Pins the tab-level chrome owned by gui/tabs/shows_tab.py:
   timeline v3 field rows - RANGE with bar span + snap, the DIM effect
   chain, COL painted colour swatches with the transition arrow - and
   the DIM/COL/MOV/SPC stat tiles). No OVERLAP row: per-block overlap
-  functions are v1.6 work (docs/timeline-v3-plan.md "Deferred").
+  functions are v1.7 work (docs/timeline-v3-plan.md "Deferred").
 
 Deliberately grabs only the toolbar, footer and inspector widgets, not
 the timeline grid area - lane/master rendering belongs to timeline_ui

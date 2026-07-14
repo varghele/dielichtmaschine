@@ -14,7 +14,7 @@ Semantics:
 - Name conflicts resolve per the caller's choice: rename ("Name (2)"),
   overwrite, or skip.
 - Referenced fixture groups that don't exist in the target config are
-  reported, not fixed — group retargeting is the v1.4b morphing work.
+  reported, not fixed — group retargeting is the v1.5b morphing work.
   The show still imports; lanes targeting missing groups stay dormant
   until the user re-points them.
 - Audio: the show's audio file (basename, resolved against the source

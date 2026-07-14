@@ -25,7 +25,7 @@ Covers:
   (RANGE with bar span + snap, DIM effect chain, COL painted colour
   swatches with a transition arrow), and carries no overlap-function
   chip row or OVERLAP field, because per-block overlap functions do
-  not exist in the data model (roadmap v1.6, plan "Deferred").
+  not exist in the data model (roadmap v1.7, plan "Deferred").
 - The footer status line reports lanes / blocks / grid / zoom.
 
 Constructing ShowsTab headlessly normally hangs on the embedded-GL
@@ -571,7 +571,7 @@ class TestBlockInspector:
     def test_no_overlap_function_chip_row(self, shows_tab):
         """Per-block overlap functions (XFADE/HTP/LTP/ADD and the
         mock's OVERLAP field row) do not exist in the data model -
-        v1.6 roadmap work (plan "Deferred"). The inspector must not
+        v1.7 roadmap work (plan "Deferred"). The inspector must not
         fake them, even with a block selected."""
         from PyQt6.QtWidgets import QLabel, QPushButton
 

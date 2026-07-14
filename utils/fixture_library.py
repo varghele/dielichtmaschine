@@ -331,9 +331,9 @@ def project_custom_fixtures_dir() -> str:
 def project_gdtf_fixtures_dir() -> str:
     """The gdtf_fixtures/ directory next to custom_fixtures/.
 
-    Drop .gdtf files here to use them. (A per-user data-dir location is
-    planned with the v1.4 %APPDATA% work; until then this is the one
-    GDTF folder.)
+    Drop .gdtf files here to use them. (Settings > Fixture Libraries
+    adds a per-user GDTF directory that ranks above this project-local
+    folder; both are scanned.)
     """
     return os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
                         'gdtf_fixtures')

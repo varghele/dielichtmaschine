@@ -1272,7 +1272,8 @@ class StructureTab(BaseTab):
         sync_row.addStretch(1)
         header_column.addLayout(sync_row)
         # Plain QLabel: "Device: -" keeps its sentence case (a caps
-        # MicroLabel would shout it); the engine that fills it is v1.7.
+        # MicroLabel would shout it); the engine that fills it is the sync
+        # work (LTC/SMPTE v1.4, the rest v1.8).
         # Own row: inline after four segments it overflows 330px and
         # squeezes the SMPTE/MANUAL glyphs.
         self.sync_device_hint = QLabel("Device: -")
@@ -1482,7 +1483,8 @@ class StructureTab(BaseTab):
 
     def _on_sync_mode_selected(self, mode: str):
         """SYNC segment writes setlist.sync_mode (the listening engine
-        is v1.7; this stage stores and edits the data)."""
+        arrives with the sync work - LTC/SMPTE v1.4, the rest v1.8;
+        this stage stores and edits the data)."""
         if self.config.setlist.sync_mode == mode:
             return
         self.config.setlist.sync_mode = mode
@@ -1626,7 +1628,7 @@ class StructureTab(BaseTab):
             QFontMetrics(learn_font).horizontalAdvance(
                 self.learn_btn.text()) + 24)
         self.learn_btn.setEnabled(False)   # honest placeholder
-        self.learn_btn.setToolTip("Arrives with the sync engine (v1.7)")
+        self.learn_btn.setToolTip("Arrives with the sync engine")
         label_row.addWidget(self.learn_btn)
         host_col.addLayout(label_row)
 
@@ -1770,7 +1772,7 @@ class StructureTab(BaseTab):
 
         self.pause_micro_hint = QLabel(
             "Ambient loop = the screensaver rig behaviour · engine "
-            "arrives with v1.7")
+            "arrives in a later release")
         self.pause_micro_hint.setObjectName("PauseMicroHint")
         self.pause_micro_hint.setFont(mono_font(8))
         self.pause_micro_hint.setProperty("role", "micro")
@@ -3338,7 +3340,9 @@ class StructureTab(BaseTab):
         ``File -> Save Configuration``. Previously this also wrote a CSV per
         show on every edit, which created the parallel-filesystem problem
         v1.0 set out to fix (config.yaml + shows/*.csv kept independently).
-        The autosave-to-yaml feature in v1.2 will land in this slot.
+        Autosave (utils/autosave.py, shipped v1.3) covers unsaved edits
+        via a content-fingerprint timer instead, so this hook stays a
+        no-op.
         """
         return
 

@@ -1437,7 +1437,7 @@ class TestOutputIndicators:
         assert live_tab._out_chip.text() == "OUT OFF"
         assert live_tab._out_chip.property("state") == "off"
         # The only clock today is the internal TAP reference (external
-        # sync arrives with the v1.7 engine).
+        # sync arrives with the sync work: LTC/SMPTE v1.4, rest v1.8).
         assert live_tab._sync_chip.text() == "SYNC INT"
         assert live_tab._sync_chip.property("state") == "on"
 

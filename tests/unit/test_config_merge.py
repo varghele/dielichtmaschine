@@ -134,7 +134,7 @@ class TestMergeShows:
 
         (result,) = merge_shows(target, source, ["Opener"], copy_audio=False)
         assert result.missing_groups == ["Lasers"]
-        # Lane still targets the missing group — retargeting is v1.4b.
+        # Lane still targets the missing group — retargeting is v1.5b.
         assert "Lasers" in referenced_groups(target.songs["Opener"])
 
     def test_unknown_show_raises(self, tmp_path):
