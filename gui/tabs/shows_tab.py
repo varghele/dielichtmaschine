@@ -70,6 +70,38 @@ except ImportError:
 SWING_PERCENT_STEPS = (0, 25, 50, 75, 100)
 
 
+class TimelineChaseTransport:
+    """The SetlistTimecodeRunner's view of the timeline transport
+    (docs/ltc-plan.md phase 3): load/play/seek/stop/position over a
+    ShowsTab. All calls run on the UI thread (the shell's tick timer).
+    Stops go straight to _stop_playback so the runner's own stops can
+    never trigger the operator-STOP disarm hook."""
+
+    def __init__(self, tab: "ShowsTab"):
+        self._tab = tab
+
+    def load_song(self, name: str) -> None:
+        combo = self._tab.show_combo
+        index = combo.findData(name)
+        if index >= 0 and combo.currentIndex() != index:
+            combo.setCurrentIndex(index)   # fires the tab's song load
+
+    def play_at(self, seconds: float) -> None:
+        self._tab._seek_to(seconds)
+        if not self._tab.is_playing:
+            self._tab._start_playback()
+
+    def seek(self, seconds: float) -> None:
+        self._tab._seek_to(seconds)
+
+    def stop(self) -> None:
+        if self._tab.is_playing:
+            self._tab._stop_playback()
+
+    def position(self) -> float:
+        return self._tab._get_current_position()
+
+
 class ShowsTab(BaseTab):
     """Timeline-based show management tab.
 
@@ -955,7 +987,7 @@ class ShowsTab(BaseTab):
 
         # Playback controls
         self.play_btn.clicked.connect(self._toggle_playback)
-        self.stop_btn.clicked.connect(self._stop_playback)
+        self.stop_btn.clicked.connect(self._on_stop_clicked)
         self.position_slider.sliderPressed.connect(self._on_position_slider_pressed)
         self.position_slider.sliderReleased.connect(self._on_position_slider_released)
         self.position_slider.valueChanged.connect(self._on_position_slider_changed)
@@ -1768,6 +1800,34 @@ class ShowsTab(BaseTab):
                 total = self.song_structure.get_total_duration()
                 position = (value / 1000.0) * total
                 self.time_label.setText(self._format_readout(position))
+
+    # -- LTC chase transport (docs/ltc-plan.md phase 3) --------------------
+
+    def chase_transport(self):
+        """The SetlistTimecodeRunner's transport adapter over this tab.
+        Programmatic control only - it bypasses the operator's STOP
+        hook, so a window exit never disarms the chase."""
+        return TimelineChaseTransport(self)
+
+    def set_chase_armed(self, armed: bool, disarm=None) -> None:
+        """While the LTC chase is armed the desk is the master: Play is
+        disabled and the STOP button becomes the one escape hatch - it
+        DISARMS (via the shell's ``disarm`` callback) before stopping."""
+        self._chase_disarm = disarm if armed else None
+        self.play_btn.setEnabled(not armed)
+        self.play_btn.setToolTip(
+            "Transport follows the incoming timecode (chase armed)"
+            if armed else "Play / Pause")
+
+    def _on_stop_clicked(self):
+        """The operator's STOP: disarm an armed chase first, then stop.
+        Programmatic stops (the chase runner's own window-exit stop)
+        call _stop_playback directly and never land here."""
+        disarm = getattr(self, "_chase_disarm", None)
+        if disarm is not None:
+            self._chase_disarm = None
+            disarm()
+        self._stop_playback()
 
     def _toggle_playback(self):
         """Toggle play/pause."""

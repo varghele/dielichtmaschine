@@ -815,3 +815,53 @@ class TestSongSelector:
         shows_tab.update_from_config()
         assert combo.currentData() == "Schwarzes Gold"
         assert combo.currentText() == "01 · Schwarzes Gold"
+
+
+class TestChaseTransport:
+    """TimelineChaseTransport + the armed-transport policy
+    (docs/ltc-plan.md phase 3)."""
+
+    def test_seek_and_position(self, shows_tab):
+        shows_tab.update_from_config()
+        transport = shows_tab.chase_transport()
+        transport.seek(3.5)
+        assert transport.position() == pytest.approx(3.5)
+
+    def test_play_at_starts_and_stop_stops(self, shows_tab):
+        shows_tab.update_from_config()
+        transport = shows_tab.chase_transport()
+        transport.play_at(2.0)
+        assert shows_tab.is_playing
+        assert shows_tab.playhead_position == pytest.approx(2.0)
+        transport.stop()
+        assert not shows_tab.is_playing
+
+    def test_load_song_switches_by_item_data(self, shows_tab):
+        _add_show(shows_tab.config, "Zweite Nummer")
+        shows_tab.update_from_config()
+        transport = shows_tab.chase_transport()
+        transport.load_song("Zweite Nummer")
+        assert shows_tab.show_combo.currentData() == "Zweite Nummer"
+        transport.load_song("Zweite Nummer")   # idempotent, no reload
+        assert shows_tab.show_combo.currentData() == "Zweite Nummer"
+
+    def test_armed_disables_play_and_operator_stop_disarms(self, shows_tab):
+        shows_tab.update_from_config()
+        disarms = []
+        shows_tab.set_chase_armed(True, disarm=lambda: disarms.append(1))
+        assert not shows_tab.play_btn.isEnabled()
+        shows_tab._on_stop_clicked()           # the operator's STOP
+        assert disarms == [1]
+        shows_tab._on_stop_clicked()           # hook fires only once
+        assert disarms == [1]
+
+    def test_runner_stops_never_disarm(self, shows_tab):
+        shows_tab.update_from_config()
+        disarms = []
+        shows_tab.set_chase_armed(True, disarm=lambda: disarms.append(1))
+        transport = shows_tab.chase_transport()
+        transport.play_at(1.0)
+        transport.stop()                       # window exit, not STOP
+        assert disarms == []
+        shows_tab.set_chase_armed(False)
+        assert shows_tab.play_btn.isEnabled()

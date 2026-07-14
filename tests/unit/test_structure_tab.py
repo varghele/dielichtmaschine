@@ -869,7 +869,8 @@ class TestThemeContract:
         forbidden = "▾▸⏸⚙＋½¼—–"
         texts = [setlist_tab.rail_title.text(),
                  setlist_tab.rail_summary.text(),
-                 setlist_tab.sync_device_hint.text(),
+                 setlist_tab.chase_arm_btn.text(),
+                 setlist_tab.sync_device_combo.currentText(),
                  setlist_tab.add_song_tile.text(),
                  setlist_tab.rail_footer_hint.text()]
         texts += [b.text() for b in setlist_tab.sync_buttons.values()]
@@ -1008,8 +1009,11 @@ class TestSetlistRailAnatomy:
         setlist_tab._refresh_setlist_rail()
         assert setlist_tab.rail_title.text() == "SETLIST · DEMO_TOUR"
 
-    def test_device_hint_placeholder(self, setlist_tab):
-        assert setlist_tab.sync_device_hint.text() == "Device: -"
+    def test_chase_row_hidden_outside_smpte_mode(self, setlist_tab):
+        # Default sync mode is manual: no device combo, no ARM chip.
+        assert setlist_tab.config.setlist.sync_mode != "smpte"
+        assert setlist_tab.sync_device_combo.isHidden()
+        assert setlist_tab.chase_arm_btn.isHidden()
 
     def test_add_song_tile_is_dashed(self, setlist_tab):
         assert setlist_tab.add_song_tile.text() == "+ SONG"
@@ -1507,3 +1511,69 @@ class TestPauseLookSection:
         setlist_tab._set_pause_mode("blackout")
         setlist_tab.trigger_buttons["manual"].click()
         assert len(calls) == 2
+
+
+class TestChaseRow:
+    """ARM CHASE + sync device combo (docs/ltc-plan.md phase 3)."""
+
+    @pytest.fixture(autouse=True)
+    def _fake_devices(self, monkeypatch):
+        from audio.device_manager import AudioDevice, DeviceManager
+        devices = [AudioDevice(index=3, name="Line In (HD Audio)",
+                               max_output_channels=0,
+                               max_input_channels=2,
+                               default_sample_rate=44100.0,
+                               host_api="Windows WASAPI",
+                               host_api_index=1,
+                               display_name="Line In")]
+        monkeypatch.setattr(DeviceManager, "enumerate_input_devices",
+                            lambda self, **kw: devices)
+
+    def _smpte(self, tab, with_trigger=True):
+        tab.config.setlist.sync_mode = "smpte"
+        if with_trigger and tab.config.setlist.entries:
+            entry = tab.config.setlist.entries[0]
+            entry.trigger.mode = "smpte"
+            entry.trigger.timecode = "01:00:00:00"
+        tab._refresh_sync_chase_row()
+
+    def test_smpte_mode_reveals_and_populates_devices(self, setlist_tab):
+        self._smpte(setlist_tab)
+        combo = setlist_tab.sync_device_combo
+        assert not combo.isHidden()
+        assert not setlist_tab.chase_arm_btn.isHidden()
+        assert [combo.itemText(i) for i in range(combo.count())] == \
+            ["Default input", "Line In"]
+        assert combo.itemData(1) == "Line In (HD Audio)"
+
+    def test_arm_needs_an_smpte_trigger(self, setlist_tab):
+        self._smpte(setlist_tab, with_trigger=False)
+        assert not setlist_tab.chase_arm_btn.isEnabled()
+        self._smpte(setlist_tab, with_trigger=True)
+        assert setlist_tab.chase_arm_btn.isEnabled()
+
+    def test_device_choice_persists_to_the_setlist(self, setlist_tab):
+        self._smpte(setlist_tab)
+        setlist_tab.sync_device_combo.setCurrentIndex(1)
+        assert setlist_tab.config.setlist.sync_device == \
+            "Line In (HD Audio)"
+
+    def test_arm_toggle_requests_and_reflect_does_not_reemit(
+            self, setlist_tab):
+        self._smpte(setlist_tab)
+        requests = []
+        setlist_tab.chase_arm_requested.connect(requests.append)
+        setlist_tab.chase_arm_btn.setChecked(True)
+        assert requests == [True]
+        # The shell refused (input would not open) and reflects back.
+        setlist_tab.set_chase_armed(False)
+        assert not setlist_tab.chase_arm_btn.isChecked()
+        assert requests == [True]
+
+    def test_set_chase_armed_renames_the_chip(self, setlist_tab):
+        self._smpte(setlist_tab)
+        setlist_tab.set_chase_armed(True)
+        assert setlist_tab.chase_arm_btn.text() == "CHASING"
+        assert setlist_tab.chase_arm_btn.isChecked()
+        setlist_tab.set_chase_armed(False)
+        assert setlist_tab.chase_arm_btn.text() == "ARM CHASE"

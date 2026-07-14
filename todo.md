@@ -11,9 +11,12 @@ checks below pass; v1.4 work continues on `v1.4-standalone-switch`.
 
 ## v1.4 build order (rough leverage order, discuss before each)
 
-- [ ] **LTC/SMPTE input + setlist SMPTE triggering** - the marquee
-      item. PLAN: docs/ltc-plan.md (phases 0-3 + bench checkpoint,
-      written 2026-07-14). Biphase-mark decoder for the 80-bit frame, 24/25/29.97/30
+- [x] **LTC/SMPTE input + setlist SMPTE triggering** - SHIPPED
+      2026-07-14, phases 0-3 of docs/ltc-plan.md all green (~90 new
+      tests: utils/timecode package, audio/ltc_input service, shell
+      wiring). Only the bench checkpoint remains - added to the
+      manual list below. MIDI/MTC triggers, LEARN and pause looks
+      stay v1.8. Original scope, for reference: Biphase-mark decoder for the 80-bit frame, 24/25/29.97/30
       fps, freewheel on dropout, per-song offset; a setlist entry with
       an SMPTE start trigger fires its song when incoming timecode
       reaches it, playhead chases from then on. Input rides the Auto
@@ -35,6 +38,13 @@ checks below pass; v1.4 work continues on `v1.4-standalone-switch`.
 
 ## Release gate: pending manual verification (user, needs hardware/desktop)
 
+- [ ] LTC chase bench checkpoint (docs/ltc-plan.md): generate a WAV
+      covering the demo setlist's trigger times
+      (utils/timecode/write_ltc_wav), play it into the line-in from a
+      phone/DAW, set sync mode SMPTE + song start timecodes, ARM
+      CHASE - songs must fire at their timecodes, the playhead must
+      follow, pulling the cable mid-song must NOT stop the show,
+      replugging must re-lock, STOP must disarm.
 - [ ] QLC+ export aim check: export tester.lms (or any mover project)
       to .qxw, open in QLC+, fire a position preset from the Virtual
       Console at the hung head - the beam should land where

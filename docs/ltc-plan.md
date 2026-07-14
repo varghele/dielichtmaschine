@@ -288,11 +288,17 @@ the cable mid-song must NOT stop the show, replugging must re-lock.
       start/stop, failing device degrades cleanly, device-hint
       resolution incl. loose match. Arrival anchoring per drain, so
       audio-clock drift cannot accumulate)
-- [ ] Phase 3 - runner + shell integration + SYNC chip. Policy half
-      DONE 2026-07-14: utils/timecode/runner.py, 15 tests in
+- [x] Phase 3 - runner + shell integration + SYNC chip (2026-07-14).
+      Policy half: utils/timecode/runner.py, 15 tests in
       test_setlist_runner.py incl. the no-hardware end to end
       (generated LTC through the real decoder + chase fires a two-song
-      setlist and tracks within a frame). Remaining: the transport
-      adapter on ShowsTab/MainWindow, ARM CHASE + device combo in the
-      Structure sync row, the Live SYNC chip states.
+      setlist and tracks within a frame). Shell half:
+      TimelineChaseTransport + armed-transport policy on ShowsTab
+      (Play disabled, operator STOP disarms via hook, runner stops
+      bypass it), ARM CHASE chip + input-device combo in the Structure
+      sync row (SMPTE mode only, ARM needs an SMPTE trigger, device
+      persists to Setlist.sync_device), Live SYNC chip reads
+      LTC/FW/NO SIG, MainWindow owns arm/disarm + the 100 ms tick and
+      builds the runner once the incoming rate is detected. 11
+      integration tests across the three tab test files.
 - [ ] Manual checkpoint on the bench

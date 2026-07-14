@@ -101,6 +101,21 @@ verbatim as the GitHub Release notes (see [docs/releasing.md](docs/releasing.md)
 
 ### Added
 
+- **Shows chase incoming SMPTE timecode (LTC).** Set the setlist's
+  sync mode to SMPTE, give songs an SMPTE start time, pick the audio
+  input carrying the timecode and press ARM CHASE in the Structure
+  tab: each song fires the moment the incoming timecode reaches its
+  start time, and the playhead follows the signal from then on -
+  joining mid-song, following desk locates, and quietly re-syncing
+  when drift builds up. A dropped timecode cable never stops the
+  show: playback freewheels and re-locks when the signal returns.
+  While armed the desk is the master (Play is disabled); STOP is the
+  escape hatch and disarms. The Live tab's SYNC chip reads SYNC LTC
+  with the lock state and the last received timecode. Frame rates
+  24/25/30 and 29.97 drop-frame are detected automatically from the
+  signal. No timecode hardware is needed to try it: the decoder ships
+  with a generator (`utils/timecode/write_ltc_wav`) that renders a
+  timecode WAV to play into the line-in from a phone or DAW.
 - **Live colour swatches reach colour-wheel fixtures.** A busked swatch
   on a mover without RGB emitters (colour wheel only, like the Varytec
   Hero Spot 60) used to light the fixture white at best - the wheel

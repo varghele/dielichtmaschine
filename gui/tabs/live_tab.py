@@ -1377,6 +1377,37 @@ class LiveTab(BaseTab):
         chip.setToolTip("\n".join(lines))
         self._set_chip_state(chip, True)
 
+    def set_sync_status(self, source: str, state: str = "",
+                        label: str = "") -> None:
+        """SYNC chip source (docs/ltc-plan.md phase 3). ``source`` is
+        "int" (internal TAP, the default) or "ltc" with the chase's
+        state ("locked" / "freewheel" / "no_signal") and the last
+        received timecode label for the tooltip. Display-only; the
+        shell drives this from the LTC service's signals."""
+        chip = self._sync_chip
+        if source == "ltc":
+            text = {"locked": "SYNC LTC",
+                    "freewheel": "SYNC LTC · FW",
+                    "no_signal": "SYNC LTC · NO SIG"}.get(
+                        state, "SYNC LTC")
+            chip.setText(text)
+            tip = "Chasing incoming SMPTE timecode"
+            if label:
+                tip += f" · last {label}"
+            if state == "freewheel":
+                tip += " · signal lost, freewheeling"
+            elif state == "no_signal":
+                tip += " · no signal"
+            chip.setToolTip(tip)
+            self._set_chip_state(chip, state == "locked")
+        else:
+            chip.setText("SYNC INT")
+            chip.setToolTip(
+                "Tempo reference: internal (TAP). External sync - MIDI "
+                "clock, MTC, LTC - arrives with the sync engine and "
+                "will slave the clock shown here")
+            self._set_chip_state(chip, True)
+
     @staticmethod
     def _set_chip_state(chip: QLabel, on: bool) -> None:
         state = "on" if on else "off"

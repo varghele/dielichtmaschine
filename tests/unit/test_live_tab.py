@@ -1486,3 +1486,24 @@ class TestOutputIndicators:
         live_tab.set_status_arbiter(_StubStatusArbiter(frames=5))
         live_tab.set_status_arbiter(None)
         assert live_tab._out_chip.text() == "OUT OFF"
+
+
+class TestSyncChipSources:
+    """set_sync_status: the shell pushes the LTC chase state onto the
+    SYNC chip (docs/ltc-plan.md phase 3)."""
+
+    def test_ltc_states_and_back_to_internal(self, live_tab):
+        chip = live_tab._sync_chip
+        live_tab.set_sync_status("ltc", "locked", "00:10:00:00")
+        assert chip.text() == "SYNC LTC"
+        assert chip.property("state") == "on"
+        assert "00:10:00:00" in chip.toolTip()
+        live_tab.set_sync_status("ltc", "freewheel", "00:10:01:00")
+        assert chip.text() == "SYNC LTC · FW"
+        assert chip.property("state") == "off"
+        live_tab.set_sync_status("ltc", "no_signal")
+        assert chip.text() == "SYNC LTC · NO SIG"
+        assert chip.property("state") == "off"
+        live_tab.set_sync_status("int")
+        assert chip.text() == "SYNC INT"
+        assert chip.property("state") == "on"

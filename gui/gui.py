@@ -405,6 +405,111 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         arbiter.set_grandmaster(state.grandmaster)
         arbiter.set_dbo(state.dbo)
 
+    # -- LTC chase (docs/ltc-plan.md phase 3): the shell owns the
+    # arm/disarm policy on the shared service, tabs only request and
+    # display - the same ownership rule as the output arbiter.
+
+    def ltc_service(self):
+        """The one LTCInputService, created lazily (most sessions never
+        chase timecode). Its signals feed the Live tab's SYNC chip."""
+        if getattr(self, "_ltc_service", None) is None:
+            from audio.ltc_input import LTCInputService
+            self._ltc_service = LTCInputService(parent=self)
+            self._ltc_last_tc_label = ""
+            self._ltc_service.state_changed.connect(self._on_ltc_state)
+            self._ltc_service.timecode.connect(self._on_ltc_timecode)
+        return self._ltc_service
+
+    def ltc_chase_armed(self) -> bool:
+        return getattr(self, "_ltc_timer", None) is not None
+
+    def _on_chase_arm_requested(self, armed: bool):
+        if armed:
+            if not self.arm_ltc_chase():
+                self.structure_tab.set_chase_armed(False)
+        else:
+            self.disarm_ltc_chase()
+
+    def arm_ltc_chase(self) -> bool:
+        """Start chasing incoming SMPTE: the desk becomes the transport
+        master (manual Play disabled, STOP disarms). False when the
+        audio input cannot be opened."""
+        if self.ltc_chase_armed():
+            return True
+        service = self.ltc_service()
+        service.device_hint = getattr(self.config.setlist,
+                                      "sync_device", "")
+        if not service.start():
+            self.statusBar().showMessage(
+                "LTC input could not be opened - check the sync device "
+                "in the Structure tab", 6000)
+            return False
+        self._ltc_runner = None    # built once the incoming rate is known
+        self.shows_tab.set_chase_armed(True, disarm=self.disarm_ltc_chase)
+        self.structure_tab.set_chase_armed(True)
+        self.live_tab.set_sync_status("ltc", "no_signal")
+        from PyQt6.QtCore import QTimer
+        timer = QTimer(self)
+        timer.setInterval(100)
+        timer.timeout.connect(self._ltc_tick)
+        timer.start()
+        self._ltc_timer = timer
+        return True
+
+    def disarm_ltc_chase(self):
+        """Back to manual transport. Reached from the ARM chip and from
+        the timeline's operator STOP - never from the runner."""
+        timer = getattr(self, "_ltc_timer", None)
+        if timer is None:
+            return
+        self._ltc_timer = None
+        timer.stop()
+        timer.deleteLater()
+        self._ltc_runner = None
+        if getattr(self, "_ltc_service", None) is not None:
+            self._ltc_service.stop()
+        self.shows_tab.set_chase_armed(False)
+        self.structure_tab.set_chase_armed(False)
+        self.live_tab.set_sync_status("int")
+
+    def _ltc_tick(self):
+        service = getattr(self, "_ltc_service", None)
+        if service is None:
+            return
+        if getattr(self, "_ltc_runner", None) is None:
+            # The entry timecodes parse at the DETECTED incoming rate,
+            # so the runner waits for the decoder's verdict.
+            rate = service.detected_rate()
+            if rate is not None:
+                from utils.timecode import SetlistTimecodeRunner
+                self._ltc_runner = SetlistTimecodeRunner(
+                    self.config.setlist,
+                    self.shows_tab.chase_transport(),
+                    duration_of=self._chase_song_duration,
+                    rate=rate)
+        if self._ltc_runner is not None:
+            self._ltc_runner.update(service.position())
+
+    def _chase_song_duration(self, name: str) -> float:
+        from timeline.song_structure import SongStructure
+        song = self.config.songs.get(name)
+        if song is None or not getattr(song, "parts", None):
+            return 0.0
+        structure = SongStructure()
+        structure.load_from_show_parts(song.parts)
+        return structure.get_total_duration()
+
+    def _on_ltc_state(self, state: str):
+        if self.ltc_chase_armed():
+            self.live_tab.set_sync_status(
+                "ltc", state, getattr(self, "_ltc_last_tc_label", ""))
+
+    def _on_ltc_timecode(self, label: str):
+        self._ltc_last_tc_label = label
+        if self.ltc_chase_armed():
+            self.live_tab.set_sync_status("ltc", self._ltc_service.state(),
+                                          label)
+
     def _sync_idle_policy(self, tab_index: int):
         """The shell owns the idle-floor policy: SETUP/SHOW keep the
         rig visible for authoring, the LIVE section idles to blackout
@@ -428,6 +533,11 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.shows_tab = ShowsTab(self.config, self)
         self.auto_tab = AutoTab(self.config, self)
         self.live_tab = LiveTab(self.config, self)
+
+        # LTC chase: the Structure tab's ARM CHASE chip only requests;
+        # the SHELL arms/disarms (docs/ltc-plan.md phase 3).
+        self.structure_tab.chase_arm_requested.connect(
+            self._on_chase_arm_requested)
 
         # Replace placeholder tabs with actual tab widgets
         # The tab widget structure is created in Ui_MainWindow

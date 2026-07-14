@@ -25,6 +25,21 @@ Rules of thumb:
 - A parallel failure that passes serially usually means shared mutable
   state (a shared output file, QSettings cross-talk); fix the isolation,
   don't drop xdist.
+- Do NOT run whole UI-heavy test files (`test_live_tab.py`,
+  `test_structure_tab.py`, `test_shows_tab_chrome.py`, ...) serially in
+  one process "to check a few files": their per-test fixtures re-apply
+  the theme to every widget in the process, and torn-down widgets
+  accumulate, so theme-apply cost grows with every test - a run that
+  takes seconds per test under `-n auto` (fresh worker processes,
+  tests spread out) crawls to 30+ minutes single-process (found
+  2026-07-14, a three-file serial run sat in `ThemeManager.apply` for
+  49 minutes). Run single test classes serially, or use `-n auto` for
+  anything file-sized.
+- When a run seems stuck: check `Get-Process python` ages first (a
+  suite whose workers are far older than the expected runtime is hung
+  or crawling, not busy), then `py-spy dump --pid <worker>` names the
+  exact test and blocking call. See docs/qt-gotchas.md #7 for the
+  modal-dialog variant of a silent hang.
 
 ## Layout
 

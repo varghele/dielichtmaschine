@@ -899,6 +899,11 @@ class StructureTab(BaseTab):
     #: AutogenDialog flow itself and writes the lanes into the show.
     autogenerate_requested = pyqtSignal(str)
 
+    #: ARM CHASE toggled by the operator (docs/ltc-plan.md phase 3).
+    #: The SHELL arms/disarms the LTC chase and reflects the outcome
+    #: via set_chase_armed - arming can fail (audio input won't open).
+    chase_arm_requested = pyqtSignal(bool)
+
     def __init__(self, config: Configuration, parent=None):
         self.current_song_name = ""
         self.current_show = None
@@ -1271,16 +1276,37 @@ class StructureTab(BaseTab):
         sync_row.addWidget(segment_host)
         sync_row.addStretch(1)
         header_column.addLayout(sync_row)
-        # Plain QLabel: "Device: -" keeps its sentence case (a caps
-        # MicroLabel would shout it); the engine that fills it is the sync
-        # work (LTC/SMPTE v1.4, the rest v1.8).
-        # Own row: inline after four segments it overflows 330px and
-        # squeezes the SMPTE/MANUAL glyphs.
-        self.sync_device_hint = QLabel("Device: -")
-        self.sync_device_hint.setObjectName("SyncDeviceHint")
-        self.sync_device_hint.setFont(mono_font(8))
-        self.sync_device_hint.setProperty("role", "micro")
-        header_column.addWidget(self.sync_device_hint)
+        # Device + ARM row (docs/ltc-plan.md phase 3). Own row: inline
+        # after four segments it overflows 330px and squeezes the
+        # SMPTE/MANUAL glyphs. The combo lists audio inputs only when
+        # SMPTE is the sync mode (device enumeration is not free and
+        # the other modes read their devices elsewhere); ARM CHASE asks
+        # the shell to start/stop the LTC chase - the SHELL owns the
+        # policy, this row only requests and reflects.
+        device_row = QHBoxLayout()
+        device_row.setSpacing(8)
+        self.sync_device_combo = QComboBox()
+        self.sync_device_combo.setObjectName("SyncDeviceCombo")
+        self.sync_device_combo.setProperty("role", "lane-chip")
+        self.sync_device_combo.setFont(mono_font(8))
+        self.sync_device_combo.setToolTip(
+            "Audio input carrying the LTC signal")
+        self.sync_device_combo.currentIndexChanged.connect(
+            self._on_sync_device_selected)
+        device_row.addWidget(self.sync_device_combo, stretch=1)
+        self.chase_arm_btn = QPushButton("ARM CHASE")
+        self.chase_arm_btn.setCheckable(True)
+        self.chase_arm_btn.setProperty("role", "cta-outline")
+        self.chase_arm_btn.setProperty("density", "compact")
+        self.chase_arm_btn.setFont(display_font(8, QFont.Weight.DemiBold,
+                                                tracking_em=0.08))
+        self.chase_arm_btn.setToolTip(
+            "Follow incoming SMPTE timecode: songs with an SMPTE "
+            "trigger fire at their start time and the playhead chases")
+        self.chase_arm_btn.toggled.connect(self._on_chase_arm_toggled)
+        device_row.addWidget(self.chase_arm_btn)
+        header_column.addLayout(device_row)
+        self._refresh_sync_chase_row()
         column.addWidget(header)
         self._rail_static_dividers = [self._rail_divider(tokens)]
         column.addWidget(self._rail_static_dividers[0])
@@ -1447,8 +1473,7 @@ class StructureTab(BaseTab):
             btn.blockSignals(True)
             btn.setChecked(mode == setlist.sync_mode)
             btn.blockSignals(False)
-        self.sync_device_hint.setText(
-            f"Device: {setlist.sync_device or '-'}")
+        self._refresh_sync_chase_row()
 
         for card in self._rail_cards:
             entry = (entries[card.entry_index]
@@ -1482,13 +1507,64 @@ class StructureTab(BaseTab):
         self.show_combo.setCurrentText(song_name)
 
     def _on_sync_mode_selected(self, mode: str):
-        """SYNC segment writes setlist.sync_mode (the listening engine
-        arrives with the sync work - LTC/SMPTE v1.4, the rest v1.8;
-        this stage stores and edits the data)."""
+        """SYNC segment writes setlist.sync_mode (SMPTE chases for real
+        since v1.4; MIDI/MTC listening arrives with v1.8)."""
         if self.config.setlist.sync_mode == mode:
             return
         self.config.setlist.sync_mode = mode
         self._auto_save()
+        self._refresh_sync_chase_row()
+
+    # -- LTC chase row (docs/ltc-plan.md phase 3) ----------------------
+
+    def _refresh_sync_chase_row(self):
+        """Device combo + ARM CHASE reflect the setlist. Both only show
+        in SMPTE mode (the other modes read their devices elsewhere,
+        and audio enumeration is not free); ARM is offered only when a
+        chase could do something - at least one SMPTE trigger."""
+        setlist = self.config.setlist
+        smpte = setlist.sync_mode == "smpte"
+        combo = self.sync_device_combo
+        combo.blockSignals(True)
+        if smpte and combo.count() == 0:
+            combo.addItem("Default input", "")
+            try:
+                from audio.device_manager import DeviceManager
+                for dev in DeviceManager().enumerate_input_devices():
+                    combo.addItem(dev.display_name or dev.name, dev.name)
+            except Exception:
+                pass    # enumeration failed: default input only
+        if combo.count():
+            index = combo.findData(setlist.sync_device or "")
+            combo.setCurrentIndex(index if index >= 0 else 0)
+        combo.setVisible(smpte)
+        combo.blockSignals(False)
+        armable = smpte and any(
+            e.trigger.mode == "smpte" and e.trigger.timecode
+            for e in setlist.entries)
+        self.chase_arm_btn.setVisible(smpte)
+        self.chase_arm_btn.setEnabled(
+            armable or self.chase_arm_btn.isChecked())
+
+    def _on_sync_device_selected(self, index: int):
+        value = self.sync_device_combo.itemData(index) or ""
+        if self.config.setlist.sync_device == value:
+            return
+        self.config.setlist.sync_device = value
+        self._auto_save()
+
+    def _on_chase_arm_toggled(self, checked: bool):
+        self.chase_arm_requested.emit(bool(checked))
+
+    def set_chase_armed(self, armed: bool):
+        """The shell reflects the ACTUAL chase state here (arming can
+        fail; disarm can come from the timeline's STOP)."""
+        btn = self.chase_arm_btn
+        btn.blockSignals(True)
+        btn.setChecked(armed)
+        btn.setText("CHASING" if armed else "ARM CHASE")
+        btn.blockSignals(False)
+        self._refresh_sync_chase_row()
 
     def _reorder_setlist_entry(self, source: int, target: int):
         """Move the entry at ``source`` to the slot of the card dropped

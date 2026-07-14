@@ -422,3 +422,25 @@ v1.2-rebrand merges to main untagged once the gate checks pass, then
 work continues on v1.4-standalone-switch. LTC output and OSC are
 explicitly NOT v1.4 (user has no LTC output on the desk; OSC "can
 move further back").
+
+**LTC chase shipped (2026-07-14, same day):** all four phases of
+docs/ltc-plan.md. utils/timecode/ = tc.py (FRAME-COUNT math, DF
+vectors pinned), generator.py (independent bit table, write_ltc_wav
+IS the bench signal source - no TC hardware on the desk), ltc.py
+(streaming biphase-mark decoder, rate-agnostic, sync word 0xBFFC
+arrival-packed), chase.py (linear fit, lock/freewheel/jump,
+injectable clocks everywhere), runner.py (SMPTE windows ->
+duck-typed transport; NO_SIGNAL never stops the show).
+audio/ltc_input.py = LTCInputService (per-drain monotonic anchoring
+so audio-clock drift can't accumulate; construction never opens a
+stream). Shell: MainWindow.ltc_service()/arm_ltc_chase() own policy
+(arbiter pattern), ShowsTab.chase_transport() + set_chase_armed
+(operator STOP disarms via hook, runner stops bypass it - the STOP
+button now goes through _on_stop_clicked, NOT _stop_playback),
+StructureTab ARM CHASE + device combo (SMPTE mode only,
+sync_device_hint label is GONE), LiveTab.set_sync_status. Bench
+checkpoint pending in todo.md. Two suite lessons the same day:
+QMenu.exec froze the suite silently (guard now covers it, qt-gotchas
+#7 has the py-spy diagnosis recipe) and ThemeManager.apply cost
+ACCUMULATES when whole UI test files run serially in one process -
+always -n auto for anything file-sized (tests/README.md rules).
