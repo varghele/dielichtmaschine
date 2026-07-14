@@ -400,3 +400,25 @@ engine/listener/client - no GL, no sockets). PENDING MANUAL CHECKS
 show against a real node/visualizer, the VISUALIZER OPEN flow
 end-to-end (process launch is stubbed in tests), and the rebranded
 viewer frame under a live GL context.
+
+**Roadmap restructured for release (2026-07-14):** the next tag is
+**v1.4.0 "the standalone switch"** - LTC/SMPTE input INCLUDING setlist
+SMPTE triggering (songs fire when incoming timecode reaches their
+start time, playhead chases; the SMPTE slice of the trigger engine
+pulled forward), GDTF Share Phase 4, MVR import/export (promoted from
+evaluation), CSV lighting-table import (column mapping), diagnostics
+panel + silent-fallback audit; gated on todo.md's manual hardware
+checks. **v1.5.0** follows after focus geometry + morphing (v1.5a/b).
+v1.1, v1.2, v1.3 are CLOSED. Stage refinement (reopened v1.1 gaps,
+truss segment tiling, verify+refine truss docking, stage-setup
+workflow pass) is the new v1.6; everything after slid by one:
+timeline ergonomics v1.7, live ops + clock sync v1.8 (OSC folded in),
+control panel v1.9, autogen v1.10, Auto hardening v1.11, visualizer
+breadth v1.12 (+ truss 3D models). Crash telemetry moved to
+out-of-scope. Docs and code comments predating 2026-07-14 may use the
+OLD numbers (old v1.7 sync engine = new v1.8, old v1.6 timeline = new
+v1.7); UI strings were made number-agnostic. Branch plan:
+v1.2-rebrand merges to main untagged once the gate checks pass, then
+work continues on v1.4-standalone-switch. LTC output and OSC are
+explicitly NOT v1.4 (user has no LTC output on the desk; OSC "can
+move further back").
