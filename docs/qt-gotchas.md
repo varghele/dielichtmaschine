@@ -410,9 +410,27 @@ runs. The `tests/e2e/` harness has its own richer guard
 (`tests/e2e/conftest.py::modals`) that records a handler per dialog and
 answers it; the two coexist.
 
+**It sprang again 2026-07-14, through the guard's one blind spot:**
+`QMenu` is not a `QDialog`, so `QMenu.exec` was never patched. A
+Universes-tab test emitted a card's `context_requested` signal to check
+its own lambda received it - and the signal also fans out to the tab's
+real handler, which opens the right-click menu. Two consecutive full
+`-n auto` runs froze at ~96% (every other worker idle, the coordinator
+waiting on the one stuck worker). The guard now patches `QMenu.exec`
+too, and the test drives a real `QContextMenuEvent` with a local exec
+stub instead of emitting past the handler.
+
+Diagnosis recipe for the next silent freeze, which is what actually
+found this: `Get-Process python` and look at the AGES (a 3-minute suite
+whose workers are 20+ minutes old is hung, not slow), then
+`pip install py-spy; py-spy dump --pid <worker>` on each worker - the
+stuck one shows the exact test and the blocking call in its MainThread
+stack, no restart or instrumentation needed.
+
 Rule of thumb: never let a test drive a code path that can open a modal
 without either patching the dialog class or driving its
-accept/reject/get* directly.
+accept/reject/get* directly. Emitting a SIGNAL counts as driving every
+connected slot, including the ones production code connected.
 
 ---
 

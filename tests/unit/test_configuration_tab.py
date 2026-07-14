@@ -292,16 +292,30 @@ class TestContextMenu:
         finally:
             tab.deleteLater()
 
-    def test_card_emits_context_requested_on_right_click(self, qapp):
+    def test_card_emits_context_requested_on_right_click(self, qapp,
+                                                         monkeypatch):
+        from PyQt6 import QtGui, QtWidgets
         from PyQt6.QtCore import QPoint
 
         tab = _make_tab(qapp, ("ArtNet",))
         try:
+            # The tab's own handler on this signal opens a QMenu, and
+            # QMenu.exec is a MODAL event loop: unstubbed it blocks the
+            # whole test run forever (froze two full-suite runs on
+            # 2026-07-14 - see docs/qt-gotchas.md). Stub it and use the
+            # capture to prove the menu wiring fired.
+            menus = []
+            monkeypatch.setattr(
+                QtWidgets.QMenu, "exec",
+                lambda self, *a, **k: menus.append(self))
             received = []
             tab._cards[1].context_requested.connect(
                 lambda uid, pos: received.append(uid))
-            tab._cards[1].context_requested.emit(1, QPoint(0, 0))
+            event = QtGui.QContextMenuEvent(
+                QtGui.QContextMenuEvent.Reason.Mouse, QPoint(2, 2))
+            tab._cards[1].contextMenuEvent(event)
             assert received == [1]
+            assert len(menus) == 1
         finally:
             tab.deleteLater()
 

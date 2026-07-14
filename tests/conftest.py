@@ -241,6 +241,12 @@ def _no_blocking_modals(monkeypatch):
         return _raise
 
     monkeypatch.setattr(QtWidgets.QDialog, "exec", _blocked, raising=False)
+    # QMenu is NOT a QDialog, but its exec() is the same modal trap: a
+    # context-menu signal fan-out reached the tab's real menu handler
+    # and froze two full -n auto runs before anyone looked at the
+    # worker stacks (2026-07-14, qt-gotchas #7). Tests that drive a
+    # menu patch exec themselves, like the dialogs.
+    monkeypatch.setattr(QtWidgets.QMenu, "exec", _blocked, raising=False)
     for cls, methods in (
         (QtWidgets.QInputDialog,
          ("getText", "getInt", "getDouble", "getItem", "getMultiLineText")),
