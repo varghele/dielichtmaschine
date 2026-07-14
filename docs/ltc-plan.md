@@ -272,7 +272,10 @@ the cable mid-song must NOT stop the show, replugging must re-lock.
 
 ## Status
 
-- [ ] Phase 0 - tc.py + generator + decoder
+- [x] Phase 0 - tc.py + generator + decoder (2026-07-14: 38 tests in
+      test_timecode.py + test_ltc_decoder.py, all four rates round-trip
+      incl. the drop-frame boundary, noise/polarity/DC/48k robustness,
+      dropout re-lock < 0.2 s, chunked feed == one-shot exactly)
 - [ ] Phase 1 - chase
 - [ ] Phase 2 - input service
 - [ ] Phase 3 - runner + shell integration + SYNC chip
