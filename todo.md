@@ -12,7 +12,8 @@ checks below pass; v1.4 work continues on `v1.4-standalone-switch`.
 ## v1.4 build order (rough leverage order, discuss before each)
 
 - [ ] **LTC/SMPTE input + setlist SMPTE triggering** - the marquee
-      item. Biphase-mark decoder for the 80-bit frame, 24/25/29.97/30
+      item. PLAN: docs/ltc-plan.md (phases 0-3 + bench checkpoint,
+      written 2026-07-14). Biphase-mark decoder for the 80-bit frame, 24/25/29.97/30
       fps, freewheel on dropout, per-song offset; a setlist entry with
       an SMPTE start trigger fires its song when incoming timecode
       reaches it, playhead chases from then on. Input rides the Auto
