@@ -281,6 +281,12 @@ the cable mid-song must NOT stop the show, replugging must re-lock.
       freewheel, expiry, seamless short-dropout relock, forward and
       backward locates reported exactly once, drop-frame real-seconds
       positions)
-- [ ] Phase 2 - input service
+- [x] Phase 2 - input service (2026-07-14: audio/ltc_input.py, 11 tests
+      in test_ltc_input.py - generated audio through a real ring buffer
+      into lock/position/label/rate, state signal walks
+      lock/freewheel/no-signal, display throttle, idempotent
+      start/stop, failing device degrades cleanly, device-hint
+      resolution incl. loose match. Arrival anchoring per drain, so
+      audio-clock drift cannot accumulate)
 - [ ] Phase 3 - runner + shell integration + SYNC chip
 - [ ] Manual checkpoint on the bench
