@@ -32,9 +32,14 @@ checks below pass; v1.4 work continues on `v1.4-standalone-switch`.
       One manual check added to the gate list below (real login).
 - [ ] **MVR import spike** - read a real MVR from a previz tool into a
       patched, placed rig (pymvr), then decide export scope.
-- [ ] **CSV lighting-table import wizard** - column mapping onto the
-      existing resolution pipeline (library lookup, Replace/Add),
-      preview before commit.
+- [x] **CSV lighting-table import wizard** - SHIPPED 2026-07-15:
+      utils/csv_table_import.py (pure sniff/guess/map/build/resolve,
+      delimiter + encoding + header tolerant) and the three-step
+      wizard gui/dialogs/csv_import_wizard.py riding the existing
+      resolution pipeline (library lookup, Replace/Add); nothing
+      touches the config until IMPORT. The topbar import button now
+      pops a workspace/CSV choice menu. 42 tests in
+      tests/unit/test_csv_table_import.py.
 - [x] **Silent-fallback audit** - SHIPPED 2026-07-15: 142 print sites
       inventoried, user-impacting ones route through
       utils/user_warnings.py (operation grouping, once-key folding for

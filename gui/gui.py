@@ -902,6 +902,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.actionExportShowStructure.triggered.connect(self.export_show_structure_file)
         self.actionImportFixtureList.triggered.connect(self.import_fixture_list_file)
         self.actionExportFixtureList.triggered.connect(self.export_fixture_list_file)
+        self.actionImportCsvTable.triggered.connect(self.import_csv_lighting_table)
         self.actionImportShowsFromConfig.triggered.connect(self.import_shows_from_config_file)
         self.actionImportLegacyCsv.triggered.connect(self.import_legacy_csv_songs)
         self.actionNewFromTemplate.triggered.connect(self.new_from_template)
@@ -1965,6 +1966,41 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         msg = f"Imported {len(fixtures)} fixture(s) from {fmt.upper()}."
         if warnings:
             msg += "\n\nWarnings:\n- " + "\n- ".join(warnings)
+        msg += "\n\nSave the config to persist the imported rig."
+        QMessageBox.information(self, "Imported", msg)
+
+    def import_csv_lighting_table(self):
+        """File -> Import Lighting Table (CSV): a foreign spreadsheet in,
+        mapped columns out.
+
+        The wizard (gui/dialogs/csv_import_wizard.py) sniffs delimiter,
+        encoding and header row, maps the sheet's columns onto the rig
+        fields, and previews the rig resolved through the same library
+        pipeline as Import Fixture List. Nothing touches the config
+        until the wizard's IMPORT is confirmed; the Replace/Add choice
+        mirrors the fixture-list import.
+        """
+        from gui.dialogs.csv_import_wizard import CsvImportWizard
+        from utils.fixture_io import apply_fixture_list
+        default_dir = os.path.dirname(self.config_path) if self.config_path else ""
+        wizard = CsvImportWizard(
+            existing_fixture_count=len(self.config.fixtures),
+            start_dir=default_dir, parent=self)
+        if wizard.exec() != QtWidgets.QDialog.DialogCode.Accepted:
+            return
+        fixtures = wizard.result_fixtures()
+        if not fixtures:
+            return
+        apply_fixture_list(self.config, fixtures,
+                           replace=wizard.replace_rig())
+
+        self.fixtures_tab.update_from_config(force=True)
+        self.on_groups_changed()
+
+        msg = f"Imported {len(fixtures)} fixture(s) from the lighting table."
+        notes = wizard.row_errors() + wizard.resolution_warnings()
+        if notes:
+            msg += "\n\nWarnings:\n- " + "\n- ".join(notes)
         msg += "\n\nSave the config to persist the imported rig."
         QMessageBox.information(self, "Imported", msg)
 

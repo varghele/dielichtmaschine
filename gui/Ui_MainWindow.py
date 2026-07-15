@@ -178,6 +178,11 @@ class Ui_MainWindow(object):
         self.actionImportShowStructure = QAction("Import Show Structure...", MainWindow)
         self.actionExportShowStructure = QAction("Export Show Structure...", MainWindow)
         self.actionImportFixtureList = QAction("Import Fixture List...", MainWindow)
+        # Foreign venue spreadsheets (column-mapping wizard,
+        # gui/dialogs/csv_import_wizard.py) vs. the app's own fixture
+        # list layout above.
+        self.actionImportCsvTable = QAction(
+            "Import Lighting Table (CSV)...", MainWindow)
         self.actionExportFixtureList = QAction("Export Fixture List...", MainWindow)
         self.actionImportShowsFromConfig = QAction("Import Shows from Config...", MainWindow)
         self.actionImportLegacyCsv = QAction("Import Legacy CSV Songs...", MainWindow)
@@ -198,6 +203,7 @@ class Ui_MainWindow(object):
         self.menuFile.addAction(self.actionImportLegacyCsv)
         self.menuFile.addSeparator()
         self.menuFile.addAction(self.actionImportFixtureList)
+        self.menuFile.addAction(self.actionImportCsvTable)
         self.menuFile.addAction(self.actionExportFixtureList)
         self.menuFile.addSeparator()
         self.menuFile.addAction(self.actionImportWorkspace)
@@ -296,6 +302,27 @@ class Ui_MainWindow(object):
                        self.importWorkspaceAction, self.createWorkspaceAction):
             btn = TopBarIconButton()
             btn.setDefaultAction(action)
+            if action is self.importWorkspaceAction:
+                # The import icon offers a choice: QLC+ workspace or a
+                # venue's CSV lighting table. InstantPopup means the
+                # click opens the menu; the default action only lends
+                # its icon (apply_shell_icons keeps recoloring it). The
+                # same QAction objects live in the File menu, so
+                # register_menu_shortcuts covers any future shortcuts.
+                self.import_menu = QtWidgets.QMenu(MainWindow)
+                self.import_menu.addAction(self.actionImportWorkspace)
+                self.import_menu.addAction(self.actionImportCsvTable)
+                btn.setMenu(self.import_menu)
+                btn.setPopupMode(
+                    QToolButton.ToolButtonPopupMode.InstantPopup)
+                # On the action, not the button: QToolButton re-syncs
+                # its tooltip from the default action on every action
+                # change (apply_shell_icons re-sets the icon per theme).
+                self.importWorkspaceAction.setToolTip(
+                    QtCore.QCoreApplication.translate(
+                        "Shell",
+                        "Import (QLC+ workspace or CSV lighting table)"))
+                self.import_btn = btn
             self.topbar.right_layout.addWidget(btn)
 
         self.overflow_btn = TopBarIconButton()

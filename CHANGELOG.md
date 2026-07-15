@@ -115,6 +115,24 @@ verbatim as the GitHub Release notes (see [docs/releasing.md](docs/releasing.md)
   counted entry instead of a storm. The headless CLI export prints
   the same warnings to stderr for scripts and CI. Exported files are
   byte-identical - only the reporting changed.
+- **Import any CSV lighting table.** Real venues hand over whatever
+  spreadsheet they have; the new wizard (File > Import Lighting Table
+  (CSV), or the topbar import button, which now offers the choice of
+  QLC+ workspace or CSV) takes it as-is. Delimiter (comma, semicolon,
+  tab), text encoding (UTF-8 or Windows/Excel umlauts) and the header
+  row are detected automatically, with manual overrides and a raw
+  preview. Then each rig field picks the CSV column that feeds it,
+  auto-guessed from the header names (manufacturer and model are
+  required, everything else optional), with a live preview of the
+  mapped result. The last page shows the rig resolved through the
+  fixture library, exactly like Import Fixture List: known models get
+  their real mode lists, models the library does not know are marked
+  clearly instead of silently dropped, and bad rows are listed. A
+  "position" column (FOH truss, LX1...) becomes a stage layer, so hang
+  positions survive into the stage setup. Replace or add to the
+  current rig, same as the fixture-list import - and nothing changes
+  until IMPORT is confirmed on that last page; Cancel anywhere leaves
+  the project untouched.
 - **Help > Diagnostics.** One copyable markdown block for bug reports:
   app/Python/Qt versions, platform, OpenGL renderer, detected audio
   host APIs, ArtNet output state, project path and log folder. Every
