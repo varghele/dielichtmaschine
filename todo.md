@@ -37,8 +37,10 @@ checks below pass; v1.4 work continues on `v1.4-standalone-switch`.
       preview before commit.
 - [ ] **Silent-fallback audit** - convert the print-and-continue paths
       to structured warnings with a visible panel.
-- [ ] **Diagnostics panel** - Help > Diagnostics, copyable markdown
-      block for bug reports.
+- [x] **Diagnostics panel** - SHIPPED 2026-07-15: Help > Diagnostics,
+      utils/diagnostics.py (guarded probes: versions, GL renderer,
+      audio host APIs, arbiter output state, project + log paths) and
+      a COPY TO CLIPBOARD dialog. 11 probe-injected tests.
 
 ## Release gate: pending manual verification (user, needs hardware/desktop)
 

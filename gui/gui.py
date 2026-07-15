@@ -959,6 +959,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
 
         # Help menu actions
         self.actionOpenLogFolder.triggered.connect(self.open_log_folder)
+        self.actionDiagnostics.triggered.connect(self.open_diagnostics)
         self.actionAbout.triggered.connect(self.show_about)
 
         # Home screen quick actions + recents + checklist
@@ -2088,6 +2089,11 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         config load rescans - nothing to push from here."""
         from gui.dialogs.library_paths_dialog import LibraryPathsDialog
         LibraryPathsDialog(parent=self).exec()
+
+    def open_diagnostics(self):
+        """Help > Diagnostics: the copyable bug-report block."""
+        from gui.dialogs.diagnostics_dialog import DiagnosticsDialog
+        DiagnosticsDialog(main_window=self, parent=self).exec()
 
     def open_gdtf_share_account(self):
         """Settings > GDTF Share Account: credentials for the fixture

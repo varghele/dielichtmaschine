@@ -258,6 +258,9 @@ class Ui_MainWindow(object):
         self.menuHelp = QtWidgets.QMenu("Help", parent=MainWindow)
         self.actionOpenLogFolder = QAction("Open Log Folder", MainWindow)
         self.menuHelp.addAction(self.actionOpenLogFolder)
+        # Copyable bug-report block (gui/dialogs/diagnostics_dialog.py).
+        self.actionDiagnostics = QAction("Diagnostics...", MainWindow)
+        self.menuHelp.addAction(self.actionDiagnostics)
         self.actionAbout = QAction("About", MainWindow)
         self.menuHelp.addAction(self.actionAbout)
 

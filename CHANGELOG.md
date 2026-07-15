@@ -101,6 +101,12 @@ verbatim as the GitHub Release notes (see [docs/releasing.md](docs/releasing.md)
 
 ### Added
 
+- **Help > Diagnostics.** One copyable markdown block for bug reports:
+  app/Python/Qt versions, platform, OpenGL renderer, detected audio
+  host APIs, ArtNet output state, project path and log folder. Every
+  probe is guarded - on a machine where a subsystem is broken (exactly
+  the machine that needs this), the report shows the error string for
+  that row instead of failing to open.
 - **GDTF Share, in-app.** The fixture browser grew a GDTF SHARE tab:
   log in with your own gdtf-share.com account, search the catalog
   (manufacturer uploads ranked first), and download definitions
