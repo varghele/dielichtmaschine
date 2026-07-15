@@ -23,9 +23,13 @@ checks below pass; v1.4 work continues on `v1.4-standalone-switch`.
       Mode audio-capture stack. Fully testable with synthetically
       generated LTC audio before it meets hardware. MIDI/MTC triggers,
       LEARN, pause looks stay v1.8.
-- [ ] **GDTF Share Phase 4** - in-app login/browse/download into the
-      user GDTF dir. API proven by scripts/gdtf_share_fetch.py;
-      credentials via keyring or session-only prompt, never plaintext.
+- [x] **GDTF Share Phase 4** - SHIPPED 2026-07-15: utils/gdtf_share.py
+      client (cached catalog serves offline, ranked search,
+      revision-pinned downloads), GDTF SHARE tab in the fixture
+      browser with download + auto-rescan, Settings > GDTF Share
+      Account with TEST LOGIN. Password only ever in the OS credential
+      store (keyring; session-only without one). 37 device-free tests.
+      One manual check added to the gate list below (real login).
 - [ ] **MVR import spike** - read a real MVR from a previz tool into a
       patched, placed rig (pymvr), then decide export scope.
 - [ ] **CSV lighting-table import wizard** - column mapping onto the
@@ -65,6 +69,12 @@ checks below pass; v1.4 work continues on `v1.4-standalone-switch`.
       in tests)
 - [ ] Eyeball the rebranded visualizer frame under a live GL context
       (header spacing, statusbar colors)
+- [ ] GDTF Share online check: Add Fixture > GDTF SHARE tab, CONNECT
+      with the real account (REMEMBER stores the password in the
+      Windows vault), search, download one fixture, see it appear
+      [GDTF] in the library list and patch it. The whole flow is
+      tested against a fake API; this closes the only untested link
+      (the live gdtf-share.com endpoints + real keyring backend).
 
 ## Resolved reference
 

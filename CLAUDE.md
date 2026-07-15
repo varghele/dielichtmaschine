@@ -140,10 +140,18 @@ config load, and GDTF GLB models render in the visualizer
 (utils/gdtf_mesh.py + visualizer/renderer/gdtf_draw_plan.py +
 gdtf_mesh_chassis.py, shared GL resources, per-platform golden,
 QLC_GDTF_MESHES=0 kill switch; verified end to end on the MagicBlade
-R). Open: manual QLC+ runtime check of a companion .qxf, Phase 4
-(Share browser UI) unstarted, and the test suite globally excludes
-gdtf_fixtures/ (tests/conftest.py) so local Share files never shadow
-bundled test definitions.
+R). Open: manual QLC+ runtime check of a companion .qxf, and the test
+suite globally excludes gdtf_fixtures/ (tests/conftest.py) so local
+Share files never shadow bundled test definitions. Phase 4 (Share
+browser) SHIPPED 2026-07-15 on v1.4-standalone-switch:
+utils/gdtf_share.py (client, 24h catalog cache that serves stale
+offline, ranked search, rid-pinned downloads; username in QSettings,
+password ONLY via keyring with session-only fallback), GDTF SHARE tab
+in the fixture browser (gui/dialogs/gdtf_share_pane.py, worker-thread
+network, downloads into the user GDTF dir + auto-rescan), Settings >
+GDTF Share Account with TEST LOGIN. Tests fake both the HTTP session
+and the keyring module (tests/unit/test_gdtf_share.py) - a real-login
+manual check sits in todo.md's gate list.
 
 **Rebrand shipped (2026-07-07, branch `v1.2-rebrand`):** the product
 is **Die Lichtmaschine** (dielichtmaschine.de). Design North Star in

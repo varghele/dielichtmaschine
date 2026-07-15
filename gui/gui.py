@@ -911,6 +911,8 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         # Settings menu actions
         self.actionAudioSettings.triggered.connect(self.open_audio_settings)
         self.actionLibraryPaths.triggered.connect(self.open_library_paths)
+        self.actionGDTFShareAccount.triggered.connect(
+            self.open_gdtf_share_account)
 
         # Hidden deep setting: canvas sub-lane purpose labels in the Show
         # Timeline. Reflect the persisted state in the check box, then
@@ -2086,6 +2088,15 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         config load rescans - nothing to push from here."""
         from gui.dialogs.library_paths_dialog import LibraryPathsDialog
         LibraryPathsDialog(parent=self).exec()
+
+    def open_gdtf_share_account(self):
+        """Settings > GDTF Share Account: credentials for the fixture
+        browser's Share tab (username in QSettings, password in the OS
+        credential store, never plaintext)."""
+        from gui.dialogs.gdtf_share_account_dialog import (
+            GDTFShareAccountDialog,
+        )
+        GDTFShareAccountDialog(parent=self).exec()
 
     def open_audio_settings(self):
         """Open audio settings dialog"""

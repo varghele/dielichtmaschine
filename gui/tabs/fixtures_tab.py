@@ -1923,12 +1923,16 @@ class FixturesTab(BaseTab):
     def _add_fixture(self):
         """Open the fixture browser and add the picked fixture(s)."""
         from gui.dialogs.fixture_browser_dialog import FixtureBrowserDialog
+        from gui.dialogs.gdtf_share_pane import GDTFSharePane
         try:
             fixture_files = self._scan_fixture_files()
             if not fixture_files:
                 raise Exception("No fixture files found in QLC+ directories")
 
-            dialog = FixtureBrowserDialog(fixture_files, parent=self)
+            dialog = FixtureBrowserDialog(
+                fixture_files, parent=self,
+                rescan=self._scan_fixture_files,
+                share_pane=GDTFSharePane())
             if dialog.exec() == QDialog.DialogCode.Accepted:
                 selected = dialog.selection()
                 if selected:

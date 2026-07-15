@@ -241,6 +241,11 @@ class Ui_MainWindow(object):
         # the definition search path (gui/dialogs/library_paths_dialog.py).
         self.actionLibraryPaths = QAction("Fixture Libraries...", MainWindow)
         self.menuSettings.addAction(self.actionLibraryPaths)
+        # GDTF Share account (username in QSettings, password in the OS
+        # credential store; gui/dialogs/gdtf_share_account_dialog.py).
+        self.actionGDTFShareAccount = QAction(
+            "GDTF Share Account...", MainWindow)
+        self.menuSettings.addAction(self.actionGDTFShareAccount)
         # Hidden deep setting: toggle the canvas sub-lane purpose labels in
         # the Show Timeline. Checkable, persisted to the
         # "timeline/show_sublane_labels" QSettings key (default on).

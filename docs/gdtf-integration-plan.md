@@ -379,10 +379,25 @@ below goes through the transpiled channel model.
 
 ### Phase 4: GDTF Share browser (optional, last)
 
-- [ ] Settings-stored user credentials (their own Share account), catalog
+- [x] Settings-stored user credentials (their own Share account), catalog
       via `getList.php`, download + local cache in the per-OS data dir,
       update check via revision IDs. Never bundled, never redistributed.
-- [ ] Baseline that ships with Phase 1 regardless: drop `.gdtf` files into
+      Done 2026-07-15 (branch v1.4-standalone-switch): `utils/gdtf_share.py`
+      client (injectable session, catalog cached 24h in the user data dir
+      and still served stale when offline, ranked search, downloads named
+      `manufacturer@fixture@rid<N>.gdtf` so revisions never overwrite
+      silently), GDTF SHARE tab in the fixture browser
+      (`gui/dialogs/gdtf_share_pane.py`, network on a worker thread,
+      downloads land in the user GDTF dir + auto-rescan) and Settings >
+      GDTF Share Account with TEST LOGIN. Credentials: username in
+      QSettings, password ONLY in the OS credential store via keyring
+      (session-only fallback when no backend exists - plaintext
+      persistence has no code path). Tests: `tests/unit/test_gdtf_share.py`
+      (fake HTTP session + fake keyring). A proactive update check on
+      already-downloaded revisions was left out deliberately - the rid in
+      the filename makes a manual re-download recognizable; revisit on
+      demand.
+- [x] Baseline that ships with Phase 1 regardless: drop `.gdtf` files into
       the fixtures folder manually.
 
 ---

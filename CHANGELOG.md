@@ -101,6 +101,18 @@ verbatim as the GitHub Release notes (see [docs/releasing.md](docs/releasing.md)
 
 ### Added
 
+- **GDTF Share, in-app.** The fixture browser grew a GDTF SHARE tab:
+  log in with your own gdtf-share.com account, search the catalog
+  (manufacturer uploads ranked first), and download definitions
+  straight into your GDTF directory - they appear in the library list
+  immediately, ready to patch. The catalog is cached for a day and
+  stays browsable offline. Credentials are never written in
+  plaintext: the username lives in the app settings, the password
+  only in the OS credential store (Settings > GDTF Share Account,
+  with a TEST LOGIN button) - without a credential store it is kept
+  for the session only. Share terms hold as ever: definitions are
+  fetched per user, never bundled with the app. Dropping `.gdtf`
+  files into the fixtures folder manually keeps working.
 - **An honest unsaved-changes asterisk.** The project name in the
   topbar (and the window title) now carries a Reaper-style ` *`
   whenever the project differs from what was last manually saved -

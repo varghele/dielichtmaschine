@@ -64,6 +64,9 @@ a = Analysis(
         'gui.tabs.shows_tab_timeline',
         'gui.tabs.stage_tab',
         'gui.tabs.structure_tab',
+        # keyring finds its backend at runtime (GDTF Share password
+        # store); make sure the Windows vault backend is bundled.
+        'keyring.backends.Windows',
     ],
     hookspath=[],
     hooksconfig={},

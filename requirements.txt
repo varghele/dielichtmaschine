@@ -21,6 +21,9 @@ pyserial>=3.5
 
 # GDTF fixture definitions (DIN SPEC 15800), see docs/gdtf-integration-plan.md
 pygdtf>=1.4.5
+# GDTF Share account password in the OS credential store (Phase 4);
+# the app degrades to a session-only password when keyring is absent.
+keyring>=24.0
 # GLB mesh loading for GDTF 3D models (visualizer)
 trimesh>=4.0.0
 
