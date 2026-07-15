@@ -93,15 +93,26 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         1 s tick.
         """
         if hasattr(self, 'topbar'):
+            # Reaper-style dirty marker: the truth is the content
+            # fingerprint vs the last MANUAL save/load (autosave
+            # backups do not count), throttled because it hashes the
+            # whole config.
+            dirty = self._dirty_for_tick()
+            self._refresh_dirty_marker(dirty)
             if getattr(self, 'config_path', None):
                 name = os.path.basename(self.config_path)
-                if self.windowTitle().endswith(" *"):
-                    name += " *"
+            elif dirty:
+                # Edits exist but the project was never saved: own it.
+                name = "untitled"
             else:
                 # Reference screen 01: the filename slot reads
                 # "no project loaded" until a project exists.
                 name = "no project loaded"
-            self.topbar.set_filename(name)
+            if dirty:
+                name += " *"
+            self.topbar.set_filename(
+                name,
+                tooltip="Unsaved changes · Ctrl+S saves" if dirty else "")
             # Keep the Home checklist live while the user works.
             if hasattr(self, 'home_screen') and self.home_screen.isVisible():
                 self.home_screen.refresh_checklist(self.config)
@@ -743,6 +754,8 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             self._autosave.clear()
         from utils.app_settings import app_settings
         app_settings().remove("autosave/last_project")
+        # Every real save lands here: reset the dirty-marker baseline.
+        self._mark_config_clean()
 
     def _config_fingerprint(self):
         """A value that changes when the config content changes, for the
@@ -752,6 +765,45 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             return hash(repr(asdict(self.config)))
         except Exception:
             return None
+
+    # -- dirty marker (Reaper-style " *" on the topbar filename + window
+    # title). Truth = the content fingerprint differs from the last
+    # MANUAL save/load; the undo stack is NOT the source (most edit
+    # paths never push undo commands), and autosave backups do not
+    # count as saves (they are crash recovery).
+
+    def _mark_config_clean(self):
+        """Remember the just-persisted content as the clean baseline."""
+        self._saved_fingerprint = self._config_fingerprint()
+        self._dirty_cache = False
+        self._dirty_ticks = 0
+        self._refresh_dirty_marker(False)
+
+    def is_config_dirty(self) -> bool:
+        """Does the live config differ from what was last manually
+        saved or loaded? (Recomputes the fingerprint - use
+        _dirty_for_tick on hot paths.)"""
+        saved = getattr(self, "_saved_fingerprint", None)
+        if saved is None:
+            return False   # no baseline yet (early startup)
+        return self._config_fingerprint() != saved
+
+    def _dirty_for_tick(self) -> bool:
+        """The 1 s status tick's throttled view: the fingerprint hashes
+        the whole config, so recompute at most every 5th tick. Save,
+        load and undo boundaries refresh immediately instead."""
+        self._dirty_ticks = getattr(self, "_dirty_ticks", 0) - 1
+        if self._dirty_ticks < 0:
+            self._dirty_cache = self.is_config_dirty()
+            self._dirty_ticks = 4
+        return getattr(self, "_dirty_cache", False)
+
+    def _refresh_dirty_marker(self, dirty: bool):
+        title = self.windowTitle()
+        if dirty and not title.endswith(" *"):
+            self.setWindowTitle(title + " *")
+        elif not dirty and title.endswith(" *"):
+            self.setWindowTitle(title[:-2])
 
     def _init_autosave(self):
         """Crash-recovery autosave: every few seconds, unsaved changes are
@@ -764,6 +816,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             fingerprint_fn=self._config_fingerprint,
             current_path=lambda: self.config_path)
         self._autosave.prime()
+        self._mark_config_clean()
         self._autosave_timer = QTimer(self)
         self._autosave_timer.setInterval(15000)  # 15 seconds
         self._autosave_timer.timeout.connect(self._autosave_tick)
@@ -812,18 +865,14 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             self.show_pages()
 
     def _on_undo_clean_changed(self, clean: bool):
-        """Handle undo stack clean state change.
-
-        Can be used to show unsaved changes indicator.
-        """
-        # Update window title to show unsaved state
-        title = self.windowTitle()
-        if clean:
-            if title.endswith(" *"):
-                self.setWindowTitle(title[:-2])
-        else:
-            if not title.endswith(" *"):
-                self.setWindowTitle(title + " *")
+        """An undo boundary is a cheap moment to refresh the dirty
+        marker immediately. The ``clean`` argument is deliberately
+        ignored: the undo stack only covers timeline block edits and is
+        cleared on song switch, so it is NOT the truth about unsaved
+        changes - the content fingerprint is."""
+        self._dirty_cache = self.is_config_dirty()
+        self._dirty_ticks = 4
+        self._refresh_dirty_marker(self._dirty_cache)
 
     def get_undo_stack(self) -> QUndoStack:
         """Get the application's undo stack."""
@@ -1358,6 +1407,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
                 # we leave it dirty so it keeps backing up until the user
                 # saves the recovered work.
                 self._autosave.prime()
+                self._mark_config_clean()
 
             # Steps 2-7: rebind every tab and preview to the new config.
             self.progress_manager.update_modal(4, "Updating tabs...")

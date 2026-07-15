@@ -220,8 +220,9 @@ class TopBar(QWidget):
                 return key
         return None
 
-    def set_filename(self, text: str) -> None:
+    def set_filename(self, text: str, tooltip: str = "") -> None:
         self.filename_label.setText(text or "")
+        self.filename_label.setToolTip(tooltip)
 
 
 class SubNav(QWidget):

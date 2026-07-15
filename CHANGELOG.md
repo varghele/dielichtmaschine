@@ -101,6 +101,15 @@ verbatim as the GitHub Release notes (see [docs/releasing.md](docs/releasing.md)
 
 ### Added
 
+- **An honest unsaved-changes asterisk.** The project name in the
+  topbar (and the window title) now carries a Reaper-style ` *`
+  whenever the project differs from what was last manually saved -
+  regardless of where the edit happened: fixtures, stage, structure,
+  timeline, dialogs. Previously the marker only tracked timeline
+  block edits, so most changes never showed it. Autosave's crash
+  backups deliberately do not clear it - only Ctrl+S does. Edits in a
+  never-saved project read "UNTITLED *", and hovering the name says
+  what the asterisk means.
 - **Shows chase incoming SMPTE timecode (LTC).** Set the setlist's
   sync mode to SMPTE, give songs an SMPTE start time, pick the audio
   input carrying the timecode and press ARM CHASE in the Structure
