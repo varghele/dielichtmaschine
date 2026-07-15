@@ -1,6 +1,6 @@
 # gui/tabs/stage_tab.py
 """Setup > Stage, rebuilt to the reference screen
-design_handoff_lichtmaschine_app/screens/04-setup-stage.html.
+docs/design/screens/04-setup-stage.html.
 
 Anatomy (top to bottom, left to right):
 

@@ -1,6 +1,6 @@
 # Setlist: Show becomes the evening, songs carry the parts
 
-Reference: `design_handoff_lichtmaschine_app/screens/05b-show-structure-v2-setlist.html`
+Reference: `docs/design/screens/05b-show-structure-v2-setlist.html`
 (1920x1080). The screen's status bar states the hierarchy change:
 **SHOW (SETLIST) -> SONGS -> PARTS**. What the app calls a "Show" today
 (parts + BPM + audio) is renamed **Song**; the Show is now the whole

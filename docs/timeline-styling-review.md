@@ -2,7 +2,7 @@
 
 Review of the Show Timeline tab (`gui/tabs/shows_tab.py` + `timeline_ui/`)
 against the North Star reference
-`design_handoff_lichtmaschine_app/screens/06-show-timeline.html`.
+`docs/design/screens/06-show-timeline.html`.
 
 Method: compared the reference's tokens/layout to the live tab (rendered
 offscreen) and to the source. "Old styling" = pre-rebrand Material /

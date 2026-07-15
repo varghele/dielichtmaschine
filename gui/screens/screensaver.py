@@ -9,7 +9,7 @@ it does not instantly close it again).
 
 The widget is deliberately self-contained: no imports from gui.gui, no
 QSettings, no reach into the ArtNet controllers. Colors are hardcoded
-from ``design_handoff_lichtmaschine_app/screens/12-screensaver.html``
+from ``docs/design/screens/12-screensaver.html``
 rather than taken from theme tokens because the screensaver always
 renders on the screensaver black, independent of the app theme.
 

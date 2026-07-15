@@ -4,7 +4,7 @@
 
 **LET THERE BE LIGHT.** Die Lichtmaschine is a standalone visual light-show authoring tool: beat-synced timeline editing, a built-in 3D preview, automatic show generation from audio analysis, and live ArtNet/DMX playback - with export to [QLC+](https://www.qlcplus.org/) workspaces as an interop path.
 
-> **Status:** `v1.0.0` - the first community release. See the [CHANGELOG](CHANGELOG.md) and [ROADMAP](ROADMAP.md).
+> **Status:** `v1.0.0` is the latest release; `v1.4.0` "the standalone switch" is in preparation on the current branch - setlists with SMPTE/LTC timecode chase, in-app GDTF Share downloads, CSV rig import, a live busking surface with native ArtNet output, and the Die Lichtmaschine rebrand all land with it. See the [CHANGELOG](CHANGELOG.md) and [ROADMAP](ROADMAP.md).
 >
 > This project was formerly known as **QLC+ Show Creator** - old links, releases, and issues refer to the same codebase.
 
@@ -12,16 +12,20 @@
 
 ## What it does
 
-- **Builds shows visually** - drag fixtures into stage positions, define song structure (BPM, time signature, parts), then paint effects onto a beat-aligned timeline.
+- **Builds shows visually** - drag fixtures into stage positions, define song structure (BPM, time signature, parts), then paint effects onto a beat-aligned timeline. A whole gig is one project: a setlist of songs with per-song triggers and pause looks, saved as a native `.lms` file (plain YAML underneath).
 - **Previews live** - built-in 3D visualizer + ArtNet output at 44 Hz, so you can iterate without lighting an actual stage.
 - **Plays natively over ArtNet** - the same 44 Hz DMX output that feeds the preview drives a real rig directly from the timeline, no external runtime required.
+- **Chases SMPTE timecode** - feed LTC into any audio input, arm the chase, and songs fire when the incoming timecode reaches their start time; the playhead follows the signal, freewheels through dropouts, and re-locks. 24/25/30 and 29.97 drop-frame detected automatically.
+- **Busks on top of the show** - the Live tab layers colour swatches, submasters, effects, movement and position palettes over whatever is playing, with per-control release, grandmaster and DBO - all merged into the same ArtNet output.
 - **Generates shows from audio** - point it at an audio file + your song structure; it picks lighting rudiments per fixture group based on energy, vocal presence, and spectral contrast. Output is regular timeline blocks you can edit.
 - **Runs unscripted (experimental)** - Auto Mode listens to live audio (mic / interface / loopback) and drives DMX in real time. For rehearsal jams, busking, or the parts of the set you haven't authored yet.
+- **Says what it worked around** - Help > Warnings collects what an export or load had to skip (structured, copyable); Help > Diagnostics produces a one-block bug report.
 
 ### Interoperability
 
-- **Exports to QLC+** - generates a `.qxw` workspace with fixture mappings, sequences, virtual console, and master presets, so a show authored here can also run on QLC+. Fixtures QLC+ does not know get a companion `.qxf` generated next to the workspace.
-- **Consumes standard fixture definitions** - GDTF (`.gdtf`, DIN SPEC 15800) is the primary format (drop files into `gdtf_fixtures/`, they render with their real 3D models); `.qxf` files from the QLC+ fixture library work as-is in parallel.
+- **Exports to QLC+** - generates a `.qxw` workspace with fixture mappings, sequences, virtual console, and master presets, so a show authored here can also run on QLC+. Fixtures QLC+ does not know get a companion `.qxf` generated next to the workspace; moving-head aim and movement patterns convert to each fixture's real yoke, verified against hardware.
+- **Consumes standard fixture definitions** - GDTF (`.gdtf`, DIN SPEC 15800) is the primary format, rendered with its real 3D models. Download definitions in-app from [GDTF Share](https://gdtf-share.com) (fixture browser > GDTF SHARE tab, your own account) or drop files into your GDTF directory (Settings > Fixture Libraries); `.qxf` files from the QLC+ fixture library work as-is in parallel.
+- **Imports whatever rig list the venue has** - a column-mapping wizard turns any CSV lighting table (any delimiter, Excel encodings) into a patched rig through the fixture library, previewed before anything changes.
 
 Full feature tour: [FEATURES.md](FEATURES.md). What's next: [ROADMAP.md](ROADMAP.md).
 
@@ -77,7 +81,7 @@ python main.py
 The five-minute path from blank project to a working show:
 
 1. **Configuration** - add a universe and pick its output (E1.31, ArtNet, or USB DMX).
-2. **Fixtures** - import your rig's fixture definitions - `.gdtf` files (drop into `gdtf_fixtures/`) or `.qxf` from the QLC+ library / `custom_fixtures/` - and group them by role (front PARs, rear washes, movers, ...).
+2. **Fixtures** - add your rig's fixtures: search the built-in library, download `.gdtf` definitions from the GDTF SHARE tab, or drop `.gdtf`/`.qxf` files into your library directories (Settings > Fixture Libraries). Group them by role (front PARs, rear washes, movers, ...).
 3. **Stage** - drag fixtures into position on the 2D plot. The right pane previews the rig in 3D with all channels at full so you can see what you're placing.
 4. **Structure** - define the song: parts, BPM per part, time signature, bar counts, transitions.
 5. **Shows** - drop riffs onto the timeline, or paint dimmer / colour / movement / special blocks lane by lane. Enable ArtNet output and / or the embedded visualizer to preview as you go.
@@ -116,12 +120,13 @@ dielichtmaschine/
 ├── audio/               # Playback + live capture + real-time spectral analysis
 ├── auto/                # Auto Mode engine, BPM, DMX, widgets
 ├── autogen/             # Algorithmic show-generation pipeline
-├── utils/               # ArtNet, TCP, .qxf parsing, orientation, .qxw export
+├── utils/               # ArtNet arbiter, timecode, fixture library, .qxw export
 ├── visualizer/          # 3D Visualizer (composable renderer)
-├── custom_fixtures/     # Your fixture definitions (.qxf)
-├── shows/               # Show data (CSV + audio)
+├── scenes/              # Scene library (Live tab looks)
+├── custom_fixtures/     # Bundled fixture definitions (.qxf)
+├── demos/               # Reproducible demo rigs, shows, and media
 ├── tests/               # Unit + visual regression
-└── docs/                # Architecture, subsystem docs, gotchas
+└── docs/                # Architecture, subsystem docs, gotchas, design reference
 ```
 
 ---
@@ -130,7 +135,7 @@ dielichtmaschine/
 
 User-facing:
 - [FEATURES](FEATURES.md) - full capability tour
-- [ROADMAP](ROADMAP.md) - themed milestones (v1.1 stage layers and rig import/export, v1.2 standalone pivot with GDTF evaluation and OSC, v1.3 authoring polish, v1.4 stability and error reporting, v1.5a stage-relative movement, v1.5b show morphing, v1.6 timeline ergonomics, v1.7 Live tab and clock sync, v1.8 live mode control panel, v1.9 autogen polish, v1.10 Auto Mode hardening, v1.11 visualizer breadth, v2.0 algorithmic generation v2)
+- [ROADMAP](ROADMAP.md) - themed milestones (v1.4 the standalone switch - next release, v1.5a stage-relative movement, v1.5b show morphing, v1.6 stage refinement, v1.7 timeline ergonomics, v1.8 live operations and clock sync, v1.8b MVR rig exchange, v1.9 live mode control panel, v1.10 autogen polish, v1.11 Auto Mode hardening, v1.12 visualizer breadth, v2.0 algorithmic generation v2)
 - [CHANGELOG](CHANGELOG.md) - what shipped when
 
 Subsystem:

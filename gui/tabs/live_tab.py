@@ -1,5 +1,5 @@
 """LiveTab - the touch-palette busking surface, built to the reference
-design_handoff_lichtmaschine_app/screens/09-live-3b-palette.html (layout
+docs/design/screens/09-live-3b-palette.html (layout
 "3b").
 
 This is a UI shell wired to an in-memory :class:`LiveState`; every

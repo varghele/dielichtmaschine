@@ -1,5 +1,5 @@
 """Shows tab chrome (timeline v3, reference screen
-design_handoff_lichtmaschine_app/screens/06b-show-timeline-v3.html):
+docs/design/screens/06b-show-timeline-v3.html):
 one compact toolbar row carrying song selector, actions, transport +
 bar readout, GRID segment group, SNAP chip and SWING dropdown, plus
 the right-pane header, block inspector and the footer status line.

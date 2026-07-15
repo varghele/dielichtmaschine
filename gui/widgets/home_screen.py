@@ -1,5 +1,5 @@
 """Home screen, built against the design reference
-design_handoff_lichtmaschine_app/screens/01-home-startfenster.html.
+docs/design/screens/01-home-startfenster.html.
 
 Anatomy: two centered columns on the engineering grid.
 Left (460px): horizontal brand lockup (64px rotor glyph beside the

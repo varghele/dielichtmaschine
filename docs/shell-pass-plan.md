@@ -25,7 +25,7 @@ Remaining follow-ups: compiled .qm for German needs a Qt lrelease (pip
 install pyside6 provides pyside6-lrelease); registration-cross corner
 marks (screen-specific, land with their screens). Follows the rebrand
 (docs/rebranding-plan.md); design source is the North Star topbar/
-statusbar anatomy in `design_handoff_lichtmaschine_app/README.md`
+statusbar anatomy in `docs/design/README.md`
 ("App-Struktur") and the `.dc.html` boards. Decisions taken with the
 user 2026-07-07: UI stays English with Qt i18n scaffolding (German .ts
 started); the QMenuBar is removed, mockup-faithful.

@@ -1,5 +1,5 @@
 """AutoTab - the audio-reactive engine screen, rebuilt to the reference
-design_handoff_lichtmaschine_app/screens/07-auto.html.
+docs/design/screens/07-auto.html.
 
 Anatomy (left to right):
 

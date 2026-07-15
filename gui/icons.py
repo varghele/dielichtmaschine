@@ -1,7 +1,7 @@
 """Brand line-icon factory.
 
 The North Star icon language is 16x16 line SVGs, stroke 1.5,
-``currentColor`` (design_handoff_lichtmaschine_app/README.md). The
+``currentColor`` (docs/design/README.md). The
 files live in resources/icons/ - most extracted verbatim from the
 North Star boards, open/import authored in the same style.
 

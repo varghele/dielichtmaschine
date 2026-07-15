@@ -155,7 +155,7 @@ manual check sits in todo.md's gate list.
 
 **Rebrand shipped (2026-07-07, branch `v1.2-rebrand`):** the product
 is **Die Lichtmaschine** (dielichtmaschine.de). Design North Star in
-`design_handoff_lichtmaschine_app/`, execution plan + follow-ups in
+`docs/design/`, execution plan + follow-ups in
 `docs/rebranding-plan.md`. Identity lives in `utils/app_identity.py`;
 ALL QSettings access goes through `utils/app_settings.py`
 `app_settings()` (one-shot migration from the old QLCShowCreator

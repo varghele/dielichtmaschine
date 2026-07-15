@@ -1,6 +1,6 @@
 """North Star shell chrome: the 48px topbar and the section subnav.
 
-Anatomy (design_handoff_lichtmaschine_app/README.md, "App-Struktur"):
+Anatomy (docs/design/README.md, "App-Struktur"):
 left the rotor glyph + DIE LICHTMASCHINE wordmark, then the section
 tabs (SETUP · SHOW · LIVE), on the right 30x30 icon buttons, the
 config filename in mono, and the output status chips. Below it a

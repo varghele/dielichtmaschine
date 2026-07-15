@@ -1,6 +1,6 @@
 # gui/tabs/structure_tab.py
 """Show > Structure, rebuilt to the reference screen
-design_handoff_lichtmaschine_app/screens/05b-show-structure-v2-setlist.html.
+docs/design/screens/05b-show-structure-v2-setlist.html.
 
 Anatomy (top to bottom):
 

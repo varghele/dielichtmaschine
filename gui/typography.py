@@ -1,7 +1,7 @@
 """Brand typography helpers.
 
 The North Star design uses three text voices (see
-design_handoff_lichtmaschine_app/README.md, "Typografie"):
+docs/design/README.md, "Typografie"):
 
 - display: Barlow Condensed 600-800, ALL CAPS, tracked 0.04-0.12em -
   headlines, tab labels, panel titles

@@ -2,7 +2,7 @@
 
 Status: phases B0-B5 SHIPPED 2026-07-07 on branch `v1.2-rebrand` (off
 `v1.1-stage-rig-data`). Remaining follow-ups are listed at the bottom.
-Source of truth for the design: `design_handoff_lichtmaschine_app/`
+Source of truth for the design: `docs/design/`
 (README + the two `.dc.html` North Star boards). This document covers the
 *rebranding* slice of that package: identity, tokens, packaging, and the
 plumbing pulled forward so breakage is self-reporting. The full screen

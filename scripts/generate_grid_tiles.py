@@ -1,7 +1,7 @@
 """Generate the engineering-grid background tiles.
 
 North Star motif: a fine engineering grid, rgba(141,146,153) at
-0.04-0.07 alpha, 24-48px cells (design_handoff_lichtmaschine_app/
+0.04-0.07 alpha, 24-48px cells (docs/design/
 README.md, "Grid/Schema-Motive"). One 48px tile per theme with a 1px
 line on the top and left edge; QSS repeats it across the main window
 background.

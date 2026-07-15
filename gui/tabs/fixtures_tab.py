@@ -1,6 +1,6 @@
 # gui/tabs/fixtures_tab.py
 """Setup > Fixtures, rebuilt to the reference screen
-design_handoff_lichtmaschine_app/screens/02-setup-fixtures.html.
+docs/design/screens/02-setup-fixtures.html.
 
 Anatomy (left to right, top to bottom):
 

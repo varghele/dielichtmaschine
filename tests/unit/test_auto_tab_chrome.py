@@ -1,5 +1,5 @@
 """Auto tab chrome, rebuilt to the reference screen
-design_handoff_lichtmaschine_app/screens/07-auto.html.
+docs/design/screens/07-auto.html.
 
 Covers the parts of the anatomy that carry behaviour:
 

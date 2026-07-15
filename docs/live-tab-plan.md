@@ -3,7 +3,7 @@
 The first pass (`gui/tabs/live_tab.py`, golden `live_tab_dark`) is a
 simplified shell: group SELECT tiles, one generic palette grid, a single
 master, strobe, fade, blackout. The North Star
-(`design_handoff_lichtmaschine_app/screens/09-live-3b-palette.html`) is a
+(`docs/design/screens/09-live-3b-palette.html`) is a
 full busking surface. This plan closes the gap; still UI-over-state (no
 DMX output yet), but the state model grows to support real output later.
 

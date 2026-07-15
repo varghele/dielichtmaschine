@@ -1,7 +1,7 @@
 """AutogenDialog: public contract, reference anatomy, honest omissions.
 
 The dialog was rebuilt against
-design_handoff_lichtmaschine_app/screens/10-autogen-dialog.html. These
+docs/design/screens/10-autogen-dialog.html. These
 tests pin three things:
 
 1. the contract both callers rely on (``AutogenDialog(parent)`` ->

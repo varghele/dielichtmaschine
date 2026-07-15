@@ -1,5 +1,5 @@
 """Golden screenshots for the Shows tab chrome (timeline v3, reference
-design_handoff_lichtmaschine_app/screens/06b-show-timeline-v3.html).
+docs/design/screens/06b-show-timeline-v3.html).
 
 Pins the tab-level chrome owned by gui/tabs/shows_tab.py:
 

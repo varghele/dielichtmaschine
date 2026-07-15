@@ -1,7 +1,7 @@
 # gui/dialogs/autogen_dialog.py
 # Configuration dialog for automatic show generation.
 #
-# Rebuilt against design_handoff_lichtmaschine_app/screens/
+# Rebuilt against docs/design/screens/
 # 10-autogen-dialog.html: a 44px display-caps header, a 420px left
 # column (AUDIO / STRUCTURE / SONG KEY / COLOUR PALETTE, mono captions
 # over raised readout tiles, then the accent GENERATE call to action and

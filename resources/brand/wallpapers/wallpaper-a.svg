@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1920" height="1080" viewBox="0 0 1920 1080">
+  
+  
+  
+  <defs>
+    <pattern id="grid" width="48" height="48" patternUnits="userSpaceOnUse">
+      <path d="M48 0H0V48" fill="none" stroke="rgba(141,146,153,0.05)" stroke-width="1"></path>
+    </pattern>
+    
+    <g id="rotor">
+      <circle cx="32" cy="32" r="30" fill="none" stroke="#3f4348" stroke-width="1" stroke-dasharray="7.85 3.93"></circle>
+      <circle cx="32" cy="32" r="21" fill="none" stroke="#e9e5dc" stroke-width="8" stroke-dasharray="8.24 8.24" transform="rotate(-11.25 32 32)"></circle>
+      <circle cx="32" cy="32" r="6" fill="#f0562e"></circle>
+    </g>
+    <g id="crosshair" stroke-width="1.3" fill="none">
+      <path d="M-8.5 0H8.5M0 -8.5V8.5"></path>
+    </g>
+  </defs>
+  <rect width="1920" height="1080" fill="#101012"></rect>
+  <rect width="1920" height="1080" fill="url(#grid)"></rect>
+  <use href="#crosshair" transform="translate(44 44)" stroke="#3a3a3a"></use>
+  <use href="#crosshair" transform="translate(1876 44)" stroke="#3a3a3a"></use>
+  <use href="#crosshair" transform="translate(44 1036)" stroke="#3a3a3a"></use>
+  <use href="#crosshair" transform="translate(1876 1036)" stroke="#3a3a3a"></use>
+  <use href="#rotor" transform="translate(810 250) scale(4.6875)"></use>
+  <text x="960" y="660" text-anchor="middle" font-family="Barlow Condensed" font-weight="800" font-size="58" letter-spacing="4" fill="#f4f1ea">DIE LICHTMASCHINE</text>
+  <text x="960" y="702" text-anchor="middle" font-family="IBM Plex Mono" font-weight="500" font-size="14" letter-spacing="3.9" fill="#8d9299">ES WERDE LICHT</text>
+  <rect x="704" y="695" width="70" height="3" fill="#f0562e"></rect>
+  <rect x="1146" y="695" width="70" height="3" fill="#f0562e"></rect>
+  <text x="960" y="1042" text-anchor="middle" font-family="IBM Plex Mono" font-weight="500" font-size="11" fill="#3f4348">dielichtmaschine.de</text>
+</svg>

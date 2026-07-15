@@ -1,5 +1,14 @@
 # Handoff: Die Lichtmaschine · Qt6 Desktop App (North Star, Glutorange)
 
+> **Provenance:** this folder is the frozen design handoff from the
+> 2026-07-07 rebrand (dropped in as `design_handoff_lichtmaschine_app/`,
+> moved to `docs/design/` on 2026-07-15). The token tables below are the
+> authoritative design reference; the app's CANONICAL runtime assets
+> live in `resources/brand/` and `resources/stageplot/` - the copies
+> under `assets/` here exist only so the mockup screens render
+> standalone. New product assets (e.g. `resources/brand/wallpapers/`)
+> go to `resources/`, never here.
+
 ## Overview
 "Die Lichtmaschine" (dielichtmaschine.de) ist eine Open-Source-Desktop-App zum Erstellen von Lichtshows:
 visuelles Authoring auf einer beat-synchronen Timeline, 3D-Preview mit volumetrischen Beams, automatische

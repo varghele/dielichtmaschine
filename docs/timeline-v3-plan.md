@@ -1,6 +1,6 @@
 # Timeline v3: visual pass against screen 06b
 
-Reference: `design_handoff_lichtmaschine_app/screens/06b-show-timeline-v3.html`
+Reference: `docs/design/screens/06b-show-timeline-v3.html`
 (1920x900). The screen's own footer names the deltas versus the current
 tab: block tint = muted part/group colour instead of full saturation,
 sub-lane labels aligned in the lane header, compact grid bar, scenes

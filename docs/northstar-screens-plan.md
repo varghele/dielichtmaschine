@@ -3,7 +3,7 @@
 Status: ALL SLICES SHIPPED 2026-07-07 late evening (H1, T1, T2, S1,
 SS1, TY1; scope agreed as "everything visual on existing functionality
 plus self-contained new screens"). Design source:
-`design_handoff_lichtmaschine_app/` (card IDs in parentheses).
+`docs/design/` (card IDs in parentheses).
 1208 tests green at completion; every screen verified via goldens and
 a full offscreen boot. TY1 note: most panel "titles" are QGroupBoxes
 where a QSS ::title font would cascade into children, so only the true
@@ -48,7 +48,7 @@ bar), accent-filled checked chip variant.
 
 ## Round 3 (2026-07-08): rebuilds against the ORIGINAL screen references
 
-`design_handoff_lichtmaschine_app/screens/*.html` arrived (the real
+`docs/design/screens/*.html` arrived (the real
 per-screen design files). Rebuilt screen-by-screen against them, each
 verified by golden + a real-config render: Home (01), Fixtures (1c/02),
 Stage (04), Structure (05), Timeline (06), Auto (07). Ten shared QSS
