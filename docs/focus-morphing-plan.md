@@ -146,9 +146,7 @@ assume one active config.
 - [ ] Morph report (every edge / transform / fan-in loss / drop /
       regeneration + seed / destroyed hand-edit), same spirit as
       GenerationReport; rendered in-app + writable as markdown.
-- [ ] Side-by-side preview: source show on config A vs morphed on config
-      B in the embedded visualizer, scrubbable (two-config work from
-      Phase 0 pays off here).
+- [x] Side-by-side preview HELPER (DONE 2026-07-16, utils/morph/preview.py: render_pair produces src/dst stills at one show time via two STRICTLY SEQUENTIAL OfflineRenderer passes per the audit constraint, either side degrading to None; real-GL test passes on the dev box). The wizard's scrub UI consumes it when the patchbay lands.
 
 ## Phase 4 - patchbay UI + CLI (design doc 8; mockup 15-morph-patch-flow-6d)
 
