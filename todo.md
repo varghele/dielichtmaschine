@@ -55,7 +55,12 @@ checks below pass; v1.4 work continues on `v1.4-standalone-switch`.
       audio host APIs, arbiter output state, project + log paths) and
       a COPY TO CLIPBOARD dialog. 11 probe-injected tests.
 
-## Release gate: pending manual verification (user, needs hardware/desktop)
+## Post-release verification (user, needs hardware/desktop)
+
+Originally the v1.4.0 release gate; the bench session was postponed
+(decision 2026-07-15) and v1.4.0 tagged without it. The software
+half of every item is tested; what follows verifies the physical
+links. Findings land as patch releases.
 
 > **Bench kit prepared 2026-07-15** (untracked, in the repo root like
 > tester.lms): `bench_kit.lms` = tester.lms rig + two 16 s songs with
