@@ -30,8 +30,11 @@ checks below pass; v1.4 work continues on `v1.4-standalone-switch`.
       Account with TEST LOGIN. Password only ever in the OS credential
       store (keyring; session-only without one). 37 device-free tests.
       One manual check added to the gate list below (real login).
-- [ ] **MVR import spike** - read a real MVR from a previz tool into a
-      patched, placed rig (pymvr), then decide export scope.
+- [x] **MVR import spike** - moved to ROADMAP v1.8b (2026-07-15): an
+      imported MVR must create and update stage geometry, which the
+      v1.6 stage pass has to solve first. With this, every v1.4 CODE
+      item is done; what remains before the tag is the manual gate
+      list below.
 - [x] **CSV lighting-table import wizard** - SHIPPED 2026-07-15:
       utils/csv_table_import.py (pure sniff/guess/map/build/resolve,
       delimiter + encoding + header tolerant) and the three-step

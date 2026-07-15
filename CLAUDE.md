@@ -463,8 +463,11 @@ tabs route through it; export stays byte-identical - hash-checked),
 and the CSV lighting-table wizard (utils/csv_table_import.py pure
 logic + gui/dialogs/csv_import_wizard.py three-step dialog reusing
 utils/fixture_io.apply_fixture_list; the topbar import button is now
-an InstantPopup menu offering QLC+ workspace or CSV). v1.4 code items
-remaining: MVR import spike only; the rest of the milestone is the
-manual gate list in todo.md. Suite: 2632+ unit, e2e+visual green;
+an InstantPopup menu offering QLC+ workspace or CSV). MVR moved OUT
+of v1.4 to the new lettered milestone v1.8b (user decision 2026-07-15:
+an imported MVR must create/update stage geometry, which the v1.6
+stage pass has to solve first) - so every v1.4 CODE item is done and
+the milestone rests on todo.md's manual gate list. Suite: 2632+ unit,
+e2e+visual green;
 three stale goldens regenerated 2026-07-15 (structure tab device-hint
 row removal, riff tags + dimmer-rudiment riffs) after diff review.
