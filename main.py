@@ -27,6 +27,12 @@ if len(sys.argv) > 1 and sys.argv[1] == 'export':
     from utils.export_cli import run_export_cli
     sys.exit(run_export_cli(sys.argv[2:]))
 
+# Headless morph (v1.5b): compile a setlist onto a target rig without a
+# window (utils/morph_cli.py). Keep above the Qt imports like export.
+if len(sys.argv) > 1 and sys.argv[1] == 'morph':
+    from utils.morph_cli import run_morph_cli
+    sys.exit(run_morph_cli(sys.argv[2:]))
+
 from PyQt6 import QtWidgets
 from PyQt6.QtGui import QIcon
 from gui import MainWindow

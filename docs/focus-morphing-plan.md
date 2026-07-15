@@ -121,7 +121,7 @@ assume one active config.
 
 ## Phase 3 - validation, report, preview (design doc 6)
 
-- [ ] Completeness checker (per target group x capability time coverage;
+- [x] Completeness checker (DONE 2026-07-16, utils/morph/checker.py: per song x target group x sublane coverage, capability-aware gap rows, unrouted mirror; regenerate edges count as full coverage except manual) (per target group x capability time coverage;
       unrouted-source mirror view); saved expectations double as the
       requirements manifest.
 - [ ] Morph report (every edge / transform / fan-in loss / drop /
@@ -141,7 +141,7 @@ assume one active config.
 - [ ] Wizard flow around it (source setlist -> target config -> patch ->
       preview -> commit), reachable from File > Morph to Venue...;
       reconcile visuals with docs/design/screens/11-morph-wizard.html.
-- [ ] Headless CLI (`main.py morph ...`) above the Qt imports.
+- [x] Headless CLI DONE 2026-07-16 (`main.py morph` -> utils/morph_cli.py above the Qt imports; exit 0/1/2/3 = ok/bad-input/compile-errors/needs-force; --report writes markdown).
 
 ## Phase 5 - pre-flight (design doc 7)
 
