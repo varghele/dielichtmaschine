@@ -38,13 +38,15 @@ checks below pass; v1.4 work continues on `v1.4-standalone-switch`.
 
 ## Release gate: pending manual verification (user, needs hardware/desktop)
 
-- [ ] LTC chase bench checkpoint (docs/ltc-plan.md): generate a WAV
-      covering the demo setlist's trigger times
-      (utils/timecode/write_ltc_wav), play it into the line-in from a
-      phone/DAW, set sync mode SMPTE + song start timecodes, ARM
-      CHASE - songs must fire at their timecodes, the playhead must
-      follow, pulling the cable mid-song must NOT stop the show,
-      replugging must re-lock, STOP must disarm.
+- [ ] LTC chase bench checkpoint, HARDWARE HALF ONLY: the full bench
+      script (arm, songs fire at their timecodes, playhead chases,
+      cable-pull freewheels and never stops the show, replug re-locks
+      into the next song, STOP disarms) is verified in software by
+      tests/e2e/test_ltc_chase_e2e.py against the real shell and a
+      real generated WAV (2026-07-15). What remains on the desk is
+      only the physical line-in: pick the input in the Structure tab,
+      play a write_ltc_wav file from a phone/DAW into it, ARM CHASE,
+      and see one song fire - that proves device open + analog decode.
 - [ ] QLC+ export aim check: export tester.lms (or any mover project)
       to .qxw, open in QLC+, fire a position preset from the Virtual
       Console at the hung head - the beam should land where
