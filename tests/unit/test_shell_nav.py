@@ -112,7 +112,7 @@ class TestOverflowMenu:
         _, ui = shell_window
         titles = [a.menu().title() for a in ui.overflow_menu.actions()
                   if a.menu() is not None]
-        assert titles == ["File", "View", "Settings", "Help"]
+        assert titles == ["File", "View", "Tools", "Settings", "Help"]
 
     def test_gui_py_insertion_points_exist(self, shell_window):
         """gui.py inserts Edit before Settings and Render before Help."""

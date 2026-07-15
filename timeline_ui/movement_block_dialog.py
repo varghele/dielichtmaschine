@@ -462,31 +462,57 @@ class MovementBlockDialog(QDialog):
         effect_group.setLayout(effect_layout)
         layout.addWidget(effect_group)
 
-        # Target Spot group
-        target_group = QGroupBox("Target Spot (Auto-Point)")
+        # Target group (v1.5a): MANUAL / ad-hoc world point (read-only
+        # display, written by the Stage tab's click-to-aim) / each named
+        # spot / each stage bounding plane. Item data carries a
+        # (kind, name) tuple; resolution priority is plane > spot >
+        # point > manual pan/tilt (utils/to_xml + dmx_manager).
+        target_group = QGroupBox("Target (Auto-Point)")
         target_layout = QFormLayout()
 
-        self.target_spot_combo = QComboBox()
-        self.target_spot_combo.addItem("(None - use manual position)", None)
+        self.target_combo = QComboBox()
+        self.target_combo.addItem(
+            "MANUAL (pan/tilt below)", ("manual", None))
 
-        # Populate with spots from config
+        # Ad-hoc world point - only offered while the block carries one
+        # (click-to-aim writes it); selecting MANUAL clears it.
+        if getattr(self.block, 'target_point', None):
+            x, y, z = self.block.target_point
+            self.target_combo.addItem(
+                f"POINT ({x:.2f}, {y:.2f}, {z:.2f}) m", ("point", None))
+
+        # Named spots from the config
         if self.config and hasattr(self.config, 'spots'):
             for spot_name in sorted(self.config.spots.keys()):
                 spot = self.config.spots[spot_name]
                 # Show spot name with coordinates for clarity
                 label = f"{spot_name} (x={spot.x:.1f}, y={spot.y:.1f}, z={spot.z:.1f})"
-                self.target_spot_combo.addItem(label, spot_name)
+                self.target_combo.addItem(label, ("spot", spot_name))
 
-        self.target_spot_combo.setToolTip(
-            "Select a stage spot to automatically point at.\n"
-            "Pan/tilt will be calculated based on fixture position and orientation.\n"
-            "Leave as '(None)' to use manual pan/tilt values."
+        # Stage bounding planes (Floor, Ceiling, walls) - the shape then
+        # runs in world space ON the plane instead of around a centre.
+        if self.config is not None:
+            try:
+                from autogen.spatial import compute_stage_planes
+                for plane in compute_stage_planes(self.config):
+                    self.target_combo.addItem(
+                        f"PLANE · {plane.name}", ("plane", plane.name))
+            except Exception:
+                pass  # a partial config offers no planes
+
+        self.target_combo.setToolTip(
+            "Where the fixtures point.\n"
+            "MANUAL: the pan/tilt sliders below.\n"
+            "POINT: the world coordinate set by the Stage tab's AIM click.\n"
+            "Spot: aim every fixture at the named stage mark.\n"
+            "PLANE: run the movement shape on that stage face in world "
+            "space."
         )
-        target_layout.addRow("Target Spot:", self.target_spot_combo)
+        target_layout.addRow("Target:", self.target_combo)
 
         # Info label
         self.target_info_label = QLabel(
-            "When a target spot is selected, pan/tilt values are calculated\n"
+            "When a target is selected, pan/tilt values are calculated\n"
             "automatically for each fixture based on its position and orientation."
         )
         self.target_info_label.setProperty("role", "stat-caption")
@@ -734,25 +760,36 @@ class MovementBlockDialog(QDialog):
         # 2D widget position change
         self.pan_tilt_widget.position_changed.connect(self._on_position_widget_changed)
 
-        # Target spot change
-        self.target_spot_combo.currentIndexChanged.connect(self._on_target_spot_changed)
+        # Target change
+        self.target_combo.currentIndexChanged.connect(
+            self._on_target_changed)
 
-    def _on_target_spot_changed(self, index):
-        """Handle target spot selection change."""
-        spot_name = self.target_spot_combo.currentData()
-        has_target = spot_name is not None
+    def _selected_target(self):
+        """(kind, name) of the current combo choice."""
+        data = self.target_combo.currentData()
+        return data if data else ("manual", None)
 
-        # When a target spot is selected, manual pan/tilt becomes less relevant
-        # but we still allow it as an offset or fallback
-        # Update the info label
-        if has_target:
+    def _on_target_changed(self, index):
+        """Handle target selection change."""
+        kind, name = self._selected_target()
+        if kind == "spot":
             self.target_info_label.setText(
-                f"Fixtures will automatically point at '{spot_name}'.\n"
+                f"Fixtures will automatically point at '{name}'.\n"
                 "Manual pan/tilt values serve as offsets for effects."
+            )
+        elif kind == "plane":
+            self.target_info_label.setText(
+                f"The movement shape runs on the stage's {name} face\n"
+                "in world space; amplitude maps to metres on the plane."
+            )
+        elif kind == "point":
+            self.target_info_label.setText(
+                "Fixtures aim at the stored world point (set via the\n"
+                "Stage tab's AIM click). Pan/tilt values stay as fallback."
             )
         else:
             self.target_info_label.setText(
-                "When a target spot is selected, pan/tilt values are calculated\n"
+                "When a target is selected, pan/tilt values are calculated\n"
                 "automatically for each fixture based on its position and orientation."
             )
 
@@ -879,20 +916,25 @@ class MovementBlockDialog(QDialog):
         # Interpolation
         self.interpolate_checkbox.setChecked(self.block.interpolate_from_previous)
 
-        # Target spot selection
-        target_spot = self.block.target_spot_name
-        if target_spot:
-            # Find the index for this spot
-            for i in range(self.target_spot_combo.count()):
-                if self.target_spot_combo.itemData(i) == target_spot:
-                    self.target_spot_combo.setCurrentIndex(i)
-                    break
+        # Target selection - mirror the resolution priority
+        # (plane > spot > point > manual).
+        if getattr(self.block, 'target_plane_name', None):
+            wanted = ("plane", self.block.target_plane_name)
+        elif self.block.target_spot_name:
+            wanted = ("spot", self.block.target_spot_name)
+        elif getattr(self.block, 'target_point', None):
+            wanted = ("point", None)
         else:
-            self.target_spot_combo.setCurrentIndex(0)  # "(None)"
+            wanted = ("manual", None)
+        self.target_combo.setCurrentIndex(0)  # MANUAL
+        for i in range(self.target_combo.count()):
+            if self.target_combo.itemData(i) == wanted:
+                self.target_combo.setCurrentIndex(i)
+                break
 
         # Update preview
         self._on_effect_params_changed()
-        self._on_target_spot_changed(self.target_spot_combo.currentIndex())
+        self._on_target_changed(self.target_combo.currentIndex())
 
     def accept(self):
         """Save parameters to block and close."""
@@ -927,7 +969,25 @@ class MovementBlockDialog(QDialog):
         # Interpolation
         self.block.interpolate_from_previous = self.interpolate_checkbox.isChecked()
 
-        # Target spot
-        self.block.target_spot_name = self.target_spot_combo.currentData()
+        # Target: selecting a spot or plane clears the other targets;
+        # POINT keeps the stored world point; MANUAL clears everything
+        # (back to the raw pan/tilt sliders).
+        kind, name = self._selected_target()
+        if kind == "spot":
+            self.block.target_spot_name = name
+            self.block.target_plane_name = None
+            self.block.target_point = None
+        elif kind == "plane":
+            self.block.target_plane_name = name
+            self.block.target_spot_name = None
+            self.block.target_point = None
+        elif kind == "point":
+            self.block.target_spot_name = None
+            self.block.target_plane_name = None
+            # target_point stays as stored (read-only display here)
+        else:
+            self.block.target_spot_name = None
+            self.block.target_plane_name = None
+            self.block.target_point = None
 
         super().accept()

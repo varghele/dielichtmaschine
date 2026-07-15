@@ -238,6 +238,16 @@ class Ui_MainWindow(object):
         self.menuTheme.addAction(self.actionThemeLight)
         self.menuView.addMenu(self.menuTheme)
 
+        # Tools menu - batch operations on the loaded config. First
+        # resident: the v1.5a movement migration (trace each manual
+        # pan/tilt movement block's centre beam onto the stage and write
+        # the landing point as its world target; gui.py wires the
+        # handler, utils/movement_migration.py does the tracing).
+        self.menuTools = QtWidgets.QMenu("Tools", parent=MainWindow)
+        self.actionConvertMovementTargets = QAction(
+            "Convert Movement to World Targets...", MainWindow)
+        self.menuTools.addAction(self.actionConvertMovementTargets)
+
         # Settings menu
         self.menuSettings = QtWidgets.QMenu("Settings", parent=MainWindow)
         self.actionAudioSettings = QAction("Audio Settings...", MainWindow)
@@ -283,6 +293,7 @@ class Ui_MainWindow(object):
         self.overflow_menu = QtWidgets.QMenu(MainWindow)
         self.overflow_menu.addMenu(self.menuFile)
         self.overflow_menu.addMenu(self.menuView)
+        self.overflow_menu.addMenu(self.menuTools)
         self.overflow_menu.addMenu(self.menuSettings)
         self.overflow_menu.addMenu(self.menuHelp)
 

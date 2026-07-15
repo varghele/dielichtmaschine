@@ -54,6 +54,13 @@ class StageView(QtWidgets.QGraphicsView):
     # removed or renamed - so the Marks list in the tab can refresh.
     spots_changed = QtCore.pyqtSignal()
 
+    # Click-to-aim (v1.5a focus geometry): while aim mode is on, a left
+    # click on the plan emits the clicked STAGE coordinate (x, y in
+    # centred metres) plus whether Shift was held (= keep the target's
+    # current height instead of the z=0 floor). The tab writes it into
+    # the selected movement block's target_point.
+    aim_clicked = QtCore.pyqtSignal(float, float, bool)
+
     def __init__(self, parent=None):
         super().__init__(parent)
         # Theme-driven colours — populated by Qt's stylesheet engine
@@ -131,6 +138,9 @@ class StageView(QtWidgets.QGraphicsView):
         # faint, locked reference. None = normal editing. UI state, not
         # persisted to the config.
         self.active_layer = None
+
+        # Click-to-aim mode (see aim_clicked). UI state, not persisted.
+        self.aim_mode = False
 
         # List to store fixture items
         self.fixtures = {}
@@ -1036,6 +1046,16 @@ class StageView(QtWidgets.QGraphicsView):
         if event.type() == QtCore.QEvent.Type.StyleChange:
             self._on_theme_color_changed()
 
+    def set_aim_mode(self, enabled: bool) -> None:
+        """Toggle click-to-aim: left clicks report stage coordinates via
+        aim_clicked instead of selecting/rubber-banding. Space+pan and
+        the wheel zoom keep working so the user can line up the click."""
+        self.aim_mode = bool(enabled)
+        if self.aim_mode:
+            self.viewport().setCursor(QtCore.Qt.CursorShape.CrossCursor)
+        else:
+            self.viewport().unsetCursor()
+
     def mousePressEvent(self, event):
         """Handle mouse press for rubber band selection and context menu."""
         # Space + left-drag pans the view. Intercepted before any of the
@@ -1048,6 +1068,20 @@ class StageView(QtWidgets.QGraphicsView):
             self._panning = True
             self._pan_anchor = event.pos()
             self.viewport().setCursor(QtCore.Qt.CursorShape.ClosedHandCursor)
+            event.accept()
+            return
+
+        # Click-to-aim: consume the left click and report the stage
+        # coordinate (after the pan branch, so Space+drag still pans in
+        # aim mode; before item selection, so the click aims even when
+        # it lands on a fixture symbol).
+        if (event.button() == QtCore.Qt.MouseButton.LeftButton
+                and self.aim_mode):
+            scene_pos = self.mapToScene(event.pos())
+            x_m, y_m = self.pixels_to_meters(scene_pos.x(), scene_pos.y())
+            keep_z = bool(event.modifiers()
+                          & QtCore.Qt.KeyboardModifier.ShiftModifier)
+            self.aim_clicked.emit(x_m, y_m, keep_z)
             event.accept()
             return
 

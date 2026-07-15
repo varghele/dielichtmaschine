@@ -11,6 +11,22 @@ verbatim as the GitHub Release notes (see [docs/releasing.md](docs/releasing.md)
 
 ## [Unreleased]
 
+### Added
+
+- **Movement blocks can aim at the world, and old shows can convert.**
+  Three authoring surfaces for the new world-space movement targets:
+  the movement block editor's target picker now offers, besides named
+  spots, the stage's bounding planes and a read-only display of an
+  ad-hoc world point; the Stage tab gained an AIM toggle - click the
+  stage plan to point the movement block selected in the Show timeline
+  at that exact spot (Shift keeps the current target height); and
+  Tools > Convert Movement to World Targets... traces where every
+  legacy pan/tilt movement block's beam actually lands on the stage
+  and writes that point as the block's world target, after showing a
+  full per-block report (skipped blocks - e.g. beams pointing at the
+  sky - and groups whose fixtures land far apart are called out).
+  Pan/tilt values stay as fallback in all three paths.
+
 ## [1.4.0] - 2026-07-15
 
 ### Fixed

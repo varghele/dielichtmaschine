@@ -108,6 +108,12 @@ def _physical_ranges(manufacturer: str, model: str) -> Tuple[float, float]:
         return (540.0, 270.0)
 
 
+def physical_ranges(manufacturer: str, model: str) -> Tuple[float, float]:
+    """Public accessor for the definition's physical pan/tilt travel
+    (utils/movement_migration.py decodes stored solver DMX with it)."""
+    return _physical_ranges(manufacturer, model)
+
+
 def export_aim_dmx(fixture, fixture_z: float,
                    target: Tuple[float, float, float],
                    mounting: str, yaw: float, pitch: float,

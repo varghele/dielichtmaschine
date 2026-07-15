@@ -917,6 +917,41 @@ class ShowsTab(BaseTab):
         self.inspector_rows.setVisible(True)
         self.inspector_stats_row.setVisible(True)
 
+    # ── Cross-tab movement-target selection (v1.5a click-to-aim) ──────
+
+    def selected_movement_blocks(self) -> list:
+        """The movement sublane blocks the Stage tab's click-to-aim
+        writes to.
+
+        Two selection tiers, most precise wins: a movement sublane block
+        explicitly clicked inside an envelope (LightBlockWidget's
+        selected_sublane_block) is the user's exact intent; otherwise
+        every movement block inside the envelope blocks in the
+        SelectionManager multi-selection (marquee / Ctrl+A) counts -
+        the sanctioned fallback in docs/focus-morphing-plan.md phase 1.
+        """
+        sublane_selected = []
+        for lane_widget in self.lane_widgets:
+            for widget in getattr(lane_widget, "light_block_widgets", []):
+                if (getattr(widget, "selected_sublane_type", None)
+                        == "movement"
+                        and widget.selected_sublane_block is not None):
+                    sublane_selected.append(widget.selected_sublane_block)
+        if sublane_selected:
+            return sublane_selected
+        blocks = []
+        for widget in self.selection_manager.get_selected_blocks():
+            blocks.extend(widget.block.movement_blocks)
+        return blocks
+
+    def refresh_movement_targets(self) -> None:
+        """Repaint the block widgets after an external movement-target
+        edit (the Stage tab writes target_point on the shared block
+        objects in place - only the paint needs a nudge)."""
+        for lane_widget in self.lane_widgets:
+            for widget in getattr(lane_widget, "light_block_widgets", []):
+                widget.update()
+
     def _apply_chrome_icons(self):
         """(Re)rasterize the toolbar/transport line icons.
 

@@ -416,6 +416,25 @@ class StageTab(BaseTab):
 
         strip_font = display_font(11, QFont.Weight.DemiBold, tracking_em=0.08)
 
+        # Click-to-aim toggle (v1.5a focus geometry): while checked,
+        # clicking the plan writes the clicked stage coordinate into the
+        # selected movement block's target_point (Shift keeps the
+        # current target height). Auto-sized display-caps toggle - NOT
+        # fixed-width, so it stays outside the clipping sweep's scope
+        # (tests/visual/test_widget_clipping.py); the base :checked rule
+        # tints it while the mode is armed, like the Shows INSPECTOR
+        # toggle.
+        self.aim_btn = QtWidgets.QPushButton("AIM")
+        self.aim_btn.setProperty("role", "cta-outline")
+        self.aim_btn.setFont(strip_font)
+        self.aim_btn.setCheckable(True)
+        self.aim_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.aim_btn.setToolTip(
+            "Click-to-aim: click the stage plan to point the movement\n"
+            "block selected in the Show timeline at that spot (floor,\n"
+            "z=0). Hold Shift to keep the target's current height.")
+        strip_row.addWidget(self.aim_btn)
+
         self.morph_btn = QtWidgets.QPushButton("MORPH...")
         self.morph_btn.setIcon(line_icon("morph", tokens["text_disabled"]))
         self.morph_btn.setFont(strip_font)
@@ -1346,6 +1365,71 @@ class StageTab(BaseTab):
         self._fit_shortcut = QShortcut(QKeySequence("F"), self)
         self._fit_shortcut.setContext(Qt.ShortcutContext.WidgetWithChildrenShortcut)
         self._fit_shortcut.activated.connect(self.stage_view.fit_to_stage)
+
+        # Click-to-aim (v1.5a focus geometry).
+        self.aim_btn.toggled.connect(self._on_aim_mode_toggled)
+        self.stage_view.aim_clicked.connect(self._on_aim_clicked)
+
+    # ── Click-to-aim (v1.5a focus geometry) ───────────────────────────
+
+    def _show_status(self, message: str, timeout: int = 5000) -> None:
+        """Transient message on the main window's status strip (no-op
+        when the tab lives outside the shell, e.g. in tests)."""
+        window = self.window()
+        bar = window.statusBar() if hasattr(window, "statusBar") else None
+        if bar is not None:
+            bar.showMessage(message, timeout)
+
+    def _on_aim_mode_toggled(self, checked: bool) -> None:
+        self.stage_view.set_aim_mode(checked)
+        if checked:
+            self._show_status(
+                "AIM: click the stage plan to aim the selected movement "
+                "block(s) · Shift keeps the current target height")
+
+    def _aim_movement_blocks(self) -> list:
+        """The movement blocks an aim click writes to.
+
+        ``aim_blocks_provider`` (a callable) overrides for tests /
+        embedding; the default asks the Shows tab for its current
+        movement-block selection through the shared MainWindow parent -
+        the tabs never hold references to each other.
+        """
+        provider = getattr(self, "aim_blocks_provider", None)
+        if provider is not None:
+            return list(provider())
+        shows_tab = getattr(self.window(), "shows_tab", None)
+        if shows_tab is None or not hasattr(shows_tab,
+                                            "selected_movement_blocks"):
+            return []
+        return shows_tab.selected_movement_blocks()
+
+    def _on_aim_clicked(self, x_m: float, y_m: float, keep_z: bool) -> None:
+        """Write the clicked stage coordinate into the selected movement
+        block(s) as their world target (z=0 floor; Shift keeps each
+        block's current target height). The point wins over manual
+        pan/tilt by resolution priority, so spot/plane targets are
+        cleared while pan/tilt stay as authored fallback."""
+        blocks = self._aim_movement_blocks()
+        if not blocks:
+            self._show_status(
+                "AIM: no movement block selected in the Show timeline")
+            return
+        for block in blocks:
+            z_m = 0.0
+            if keep_z and getattr(block, "target_point", None):
+                z_m = float(block.target_point[2])
+            block.target_point = [round(x_m, 3), round(y_m, 3), z_m]
+            block.target_spot_name = None
+            block.target_plane_name = None
+            block.modified = True
+        shows_tab = getattr(self.window(), "shows_tab", None)
+        if shows_tab is not None and hasattr(shows_tab,
+                                             "refresh_movement_targets"):
+            shows_tab.refresh_movement_targets()
+        self._show_status(
+            f"AIM: {len(blocks)} movement block(s) target "
+            f"({x_m:.2f}, {y_m:.2f}) m")
 
     def _on_preview_collapsed(self, collapsed: bool) -> None:
         """Chevron in the 3D preview header: hide/show the GL pane."""

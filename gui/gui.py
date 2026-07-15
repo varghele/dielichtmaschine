@@ -913,6 +913,10 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         # Tab change handler
         self.tabWidget.currentChanged.connect(self._on_tab_changed)
 
+        # Tools menu actions
+        self.actionConvertMovementTargets.triggered.connect(
+            self.convert_movement_targets)
+
         # Settings menu actions
         self.actionAudioSettings.triggered.connect(self.open_audio_settings)
         self.actionLibraryPaths.triggered.connect(self.open_library_paths)
@@ -2165,6 +2169,31 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         config load rescans - nothing to push from here."""
         from gui.dialogs.library_paths_dialog import LibraryPathsDialog
         LibraryPathsDialog(parent=self).exec()
+
+    def convert_movement_targets(self):
+        """Tools > Convert Movement to World Targets... (v1.5a).
+
+        Traces every manual pan/tilt movement block's centre beam onto
+        the stage with the solver forward pass and writes the landing
+        point into target_point (utils/movement_migration.py); pan/tilt
+        stay as fallback. The confirmation dialog lists the full report
+        first - nothing changes until CONVERT - and the write is
+        in-memory only: the user saves manually.
+        """
+        from gui.dialogs.movement_migration_dialog import (
+            run_movement_migration,
+        )
+        # Fold the Shows tab's live timeline edits into the config so
+        # the sweep sees what the user sees.
+        self.shows_tab.save_to_config()
+        applied = run_movement_migration(self.config, parent=self)
+        if applied is None:
+            return
+        self.shows_tab.mark_config_dirty()
+        self.shows_tab.update_from_config()
+        self.statusbar.showMessage(
+            f"Converted {applied} movement block(s) to world targets "
+            "(save the config to persist)", 6000)
 
     def open_diagnostics(self):
         """Help > Diagnostics: the copyable bug-report block."""

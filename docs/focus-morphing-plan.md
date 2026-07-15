@@ -85,15 +85,34 @@ assume one active config.
       before/after and review that ONLY the aim values move
       (scripts/export_hash_check.py covers only movement-less
       demos/rigs/ - do not trust it alone here).
-- [ ] **Migration converter**: per show, snapshot the current rig, trace
-      where each movement block's beam lands (solver forward pass),
-      rewrite the block to the world-space equivalent; report per block;
-      user-invoked (Tools menu), never automatic.
-- [ ] **Authoring UX**: click-to-aim in the Stage tab (click stage ->
-      world point on the active movement block), spot picker on the
-      movement inspector; sliders stay.
-- [ ] **Named spots in the timeline UI**: spot markers usable as
-      first-class targets (they already exist on Configuration).
+- [x] **Migration converter**: DONE 2026-07-16. utils/movement_migration.py
+      (pure): solver FORWARD pass (exact inverse of calculate_pan_tilt,
+      pinned by a float-precision closed-loop test) traces each
+      untargeted block's centre beam onto the stage volume from
+      compute_stage_planes (converted once out of spatial.py's 0..D
+      depth convention); multi-fixture lanes average the per-fixture
+      landings, spreads over 1 m warn; ceiling exits / upward misses =
+      sky, skipped. Tools > Convert Movement to World Targets... shows
+      the full per-block report (song, lane, range, point or reason)
+      BEFORE anything changes; apply is in-memory (user saves manually),
+      keeps pan/tilt as fallback, warns per skip (category "migration").
+      Tests: test_movement_migration.py, test_movement_targets_ui.py.
+- [x] **Authoring UX**: DONE 2026-07-16 (click-to-aim + spot picker; the
+      pan/tilt sliders stay). Stage tab AIM toggle (action strip) arms
+      StageView's aim mode: a plan click emits the stage coordinate and
+      the tab writes it as target_point (z=0; Shift keeps the current
+      target height) into the Shows tab's selected movement blocks -
+      an explicitly clicked movement sublane block wins, else every
+      movement block in the envelope multi-selection (the sanctioned
+      fallback; SelectionManager stays the single source). Spot/plane
+      targets are cleared so the point actually wins; tabs talk only
+      through the MainWindow parent. Tests: test_movement_targets_ui.py.
+- [x] **Named spots in the timeline UI**: DONE 2026-07-16. The movement
+      block editor's target combo became MANUAL / POINT (read-only
+      display of the stored world point) / every named spot / every
+      stage plane, preselected by the resolution priority (plane > spot
+      > point > manual); picking a spot or plane clears the other
+      targets, MANUAL clears all. Tests: test_movement_targets_ui.py.
 
 ## Phase 2 - morph compile engine (design doc 3, 5)
 
@@ -167,3 +186,9 @@ assume one active config.
   _solver_shape_position, plane targets now export), native playback
   resolves points; tests in test_group_topology.py,
   test_palette_roles.py, test_world_targets.py.
+- 2026-07-16 (second pass): phase 1 migration converter + authoring UX
+  + timeline spot picker shipped (see the ticked items above). New
+  shell surface: a Tools menu now exists in the overflow (File · View ·
+  Tools · Settings · Help). Phase 1 leftover: per-fixture range-aware
+  IK at export (the deliberate byte-identity break) and the world-target
+  editing pass on the world-space fields themselves.
