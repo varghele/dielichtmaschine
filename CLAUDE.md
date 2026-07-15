@@ -452,3 +452,19 @@ QMenu.exec froze the suite silently (guard now covers it, qt-gotchas
 #7 has the py-spy diagnosis recipe) and ThemeManager.apply cost
 ACCUMULATES when whole UI test files run serially in one process -
 always -n auto for anything file-sized (tests/README.md rules).
+
+**v1.4 sweep (2026-07-15, same branch):** four roadmap items shipped
+in one day - GDTF Share Phase 4 (see the GDTF note above), Help >
+Diagnostics (utils/diagnostics.py, guarded probes, copyable markdown
+block), the silent-fallback audit (utils/user_warnings.py: warn() with
+operation grouping + once-key folding, surfaced by Help > Warnings;
+the WU print sites across export/library/config-load/output/render/
+tabs route through it; export stays byte-identical - hash-checked),
+and the CSV lighting-table wizard (utils/csv_table_import.py pure
+logic + gui/dialogs/csv_import_wizard.py three-step dialog reusing
+utils/fixture_io.apply_fixture_list; the topbar import button is now
+an InstantPopup menu offering QLC+ workspace or CSV). v1.4 code items
+remaining: MVR import spike only; the rest of the milestone is the
+manual gate list in todo.md. Suite: 2632+ unit, e2e+visual green;
+three stale goldens regenerated 2026-07-15 (structure tab device-hint
+row removal, riff tags + dimmer-rudiment riffs) after diff review.
