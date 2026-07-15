@@ -16,7 +16,7 @@ short and user-facing (what changed for someone using the app), not a commit log
 1. **Pick the version** (`MAJOR.MINOR.PATCH`, [SemVer](https://semver.org)).
 2. **Update the changelog:** rename `## [Unreleased]` to `## [X.Y.Z] - YYYY-MM-DD`,
    add a fresh empty `## [Unreleased]` above it, and add a link line at the
-   bottom (`[X.Y.Z]: https://github.com/varghele/QLCplusShowCreator/releases/tag/vX.Y.Z`).
+   bottom (`[X.Y.Z]: https://github.com/varghele/dielichtmaschine/releases/tag/vX.Y.Z`).
 3. **Bump `_version.py`** to `"X.Y.Z"`.
 4. **Commit** those together, e.g. `chore(release): vX.Y.Z`.
 5. *(Optional, first time / risky changes)* dry-run the build: GitHub -> **Actions**

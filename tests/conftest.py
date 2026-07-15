@@ -1,5 +1,5 @@
 # tests/conftest.py
-# Shared pytest fixtures for the QLCplusShowCreator test suite
+# Shared pytest fixtures for the Die Lichtmaschine test suite
 
 import sys
 import os

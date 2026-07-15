@@ -1,5 +1,5 @@
 """
-Real-time audio mixing for multiple lanes in QLCAutoShow.
+Real-time audio mixing for multiple lanes in Die Lichtmaschine.
 Handles volume, mute, and solo processing.
 """
 

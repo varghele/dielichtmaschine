@@ -1,5 +1,5 @@
 """
-Audio device management for QLCAutoShow.
+Audio device management for Die Lichtmaschine.
 
 Handles device enumeration, classification, filtering, and selection.
 Uses sounddevice for cross-platform ASIO (Windows) / JACK (Linux) support.

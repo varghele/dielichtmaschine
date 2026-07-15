@@ -37,6 +37,7 @@ imageio-ffmpeg>=0.4.9
 
 # Development/Testing
 pytest>=7.0.0
+pytest-xdist>=3.0.0
 
 # Note: On Linux, you may need system packages for audio:
 # Ubuntu/Debian: sudo apt-get install libportaudio2

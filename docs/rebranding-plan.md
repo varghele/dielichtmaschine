@@ -109,17 +109,25 @@ changelog kept current under `[Unreleased]`.
   the GUI for no user benefit. The rebrand keeps current tabs.
 - `.lms` show file format.
 
-## Repo rename checklist (user action, do when ready)
+## Repo rename checklist (DONE 2026-07-15)
 
-1. GitHub: Settings > rename repository to `dielichtmaschine`
-   (old URLs redirect automatically).
-2. Locally: `git remote set-url origin <new URL>`.
-3. In-repo references to the old repo URL/path (README badges/links,
-   docs) - covered by phase B5 where already known; grep
-   `QLCplusShowCreator` after the rename for stragglers.
-4. Optional: rename the local project folder; PyCharm project name.
-5. GitHub repo social preview: upload
-   `resources/brand/social-preview-1280x640.png`.
+1. [x] GitHub: repository renamed to `dielichtmaschine` (old URLs
+   redirect automatically).
+2. [x] Locally: `git remote set-url origin` done.
+3. [x] In-repo references swept: CHANGELOG link block +
+   docs/releasing.md example URL point at the new repo; stale
+   "QLCAutoShow"/"QLCplusShowCreator" header comments in audio/*,
+   gui/audio_settings_dialog.py, tests/conftest.py and
+   docs/architecture.md updated; environment.yml env renamed
+   `QLCAutoShow` -> `lichtmaschine` (and gained the missing
+   trimesh/keyring/pygdtf/pytest-xdist deps). Remaining mentions are
+   deliberate: this plan, CHANGELOG history, docs/design/ (frozen
+   handoff), and the "formerly known as" note in README.
+4. Optional, still open: rename the local project folder; PyCharm
+   project name; the local conda env keeps its old name harmlessly.
+5. [ ] GitHub repo social preview: upload
+   `resources/brand/social-preview-1280x640.png` (user, in the repo
+   Settings; not verifiable from here).
 
 ## Open items / decisions not needed yet
 

@@ -1240,8 +1240,8 @@ The first beta (~137 commits since the alpha).
 
 Initial public alpha - proof-of-concept timeline + export pipeline.
 
-[Unreleased]: https://github.com/varghele/QLCplusShowCreator/compare/v1.0.0...HEAD
-[1.0.0]: https://github.com/varghele/QLCplusShowCreator/releases/tag/v1.0.0
-[0.9.5-beta]: https://github.com/varghele/QLCplusShowCreator/releases/tag/v0.9.5-beta
-[0.9.0-beta]: https://github.com/varghele/QLCplusShowCreator/releases/tag/v0.9.0-beta
-[0.1.0-alpha]: https://github.com/varghele/QLCplusShowCreator/releases/tag/v0.1.0-alpha
+[Unreleased]: https://github.com/varghele/dielichtmaschine/compare/v1.0.0...HEAD
+[1.0.0]: https://github.com/varghele/dielichtmaschine/releases/tag/v1.0.0
+[0.9.5-beta]: https://github.com/varghele/dielichtmaschine/releases/tag/v0.9.5-beta
+[0.9.0-beta]: https://github.com/varghele/dielichtmaschine/releases/tag/v0.9.0-beta
+[0.1.0-alpha]: https://github.com/varghele/dielichtmaschine/releases/tag/v0.1.0-alpha

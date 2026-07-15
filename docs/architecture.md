@@ -5,7 +5,7 @@ Die Lichtmaschine is a PyQt6 desktop application for designing DMX light shows. 
 ## Directory Structure
 
 ```
-QLCplusShowCreator/
+dielichtmaschine/
 ├── main.py                    # Application entry point
 ├── config/
 │   ├── models.py              # Core dataclasses (shared with Visualizer)
