@@ -471,3 +471,14 @@ the milestone rests on todo.md's manual gate list. Suite: 2632+ unit,
 e2e+visual green;
 three stale goldens regenerated 2026-07-15 (structure tab device-hint
 row removal, riff tags + dimmer-rudiment riffs) after diff review.
+
+**v1.4.0 TAGGED (2026-07-15, evening):** the bench session was
+postponed by the user - the todo.md gate list became post-release
+verification (bench kit ready in the repo root: bench_kit.lms,
+bench_ltc_25fps_01h.wav, bench_kit.qxw; findings land as patch
+releases). v1.4-standalone-switch merged to main (--no-ff), tag
+v1.4.0 pushed, GitHub repo renamed to dielichtmaschine (remote URLs,
+env name, doc links all swept). Work continues on
+**v1.5-focus-morphing** (v1.5a focus geometry + v1.5b morphing =
+v1.5.0); the user is supplying a morphing-theory md to reconcile
+against the ROADMAP v1.5a/b sections before planning.
