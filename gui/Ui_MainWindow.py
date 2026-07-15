@@ -186,6 +186,10 @@ class Ui_MainWindow(object):
         self.actionExportFixtureList = QAction("Export Fixture List...", MainWindow)
         self.actionImportShowsFromConfig = QAction("Import Shows from Config...", MainWindow)
         self.actionImportLegacyCsv = QAction("Import Legacy CSV Songs...", MainWindow)
+        # Venue adaptation: the morph wizard + patchbay
+        # (gui/dialogs/morph_wizard.py, design doc
+        # docs/design-show-morphing.md).
+        self.actionMorphToVenue = QAction("Morph to Venue...", MainWindow)
         self.actionImportWorkspace = QAction("Import QLC+ Workspace...", MainWindow)
         self.actionCreateWorkspace = QAction("Create QLC+ Workspace", MainWindow)
         self.actionExit = QAction("Exit", MainWindow)
@@ -201,6 +205,7 @@ class Ui_MainWindow(object):
         self.menuFile.addAction(self.actionExportShowStructure)
         self.menuFile.addAction(self.actionImportShowsFromConfig)
         self.menuFile.addAction(self.actionImportLegacyCsv)
+        self.menuFile.addAction(self.actionMorphToVenue)
         self.menuFile.addSeparator()
         self.menuFile.addAction(self.actionImportFixtureList)
         self.menuFile.addAction(self.actionImportCsvTable)

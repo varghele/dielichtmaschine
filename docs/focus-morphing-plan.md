@@ -127,7 +127,7 @@ assume one active config.
       shared-channel compositing rule, specials same-definition rule,
       regeneration strategies (manual, static_default,
       derive_from_intensity, autogen w/ seed).
-- [x] **Lineage + provenance**: DONE 2026-07-16 (LightBlock.provenance + Song.lineage; morphed lane ids are DERIVED from song+target+edges so re-morph is reproducible - editor hand_edited marking rides the UI phase). lineage record on the morphed setlist;
+- [x] **Lineage + provenance**: DONE 2026-07-16 (LightBlock.provenance + Song.lineage; morphed lane ids are DERIVED from song+target+edges so re-morph is reproducible). Editor hand_edited marking landed with the phase-4 UI (2026-07-16 evening): every sublane content edit in timeline_ui/light_block_widget.py funnels through _mark_hand_edit (the single block.modified assignment left in the file, pinned by test) and envelope move/resize finalizes through _flip_morph_provenance - morphed blocks flip to hand_edited on first touch, authored blocks never tagged; tests in test_morph_patchbay.py TestHandEditHook. lineage record on the morphed setlist;
       per-block provenance tag (morphed(edge) / hand_edited / authored),
       editor sets hand_edited on touch.
 - [x] **Re-morph**: DONE 2026-07-16 (pending_destruction manifest, apply_morph force gate, protected target lanes survive). same plan + seeds -> replace, destroyed hand-edits
@@ -150,14 +150,38 @@ assume one active config.
 
 ## Phase 4 - patchbay UI + CLI (design doc 8; mockup 15-morph-patch-flow-6d)
 
-- [ ] Patchbay screen: lane-level rows expanding to sublane granularity,
-      capability-gated docking (INTENSITY/COLOUR/POSITION/BEAM), edge
-      chips for mode/transforms, drag-priority, lock icon per target
-      lane, live completeness checker, auto-suggest prefill from
-      lighting_role + capabilities (prefill only, manual-first).
-- [ ] Wizard flow around it (source setlist -> target config -> patch ->
-      preview -> commit), reachable from File > Morph to Venue...;
-      reconcile visuals with docs/design/screens/11-morph-wizard.html.
+- [x] Patchbay screen: DONE 2026-07-16 (gui/dialogs/morph_patchbay.py per
+      mockup 6d): lane-level rows expanding to the four sublane streams,
+      capability-gated docking (chip-to-chip wiring, incompatible target
+      chips disabled while a wire is pending; solid = 1:1, dashed =
+      lane patch fan-out, coloured cubic curves per source lane), edge
+      context menu for mode (copy / copy+transform / regenerate +
+      strategy) and transforms (phase_offset, mirror, intensity_scale,
+      spatial_subset) with the filter marker on transformed edges,
+      priority via the menu's +/- pair instead of drag-order (flow-
+      wrapped chips make a drag order ambiguous; +/- maps 1:1 onto
+      MorphEdge.priority), LOCK per target row round-tripping
+      plan.protected_target_lanes, live checker strip (worst coverage
+      across songs, red GAP at 0% on a capability the group has),
+      auto-suggest prefill (same lighting_role first, then capability
+      overlap; add-only, manual-first). Ghost POSITION chip on lanes
+      without movement wires a regenerate edge. All mutations are plain
+      widget methods; tests/unit/test_morph_patchbay.py drives them
+      without mouse events.
+- [x] Wizard flow around it: DONE 2026-07-16 (gui/dialogs/morph_wizard.py,
+      File > Morph to Venue... wired through Ui_MainWindow overflow
+      menu + gui.py): target picker (.lms/legacy .yaml) -> patchbay ->
+      review (coverage table with highlighted gap rows, dry-run morph
+      report compiled into a DEEP COPY of the target, destroyed-hand-
+      edits manifest on re-morph) -> commit (apply_morph force flow with
+      explicit manifest confirm) + Save Target As / Save Plan As
+      (*.morphplan.yaml, source/target config_hash + date stamped on
+      save). Load Plan... adopts an existing plan for re-morph; a hash
+      mismatch shows a non-blocking rig-changed banner. Cancel anywhere
+      changes nothing - only the commit button mutates the wizard-held
+      target object, and only the save buttons write disk. Tests in
+      tests/unit/test_morph_wizard.py (isolation, force flow, plan
+      round-trip, banner).
 - [x] Headless CLI DONE 2026-07-16 (`main.py morph` -> utils/morph_cli.py above the Qt imports; exit 0/1/2/3 = ok/bad-input/compile-errors/needs-force; --report writes markdown).
 
 ## Phase 5 - pre-flight (design doc 7)
@@ -190,3 +214,8 @@ assume one active config.
   Tools · Settings · Help). Phase 1 leftover: per-fixture range-aware
   IK at export (the deliberate byte-identity break) and the world-target
   editing pass on the world-space fields themselves.
+- 2026-07-16 (evening): phase 4 patchbay + wizard shipped (see the
+  ticked items above) plus the phase-2 editor hand_edited hook. The
+  wizard's review page renders the morph report in-app (dry run).
+  Still open in phase 3: wiring utils/morph/preview.render_pair into a
+  scrubbable side-by-side view inside the wizard.

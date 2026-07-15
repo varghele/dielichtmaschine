@@ -905,6 +905,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.actionImportCsvTable.triggered.connect(self.import_csv_lighting_table)
         self.actionImportShowsFromConfig.triggered.connect(self.import_shows_from_config_file)
         self.actionImportLegacyCsv.triggered.connect(self.import_legacy_csv_songs)
+        self.actionMorphToVenue.triggered.connect(self.open_morph_wizard)
         self.actionNewFromTemplate.triggered.connect(self.new_from_template)
         self.actionImportWorkspace.triggered.connect(self.import_workspace)
         self.actionCreateWorkspace.triggered.connect(self.create_workspace)
@@ -1458,6 +1459,24 @@ class MainWindow(QMainWindow, Ui_MainWindow):
                 f"Failed to load "
                 f"{getattr(self, '_pending_config_path', 'project')}:"
                 f"\n{e}")
+
+    def open_morph_wizard(self):
+        """File > Morph to Venue: the morph patchbay + wizard flow
+        (gui/dialogs/morph_wizard.py). The open project is the SOURCE
+        and stays read-only; the wizard loads the target rig itself and
+        writes results only through its own save buttons."""
+        if not self.config.songs:
+            QMessageBox.information(
+                self, "Morph to Venue",
+                "The open project has no songs to morph. Open the show "
+                "you want to take to another venue first.")
+            return
+        from gui.dialogs.morph_wizard import MorphWizard
+        wizard = MorphWizard(
+            self.config,
+            source_path=getattr(self, 'config_path', '') or '',
+            parent=self)
+        wizard.exec()
 
     def import_legacy_csv_songs(self):
         """File > Import Legacy CSV Songs: pick a folder of pre-v1.0

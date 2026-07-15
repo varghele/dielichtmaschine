@@ -26,6 +26,20 @@ verbatim as the GitHub Release notes (see [docs/releasing.md](docs/releasing.md)
   full per-block report (skipped blocks - e.g. beams pointing at the
   sky - and groups whose fixtures land far apart are called out).
   Pan/tilt values stay as fallback in all three paths.
+- **Morph to Venue: take a show to another rig.** File > Morph to
+  Venue... opens a wizard that adapts the open show to a different
+  venue's rig: pick the venue project, wire the patchbay (each source
+  lane stream docks onto target groups of the same capability -
+  INTENSITY, COLOUR, POSITION, BEAM - with per-wire transforms like
+  mirror, phase offset, intensity scale and stage-half subsets, plus
+  regenerated movement for rigs that gained movers), review the
+  coverage table and the full morph report from a dry run, then commit
+  and save the morphed show as a new project. Patch plans save as
+  reusable `*.morphplan.yaml` files per venue - reload one to re-morph
+  after fixing the master show, with locked target lanes left untouched
+  and any hand-edited blocks listed before they are replaced. An
+  auto-suggest button prefills the wiring by lighting role; nothing
+  routes without confirmation, and cancelling changes nothing.
 
 ## [1.4.0] - 2026-07-15
 

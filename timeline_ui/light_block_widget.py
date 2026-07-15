@@ -409,6 +409,25 @@ class LightBlockWidget(QWidget):
         """Update the display after block data changes."""
         self.update()  # Trigger repaint
 
+    def _flip_morph_provenance(self):
+        """The editor's hand-edit hook (morph design doc 5.3): a block
+        a morph compile wrote (provenance ``morphed:<edges>``) becomes
+        ``hand_edited`` on first touch, so a re-morph can list exactly
+        what its replace would destroy. Authored blocks (empty
+        provenance) are never tagged - only morphed ones change state.
+        """
+        if self.block.provenance.startswith("morphed:"):
+            self.block.provenance = "hand_edited"
+
+    def _mark_hand_edit(self):
+        """Every sublane content edit funnels through here instead of
+        setting ``block.modified`` directly, so the morph provenance
+        flip cannot be forgotten by a new edit path. ``modified`` keeps
+        its original meaning (content diverged from the riff source);
+        envelope moves/resizes call _flip_morph_provenance alone."""
+        self.block.modified = True
+        self._flip_morph_provenance()
+
     @property
     def is_multi_selected(self) -> bool:
         """Check if this block is part of a multi-selection."""
@@ -1650,7 +1669,7 @@ class LightBlockWidget(QWidget):
                     sublane_block.start_time = new_start
                     # Update envelope bounds
                     self.block.update_envelope_bounds()
-                    self.block.modified = True
+                    self._mark_hand_edit()
                     self.update_position()
                     self.update()  # Redraw
 
@@ -1666,7 +1685,7 @@ class LightBlockWidget(QWidget):
                     sublane_block.end_time = new_end
                     # Update envelope bounds
                     self.block.update_envelope_bounds()
-                    self.block.modified = True
+                    self._mark_hand_edit()
                     self.update_position()
                     self.update()  # Redraw
 
@@ -1690,7 +1709,7 @@ class LightBlockWidget(QWidget):
                 sublane_block.end_time = new_end
                 # Update envelope bounds
                 self.block.update_envelope_bounds()
-                self.block.modified = True
+                self._mark_hand_edit()
                 self.update_position()
                 self.update()  # Redraw
 
@@ -1748,7 +1767,7 @@ class LightBlockWidget(QWidget):
             self.dragging_intensity_handle.intensity = new_intensity
 
             # Mark block as modified
-            self.block.modified = True
+            self._mark_hand_edit()
 
             # Redraw to update handle position and label
             self.update()
@@ -1859,7 +1878,7 @@ class LightBlockWidget(QWidget):
 
         # Update envelope bounds and mark as modified
         self.block.update_envelope_bounds()
-        self.block.modified = True
+        self._mark_hand_edit()
         self.update_position()
         self.update()
 
@@ -1967,6 +1986,11 @@ class LightBlockWidget(QWidget):
                 stack.push(ResizeBlockCommand(
                     self.lane_widget, self.block, old_start, old_end,
                     new_start, new_end))
+        # Envelope moves/resizes are hand edits too: flip morphed
+        # provenance at the drag's single finalize point. They do NOT
+        # set block.modified - that flag means "content diverged from
+        # the riff source" and a move keeps content intact.
+        self._flip_morph_provenance()
         self.block_edited.emit()
 
     def mouseDoubleClickEvent(self, event: QMouseEvent):
@@ -2133,7 +2157,7 @@ class LightBlockWidget(QWidget):
 
         if dialog and dialog.exec():
             # Mark effect as modified since sublane was changed
-            self.block.modified = True
+            self._mark_hand_edit()
             self.update_display()
             self.block_edited.emit()  # Trigger auto-save
 
@@ -2186,7 +2210,7 @@ class LightBlockWidget(QWidget):
             if self.selected_sublane_block == sublane_block:
                 self.selected_sublane_block = None
                 self.selected_sublane_type = None
-            self.block.modified = True
+            self._mark_hand_edit()
             self.update_display()
 
     # ── Right-click sublane marquee helpers ───────────────────────────────
@@ -2369,7 +2393,7 @@ class LightBlockWidget(QWidget):
                 self.selected_sublane_block.effect_speed = speed_options[new_index]
 
                 # Mark block as modified
-                self.block.modified = True
+                self._mark_hand_edit()
 
                 # Repaint to update grid
                 self.update()

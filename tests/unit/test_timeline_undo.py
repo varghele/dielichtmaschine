@@ -189,6 +189,12 @@ class TestEnvelopeDragPush:
             self.resizing_left = False
             self.resizing_right = False
             self.block = block
+            # The drag finalize flips morphed provenance to hand_edited
+            # (morph design doc 5.3); borrow the real hook so the stub
+            # stays complete.
+            from timeline_ui.light_block_widget import LightBlockWidget
+            self._flip_morph_provenance = (
+                LightBlockWidget._flip_morph_provenance.__get__(self))
 
             class _Lane:
                 # A real LightLaneWidget carries light_block_widgets;
