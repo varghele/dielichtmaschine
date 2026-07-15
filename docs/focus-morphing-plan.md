@@ -145,16 +145,15 @@ assume one active config.
 
 ## Phase 5 - pre-flight (design doc 7)
 
-- [ ] Checklist generation from plan + setlist (flash tests ->
+- [x] Checklist generation from plan + setlist (MODEL done 2026-07-16, utils/morph/preflight.py: flash for dimmer/colour-routed groups -> spot verify + focus capture per mover group x used spot -> colour sanity -> specials -> scrub; drive_state recorded per item for the future pre-flight screen) (flash tests ->
       orientation/spot verify -> focus capture -> colour sanity ->
       busiest-section scrub).
 - [ ] Verify items (app drives predicted state; incorrect -> remediation
       incl. orientation calibration -> re-test same item).
 - [ ] Capture items via the Live surface; captured values land in config
       B ONLY (design doc 7.1 - never in show blocks).
-- [ ] Checklist persistence + completion attached to lineage.
-- [ ] Export ordering guard (hard warning on exporting with an
-      incomplete/stale checklist).
+- [x] Checklist persistence (DONE 2026-07-16: *.preflight.yaml next to the config, per-item done/result/timestamp, fix-and-re-test reopen; lineage attachment rides the UI wiring).
+- [x] Export ordering guard PREDICATE (DONE 2026-07-16: export_guard_message covers incomplete AND completed-then-config-changed; the create_workspace hook lands with the UI integration to avoid three-way gui.py conflicts with the running agents).
 
 ## Status log
 
