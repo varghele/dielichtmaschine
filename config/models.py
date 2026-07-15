@@ -1727,8 +1727,9 @@ class Configuration:
         # differently-named modes; without this, such fixtures fall back
         # to empty channel maps (docs/gdtf-coverage-note.md item 4).
         from utils.fixture_io import reconcile_fixture_modes
+        from utils import user_warnings
         for warning in reconcile_fixture_modes(fixtures):
-            print(f"Config load: {warning}")
+            user_warnings.warn(warning, category="config-load")
 
         # Bring stored orientations onto the canonical mounting table
         # (utils/orientation.py). Configs written before 2026-07-12 saved

@@ -84,6 +84,7 @@ from config.models import (Configuration, Song, ShowPart, TimelineData,
 from gui.typography import DisplayLabel, MicroLabel, display_font, mono_font
 from gui.widgets.chip import Chip
 from timeline.song_structure import SongStructure
+from utils import user_warnings
 from timeline_ui import AudioLaneWidget, MasterTimelineContainer, TimelineGrid
 from .base_tab import BaseTab
 
@@ -3295,7 +3296,7 @@ class StructureTab(BaseTab):
                 if os.path.exists(audio_filename):
                     self.audio_lane.load_audio_file(audio_filename)
                 else:
-                    print(f"Audio file not found: {audio_filename}")
+                    user_warnings.warn(f"Audio file not found: {audio_filename}; the song plays without audio", category="audio")
                     self.audio_lane.clear_audio()
             else:
                 # New format: filename only. Resolve via Configuration's
@@ -3308,8 +3309,7 @@ class StructureTab(BaseTab):
                 if audio_path and os.path.exists(audio_path):
                     self.audio_lane.load_audio_file(audio_path)
                 else:
-                    print(f"Audio file not found for '{audio_filename}' "
-                          f"(bundle dir: {bundle_dir})")
+                    user_warnings.warn(f"Audio file not found for '{audio_filename}' (looked in {bundle_dir}); the song plays without audio", category="audio")
                     self.audio_lane.clear_audio()
         else:
             # No audio for this show, clear it

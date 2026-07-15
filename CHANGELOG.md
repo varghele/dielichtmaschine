@@ -101,6 +101,20 @@ verbatim as the GitHub Release notes (see [docs/releasing.md](docs/releasing.md)
 
 ### Added
 
+- **Silent fallbacks now speak up (Help > Warnings).** For years the
+  app printed problems to a terminal nobody has open and carried on:
+  a lane skipped on export, a fixture definition that would not
+  parse, missing audio, a dead ArtNet socket. Those paths now report
+  into a structured warnings panel - the last operation (export,
+  project load) called out on top, full session history below,
+  copyable for bug reports, everything mirrored into the log file.
+  The export "Success" box now says when the workspace was created
+  WITH warnings and opens the panel directly; a failed project load
+  finally shows an error dialog instead of silently keeping the old
+  project; repeated failures (a 44 Hz output error) fold into one
+  counted entry instead of a storm. The headless CLI export prints
+  the same warnings to stderr for scripts and CI. Exported files are
+  byte-identical - only the reporting changed.
 - **Help > Diagnostics.** One copyable markdown block for bug reports:
   app/Python/Qt versions, platform, OpenGL renderer, detected audio
   host APIs, ArtNet output state, project path and log folder. Every

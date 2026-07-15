@@ -261,6 +261,10 @@ class Ui_MainWindow(object):
         # Copyable bug-report block (gui/dialogs/diagnostics_dialog.py).
         self.actionDiagnostics = QAction("Diagnostics...", MainWindow)
         self.menuHelp.addAction(self.actionDiagnostics)
+        # Structured user warnings from the last export/load
+        # (gui/dialogs/warnings_dialog.py, utils/user_warnings.py).
+        self.actionWarnings = QAction("Warnings...", MainWindow)
+        self.menuHelp.addAction(self.actionWarnings)
         self.actionAbout = QAction("About", MainWindow)
         self.menuHelp.addAction(self.actionAbout)
 

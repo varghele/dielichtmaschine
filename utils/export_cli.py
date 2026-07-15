@@ -110,11 +110,20 @@ def run_export_cli(argv) -> int:
     if args.dark_mode:
         vc_options["dark_mode"] = True
 
+    from utils import user_warnings
     try:
-        create_qlc_workspace(config, vc_options, output_path=out_path)
+        with user_warnings.operation("Export QLC+ workspace"):
+            create_qlc_workspace(config, vc_options, output_path=out_path)
     except Exception as exc:
         print(f"error: export failed: {exc}", file=sys.stderr)
         return 1
+
+    # The GUI surfaces these in the Warnings panel; here they go to
+    # stderr so scripts and CI see what the export left out.
+    _op, warnings = user_warnings.get_log().last_operation()
+    for entry in warnings:
+        suffix = f" (x{entry.count})" if entry.count > 1 else ""
+        print(f"warning: {entry.message}{suffix}", file=sys.stderr)
 
     print(f"Workspace written to {out_path}")
     return 0

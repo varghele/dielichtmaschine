@@ -404,7 +404,11 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             if maps:
                 self._output_arbiter.set_fixture_maps(maps)
         except Exception as e:
-            print(f"output arbiter: fixture maps not built: {e}")
+            from utils import user_warnings
+            user_warnings.warn(
+                f"Live output fixture maps could not be built; busk "
+                f"output is degraded: {e}",
+                category="output", once_key="arbiter-maps")
         return self._output_arbiter
 
     def _push_live_masters(self):
@@ -960,6 +964,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         # Help menu actions
         self.actionOpenLogFolder.triggered.connect(self.open_log_folder)
         self.actionDiagnostics.triggered.connect(self.open_diagnostics)
+        self.actionWarnings.triggered.connect(self.open_warnings)
         self.actionAbout.triggered.connect(self.show_about)
 
         # Home screen quick actions + recents + checklist
@@ -1403,7 +1408,9 @@ class MainWindow(QMainWindow, Ui_MainWindow):
                 if resp == QMessageBox.StandardButton.Yes:
                     load_from = backup
                     recovered = True
-            self.config = Configuration.load(load_from)
+            from utils import user_warnings
+            with user_warnings.operation("Load project"):
+                self.config = Configuration.load(load_from)
             self.config_path = file_path
             if hasattr(self, "_autosave") and not recovered:
                 # Freshly loaded, unchanged content is clean. When recovered
@@ -1439,6 +1446,13 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             print(f"Error loading configuration: {e}")
             import traceback
             traceback.print_exc()
+            # A failed load used to be console-only - the UI just sat
+            # there with the old (or no) project. Say it out loud.
+            QMessageBox.critical(
+                self, "Error",
+                f"Failed to load "
+                f"{getattr(self, '_pending_config_path', 'project')}:"
+                f"\n{e}")
 
     def import_legacy_csv_songs(self):
         """File > Import Legacy CSV Songs: pick a folder of pre-v1.0
@@ -1526,7 +1540,10 @@ class MainWindow(QMainWindow, Ui_MainWindow):
                 self.config.songs[stem] = show
                 imported += 1
             except Exception as e:
-                print(f"Skipping {path}: {e}")
+                from utils import user_warnings
+                user_warnings.warn(
+                    f"Legacy CSV show skipped (unreadable): {path}: {e}",
+                    category="import")
         if imported:
             self.structure_tab.update_from_config()
             self.shows_tab.update_from_config()
@@ -1554,7 +1571,10 @@ class MainWindow(QMainWindow, Ui_MainWindow):
                 get_cached_fixture_definitions(models_in_config)
                 print(f"Pre-loaded {len(models_in_config)} fixture definition(s) into cache")
         except Exception as e:
-            print(f"Warning: Could not pre-load fixture definitions: {e}")
+            from utils import user_warnings
+            user_warnings.warn(
+                f"Could not pre-load fixture definitions: {e}",
+                category="fixture-library")
 
     def import_workspace(self):
         """Import configuration from QLC+ workspace file"""
@@ -2020,9 +2040,11 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             else:
                 self.progress_manager.update_modal(2, "Generating QLC+ workspace XML...")
 
+            from utils import user_warnings
             self.progress_manager.start_log_capture()
             try:
-                create_qlc_workspace(self.config, vc_options)
+                with user_warnings.operation("Export QLC+ workspace"):
+                    create_qlc_workspace(self.config, vc_options)
             finally:
                 self.progress_manager.stop_log_capture()
 
@@ -2033,11 +2055,29 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             self.progress_manager.finish_modal()
 
             workspace_path = os.path.join(self.project_root, 'workspace.qxw')
-            QMessageBox.information(
-                self,
-                "Success",
-                f"Workspace created at {workspace_path}"
-            )
+            _op, export_warnings = user_warnings.get_log().last_operation()
+            if export_warnings:
+                # The box that used to say plain "Success" while lanes
+                # were silently dropped. Offer the panel directly.
+                box = QMessageBox(self)
+                box.setIcon(QMessageBox.Icon.Warning)
+                box.setWindowTitle("Workspace created with warnings")
+                box.setText(
+                    f"Workspace created at {workspace_path}\n\n"
+                    f"{len(export_warnings)} warning(s) during export - "
+                    f"parts of the show may be missing from the file.")
+                view_btn = box.addButton(
+                    "View Warnings", QMessageBox.ButtonRole.ActionRole)
+                box.addButton(QMessageBox.StandardButton.Ok)
+                box.exec()
+                if box.clickedButton() is view_btn:
+                    self.open_warnings()
+            else:
+                QMessageBox.information(
+                    self,
+                    "Success",
+                    f"Workspace created at {workspace_path}"
+                )
             print(f"Workspace created at {workspace_path}")
 
         except Exception as e:
@@ -2094,6 +2134,11 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         """Help > Diagnostics: the copyable bug-report block."""
         from gui.dialogs.diagnostics_dialog import DiagnosticsDialog
         DiagnosticsDialog(main_window=self, parent=self).exec()
+
+    def open_warnings(self):
+        """Help > Warnings: what the last export/load worked around."""
+        from gui.dialogs.warnings_dialog import WarningsDialog
+        WarningsDialog(parent=self).exec()
 
     def open_gdtf_share_account(self):
         """Settings > GDTF Share Account: credentials for the fixture

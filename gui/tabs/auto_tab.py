@@ -58,6 +58,7 @@ from PyQt6.QtCore import Qt, QTimer, QEvent, QPointF, pyqtSignal
 from PyQt6.QtGui import (
     QColor, QConicalGradient, QFont, QPainter,
 )
+from utils import user_warnings
 
 from config.models import Configuration
 from audio.device_manager import DeviceManager
@@ -1404,7 +1405,7 @@ class AutoTab(BaseTab):
         try:
             self._save_settings()
         except Exception as e:
-            print(f"Error saving Auto Mode settings: {e}")
+            user_warnings.warn(f"Auto Mode settings could not be saved: {e}", category="config-load", once_key="auto-settings-save")
 
     def update_from_config(self):
         # Refresh QXF fixture definitions for the current config on every
@@ -1447,7 +1448,7 @@ class AutoTab(BaseTab):
                 get_cached_fixture_definitions(models_in_config)
             )
         except Exception as e:
-            print(f"AutoTab: failed to load fixture definitions: {e}")
+            user_warnings.warn(f"Auto Mode could not load fixture definitions: {e}", category="fixture-library")
             self.fixture_definitions = {}
 
     # -- Population helpers -------------------------------------------------
@@ -1886,7 +1887,7 @@ class AutoTab(BaseTab):
         try:
             self._save_settings()
         except Exception as e:
-            print(f"Error saving Auto Mode settings: {e}")
+            user_warnings.warn(f"Auto Mode settings could not be saved: {e}", category="config-load", once_key="auto-settings-save")
         self._cleanup()
         try:
             self._device_manager.cleanup()

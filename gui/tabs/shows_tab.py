@@ -10,6 +10,7 @@ from PyQt6.QtWidgets import (QVBoxLayout, QHBoxLayout, QComboBox, QPushButton,
 from PyQt6.QtCore import Qt, QTimer, QEvent, pyqtSignal, QPoint, QRect
 from PyQt6.QtGui import QShortcut, QKeySequence, QActionGroup
 from config.models import Configuration, Song, ShowPart, TimelineData, LightBlock, ShowEffect
+from utils import user_warnings
 from timeline.song_structure import SongStructure
 from timeline.light_lane import LightLane
 from utils.fixture_utils import load_fixture_definitions_from_qlc, get_cached_fixture_definitions
@@ -1138,7 +1139,7 @@ class ShowsTab(BaseTab):
                         self.audio_lane.file_path_edit.setText(basename)
                         self.audio_lane.file_path_edit.setToolTip(local_path)
                 except Exception as e:
-                    print(f"Failed to copy audio file: {e}")
+                    user_warnings.warn(f"Audio file could not be copied into the project; the project keeps referencing the original location: {e}", category="audio")
                     local_path = file_path  # Fall back to original
 
             # Update the show's timeline_data to store just the filename
@@ -1239,8 +1240,7 @@ class ShowsTab(BaseTab):
                     self.audio_lane.load_audio_file(audio_filename)
                 # Priority 3: not found anywhere
                 else:
-                    print(f"Audio file not found for '{audio_filename}' "
-                          f"(bundle dir: {bundle_dir})")
+                    user_warnings.warn(f"Audio file not found for '{audio_filename}' (looked in {bundle_dir}); the song plays without audio", category="audio")
                     self.audio_lane.clear_audio()
                     if self.audio_mixer:
                         self.audio_mixer.remove_lane("audio")

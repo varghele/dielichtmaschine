@@ -46,6 +46,7 @@ from dataclasses import dataclass, field
 from typing import Dict, Iterator, List, Optional, Set, Tuple
 
 from utils.gdtf_data import GdtfData  # noqa: F401  (typing for FixtureDefinition.gdtf)
+from utils import user_warnings
 
 QLC_FIXTURE_NS = 'http://www.qlcplus.org/FixtureDefinition'
 _NS = {'': QLC_FIXTURE_NS}
@@ -531,9 +532,15 @@ def get_definition(manufacturer: str, model: str) -> Optional[FixtureDefinition]
         try:
             defn = parse_fixture_file(path)
         except ET.ParseError as e:
-            print(f"Error parsing fixture file {path}: {e}")
+            user_warnings.warn(
+                f"Fixture definition unreadable, fixture will not "
+                f"drive: {path}: {e}",
+                category="fixture-library", once_key=f"parse:{path}")
         except Exception as e:
-            print(f"Error processing fixture file {path}: {e}")
+            user_warnings.warn(
+                f"Fixture definition failed to load, fixture will not "
+                f"drive: {path}: {e}",
+                category="fixture-library", once_key=f"parse:{path}")
 
     _definition_cache[key] = defn
     return defn
@@ -550,7 +557,9 @@ def iter_definitions() -> Iterator[FixtureDefinition]:
         try:
             defn = parse_fixture_file(path)
         except Exception as e:
-            print(f"Error parsing fixture file {path}: {e}")
+            user_warnings.warn(
+                f"Fixture definition skipped (unreadable): {path}: {e}",
+                category="fixture-library", once_key=f"parse:{path}")
             continue
         if defn.key in seen:
             continue

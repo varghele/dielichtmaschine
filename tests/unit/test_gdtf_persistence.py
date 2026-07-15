@@ -185,9 +185,16 @@ def test_no_companion_when_qxf_twin_exists(tmp_path, monkeypatch, capsys):
 # Fixture-list import resolution stamps provenance
 # ---------------------------------------------------------------------------
 
-def test_config_load_reconciles_shadowed_mode_names(gdtf_dir, tmp_path, capsys):
+def test_config_load_reconciles_shadowed_mode_names(gdtf_dir, tmp_path,
+                                                    monkeypatch):
     """A config authored against .qxf mode names keeps working when a
-    GDTF shadows the identity: the closest-footprint mode is adopted."""
+    GDTF shadows the identity: the closest-footprint mode is adopted.
+    The rename is reported through the structured warnings log (the
+    v1.4 fallback audit replaced the old stdout print)."""
+    from utils import user_warnings
+    log = user_warnings.UserWarningsLog()
+    monkeypatch.setattr(user_warnings, "_log", log)
+
     fixture = _spot_fixture()
     fixture.current_mode = "14 Channel"  # qxf-style name, 13ch footprint
     fixture.available_modes = [FixtureMode(name="14 Channel", channels=13)]
@@ -200,7 +207,8 @@ def test_config_load_reconciles_shadowed_mode_names(gdtf_dir, tmp_path, capsys):
     assert f.current_mode == "Standard"          # the GDTF mode, 13 ch
     assert f.available_modes[0].channels == 13
     assert f.definition_source == "gdtf"
-    assert "not in the resolved gdtf definition" in capsys.readouterr().out
+    assert any("not in the resolved gdtf definition" in e.message
+               and e.category == "config-load" for e in log.entries())
 
 
 def test_config_load_leaves_matching_modes_alone(gdtf_dir, tmp_path):

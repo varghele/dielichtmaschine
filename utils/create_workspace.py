@@ -3,6 +3,7 @@ import xml.dom.minidom as minidom
 import os
 from typing import Dict, Optional
 from config.models import Configuration, FixtureGroupCapabilities
+from utils import user_warnings
 from utils.to_xml.setup_to_xml import (create_universe_elements, create_fixture_elements,
                                        create_channels_groups)
 from utils.to_xml.shows_to_xml import create_shows
@@ -217,8 +218,9 @@ def _write_gdtf_companion_qxfs(models_in_config, out_dir: str):
         print("GDTF fixtures with a same-identity .qxf in the QLC+ library "
               "(no companion needed): " + ", ".join(matched))
     if generated:
-        print("GDTF fixtures unknown to QLC+; companion .qxf files written. "
-              "Copy them into QLC+'s user fixture folder so the workspace "
-              "patches correctly:")
-        for path in generated:
-            print(f"  {path}")
+        user_warnings.warn(
+            "GDTF fixtures unknown to QLC+; companion .qxf files were "
+            "written next to the workspace. Copy them into QLC+'s user "
+            "fixture folder or the workspace will not patch: "
+            + ", ".join(generated),
+            category="export")

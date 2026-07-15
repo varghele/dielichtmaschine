@@ -5,6 +5,7 @@ import json
 from enum import Enum
 from typing import Dict, List, Any, Optional, Tuple
 from config.models import Configuration, Fixture, FixtureGroup
+from utils import user_warnings
 from utils.fixture_capabilities import get_capabilities_for_fixture
 
 
@@ -512,7 +513,10 @@ def _parse_qxf_for_visualizer(manufacturer: str, model: str, mode_name: str) -> 
         return result
 
     except Exception as e:
-        print(f"Error parsing QXF {qxf_path}: {e}")
+        user_warnings.warn(
+            f"Fixture definition unreadable, visualizer falls back to "
+            f"defaults: {qxf_path}: {e}",
+            category="fixture-library", once_key=f"viz-parse:{qxf_path}")
         _fixture_definition_cache[cache_key] = result
         return result
 

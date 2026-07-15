@@ -4,6 +4,9 @@
 import sys
 from typing import List, Dict
 
+from utils import user_warnings
+
+
 def get_available_dmx_devices() -> List[Dict[str, str]]:
     """Detect available USB DMX devices.
 
@@ -47,11 +50,14 @@ def get_available_dmx_devices() -> List[Dict[str, str]]:
 
     except ImportError:
         # pyserial not installed, return empty list
-        print("Warning: pyserial not installed. USB device detection unavailable.")
-        print("Install with: pip install pyserial")
+        user_warnings.warn(
+            "pyserial is not installed; USB DMX device detection is "
+            "unavailable (pip install pyserial)",
+            category="output", once_key="pyserial-missing")
 
     except Exception as e:
-        print(f"Error detecting USB devices: {e}")
+        user_warnings.warn(f"USB DMX device detection failed: {e}",
+                           category="output", once_key="usb-detect")
 
     # Add a "None" option
     if not devices:

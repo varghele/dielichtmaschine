@@ -5,6 +5,7 @@ import time
 import math
 from typing import Dict, List, Optional, Tuple, Any
 from config.models import Configuration, Fixture, LightBlock, DimmerBlock, ColourBlock, MovementBlock, SpecialBlock
+from utils import user_warnings
 from utils.effects_utils import get_channels_by_property
 from utils.orientation import calculate_pan_tilt, pan_tilt_to_dmx
 from effects import (
@@ -312,7 +313,11 @@ class DMXManager:
 
         # Summary logging instead of per-fixture
         if missing_defs:
-            print(f"DMXManager: Warning - no definitions for: {', '.join(missing_defs)}")
+            user_warnings.warn(
+                f"No fixture definitions for: {', '.join(missing_defs)}. "
+                f"These fixtures will not output.",
+                category="output",
+                once_key="missing-defs:" + ",".join(sorted(missing_defs)))
 
     def rebuild_fixture_maps(self):
         """Rebuild fixture maps when fixtures are added, removed, or modified."""
@@ -445,7 +450,10 @@ class DMXManager:
             value: DMX value (0-255)
         """
         if universe not in self.dmx_state:
-            print(f"Warning: Universe {universe} not initialized")
+            user_warnings.warn(
+                f"Universe {universe} is not initialized; DMX writes to "
+                f"it are dropped",
+                category="output", once_key=f"universe:{universe}")
             return
 
         if 0 <= channel < 512:

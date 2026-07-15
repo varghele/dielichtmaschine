@@ -3,6 +3,8 @@
 
 from typing import List, Tuple, Optional, Set
 
+from utils import user_warnings
+
 # Track warnings to avoid spamming the same message repeatedly
 _warned_groups: Set[str] = set()
 _warned_indices: Set[Tuple[str, int]] = set()
@@ -68,7 +70,10 @@ def resolve_target(target: str, config) -> List:
         if group_name not in _warned_groups:
             _warned_groups.add(group_name)
             available = list(config.groups.keys())
-            print(f"Warning: Group '{group_name}' not found. Available groups: {available}")
+            user_warnings.warn(
+                f"Group '{group_name}' not found. "
+                f"Available groups: {available}",
+                category="targets")
         return []
 
     fixtures = config.groups[group_name].fixtures
@@ -80,7 +85,10 @@ def resolve_target(target: str, config) -> List:
             warn_key = (group_name, index)
             if warn_key not in _warned_indices:
                 _warned_indices.add(warn_key)
-                print(f"Warning: Fixture index {index} out of range for '{group_name}' (has {len(fixtures)} fixtures)")
+                user_warnings.warn(
+                    f"Fixture index {index} out of range for "
+                    f"'{group_name}' (has {len(fixtures)} fixtures)",
+                    category="targets")
             return []
 
     return list(fixtures)

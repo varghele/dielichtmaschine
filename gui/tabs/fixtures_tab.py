@@ -53,6 +53,7 @@ from utils.dmx_conflicts import (
     lint_dmx_addresses,
 )
 from .base_tab import BaseTab
+from utils import user_warnings
 
 # Table columns, reference order.
 COL_NUM, COL_FIXTURE, COL_TYPE, COL_MODE, COL_UNI, COL_ADDRESS, COL_GROUP = \
@@ -1940,7 +1941,7 @@ class FixturesTab(BaseTab):
                     self._add_fixtures_from_qxf(path, quantity)
 
         except Exception as e:
-            print(f"Error adding fixture: {e}")
+            user_warnings.warn(f"Adding the fixture failed: {e}", category="fixture-library")
             import traceback
             traceback.print_exc()
 

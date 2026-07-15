@@ -35,8 +35,13 @@ checks below pass; v1.4 work continues on `v1.4-standalone-switch`.
 - [ ] **CSV lighting-table import wizard** - column mapping onto the
       existing resolution pipeline (library lookup, Replace/Add),
       preview before commit.
-- [ ] **Silent-fallback audit** - convert the print-and-continue paths
-      to structured warnings with a visible panel.
+- [x] **Silent-fallback audit** - SHIPPED 2026-07-15: 142 print sites
+      inventoried, user-impacting ones route through
+      utils/user_warnings.py (operation grouping, once-key folding for
+      output storms, file-log mirroring) into Help > Warnings; export
+      success box reports warning counts, failed project load finally
+      gets an error dialog, CLI export prints warnings to stderr.
+      Export byte-identical (hash-checked). 18 tests.
 - [x] **Diagnostics panel** - SHIPPED 2026-07-15: Help > Diagnostics,
       utils/diagnostics.py (guarded probes: versions, GL renderer,
       audio host APIs, arbiter output state, project + log paths) and
