@@ -1,9 +1,13 @@
 # visualizer/main.py
-# QLC+ Show Creator - 3D Visualizer Entry Point
+# Die Lichtmaschine - standalone 3D visualizer entry point
 #
 # Real-time 3D visualization of lighting effects.
-# - Receives configuration via TCP from Show Creator
-# - Receives DMX data via ArtNet from Show Creator or QLC+
+# - Receives configuration via TCP from Die Lichtmaschine
+# - Receives DMX data via ArtNet from Die Lichtmaschine or QLC+
+#
+# The window frame wears the brand (dark theme tokens, Barlow/IBM Plex
+# Mono, rotor glyph + wordmark header, token-driven status colors);
+# the GL scene itself is renderer territory.
 
 import sys
 import os
@@ -15,19 +19,19 @@ if parent_dir not in sys.path:
 
 from PyQt6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
-    QLabel, QStatusBar, QToolBar, QPushButton, QFrame, QMessageBox
+    QLabel, QStatusBar, QPushButton, QMessageBox
 )
 from PyQt6.QtCore import Qt, QTimer
-from PyQt6.QtGui import QAction
+from PyQt6.QtGui import QFont, QIcon, QPixmap
 
-# Import shared modules from Show Creator
-from config.models import Configuration, Fixture, FixtureGroup
-from utils.fixture_utils import determine_fixture_type
+# Import shared modules from Die Lichtmaschine
+from utils.app_identity import APP_NAME, APP_WORDMARK, app_icon_path
 
 # Import visualizer modules
 from visualizer.tcp import VisualizerTCPClient
 from visualizer.artnet import ArtNetListener
 from visualizer.renderer import RenderEngine
+from visualizer.build_mode import build_mode_buffers
 
 
 class VisualizerWindow(QMainWindow):
@@ -42,8 +46,16 @@ class VisualizerWindow(QMainWindow):
 
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("QLC+ Visualizer")
+        self.setWindowTitle(f"{APP_NAME} · Visualizer")
         self.setMinimumSize(1024, 768)
+
+        # Theme tokens for the status colors (the QSS handles the
+        # chrome; per-state label colors are set inline from the same
+        # token dict, never hardcoded hex).
+        from gui.theme_manager import ThemeManager
+        from gui.theme_tokens import THEMES
+        theme_name = ThemeManager().current() or "dark"
+        self._tokens = THEMES.get(theme_name, THEMES["dark"])
 
         # Configuration state (received via TCP)
         self.stage_width: float = 10.0  # meters
@@ -55,6 +67,12 @@ class VisualizerWindow(QMainWindow):
         self.tcp_connected: bool = False
         self.artnet_receiving: bool = False
 
+        # BUILD look: synthesise a full-on buffer from the received rig
+        # (dimmer up, shutter open, pan/tilt centred) so orientation and
+        # beam direction can be checked without live DMX. While on, live
+        # DMX is ignored.
+        self.build_mode: bool = False
+
         # TCP client for receiving configuration
         self.tcp_client = VisualizerTCPClient()
         self._connect_tcp_signals()
@@ -64,9 +82,9 @@ class VisualizerWindow(QMainWindow):
         self._connect_artnet_signals()
         self.artnet_listener.start()
 
-        # Initialize UI (toolbar must be before statusbar due to connect_action reference)
+        # Initialize UI (the header owns connect_btn, which the
+        # statusbar's indicator update touches - build order matters)
         self._init_ui()
-        self._init_toolbar()
         self._init_statusbar()
 
         # Status update timer
@@ -93,6 +111,8 @@ class VisualizerWindow(QMainWindow):
 
     def _on_dmx_received(self, universe: int, dmx_data: bytes):
         """Handle DMX data received from ArtNet."""
+        if self.build_mode:
+            return  # BUILD look owns the frame; live DMX is ignored
         # Convert 0-based ArtNet universe to 1-based internal universe
         internal_universe = universe + 1
         # Update render engine with DMX data
@@ -136,7 +156,8 @@ class VisualizerWindow(QMainWindow):
         # (The server will send new stage/fixtures/groups messages)
 
     def _init_ui(self):
-        """Initialize the main UI layout."""
+        """Initialize the main UI layout: brand header over the 3D
+        viewport."""
         # Central widget
         central_widget = QWidget()
         self.setCentralWidget(central_widget)
@@ -144,129 +165,182 @@ class VisualizerWindow(QMainWindow):
         # Main layout
         layout = QVBoxLayout(central_widget)
         layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
+
+        layout.addWidget(self._build_header())
 
         # 3D render engine
         self.render_engine = RenderEngine(self)
         self.render_engine.set_stage_size(self.stage_width, self.stage_height)
-        layout.addWidget(self.render_engine)
+        layout.addWidget(self.render_engine, 1)
+
+    def _build_header(self) -> QWidget:
+        """The brand header (the main app's topbar anatomy): rotor
+        glyph + wordmark + a VISUALIZER tag, then the window's three
+        actions as chips. Replaces the stock QToolBar."""
+        from gui.typography import MicroLabel, display_font, mono_font
+
+        header = QWidget()
+        header.setObjectName("TopBar")   # inherits the themed strip
+        header.setFixedHeight(48)
+        row = QHBoxLayout(header)
+        row.setContentsMargins(12, 0, 12, 0)
+        row.setSpacing(8)
+
+        glyph = QLabel()
+        glyph.setObjectName("TopBarGlyph")
+        pixmap = QPixmap(app_icon_path())
+        if not pixmap.isNull():
+            glyph.setPixmap(pixmap.scaled(
+                22, 22, Qt.AspectRatioMode.KeepAspectRatio,
+                Qt.TransformationMode.SmoothTransformation))
+        row.addWidget(glyph)
+
+        wordmark = QLabel(APP_WORDMARK)
+        wordmark.setObjectName("TopBarWordmark")
+        wordmark.setFont(display_font(15, QFont.Weight.ExtraBold,
+                                      tracking_em=0.08))
+        row.addWidget(wordmark)
+
+        tag = MicroLabel("Visualizer", point_size=8, tracking_em=0.18)
+        row.addWidget(tag)
+
+        row.addSpacing(16)
+
+        def _chip(text: str, tip: str, slot=None) -> QPushButton:
+            btn = QPushButton(text)
+            btn.setProperty("role", "output-select")
+            btn.setProperty("density", "compact")
+            btn.setFont(mono_font(8, QFont.Weight.DemiBold))
+            btn.setFixedHeight(22)
+            btn.setCursor(Qt.CursorShape.PointingHandCursor)
+            btn.setToolTip(tip)
+            if slot is not None:
+                btn.clicked.connect(slot)
+            row.addWidget(btn)
+            return btn
+
+        self.connect_btn = _chip(
+            "CONNECT", f"Connect to {APP_NAME} (TCP port 9000)",
+            self._on_connect_clicked)
+        self.reset_view_btn = _chip(
+            "RESET VIEW", "Reset camera to default position",
+            self._on_reset_view)
+        self.build_btn = _chip(
+            "BUILD",
+            "Light the whole rig with a synthetic look (dimmer up, "
+            "shutter open, pan/tilt centred) to check orientation and "
+            "beam direction. Live DMX is ignored while on.")
+        # A mode toggle, not an action: checkable, wired via toggled so
+        # setChecked() from code follows the same path as a click.
+        self.build_btn.setCheckable(True)
+        self.build_btn.toggled.connect(self._on_build_toggled)
+        self.help_btn = _chip(
+            "HELP", "How to feed DMX into the visualizer",
+            self._on_help_clicked)
+
+        row.addStretch(1)
+        return header
+
+    def _mono_status_label(self, text: str = "") -> QLabel:
+        from gui.typography import mono_font
+        label = QLabel(text)
+        label.setFont(mono_font(8, tracking_em=0.08))
+        return label
+
+    def _separator(self) -> QLabel:
+        label = self._mono_status_label("·")   # the brand separator
+        label.setStyleSheet(f"color: {self._tokens['border']};")
+        return label
 
     def _init_statusbar(self):
-        """Initialize the status bar with connection indicators."""
+        """Initialize the status bar with connection indicators - mono
+        caps, token-driven state colors, the brand separator."""
         self.statusbar = QStatusBar()
+        self.statusbar.setSizeGripEnabled(False)
         self.setStatusBar(self.statusbar)
 
         # TCP connection status
-        self.tcp_status_label = QLabel()
+        self.tcp_status_label = self._mono_status_label()
         self._update_tcp_indicator(False)
         self.statusbar.addWidget(self.tcp_status_label)
 
-        # Separator
-        separator1 = QLabel(" | ")
-        separator1.setStyleSheet("color: #666;")
-        self.statusbar.addWidget(separator1)
+        self.statusbar.addWidget(self._separator())
 
         # ArtNet status
-        self.artnet_status_label = QLabel()
+        self.artnet_status_label = self._mono_status_label()
         self._update_artnet_indicator(False)
-        self.statusbar.addWidget(artnet_label := QLabel("ArtNet: "))
         self.statusbar.addWidget(self.artnet_status_label)
 
-        # Separator
-        separator2 = QLabel(" | ")
-        separator2.setStyleSheet("color: #666;")
-        self.statusbar.addWidget(separator2)
+        self.statusbar.addWidget(self._separator())
 
         # Stage info
-        self.stage_info_label = QLabel()
+        self.stage_info_label = self._mono_status_label()
         self._update_stage_info()
         self.statusbar.addWidget(self.stage_info_label)
 
         # FPS counter (right side)
-        self.fps_label = QLabel("FPS: --")
-        self.fps_label.setStyleSheet("color: #888;")
+        self.fps_label = self._mono_status_label("FPS --")
+        self.fps_label.setStyleSheet(
+            f"color: {self._tokens['text_secondary']};")
         self.statusbar.addPermanentWidget(self.fps_label)
 
-        # Separator
-        separator3 = QLabel(" | ")
-        separator3.setStyleSheet("color: #666;")
-        self.statusbar.addPermanentWidget(separator3)
+        self.statusbar.addPermanentWidget(self._separator())
 
         # Fixture count (right side)
-        self.fixture_count_label = QLabel("Fixtures: 0")
+        self.fixture_count_label = self._mono_status_label("FIXTURES 0")
         self.statusbar.addPermanentWidget(self.fixture_count_label)
-
-    def _init_toolbar(self):
-        """Initialize the toolbar."""
-        toolbar = QToolBar("Main Toolbar")
-        toolbar.setMovable(False)
-        self.addToolBar(toolbar)
-
-        # Connect button
-        self.connect_action = QAction("Connect", self)
-        self.connect_action.setToolTip("Connect to Show Creator (TCP port 9000)")
-        self.connect_action.triggered.connect(self._on_connect_clicked)
-        toolbar.addAction(self.connect_action)
-
-        toolbar.addSeparator()
-
-        # Reset view button
-        self.reset_view_action = QAction("Reset View", self)
-        self.reset_view_action.setToolTip("Reset camera to default position")
-        self.reset_view_action.triggered.connect(self._on_reset_view)
-        toolbar.addAction(self.reset_view_action)
-
-        toolbar.addSeparator()
-
-        # Help button
-        self.help_action = QAction("Help", self)
-        self.help_action.setToolTip("How to connect QLC+ to the Visualizer")
-        self.help_action.triggered.connect(self._on_help_clicked)
-        toolbar.addAction(self.help_action)
 
     def _update_tcp_indicator(self, connected: bool):
         """Update TCP connection indicator."""
         self.tcp_connected = connected
         if connected:
-            self.tcp_status_label.setText("TCP: Connected")
-            self.tcp_status_label.setStyleSheet("color: #4CAF50; font-weight: bold;")
-            self.connect_action.setText("Disconnect")
+            self.tcp_status_label.setText("TCP CONNECTED")
+            self.tcp_status_label.setStyleSheet(
+                f"color: {self._tokens['success']}; font-weight: bold;")
+            self.connect_btn.setText("DISCONNECT")
         else:
-            self.tcp_status_label.setText("TCP: Disconnected")
-            self.tcp_status_label.setStyleSheet("color: #f44336;")
-            self.connect_action.setText("Connect")
+            self.tcp_status_label.setText("TCP OFFLINE")
+            self.tcp_status_label.setStyleSheet(
+                f"color: {self._tokens['destructive']};")
+            self.connect_btn.setText("CONNECT")
 
     def _update_artnet_indicator(self, receiving: bool):
         """Update ArtNet receiving indicator."""
         self.artnet_receiving = receiving
         if receiving:
-            self.artnet_status_label.setText("Receiving")
-            self.artnet_status_label.setStyleSheet("color: #4CAF50; font-weight: bold;")
+            self.artnet_status_label.setText("ARTNET RECEIVING")
+            self.artnet_status_label.setStyleSheet(
+                f"color: {self._tokens['success']}; font-weight: bold;")
         else:
-            self.artnet_status_label.setText("No Data")
-            self.artnet_status_label.setStyleSheet("color: #666;")
+            self.artnet_status_label.setText("ARTNET NO DATA")
+            self.artnet_status_label.setStyleSheet(
+                f"color: {self._tokens['text_disabled']};")
 
     def _update_stage_info(self):
         """Update stage dimensions display."""
-        self.stage_info_label.setText(f"Stage: {self.stage_width:.1f}m x {self.stage_height:.1f}m")
+        self.stage_info_label.setText(
+            f"STAGE {self.stage_width:.1f} x {self.stage_height:.1f} m")
 
     def _update_fixture_count(self):
         """Update fixture count display."""
-        self.fixture_count_label.setText(f"Fixtures: {len(self.fixtures)}")
+        self.fixture_count_label.setText(f"FIXTURES {len(self.fixtures)}")
 
     def _update_status(self):
         """Periodic status update (called by timer)."""
         # Update FPS display
         if hasattr(self, 'render_engine') and self.render_engine:
             fps = self.render_engine.get_fps()
-            self.fps_label.setText(f"FPS: {fps:.0f}")
+            self.fps_label.setText(f"FPS {fps:.0f}")
 
     def _on_connect_clicked(self):
         """Handle connect/disconnect button click."""
         if self.tcp_connected:
-            print("Disconnecting from Show Creator...")
+            print(f"Disconnecting from {APP_NAME}...")
             self.tcp_client.disconnect()
         else:
-            print(f"Connecting to Show Creator at {self.tcp_client.host}:{self.tcp_client.port}...")
+            print(f"Connecting to {APP_NAME} at "
+                  f"{self.tcp_client.host}:{self.tcp_client.port}...")
             self.tcp_client.connect()
 
     def _on_reset_view(self):
@@ -275,20 +349,48 @@ class VisualizerWindow(QMainWindow):
             self.render_engine.reset_camera()
             print("Camera reset to default position")
 
+    def _on_build_toggled(self, checked: bool):
+        """BUILD chip: synthesise a full-on rig look, or return to live.
+
+        Off pushes zeroed buffers for the universes the look filled, so
+        the view goes back to reality (dark until DMX arrives) instead
+        of freezing the synthetic frame."""
+        self.build_mode = checked
+        if checked:
+            self._push_build_look()
+            print("BUILD look on (live DMX ignored)")
+        else:
+            engine = getattr(self, 'render_engine', None)
+            if engine:
+                for universe in build_mode_buffers(self.fixtures):
+                    engine.update_dmx(universe, bytes(512))
+            print("BUILD look off (live DMX)")
+
+    def _push_build_look(self):
+        """Push the synthetic build-look buffers for the current rig."""
+        engine = getattr(self, 'render_engine', None)
+        if not engine:
+            return
+        for universe, buffer in build_mode_buffers(self.fixtures).items():
+            engine.update_dmx(universe, buffer)
+
     def _on_help_clicked(self):
-        """Show help dialog for connecting QLC+ to the Visualizer."""
+        """Show help dialog for feeding DMX into the visualizer."""
         QMessageBox.information(
             self,
-            "Connecting QLC+ to the Visualizer",
-            "To send DMX data from QLC+ to this Visualizer:\n\n"
-            "1. Open QLC+ and go to the Input/Output settings\n"
+            "Feeding the visualizer",
+            f"From {APP_NAME}: use the topbar's VISUALIZER button - it\n"
+            "starts the TCP feed (rig + stage data on port 9000) and\n"
+            "this window connects on CONNECT. DMX arrives via ArtNet\n"
+            "whenever OUTPUT is enabled there.\n\n"
+            "From QLC+ (or any ArtNet source):\n"
+            "1. Open the Input/Output settings\n"
             "2. Select an available universe\n"
             "3. Enable ArtNet output for that universe\n"
             "4. Set the output address to 255.255.255.255\n"
-            "5. The Visualizer will automatically receive DMX data\n"
-            "   on port 6454 (standard ArtNet port)\n\n"
-            "The ArtNet status in the bottom bar will show\n"
-            "\"Receiving\" once data is coming through."
+            "5. DMX is received on port 6454 (standard ArtNet)\n\n"
+            "The bottom bar reads ARTNET RECEIVING once data\n"
+            "is coming through."
         )
 
     # --- Configuration Handling (will be called by TCP client in Phase V2) ---
@@ -327,6 +429,11 @@ class VisualizerWindow(QMainWindow):
         if hasattr(self, 'render_engine') and self.render_engine:
             self.render_engine.update_fixtures(fixtures_data)
 
+        # A rig update while the BUILD look is on refreshes the look so
+        # newly patched fixtures light immediately.
+        if self.build_mode:
+            self._push_build_look()
+
         print(f"Loaded {len(fixtures_data)} fixtures")
 
     def set_groups(self, groups_data: list):
@@ -349,6 +456,8 @@ class VisualizerWindow(QMainWindow):
             universe: DMX universe number
             channels: 512 bytes of DMX channel data
         """
+        if self.build_mode:
+            return  # BUILD look owns the frame; live DMX is ignored
         # Update render engine with DMX data
         if hasattr(self, 'render_engine') and self.render_engine:
             self.render_engine.update_dmx(universe, channels)
@@ -377,23 +486,32 @@ class VisualizerWindow(QMainWindow):
 def main():
     """Entry point for the Visualizer application."""
     try:
-        # Verify shared module imports work
-        print("QLC+ Visualizer starting...")
-        print(f"  - Shared modules imported successfully")
-        print(f"  - Configuration model: {Configuration.__name__}")
-        print(f"  - Fixture model: {Fixture.__name__}")
-        print(f"  - fixture_utils: determine_fixture_type available")
+        print(f"{APP_NAME} Visualizer starting...")
 
         # Create application
         app = QApplication(sys.argv)
-        app.setApplicationName("QLC+ Visualizer")
+        app.setApplicationName(f"{APP_NAME} Visualizer")
+
+        # Brand boot, same order as the main app (main.py): fonts
+        # before any widget so the stylesheet families resolve on
+        # first paint, then the icon, then the persisted theme.
+        from gui.fonts import register_brand_fonts
+        register_brand_fonts()
+
+        icon_path = app_icon_path()
+        if os.path.exists(icon_path):
+            app.setWindowIcon(QIcon(icon_path))
+
+        from gui.theme_manager import ThemeManager
+        theme_manager = ThemeManager()
+        theme_manager.apply(app, theme_manager.current() or "dark")
 
         # Create and show main window
         window = VisualizerWindow()
         window.show()
 
         print("Visualizer window opened")
-        print("  - TCP client ready (click Connect to link with Show Creator)")
+        print(f"  - TCP client ready (CONNECT links with {APP_NAME})")
         print("  - ArtNet listener active on port 6454")
         print("  - 3D renderer active (use mouse to orbit/pan/zoom)")
         print("  - Camera controls: Left=Orbit, Right=Pan, Scroll=Zoom, Home=Reset")

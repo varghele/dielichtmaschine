@@ -2,12 +2,13 @@
 # Light lane widget for displaying and editing light effect lanes
 # Adapted from midimaker_and_show_structure/ui/lane_widget.py
 
-from PyQt6.QtWidgets import (QWidget, QHBoxLayout, QVBoxLayout, QLabel,
+from PyQt6.QtWidgets import (QWidget, QHBoxLayout, QVBoxLayout,
                              QPushButton, QCheckBox, QLineEdit, QFrame,
-                             QScrollArea, QComboBox, QMessageBox)
+                             QScrollArea, QMessageBox)
 from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtGui import QUndoStack
-from .timeline_widget import TimelineWidget
+from .timeline_widget import (TimelineWidget, HEADER_COLUMN_WIDTH,
+                              sublane_band_geometry)
 from .light_block_widget import LightBlockWidget
 from .undo_commands import InsertRiffCommand, DeleteBlockCommand, AddBlockCommand
 from timeline.light_lane import LightLane
@@ -70,6 +71,7 @@ class LightLaneWidget(QFrame):
         # this layout down and hands both children over.
         self.controls_widget = self.create_controls_widget()
         main_layout.addWidget(self.controls_widget)
+        self._apply_group_border()
 
         # Timeline section (right side) - scrollable
         self.timeline_scroll = QScrollArea()
@@ -83,6 +85,12 @@ class LightLaneWidget(QFrame):
         timeline_height = self.num_sublanes * self.sublane_height
         self.timeline_widget.setMinimumHeight(timeline_height)
         self.timeline_widget.setMaximumHeight(timeline_height)  # Prevent vertical growth
+
+        # Route the Settings-menu sub-lane-label toggle to the header
+        # column: ShowsTab.refresh_sublane_labels_setting() calls
+        # timeline_widget.update(), which invokes this hook.
+        self.timeline_widget.sublane_labels_setting_hook = \
+            self._apply_sublane_labels_setting
 
         self.timeline_widget.zoom_changed.connect(self.zoom_changed.emit)
         self.timeline_widget.zoom_changed.connect(self.on_timeline_zoom_changed)
@@ -121,33 +129,56 @@ class LightLaneWidget(QFrame):
         return self.controls_widget, self.timeline_widget
 
     def create_controls_widget(self):
-        """Create the lane controls section."""
+        """Create the lane header column (timeline v3, screen 06b).
+
+        260 px wide with a 3px group-color left edge, carrying:
+        row 1 - lane name (condensed display voice) + "N FIX" count +
+        remove; row 2 - the chip row M / S / TARGETS / + BLOCK (accent);
+        plus DIM / COL / MOV / SPC micro-labels for the lane's active
+        sub-rows, each row-aligned with its sublane band (right edge of
+        the column, shared band geometry).
+        """
         widget = QWidget()
         # Object-name + WA_StyledBackground so the theme's
         # `QWidget#LightLaneHeader` rule paints the bg after the
         # controls widget is detached and re-parented into TimelineGrid.
         widget.setObjectName("LightLaneHeader")
         widget.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
-        widget.setFixedWidth(320)
+        widget.setFixedWidth(HEADER_COLUMN_WIDTH)
+
+        # Deferred import: the gui package imports timeline_ui at module
+        # load, so a top-level import here would be circular.
+        from gui.typography import display_font, mono_font, MicroLabel
+
         layout = QVBoxLayout(widget)
-        layout.setSpacing(4)
+        layout.setContentsMargins(12, 4, 8, 4)
+        layout.setSpacing(3)
 
-        # Row 1: Name and remove button — visuals from active theme.
+        # Row 1: lane name + fixture count + remove button. The name reads
+        # in the Barlow Condensed display voice; the "N FIX" count is a
+        # right-aligned mono micro-label.
         name_layout = QHBoxLayout()
-
-        name_label = QLabel("Name:")
-        name_label.setStyleSheet("font-weight: bold; font-size: 12px;")
-        name_layout.addWidget(name_label)
+        name_layout.setSpacing(6)
 
         self.name_edit = QLineEdit(self.lane.name)
+        name_font = display_font(13)
+        self.name_edit.setFont(name_font)
+        # Height from the font's own metrics + the theme's QLineEdit
+        # padding (4px top/bottom) + 1px borders: a hardcoded 24px
+        # clipped descenders at 13pt condensed.
+        from PyQt6.QtGui import QFontMetrics
+        self.name_edit.setFixedHeight(QFontMetrics(name_font).height() + 10)
         self.name_edit.textChanged.connect(self.on_name_changed)
-        name_layout.addWidget(self.name_edit)
+        name_layout.addWidget(self.name_edit, 1)
+
+        self.fix_count_label = MicroLabel(self._fixture_count_text())
+        name_layout.addWidget(self.fix_count_label)
 
         self.remove_button = QPushButton("×")
-        self.remove_button.setFixedSize(25, 25)
-        # density=compact gives tight padding so "×" fits in 25×25; role
+        self.remove_button.setFixedSize(20, 20)
+        # density=compact gives tight padding so "×" fits in 20x20; role
         # still drives the destructive color. Two independent property axes.
-        # ("size" would collide with Qt's QSize Q_PROPERTY — don't use it.)
+        # ("size" would collide with Qt's QSize Q_PROPERTY - don't use it.)
         self.remove_button.setProperty("density", "compact")
         self.remove_button.setProperty("role", "destructive")
         self.remove_button.clicked.connect(lambda: self.remove_requested.emit(self))
@@ -155,78 +186,119 @@ class LightLaneWidget(QFrame):
 
         layout.addLayout(name_layout)
 
-        # Row 2: Fixture targets
-        targets_layout = QHBoxLayout()
+        # Row 1.5: the targeted fixture group(s), as a mono subtitle
+        # under the lane name - deliberately prominent (10pt, close to
+        # the name's weight in the hierarchy). Hidden when the lane has
+        # no targets; elided to the column when the list is long.
+        self.group_label = MicroLabel("", point_size=10, tracking_em=0.08)
+        self.group_label.setObjectName("LaneGroupLabel")
+        layout.addWidget(self.group_label)
+        self.group_label.hide()
 
-        targets_label = QLabel("Targets:")
-        targets_label.setStyleSheet("font-weight: bold; font-size: 12px;")
-        targets_layout.addWidget(targets_label)
+        # Row 2: chip row M · S · TARGETS · + BLOCK. All four share the
+        # lane-chip role: mono family + compact padding pinned in the
+        # theme (setFont alone loses to the app-wide QWidget font rule),
+        # accent outline when checked.
+        chips_layout = QHBoxLayout()
+        chips_layout.setSpacing(4)
 
-        # Read-only display label — give it an objectName so the theme can
-        # style it like a disabled lineedit if we want to refine later.
-        self.targets_display = QLabel()
-        self.targets_display.setObjectName("LightLaneTargets")
-        self._update_targets_display()
-        targets_layout.addWidget(self.targets_display, 1)
-
-        self.edit_targets_btn = QPushButton("...")
-        self.edit_targets_btn.setFixedWidth(30)
-        self.edit_targets_btn.clicked.connect(self.open_target_selection)
-        targets_layout.addWidget(self.edit_targets_btn)
-
-        layout.addLayout(targets_layout)
-
-        # Row 3: Mute, Solo, Add Block
-        controls_layout = QHBoxLayout()
-
-        # Mute button — base look from theme; :checked goes red.
-        # density=compact gives tight padding so "M" fits 30×25.
         self.mute_button = QPushButton("M")
-        self.mute_button.setFixedSize(30, 25)
+        self.mute_button.setFixedSize(30, 20)
         self.mute_button.setCheckable(True)
         self.mute_button.setChecked(self.lane.muted)
         self.mute_button.setProperty("density", "compact")
-        self.mute_button.setStyleSheet(
-            "QPushButton:checked { background-color: #d32f2f; color: white; "
-            "border-color: #b71c1c; }"
-        )
+        self.mute_button.setProperty("role", "lane-chip")
         self.mute_button.toggled.connect(self.on_mute_toggled)
-        controls_layout.addWidget(self.mute_button)
+        chips_layout.addWidget(self.mute_button)
 
-        # Solo button — base look from theme; :checked goes amber.
         self.solo_button = QPushButton("S")
-        self.solo_button.setFixedSize(30, 25)
+        self.solo_button.setFixedSize(30, 20)
         self.solo_button.setCheckable(True)
         self.solo_button.setChecked(self.lane.solo)
         self.solo_button.setProperty("density", "compact")
-        self.solo_button.setStyleSheet(
-            "QPushButton:checked { background-color: #FFC107; color: #222; "
-            "border-color: #FFA000; }"
-        )
+        self.solo_button.setProperty("role", "lane-chip")
         self.solo_button.toggled.connect(self.on_solo_toggled)
-        controls_layout.addWidget(self.solo_button)
+        chips_layout.addWidget(self.solo_button)
 
-        controls_layout.addSpacing(10)
+        # TARGETS dropdown chip: the entry point to the existing target
+        # selection dialog (the old "Targets ..." row). Sizes to content;
+        # tooltip carries the resolved target list. The mock's ▾ triangle
+        # is not in the brand fonts (tofu on the offscreen platform), so
+        # the drop indicator is U+2193, which IBM Plex Mono does carry.
+        self.targets_chip = QPushButton("TARGETS ↓")
+        self.targets_chip.setFixedHeight(20)
+        self.targets_chip.setFont(mono_font(8, tracking_em=0.08))
+        self.targets_chip.setProperty("density", "compact")
+        self.targets_chip.setProperty("role", "lane-chip")
+        self.targets_chip.clicked.connect(self.open_target_selection)
+        chips_layout.addWidget(self.targets_chip)
+        # Legacy alias: e2e drives the targets entry point by this name.
+        self.edit_targets_btn = self.targets_chip
 
-        # Snap checkbox
-        self.snap_checkbox = QCheckBox("Snap")
-        self.snap_checkbox.setChecked(True)
-        self.snap_checkbox.setStyleSheet("font-size: 12px;")
-        self.snap_checkbox.toggled.connect(self.on_snap_toggled)
-        controls_layout.addWidget(self.snap_checkbox)
-
-        controls_layout.addStretch()
-
-        # Add Block button
-        self.add_block_button = QPushButton("Add Block")
-        self.add_block_button.setMinimumHeight(25)
-        self.add_block_button.setProperty("role", "success")
+        # + BLOCK chip: the existing add-block action. As the lane's
+        # primary action it carries the accent chip role (accent border
+        # + accent ink, same metrics as lane-chip).
+        self.add_block_button = QPushButton("+ BLOCK")
+        self.add_block_button.setFixedHeight(20)
+        self.add_block_button.setFont(mono_font(8, tracking_em=0.08))
+        self.add_block_button.setProperty("density", "compact")
+        self.add_block_button.setProperty("role", "lane-chip-accent")
         self.add_block_button.clicked.connect(self.add_light_block)
-        controls_layout.addWidget(self.add_block_button)
+        chips_layout.addWidget(self.add_block_button)
 
-        layout.addLayout(controls_layout)
+        chips_layout.addStretch()
+        layout.addLayout(chips_layout)
+
+        # Per-lane snap state keeps working (TimelineGrid syncs it from
+        # the toolbar SNAP chip), but the checkbox no longer shows in the
+        # 260px header - the global chip is the single visible control.
+        self.snap_checkbox = QCheckBox("Snap", widget)
+        self.snap_checkbox.setChecked(True)
+        self.snap_checkbox.toggled.connect(self.on_snap_toggled)
+        self.snap_checkbox.hide()
+
+        # Sub-lane micro-labels: DIM / COL / MOV / SPC, one per active
+        # sublane, each vertically centered on its own band (shared
+        # geometry from sublane_band_geometry, below the block strip
+        # zone). The container overlays the whole header with absolute
+        # geometry (NOT in the vbox layout) and is mouse-transparent so
+        # the chips underneath stay clickable;
+        # refresh_sublane_labels() places every label.
+        self.sublane_labels_widget = QWidget(widget)
+        self.sublane_labels_widget.setObjectName("LaneSublaneLabels")
+        self.sublane_labels_widget.setAttribute(
+            Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
+        layout.addStretch()
+
+        self.sublane_labels = []
+        self.refresh_sublane_labels()
+        self._update_targets_display()
 
         return widget
+
+    def _fixture_count(self) -> int:
+        """Number of distinct fixtures this lane targets.
+
+        Whole-group targets count every fixture in the group; indexed
+        targets (``Group:2``) count that one fixture. Deduped by fixture
+        IDENTITY, not per group: a multi-group fixture reached through
+        two of its groups' targets (or two indexed targets) still counts
+        once, and an out-of-range index counts nothing - the count
+        matches what resolve_targets_unique addresses at export/playback."""
+        if not self.config or not self.lane.fixture_targets:
+            return 0
+        from utils.target_resolver import resolve_targets_unique
+        return len(resolve_targets_unique(self.lane.fixture_targets,
+                                          self.config))
+
+    def _fixture_count_text(self) -> str:
+        """`N FIX` label text for the lane header."""
+        return f"{self._fixture_count()} FIX"
+
+    def _refresh_fixture_count(self):
+        """Update the N FIX micro-label after targets/groups change."""
+        if hasattr(self, "fix_count_label") and self.fix_count_label is not None:
+            self.fix_count_label.setText(self._fixture_count_text())
 
     def _detect_group_capabilities(self):
         """Detect capabilities from all fixture targets."""
@@ -302,6 +374,87 @@ class LightLaneWidget(QFrame):
                 return 0
 
         return 0  # Fallback
+
+    def sublane_label_rows(self):
+        """Ordered (sublane_type, text) pairs for the active sublanes,
+        top to bottom - the same row order get_sublane_index assigns."""
+        rows = []
+        # Dimmer row shows when the group has dimmer OR colour (dimmer
+        # drives RGB intensity for no-dimmer fixtures) - mirrors
+        # _count_sublanes / get_sublane_index exactly.
+        if self.capabilities.has_dimmer or self.capabilities.has_colour:
+            rows.append(("dimmer", "DIM"))
+        if self.capabilities.has_colour:
+            rows.append(("colour", "COL"))
+        if self.capabilities.has_movement:
+            rows.append(("movement", "MOV"))
+        if self.capabilities.has_special:
+            rows.append(("special", "SPC"))
+        return rows
+
+    # Height of one DIM/COL/MOV/SPC micro-label row in the header.
+    SUBLANE_LABEL_HEIGHT = 16
+
+    def refresh_sublane_labels(self):
+        """Rebuild the DIM / COL / MOV / SPC micro-labels from the
+        current capabilities (timeline v3 lane header). Called at
+        construction and whenever capabilities are re-detected
+        (on_targets_changed / update_fixture_groups) - the same path
+        that tracks lane height / sublane count changes.
+
+        Each label sits in the 260px header column vertically centered
+        on its own sublane band (the shared sublane_band_geometry the
+        canvas stripes and block sub-rows use, i.e. below the block
+        strip zone), right-aligned at the canvas edge so it reads next
+        to its band. One label per active sublane, in stripe row order
+        (get_sublane_index). The ``timeline/show_sublane_labels`` deep
+        setting (default on) shows or hides the whole column."""
+        container = getattr(self, "sublane_labels_widget", None)
+        if container is None:
+            return
+        # Deferred import: the gui package imports timeline_ui at module
+        # load, so a top-level import here would be circular.
+        from gui.typography import MicroLabel
+
+        for label in getattr(self, "sublane_labels", None) or []:
+            label.deleteLater()
+        self.sublane_labels = []
+
+        # Same geometry the lane's canvas and block widgets use: the
+        # header rows in TimelineGrid are pinned to the stripe height,
+        # so header-local y equals canvas-local y.
+        strip, bands = sublane_band_geometry(self.num_sublanes,
+                                             self.sublane_height)
+        total_height = int(strip + sum(h for _y, h in bands))
+        container.setGeometry(0, 0, HEADER_COLUMN_WIDTH, total_height)
+
+        label_h = self.SUBLANE_LABEL_HEIGHT
+        for i, (sublane_type, text) in enumerate(self.sublane_label_rows()):
+            y, h = bands[min(i, len(bands) - 1)]
+            label = MicroLabel(text, parent=container)
+            label.setProperty("sublane_type", sublane_type)
+            label.setAlignment(Qt.AlignmentFlag.AlignRight
+                               | Qt.AlignmentFlag.AlignVCenter)
+            label.setGeometry(0, round(y + h / 2 - label_h / 2),
+                              HEADER_COLUMN_WIDTH - 8, label_h)
+            label.show()
+            self.sublane_labels.append(label)
+        container.raise_()
+        self._apply_sublane_labels_setting()
+
+    def _apply_sublane_labels_setting(self):
+        """Show/hide the header sub-lane label column per the
+        ``timeline/show_sublane_labels`` deep setting (default on). Also
+        registered as the timeline widget's sublane_labels_setting_hook,
+        so the Settings-menu toggle path (which repaints each lane's
+        timeline widget) re-applies it without a shows-tab change."""
+        widget = getattr(self, "sublane_labels_widget", None)
+        if widget is None:
+            return
+        from utils.app_settings import app_settings
+        visible = app_settings().value(
+            "timeline/show_sublane_labels", True, type=bool)
+        widget.setVisible(bool(visible))
 
     def set_song_structure(self, song_structure):
         """Set song structure for this lane's timeline."""
@@ -395,6 +548,14 @@ class LightLaneWidget(QFrame):
         )
         self.create_light_block_widget(block)
 
+        # Undo: the block is already in the lane with its widget built,
+        # so AddBlockCommand's push-time redo is a guarded no-op; undo
+        # removes it, redo re-adds it.
+        undo_stack = self._get_undo_stack()
+        if undo_stack is not None:
+            undo_stack.push(AddBlockCommand(self, block, "Add Block"))
+        self.block_edited.emit()
+
     def remove_light_block_widget(self, block_widget, use_undo=True):
         """Remove a light block widget and its data.
 
@@ -434,29 +595,89 @@ class LightLaneWidget(QFrame):
     def on_name_changed(self, text):
         self.lane.name = text
 
+    def group_color(self):
+        """Public accessor: the lane's group color as '#rrggbb' or None.
+        Used by the header border and by LightBlockWidget's envelope
+        frame/tint (North Star block anatomy)."""
+        return self._group_border_color()
+
+    def _group_border_color(self):
+        """The lane's group color: first target's group, resolved
+        against the config. None when unresolvable."""
+        if not self.config or not self.lane.fixture_targets:
+            return None
+        from utils.target_resolver import parse_target
+        group_name, _ = parse_target(self.lane.fixture_targets[0])
+        group = self.config.groups.get(group_name) if self.config.groups else None
+        return getattr(group, "color", None) or None
+
+    def _apply_group_border(self):
+        """3px group-color left border on the lane header (North Star
+        lane anatomy). Group colors are data colors, so a widget-local
+        rule is the sanctioned override of the theme's header rule;
+        only border-left is set, background stays with the theme."""
+        if not hasattr(self, "controls_widget") or self.controls_widget is None:
+            return
+        color = self._group_border_color() or "transparent"
+        self.controls_widget.setStyleSheet(
+            f"QWidget#LightLaneHeader {{ border-left: 3px solid {color}; }}"
+        )
+
+    def _target_group_names(self) -> list:
+        """The distinct fixture-group names this lane targets, in
+        target order (indexed targets like ``Group:2`` collapse to
+        their group)."""
+        from utils.target_resolver import parse_target
+        names = []
+        for target in self.lane.fixture_targets or []:
+            group_name, _index = parse_target(target)
+            if group_name and group_name not in names:
+                names.append(group_name)
+        return names
+
+    def _refresh_group_label(self):
+        """Row 1.5: the targeted group name(s) as a quiet subtitle,
+        elided to the header column, hidden when the lane is untargeted."""
+        label = getattr(self, "group_label", None)
+        if label is None:
+            return
+        names = self._target_group_names()
+        if not names:
+            label.hide()
+            label.setText("")
+            return
+        text = " · ".join(names)
+        from PyQt6.QtGui import QFontMetrics
+        metrics = QFontMetrics(label.font())
+        available = HEADER_COLUMN_WIDTH - 40  # margins + slack
+        label.setText(metrics.elidedText(
+            text, Qt.TextElideMode.ElideRight, available))
+        label.setToolTip(text)
+        label.show()
+
     def _update_targets_display(self):
-        """Update the targets display label."""
+        """Refresh everything derived from the lane's targets: group
+        border, fixture count, the group-name subtitle, and the TARGETS
+        chip tooltip (the chip text stays constant; the resolved target
+        list rides in the tooltip)."""
+        self._apply_group_border()
+        self._refresh_fixture_count()
+        self._refresh_group_label()
+        chip = getattr(self, "targets_chip", None)
+        if chip is None:
+            return
         targets = self.lane.fixture_targets
         if not targets:
-            self.targets_display.setText("(none)")
-            self.targets_display.setToolTip("")
+            chip.setToolTip("No targets")
             return
 
         from utils.target_resolver import get_target_display_name
 
-        if len(targets) == 1:
-            display_text = get_target_display_name(targets[0], self.config) if self.config else targets[0]
-            self.targets_display.setText(display_text)
-        else:
-            first = get_target_display_name(targets[0], self.config) if self.config else targets[0]
-            self.targets_display.setText(f"{first} (+{len(targets) - 1} more)")
-
-        # Full list in tooltip
         if self.config:
             tooltip_lines = [get_target_display_name(t, self.config) for t in targets]
-            self.targets_display.setToolTip("\n".join(tooltip_lines))
+            chip.setToolTip("\n".join(tooltip_lines))
         else:
-            self.targets_display.setToolTip("\n".join(targets))
+            chip.setToolTip("\n".join(targets))
 
     def open_target_selection(self):
         """Open the target selection dialog."""
@@ -489,6 +710,9 @@ class LightLaneWidget(QFrame):
         # Update timeline widget with new sublane configuration
         self.timeline_widget.num_sublanes = self.num_sublanes
         self.timeline_widget.capabilities = self.capabilities
+
+        # Header micro-labels track the active sublanes (slice T1)
+        self.refresh_sublane_labels()
 
         # Only rebuild layout if sublane count changed
         if self.num_sublanes != old_num_sublanes:
@@ -546,11 +770,22 @@ class LightLaneWidget(QFrame):
                 # Get all lane widgets from shows_tab
                 lane_widgets = shows_tab.lane_widgets
                 results = paste_multiple_effects(target_time, lane_widgets)
+                undo_stack = self._get_undo_stack()
+                if undo_stack is not None and results:
+                    # One macro so a single Ctrl+Z removes the whole paste.
+                    undo_stack.beginMacro(
+                        f"Paste {len(results)} Effect"
+                        f"{'s' if len(results) != 1 else ''}")
                 for lane_widget, new_block in results:
                     # Add to lane data
                     lane_widget.lane.light_blocks.append(new_block)
                     # Create widget
                     lane_widget.create_light_block_widget(new_block)
+                    if undo_stack is not None:
+                        undo_stack.push(AddBlockCommand(
+                            lane_widget, new_block, "Paste Effect"))
+                if undo_stack is not None and results:
+                    undo_stack.endMacro()
                 if results:
                     shows_tab.save_to_config()
                 return
@@ -565,6 +800,12 @@ class LightLaneWidget(QFrame):
 
         # Create widget for the new block
         self.create_light_block_widget(new_block)
+
+        # Already applied, so the push-time redo is a guarded no-op.
+        undo_stack = self._get_undo_stack()
+        if undo_stack is not None:
+            undo_stack.push(AddBlockCommand(self, new_block, "Paste Effect"))
+        self.block_edited.emit()
 
     def _get_shows_tab(self):
         """Get the ShowsTab parent widget if available."""
@@ -592,6 +833,9 @@ class LightLaneWidget(QFrame):
         # Refresh local capabilities (fixtures may have been added/removed from groups)
         self.capabilities = self._detect_group_capabilities()
         self.timeline_widget.capabilities = self.capabilities
+
+        # Header micro-labels track the active sublanes (slice T1)
+        self.refresh_sublane_labels()
 
     def set_riff_library(self, riff_library):
         """Set the riff library for this lane.

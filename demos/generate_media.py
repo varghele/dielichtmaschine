@@ -62,15 +62,15 @@ def resolve_config_path(target: str) -> str:
 
 def pick_show(config: Configuration, name: str = None):
     """Pick the show to render: explicit --show name, else 'Demo', else the first."""
-    if not config.shows:
+    if not config.songs:
         raise SystemExit("error: config has no shows to render")
     if name:
-        if name not in config.shows:
-            raise SystemExit(f"error: show '{name}' not in config. Have: {', '.join(config.shows)}")
-        return config.shows[name]
-    if "Demo" in config.shows:
-        return config.shows["Demo"]
-    return next(iter(config.shows.values()))
+        if name not in config.songs:
+            raise SystemExit(f"error: show '{name}' not in config. Have: {', '.join(config.songs)}")
+        return config.songs[name]
+    if "Demo" in config.songs:
+        return config.songs["Demo"]
+    return next(iter(config.songs.values()))
 
 
 def default_still_times(show) -> list[float]:

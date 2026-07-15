@@ -9,7 +9,7 @@ from PyQt6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QLabel,
 from PyQt6.QtCore import Qt, QThread, pyqtSignal
 from PyQt6.QtGui import QFont
 
-from config.models import Configuration, Show
+from config.models import Configuration, Song
 from utils.render.camera_presets import CAMERA_PRESETS
 
 
@@ -89,8 +89,8 @@ class RenderDialog(QDialog):
         scroll_layout.setSpacing(4)
 
         self._show_checkboxes = {}
-        for show_name in sorted(self.config.shows.keys()):
-            show = self.config.shows[show_name]
+        for show_name in sorted(self.config.songs.keys()):
+            show = self.config.songs[show_name]
             # Only include shows with timeline data and parts
             if show.parts:
                 cb = QCheckBox(show_name)
@@ -216,7 +216,7 @@ class RenderDialog(QDialog):
         # Build render queue
         self._render_queue = []
         for show_name in selected:
-            show = self.config.shows[show_name]
+            show = self.config.songs[show_name]
             output_path = os.path.join(output_dir, f"{show_name}.mp4")
             self._render_queue.append((show, output_path))
 

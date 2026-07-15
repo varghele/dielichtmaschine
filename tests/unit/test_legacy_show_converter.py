@@ -3,7 +3,7 @@
 
 import pytest
 
-from config.models import Show, ShowPart, ShowEffect
+from config.models import Song, ShowPart, ShowEffect
 from utils.legacy_show_converter import (
     convert_legacy_show, convert_show_in_place, LEGACY_EFFECT_MAP,
 )
@@ -26,7 +26,7 @@ def _show():
         ShowEffect(show_part="chorus", fixture_group="BARS", effect="",
                    speed="1", color="", intensity=180, spot=""),
     ]
-    return Show(name="t", parts=parts, effects=effects)
+    return Song(name="t", parts=parts, effects=effects)
 
 
 class TestConvertLegacyShow:

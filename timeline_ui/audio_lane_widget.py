@@ -6,7 +6,7 @@ from PyQt6.QtWidgets import (QWidget, QHBoxLayout, QVBoxLayout, QLabel,
                              QPushButton, QSlider, QFrame, QScrollArea,
                              QFileDialog, QLineEdit)
 from PyQt6.QtCore import Qt, pyqtSignal
-from .timeline_widget import TimelineWidget
+from .timeline_widget import TimelineWidget, HEADER_COLUMN_WIDTH
 
 # Try to import audio components - may not be available in all installations
 try:
@@ -62,11 +62,68 @@ class AudioTimelineWidget(TimelineWidget):
             self.waveform_widget.cleanup()
 
 
+# Row height of the compact audio row (timeline v3 stage T4, screen 06b).
+COMPACT_AUDIO_ROW_HEIGHT = 44
+
+
+class _ElidedFileLabel(QLabel):
+    """Middle-elided filename readout for the compact audio header.
+
+    Drop-in for the QLineEdit the full-size header uses: it keeps the
+    setText / setToolTip / setPlaceholderText / setReadOnly surface the
+    call sites drive (gui/tabs/shows_tab.py sets the filename and
+    tooltip on ``file_path_edit`` directly), so the attribute name and
+    its contracts survive the compact restyle. ``text()`` returns the
+    full un-elided string; only the painted text is elided.
+    """
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self._full_text = ""
+        self._placeholder = ""
+
+    def setText(self, text):  # noqa: N802 (Qt API)
+        self._full_text = text or ""
+        self._update_display()
+
+    def text(self):  # noqa: N802 (Qt API)
+        return self._full_text
+
+    def setPlaceholderText(self, text):  # noqa: N802 (QLineEdit shim)
+        self._placeholder = text or ""
+        self._update_display()
+
+    def placeholderText(self):  # noqa: N802 (QLineEdit shim)
+        return self._placeholder
+
+    def setReadOnly(self, _read_only):  # noqa: N802 (QLineEdit shim)
+        pass
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        self._update_display()
+
+    def _update_display(self):
+        shown = self._full_text or self._placeholder
+        metrics = self.fontMetrics()
+        available = max(0, self.width() - 2)
+        super().setText(metrics.elidedText(
+            shown, Qt.TextElideMode.ElideMiddle, available))
+
+
 class AudioLaneWidget(QFrame):
     """Widget for displaying and controlling the audio lane.
 
     Shows lane controls on the left (file path, load button, volume, mute)
     and a scrollable timeline with waveform on the right.
+
+    ``compact=True`` (Shows tab, timeline v3 stage T4) shrinks the row to
+    44px: the header cell carries "AUDIO" + a middle-elided filename on
+    one mono line and the M / volume / LOAD controls on a second, and the
+    playhead joins the unified accent line. Every control attribute
+    (``file_path_edit``, ``load_button``, ``mute_button``,
+    ``volume_slider``, ``volume_label``) keeps its name and behaviour.
+    ``embedded_row_height`` tells TimelineGrid the row height to pin.
     """
 
     scroll_position_changed = pyqtSignal(int)  # Emits horizontal scroll position
@@ -74,22 +131,30 @@ class AudioLaneWidget(QFrame):
     playhead_moved = pyqtSignal(float)  # Emits playhead position
     audio_file_changed = pyqtSignal(str)  # Emits new audio file path
 
-    def __init__(self, parent=None):
+    def __init__(self, parent=None, compact=False):
         """Create a new audio lane widget.
 
         Args:
             parent: Parent widget
+            compact: Timeline v3 44px row (Shows tab); default keeps the
+                full-size lane the Structure tab embeds.
         """
         super().__init__(parent)
         self.audio_file = None
         self.audio_file_path = ""
         self.audio_loader_thread = None  # Background audio loader
         self._is_loading_audio = False
+        self.compact = compact
+        self.embedded_row_height = COMPACT_AUDIO_ROW_HEIGHT if compact else None
 
         self.setFrameStyle(QFrame.Shape.Box)
         self.setLineWidth(1)
-        self.setMinimumHeight(100)
-        self.setMaximumHeight(140)
+        if compact:
+            self.setMinimumHeight(COMPACT_AUDIO_ROW_HEIGHT)
+            self.setMaximumHeight(COMPACT_AUDIO_ROW_HEIGHT)
+        else:
+            self.setMinimumHeight(100)
+            self.setMaximumHeight(140)
         # Background tint from `AudioLaneWidget` selector in the active theme.
 
         self.setup_ui()
@@ -107,6 +172,11 @@ class AudioLaneWidget(QFrame):
 
         self.timeline_scroll = QScrollArea()
         self.timeline_widget = AudioTimelineWidget()
+        if self.compact:
+            # Unified 2px accent playhead + a stripe that can shrink to
+            # the 44px row (the TimelineWidget base floor is 60).
+            self.timeline_widget.playhead_accent = True
+            self.timeline_widget.setMinimumHeight(COMPACT_AUDIO_ROW_HEIGHT)
         self.timeline_widget.zoom_changed.connect(self.zoom_changed.emit)
         self.timeline_widget.zoom_changed.connect(self.on_timeline_zoom_changed)
         self.timeline_widget.playhead_moved.connect(self.playhead_moved.emit)
@@ -141,21 +211,23 @@ class AudioLaneWidget(QFrame):
     def create_controls_widget(self):
         """Create the lane controls section. All visuals come from the
         active theme — only structural styling stays inline."""
+        if self.compact:
+            return self._create_compact_controls_widget()
         widget = QWidget()
         # Object-name + WA_StyledBackground so the theme's
         # `QWidget#AudioLaneHeader` rule paints the bg after the
         # controls widget is detached and re-parented into TimelineGrid.
         widget.setObjectName("AudioLaneHeader")
         widget.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
-        widget.setFixedWidth(320)
+        widget.setFixedWidth(HEADER_COLUMN_WIDTH)
         layout = QVBoxLayout(widget)
         layout.setSpacing(4)
         layout.setContentsMargins(8, 8, 8, 8)
 
-        # Row 1: Audio label
+        # Row 1: Audio label — Barlow Condensed display caps (North Star)
+        from gui.typography import DisplayLabel
         title_layout = QHBoxLayout()
-        title_label = QLabel("Audio Track")
-        title_label.setStyleSheet("font-weight: bold; font-size: 13px;")
+        title_label = DisplayLabel("Audio Track", point_size=13)
         title_layout.addWidget(title_label)
         title_layout.addStretch()
         layout.addLayout(title_layout)
@@ -168,12 +240,14 @@ class AudioLaneWidget(QFrame):
         self.file_path_edit.setReadOnly(True)
         file_layout.addWidget(self.file_path_edit, 1)
 
-        self.load_button = QPushButton("Load")
-        self.load_button.setFixedWidth(50)
-        # density=compact tightens padding so "Load" fits in 50 px wide;
-        # the global 6×14 padding leaves only 22 px for the text and
-        # crushes it.
+        self.load_button = QPushButton("LOAD")
+        self.load_button.setFixedWidth(56)
+        # cta-outline is the shared bordered display-caps role for text
+        # actions across the timeline (Save, Inspector, POP OUT); "LOAD"
+        # joins them. density=compact tightens padding so the caps fit in
+        # the narrow lane-header column.
         self.load_button.setProperty("density", "compact")
+        self.load_button.setProperty("role", "cta-outline")
         self.load_button.clicked.connect(self._on_load_clicked)
         file_layout.addWidget(self.load_button)
 
@@ -182,24 +256,21 @@ class AudioLaneWidget(QFrame):
         # Row 3: Volume and mute controls
         controls_layout = QHBoxLayout()
 
-        # Mute button — :checked state is data-driven; theme handles base look,
-        # the inline :checked rule colors it red when engaged.
-        # density=compact gives tight padding so "M" fits the 30×25 fixed size.
-        # (Don't use "size" as the property name — collides with Qt's
-        # built-in QSize geometry property and is silently ignored.)
+        # Mute chip - the shared output-select toggle-chip role, matching
+        # the light-lane mute/solo chips and the toolbar SNAP/SWING chips
+        # (accent outline when active, no per-chip inline stylesheet).
+        # density=compact keeps the glyph inside the 30x25 chip. (Don't use
+        # "size" as the property name - collides with Qt's QSize property.)
         self.mute_button = QPushButton("M")
         self.mute_button.setFixedSize(30, 25)
         self.mute_button.setCheckable(True)
         self.mute_button.setProperty("density", "compact")
+        self.mute_button.setProperty("role", "output-select")
         self.mute_button.toggled.connect(self._on_mute_toggled)
-        self.mute_button.setStyleSheet(
-            "QPushButton:checked { background-color: #d32f2f; color: white; "
-            "border-color: #b71c1c; }"
-        )
         controls_layout.addWidget(self.mute_button)
 
-        vol_label = QLabel("Vol:")
-        vol_label.setStyleSheet("font-size: 11px;")
+        from gui.typography import MicroLabel
+        vol_label = MicroLabel("Vol")
         controls_layout.addWidget(vol_label)
 
         self.volume_slider = QSlider(Qt.Orientation.Horizontal)
@@ -209,14 +280,85 @@ class AudioLaneWidget(QFrame):
         self.volume_slider.valueChanged.connect(self._on_volume_changed)
         controls_layout.addWidget(self.volume_slider)
 
+        from gui.typography import mono_font
         self.volume_label = QLabel("100%")
         self.volume_label.setFixedWidth(35)
-        self.volume_label.setStyleSheet("font-size: 10px;")
+        self.volume_label.setFont(mono_font(10))
         controls_layout.addWidget(self.volume_label)
 
         controls_layout.addStretch()
 
         layout.addLayout(controls_layout)
+
+        return widget
+
+    def _create_compact_controls_widget(self):
+        """The 44px header cell (timeline v3, mock 06b): "AUDIO" + the
+        middle-elided filename on one mono line, M / volume / LOAD as
+        compact chips on a second. Same attribute names and signal
+        wiring as the full-size header - only the chrome shrinks."""
+        from gui.typography import MicroLabel, mono_font
+
+        widget = QWidget()
+        widget.setObjectName("AudioLaneHeader")
+        widget.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
+        widget.setFixedWidth(HEADER_COLUMN_WIDTH)
+        layout = QVBoxLayout(widget)
+        layout.setSpacing(2)
+        layout.setContentsMargins(12, 3, 8, 3)
+
+        # Row 1: AUDIO caption + middle-elided filename.
+        file_row = QHBoxLayout()
+        file_row.setSpacing(8)
+        file_row.addWidget(MicroLabel("Audio", point_size=8))
+
+        self.file_path_edit = _ElidedFileLabel()
+        self.file_path_edit.setFont(mono_font(8))
+        self.file_path_edit.setProperty("role", "micro")
+        self.file_path_edit.setPlaceholderText("No audio file loaded")
+        self.file_path_edit.setReadOnly(True)
+        file_row.addWidget(self.file_path_edit, 1)
+        layout.addLayout(file_row)
+
+        # Row 2: mute chip, volume slider + readout, LOAD chip.
+        controls_row = QHBoxLayout()
+        controls_row.setSpacing(4)
+
+        self.mute_button = QPushButton("M")
+        self.mute_button.setFixedSize(26, 18)
+        self.mute_button.setCheckable(True)
+        self.mute_button.setFont(mono_font(8))
+        self.mute_button.setProperty("density", "compact")
+        self.mute_button.setProperty("role", "output-select")
+        self.mute_button.setToolTip("Mute audio")
+        self.mute_button.toggled.connect(self._on_mute_toggled)
+        controls_row.addWidget(self.mute_button)
+
+        self.volume_slider = QSlider(Qt.Orientation.Horizontal)
+        self.volume_slider.setRange(0, 100)
+        self.volume_slider.setValue(100)
+        self.volume_slider.setFixedWidth(70)
+        self.volume_slider.setFixedHeight(16)
+        self.volume_slider.setToolTip("Audio volume")
+        self.volume_slider.valueChanged.connect(self._on_volume_changed)
+        controls_row.addWidget(self.volume_slider)
+
+        self.volume_label = QLabel("100%")
+        self.volume_label.setFixedWidth(32)
+        self.volume_label.setFont(mono_font(8))
+        controls_row.addWidget(self.volume_label)
+
+        controls_row.addStretch()
+
+        self.load_button = QPushButton("LOAD")
+        self.load_button.setFixedWidth(56)
+        self.load_button.setFixedHeight(18)
+        self.load_button.setProperty("density", "compact")
+        self.load_button.setProperty("role", "cta-outline")
+        self.load_button.clicked.connect(self._on_load_clicked)
+        controls_row.addWidget(self.load_button)
+
+        layout.addLayout(controls_row)
 
         return widget
 

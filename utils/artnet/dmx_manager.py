@@ -5,6 +5,7 @@ import time
 import math
 from typing import Dict, List, Optional, Tuple, Any
 from config.models import Configuration, Fixture, LightBlock, DimmerBlock, ColourBlock, MovementBlock, SpecialBlock
+from utils import user_warnings
 from utils.effects_utils import get_channels_by_property
 from utils.orientation import calculate_pan_tilt, pan_tilt_to_dmx
 from effects import (
@@ -14,6 +15,49 @@ from effects import (
 
 # Debug flag - set to False to disable verbose prints (improves performance significantly)
 DEBUG_PRINTS = False
+
+# Assumed pan/tilt travel when the fixture definition declares no
+# <Physical><Focus> ranges (PanMax/TiltMax absent or 0). Matches the
+# calculate_pan_tilt/pan_tilt_to_dmx defaults so aiming stays unchanged
+# for definitions without physical data.
+DEFAULT_PAN_RANGE = 540.0
+DEFAULT_TILT_RANGE = 270.0
+
+
+def rgb_to_color_wheel(r: float, g: float, b: float) -> int:
+    """
+    Map RGB to color wheel position.
+
+    Simple mapping to closest standard color.
+    DMX values are set to mid-range of typical color wheel positions
+    to work with most fixtures (Varytec Hero Spot 60, etc.)
+
+    Module-level so the Live busk layer (utils/artnet/live_layer.py)
+    steers wheel-only movers the same way playback does.
+    """
+    # Standard color wheel positions (using mid-range DMX values)
+    # Most color wheels have ~25 DMX values per color
+    wheel_colors = [
+        (255, 255, 255, 12),   # White (typically 0-24)
+        (255, 0, 0, 37),       # Red (typically 25-50)
+        (255, 255, 0, 63),     # Yellow (typically 51-75)
+        (173, 216, 230, 88),   # Light Blue (typically 76-100)
+        (0, 255, 0, 113),      # Green (typically 101-125)
+        (255, 170, 0, 138),    # Amber/Orange (typically 126-150)
+        (238, 130, 238, 163),  # Violet (typically 151-175)
+        (0, 0, 255, 188),      # Blue (typically 176-200)
+    ]
+
+    min_distance = float('inf')
+    closest_value = 12  # Default to white
+
+    for wr, wg, wb, dmx_value in wheel_colors:
+        distance = ((r - wr) ** 2 + (g - wg) ** 2 + (b - wb) ** 2) ** 0.5
+        if distance < min_distance:
+            min_distance = distance
+            closest_value = dmx_value
+
+    return closest_value
 
 
 class FixtureChannelMap:
@@ -43,6 +87,15 @@ class FixtureChannelMap:
         # Get channel mappings from fixture definition
         self.mode_name = fixture.current_mode
         self._build_channel_map()
+
+        # Physical pan/tilt travel (degrees) from the definition's
+        # <Physical><Focus>, with the historical defaults as fallback
+        # when the definition declares none (absent key or 0).
+        physical = fixture_def.get('physical') or {}
+        self.pan_range = float(physical.get('pan_max') or 0.0) \
+            or DEFAULT_PAN_RANGE
+        self.tilt_range = float(physical.get('tilt_max') or 0.0) \
+            or DEFAULT_TILT_RANGE
 
     def _build_channel_map(self):
         """Build channel mapping from fixture definition."""
@@ -125,9 +178,50 @@ class DMXManager:
 
     Tracks active blocks and converts them to DMX values in real-time.
     Handles overlapping blocks with LTP (Latest Takes Priority).
+
+    Alongside the value buffers the manager keeps a per-universe CLAIM
+    MASK (``dmx_touched``): one byte per channel, 1 where this renderer
+    deliberately drives the channel. Every write through
+    :meth:`set_dmx_value` claims its channel - including a write of 0,
+    which is a claim to zero - while :meth:`clear_all_dmx` resets both
+    values and claims (a buffer reset is not a claim). The output
+    arbiter (docs/output-sync-plan.md) merges renderers by these masks;
+    an unclaimed channel falls through to the layer below. Because
+    :meth:`update_dmx` starts every frame from ``clear_all_dmx`` and
+    re-applies the safe idle state plus the active blocks, the mask is
+    exact per frame with no decay bookkeeping.
     """
 
-    def __init__(self, config: Configuration, fixture_definitions: dict, song_structure=None):
+    @staticmethod
+    def build_fixture_maps(config: Configuration,
+                           fixture_definitions: dict = None) -> dict:
+        """Channel maps for every fixture in ``config``, standalone.
+
+        The same maps :meth:`_build_fixture_maps` builds for a full
+        DMXManager, without constructing one - so the output arbiter
+        can render the "fixtures visible" idle floor before any
+        playback controller exists (OUTPUT toggled on with nothing
+        playing used to stream an all-zero floor because the maps only
+        arrived with playback). Definitions default to the shared
+        cache, loaded for exactly the config's models.
+        """
+        if fixture_definitions is None:
+            from utils.fixture_utils import get_cached_fixture_definitions
+            models = {(f.manufacturer, f.model)
+                      for f in getattr(config, "fixtures", []) or []}
+            fixture_definitions = get_cached_fixture_definitions(models) \
+                if models else {}
+        maps = {}
+        for fixture in getattr(config, "fixtures", []) or []:
+            fixture_def = fixture_definitions.get(
+                f"{fixture.manufacturer}_{fixture.model}")
+            if fixture_def:
+                maps[fixture.name] = FixtureChannelMap(
+                    fixture, fixture_def, config)
+        return maps
+
+    def __init__(self, config: Configuration, fixture_definitions: dict, song_structure=None,
+                 emit_safe_idle: bool = True):
         """
         Initialize DMX manager.
 
@@ -135,22 +229,35 @@ class DMXManager:
             config: Configuration with fixtures and universes
             fixture_definitions: Dictionary of parsed fixture definitions
             song_structure: Optional SongStructure for BPM-aware timing
+            emit_safe_idle: When True (default, playback behaviour),
+                update_dmx claims safe idle values on EVERY fixture
+                (shutter open, colour wheel white, pan/tilt centre).
+                The Live engine's private managers pass False - they
+                must claim ONLY what their staged blocks drive, so the
+                busk rides on top of the show instead of grabbing every
+                mover's wheel and yoke (docs/live-output-plan.md).
         """
         self.config = config
         self.fixture_definitions = fixture_definitions
         self.song_structure = song_structure
+        self.emit_safe_idle = emit_safe_idle
 
-        # DMX state - universe_id -> 512-byte array
+        # DMX state - universe_id -> 512-byte array, plus the parallel
+        # claim mask (see class docstring): 1 = channel deliberately
+        # driven this frame, 0 = unclaimed (falls through in a merge).
         self.dmx_state: Dict[int, bytearray] = {}
+        self.dmx_touched: Dict[int, bytearray] = {}
 
         # Initialize universes from configuration (ensure int keys - YAML may load as string)
         for universe_id in config.universes.keys():
             self.dmx_state[int(universe_id)] = bytearray(512)
+            self.dmx_touched[int(universe_id)] = bytearray(512)
 
         # Also initialize universes for all fixtures (in case fixture uses unconfigured universe)
         for fixture in config.fixtures:
             if fixture.universe not in self.dmx_state:
                 self.dmx_state[fixture.universe] = bytearray(512)
+                self.dmx_touched[fixture.universe] = bytearray(512)
 
         # Build fixture channel maps
         self.fixture_maps: Dict[str, FixtureChannelMap] = {}
@@ -206,7 +313,11 @@ class DMXManager:
 
         # Summary logging instead of per-fixture
         if missing_defs:
-            print(f"DMXManager: Warning - no definitions for: {', '.join(missing_defs)}")
+            user_warnings.warn(
+                f"No fixture definitions for: {', '.join(missing_defs)}. "
+                f"These fixtures will not output.",
+                category="output",
+                once_key="missing-defs:" + ",".join(sorted(missing_defs)))
 
     def rebuild_fixture_maps(self):
         """Rebuild fixture maps when fixtures are added, removed, or modified."""
@@ -218,16 +329,22 @@ class DMXManager:
         for fixture in self.config.fixtures:
             if fixture.universe not in self.dmx_state:
                 self.dmx_state[fixture.universe] = bytearray(512)
+                self.dmx_touched[fixture.universe] = bytearray(512)
                 new_universes.append(fixture.universe)
 
         if new_universes:
             print(f"DMXManager: Added universe(s) {new_universes}")
 
     def clear_all_dmx(self):
-        """Clear all DMX values to 0."""
+        """Clear all DMX values to 0 and drop all channel claims.
+
+        A buffer reset is not a claim: after this, every channel is
+        unclaimed until something writes it through set_dmx_value.
+        """
         # PERFORMANCE: Use fill() instead of creating new bytearray objects
         for universe_id in self.dmx_state.keys():
             self.dmx_state[universe_id][:] = b'\x00' * 512
+            self.dmx_touched[universe_id][:] = b'\x00' * 512
 
     def clear_active_blocks(self):
         """Clear all active block tracking state.
@@ -323,7 +440,9 @@ class DMXManager:
 
     def set_dmx_value(self, universe: int, channel: int, value: int):
         """
-        Set a single DMX channel value.
+        Set a single DMX channel value and claim the channel (a write
+        of 0 is a claim to zero, not a release - release is
+        clear_all_dmx).
 
         Args:
             universe: Universe ID
@@ -331,11 +450,15 @@ class DMXManager:
             value: DMX value (0-255)
         """
         if universe not in self.dmx_state:
-            print(f"Warning: Universe {universe} not initialized")
+            user_warnings.warn(
+                f"Universe {universe} is not initialized; DMX writes to "
+                f"it are dropped",
+                category="output", once_key=f"universe:{universe}")
             return
 
         if 0 <= channel < 512:
             self.dmx_state[universe][channel] = max(0, min(255, value))
+            self.dmx_touched[universe][channel] = 1
 
     def get_dmx_data(self, universe: int) -> bytes:
         """
@@ -351,6 +474,32 @@ class DMXManager:
             return bytes(512)
 
         return bytes(self.dmx_state[universe])
+
+    def get_touched_mask(self, universe: int) -> bytes:
+        """The claim mask for a universe: one byte per channel, 1 where
+        this renderer deliberately drives the channel this frame.
+
+        Args:
+            universe: Universe ID
+
+        Returns:
+            512 bytes of 0/1 claims (all zeros for unknown universes)
+        """
+        if universe not in self.dmx_touched:
+            return bytes(512)
+        return bytes(self.dmx_touched[universe])
+
+    def get_frame(self, universe: int) -> Tuple[bytes, bytes]:
+        """The (values, mask) pair the output arbiter merges by
+        (docs/output-sync-plan.md).
+
+        Args:
+            universe: Universe ID
+
+        Returns:
+            (512 value bytes, 512 claim bytes)
+        """
+        return self.get_dmx_data(universe), self.get_touched_mask(universe)
 
     def block_started(self, lane_key: str, fixtures: List[Fixture], block: object, block_type: str, current_time: float):
         """
@@ -394,7 +543,9 @@ class DMXManager:
 
         # Set safe default values for ALL fixtures to prevent strobe/weird modes
         # This ensures shutters are open, dimmers at 0, etc. for non-targeted fixtures
-        self._set_safe_idle_state()
+        # (suppressed for the Live engine's private managers - see __init__).
+        if self.emit_safe_idle:
+            self._set_safe_idle_state()
 
         # Process each lane's active blocks
         # Make a copy of items to avoid issues during iteration
@@ -791,9 +942,13 @@ class DMXManager:
             pan_degrees, tilt_degrees = calculate_pan_tilt(
                 fixture_x=fixture.x, fixture_y=fixture.y, fixture_z=fixture_z,
                 target_x=target_x, target_y=target_y, target_z=target_z,
-                mounting=mounting, yaw=yaw, pitch=pitch, roll=roll
+                mounting=mounting, yaw=yaw, pitch=pitch, roll=roll,
+                pan_range=fixture_map.pan_range,
+                tilt_range=fixture_map.tilt_range,
             )
-            pan_dmx, tilt_dmx = pan_tilt_to_dmx(pan_degrees, tilt_degrees)
+            pan_dmx, tilt_dmx = pan_tilt_to_dmx(
+                pan_degrees, tilt_degrees,
+                fixture_map.pan_range, fixture_map.tilt_range)
 
             pan = max(pan_min, min(pan_max, float(pan_dmx)))
             tilt = max(tilt_min, min(tilt_max, float(tilt_dmx)))
@@ -811,9 +966,13 @@ class DMXManager:
                     pan_degrees, tilt_degrees = calculate_pan_tilt(
                         fixture_x=fixture.x, fixture_y=fixture.y, fixture_z=fixture_z,
                         target_x=spot.x, target_y=spot.y, target_z=spot.z,
-                        mounting=mounting, yaw=yaw, pitch=pitch, roll=roll
+                        mounting=mounting, yaw=yaw, pitch=pitch, roll=roll,
+                        pan_range=fixture_map.pan_range,
+                        tilt_range=fixture_map.tilt_range,
                     )
-                    pan_dmx, tilt_dmx = pan_tilt_to_dmx(pan_degrees, tilt_degrees)
+                    pan_dmx, tilt_dmx = pan_tilt_to_dmx(
+                        pan_degrees, tilt_degrees,
+                        fixture_map.pan_range, fixture_map.tilt_range)
 
                     if DEBUG_PRINTS:
                         debug_key = f"_spot_debug_{fixture.name}"
@@ -908,33 +1067,4 @@ class DMXManager:
                 self.set_dmx_value(universe, channel, int(block.zoom))
 
     def _rgb_to_color_wheel(self, r: float, g: float, b: float) -> int:
-        """
-        Map RGB to color wheel position.
-
-        Simple mapping to closest standard color.
-        DMX values are set to mid-range of typical color wheel positions
-        to work with most fixtures (Varytec Hero Spot 60, etc.)
-        """
-        # Standard color wheel positions (using mid-range DMX values)
-        # Most color wheels have ~25 DMX values per color
-        wheel_colors = [
-            (255, 255, 255, 12),   # White (typically 0-24)
-            (255, 0, 0, 37),       # Red (typically 25-50)
-            (255, 255, 0, 63),     # Yellow (typically 51-75)
-            (173, 216, 230, 88),   # Light Blue (typically 76-100)
-            (0, 255, 0, 113),      # Green (typically 101-125)
-            (255, 170, 0, 138),    # Amber/Orange (typically 126-150)
-            (238, 130, 238, 163),  # Violet (typically 151-175)
-            (0, 0, 255, 188),      # Blue (typically 176-200)
-        ]
-
-        min_distance = float('inf')
-        closest_value = 12  # Default to white
-
-        for wr, wg, wb, dmx_value in wheel_colors:
-            distance = ((r - wr) ** 2 + (g - wg) ** 2 + (b - wb) ** 2) ** 0.5
-            if distance < min_distance:
-                min_distance = distance
-                closest_value = dmx_value
-
-        return closest_value
+        return rgb_to_color_wheel(r, g, b)

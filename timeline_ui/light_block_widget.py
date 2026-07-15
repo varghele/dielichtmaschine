@@ -4,8 +4,301 @@
 
 from PyQt6.QtWidgets import QWidget, QVBoxLayout, QLabel
 from PyQt6.QtCore import Qt, pyqtSignal, QPoint, QRect
-from PyQt6.QtGui import QPainter, QColor, QPen, QBrush, QMouseEvent
+from PyQt6.QtGui import (
+    QPainter, QColor, QPen, QBrush, QMouseEvent, QFont, QLinearGradient,
+)
 from config.models import LightBlock
+from .timeline_widget import STRIP_ZONE_HEIGHT, sublane_band_geometry
+
+# Glutorange, the brand accent (gui/theme_tokens.py); selection marks in
+# this custom-painted widget follow the theme's selection color. Same
+# value in both themes, so a constant is fine here.
+ACCENT = QColor(240, 86, 46)
+
+
+def active_tokens() -> dict:
+    """Token dict of the theme currently applied to the app.
+
+    Custom painters cannot reach QSS roles, so they read the brand
+    tokens directly. Same stylesheet sniff the tabs use (see
+    gui/dialogs/autogen_dialog._active_tokens): the light theme's
+    window color only ever appears in the light stylesheet.
+    """
+    from PyQt6.QtWidgets import QApplication
+    from gui.theme_tokens import THEMES
+
+    app = QApplication.instance()
+    qss = app.styleSheet() if app is not None else ""
+    light = THEMES.get("light")
+    if light is not None and light["window"] in qss:
+        return light
+    return THEMES["dark"]
+
+
+def token_qcolor(key: str, alpha: int = 255) -> QColor:
+    """Brand token as a QColor, optionally with an alpha override.
+
+    Only the solid ``#rrggbb`` tokens are used here; the ``rgba(...)``
+    string tokens (e.g. accent_tint) are not QColor-parseable, so we
+    pass the base accent through with an explicit alpha instead.
+    """
+    tok = active_tokens()
+    color = QColor(tok.get(key, "#000000"))
+    if alpha != 255:
+        color.setAlpha(alpha)
+    return color
+
+
+def _tinted(base: QColor, alpha: int) -> QColor:
+    """A copy of ``base`` at the given alpha (for low-alpha row tints)."""
+    color = QColor(base)
+    color.setAlpha(alpha)
+    return color
+
+
+# ── Block anatomy (timeline v3 stage T3, screen 06b) ─────────────────────
+#
+# The block reads as: muted colour-tint body, a 16px header strip
+# ("BASE · PULSE" left, "BARS 3-8" right), and one labelled segment per
+# sub-row in compact mono. The label helpers below are pure functions,
+# unit-tested in tests/unit/test_timeline_lane_visuals.py.
+
+# Painted height of the block header strip. It fills the shared strip
+# zone (timeline_widget.sublane_band_geometry) that the lane reserves
+# ABOVE the sublane bands, so the strip stacks on top of the dimmer
+# band instead of covering it - the dimmer bar and its intensity
+# handle stay fully visible and mouse-accessible.
+HEADER_STRIP_HEIGHT = STRIP_ZONE_HEIGHT
+
+# Quiet placeholder for a sub-row the block leaves empty (mock 06b shows
+# a dim "- · -" instead of a bare band).
+EMPTY_SUBROW_TEXT = "- · -"
+
+# Alpha levels from the mock: ~0.08 body, ~0.2 header strip and chrome
+# segments; colour segments carry real data colour so they read
+# stronger; hairlines between sub-rows stay faint.
+BODY_TINT_ALPHA = 20
+STRIP_TINT_ALPHA = 56
+SEGMENT_TINT_ALPHA = 51
+COLOUR_SEGMENT_ALPHA = 120
+ROW_HAIRLINE_ALPHA = 64
+
+# Two colour blocks whose boundary times differ by no more than this
+# render as one painted gradient ("COL #A → #B").
+GRADIENT_CONTIGUITY_EPS = 0.02  # seconds
+
+
+def dimmer_effect_caps(effect_type: str) -> str:
+    """Compact caps name of a dimmer effect: "ping_pong_smooth" ->
+    "PING PONG", "waterfall_down" -> "WATERFALL ↓"."""
+    label = (effect_type or "static").replace("_", " ").title()
+    label = label.replace("Ping Pong Smooth", "Ping Pong")
+    label = label.replace("Random Strobe", "Random")
+    label = label.replace("Waterfall Down", "Waterfall ↓")
+    label = label.replace("Waterfall Up", "Waterfall ↑")
+    return label.upper()
+
+
+def dimmer_segment_label(effect_type: str, effect_speed: str,
+                         intensity: float) -> str:
+    """"PULSE 1/2" when the rate is non-default, else "FADE 208"
+    (effect + intensity value)."""
+    name = dimmer_effect_caps(effect_type)
+    speed = str(effect_speed or "1")
+    if speed != "1":
+        return f"{name} {speed}"
+    return f"{name} {int(intensity)}"
+
+
+def blend_white_channel(r: float, g: float, b: float, w: float) -> tuple:
+    """RGB display values with the white channel blended in (same math
+    as the colour-segment fill)."""
+    r, g, b, w = int(r), int(g), int(b), int(w)
+    if w > 0:
+        factor = w / 255.0
+        r = min(255, int(r + (255 - r) * factor))
+        g = min(255, int(g + (255 - g) * factor))
+        b = min(255, int(b + (255 - b) * factor))
+    return r, g, b
+
+
+def common_color_name(r: int, g: int, b: int, w: int) -> str:
+    """Human-readable name for common colours, or "" when no match.
+
+    Tolerance-matched against the primaries/secondaries plus a few
+    stage staples (amber, pink, lime); the white channel counts as
+    white when RGB is dark.
+    """
+    tolerance = 30
+
+    def close_to(val, target):
+        return abs(val - target) <= tolerance
+
+    if w > 200 and r < tolerance and g < tolerance and b < tolerance:
+        return "White"
+    if close_to(r, 255) and close_to(g, 255) and close_to(b, 255):
+        return "White"
+    if r < tolerance and g < tolerance and b < tolerance and w < tolerance:
+        return "Off"
+    if close_to(r, 255) and g < tolerance and b < tolerance:
+        return "Red"
+    if r < tolerance and close_to(g, 255) and b < tolerance:
+        return "Green"
+    if r < tolerance and g < tolerance and close_to(b, 255):
+        return "Blue"
+    if close_to(r, 255) and close_to(g, 255) and b < tolerance:
+        return "Yellow"
+    if close_to(r, 255) and g < tolerance and close_to(b, 255):
+        return "Magenta"
+    if r < tolerance and close_to(g, 255) and close_to(b, 255):
+        return "Cyan"
+    if close_to(r, 255) and close_to(g, 165) and b < tolerance:
+        return "Orange"
+    if close_to(r, 255) and close_to(g, 100) and b < tolerance:
+        return "Amber"
+    if close_to(r, 128) and g < tolerance and close_to(b, 128):
+        return "Purple"
+    if close_to(r, 255) and close_to(g, 105) and close_to(b, 180):
+        return "Pink"
+    if close_to(r, 180) and close_to(g, 255) and b < tolerance:
+        return "Lime"
+    return ""
+
+
+def colour_display_name(r: float, g: float, b: float, w: float = 0) -> str:
+    """Caps colour name when common ("MAGENTA"), else the blended hex
+    ("#E17126")."""
+    name = common_color_name(int(r), int(g), int(b), int(w))
+    if name:
+        return name.upper()
+    r2, g2, b2 = blend_white_channel(r, g, b, w)
+    return f"#{r2:02X}{g2:02X}{b2:02X}"
+
+
+def colour_segment_label(rgbw: tuple, next_rgbw: tuple = None) -> str:
+    """"COL #E17126", or "COL #E17126 → MAGENTA" when the segment
+    gradients into a following colour block."""
+    base = colour_display_name(*rgbw)
+    if next_rgbw is not None:
+        return f"COL {base} → {colour_display_name(*next_rgbw)}"
+    return f"COL {base}"
+
+
+def movement_segment_label(effect_type: str) -> str:
+    """"MOV · FIGURE-8" style movement label."""
+    kind = (effect_type or "static").replace("_", "-").upper()
+    return f"MOV · {kind}"
+
+
+def special_segment_label(gobo_index: int = 0,
+                          prism_enabled: bool = False) -> str:
+    """Honest special-row label: the active features, or "BEAM" when
+    only focus/zoom apply."""
+    parts = []
+    if gobo_index:
+        parts.append(f"GOBO {int(gobo_index)}")
+    if prism_enabled:
+        parts.append("PRISM")
+    return "SPC · " + (" + ".join(parts) if parts else "BEAM")
+
+
+def block_kind_label(block) -> str:
+    """The block's content kind for the header strip: the first dimmer
+    effect ("PULSE"), else the effect_name function part ("WASH" for
+    "verse.wash"), else ""."""
+    if block.dimmer_blocks:
+        return dimmer_effect_caps(
+            getattr(block.dimmer_blocks[0], "effect_type", "static"))
+    effect_name = getattr(block, "effect_name", "") or ""
+    if effect_name:
+        return effect_name.split(".")[-1].upper()
+    return ""
+
+
+def block_header_label(name, kind="", modified=False, selected=False) -> str:
+    """Header-strip left text: "BASE · PULSE" (+" *" when modified,
+    +" ✓" when the block is selected)."""
+    left = (name or "base").upper()
+    if kind:
+        left = f"{left} · {kind}"
+    if modified:
+        left += " *"
+    if selected:
+        left += " ✓"
+    return left
+
+
+def _signature_beats_per_bar(signature: str) -> float:
+    try:
+        numerator, denominator = map(int, str(signature).split("/"))
+        return (numerator * 4) / denominator
+    except (ValueError, ZeroDivisionError):
+        return 4.0
+
+
+def bar_index_at(song_structure, time: float):
+    """1-based global bar number at ``time``, accumulating bars across
+    parts (same counting as the toolbar BAR readout). None when there
+    is no song structure. Past the end pins to the final bar."""
+    parts = getattr(song_structure, "parts", None) if song_structure else None
+    if not parts:
+        return None
+    bars_before = 0
+    for part in parts:
+        duration = part.duration or 0.0
+        if duration > 0 and time < part.start_time + duration:
+            frac = max(0.0, (time - part.start_time) / duration)
+            bar_in_part = min(int(frac * part.num_bars), part.num_bars - 1)
+            return bars_before + bar_in_part + 1
+        bars_before += part.num_bars
+    return max(1, bars_before)
+
+
+def bar_range_label(song_structure, start_time: float,
+                    end_time: float) -> str:
+    """"BARS 3-8" for the bars a block occupies ("BAR 3" when it stays
+    within one); "" without a song structure. The end bar is the last
+    bar the block reaches into - a block ending exactly on a bar line
+    does not claim the next bar."""
+    start_bar = bar_index_at(song_structure, start_time)
+    if start_bar is None:
+        return ""
+    end_bar = bar_index_at(song_structure, max(start_time, end_time - 1e-6))
+    if end_bar is None or end_bar <= start_bar:
+        return f"BAR {start_bar}"
+    return f"BARS {start_bar}-{end_bar}"
+
+
+def part_containing_span(song_structure, start_time: float, end_time: float,
+                         eps: float = 1e-3):
+    """The ShowPart whose region fully contains [start, end], or None.
+
+    This is the mock's block-tint rule: a block living inside one part
+    reads in that part's colour; a block crossing part boundaries falls
+    back to the lane's group colour.
+    """
+    parts = getattr(song_structure, "parts", None) if song_structure else None
+    if not parts:
+        return None
+    for part in parts:
+        duration = part.duration or 0.0
+        if duration <= 0:
+            continue
+        if (part.start_time - eps <= start_time
+                and end_time <= part.start_time + duration + eps):
+            return part
+    return None
+
+
+def elided(metrics, text: str, width: float) -> str:
+    """``text`` elided with "…" to fit ``width`` px; "" when nothing
+    fits at all (labels never paint outside their segment)."""
+    if width <= 0 or not text:
+        return ""
+    out = metrics.elidedText(text, Qt.TextElideMode.ElideRight, int(width))
+    if metrics.horizontalAdvance(out) > width:
+        return ""
+    return out
 
 
 class LightBlockWidget(QWidget):
@@ -20,7 +313,11 @@ class LightBlockWidget(QWidget):
     block_edited = pyqtSignal()  # Emitted when block content is edited (for auto-save)
 
     RESIZE_HANDLE_WIDTH = 8  # Pixels for resize handle area
-    HEADER_HEIGHT = 24  # Pixels reserved for header/handle area (drag entire effect)
+    # The strip zone doubles as the whole-effect drag handle. It must
+    # not reach below the strip: the sublane bands start right under it
+    # and their full height (dimmer handle included) belongs to sublane
+    # interactions.
+    HEADER_HEIGHT = STRIP_ZONE_HEIGHT
     # Minimum duration for a sublane block created by drag — anything shorter
     # is treated as an accidental mouse slip and rejected.
     MIN_SUBLANE_BLOCK_DURATION = 0.05  # seconds
@@ -98,20 +395,6 @@ class LightBlockWidget(QWidget):
         # No UI widgets needed - we'll draw everything in paintEvent
         pass
 
-    def _get_display_name(self) -> str:
-        """Get display name for the block."""
-        # Use custom name if set, otherwise default to "base"
-        if self.block.name:
-            name = self.block.name
-        else:
-            name = "base"
-
-        # Add asterisk if modified
-        if self.block.modified:
-            name += " *"
-
-        return name
-
     def _format_parameters(self) -> str:
         """Format block parameters for display."""
         params = self.block.parameters
@@ -173,15 +456,45 @@ class LightBlockWidget(QWidget):
         absolute_pixel = envelope_start_pixel + pixel_x
         return self.timeline_widget.pixel_to_time(absolute_pixel)
 
+    # ── Shared band geometry (timeline_widget.sublane_band_geometry) ──────
+    #
+    # Everything vertical in this widget - strip painting, sub-row
+    # painting, hit-testing (dimmer handle, sublane blocks, marquee) -
+    # derives from the one shared helper, the same one the canvas
+    # separators and the lane header labels use.
+
+    def band_geometry(self):
+        """``(strip, bands)`` for this block's lane.
+
+        The band count prefers the lane's ``num_sublanes``; lane stubs
+        without one fall back to the rows this block renders."""
+        lane = self.lane_widget
+        num = getattr(lane, "num_sublanes", 0) or \
+            len(self._visible_sublane_rows())
+        return sublane_band_geometry(num, lane.sublane_height)
+
+    def sublane_band_rect(self, sublane_type) -> tuple:
+        """``(y, height)`` of the band for ``sublane_type`` - always
+        below the strip zone."""
+        _strip, bands = self.band_geometry()
+        index = self.lane_widget.get_sublane_index(sublane_type)
+        return bands[min(index, len(bands) - 1)]
+
+    def header_strip_rect(self) -> QRect:
+        """The painted header-strip rect (inside the 1px frame). Its
+        bottom never reaches the first band: ``bottom() < bands[0].y``."""
+        strip, _bands = self.band_geometry()
+        return QRect(1, 1, self.width() - 2, max(0, int(strip) - 1))
+
     def paintEvent(self, event):
         """Draw the effect envelope and sublane blocks."""
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
 
-        # Draw effect envelope (subtle background)
+        # Draw effect envelope (muted tint body + frame + row hairlines)
         self._draw_envelope(painter)
 
-        # Draw individual sublane blocks
+        # Draw individual sublane blocks (and "- · -" empty-row marks)
         self._draw_sublane_blocks(painter)
 
         # Draw resize handles on envelope
@@ -191,92 +504,214 @@ class LightBlockWidget(QWidget):
         if self.creating_sublane and self.create_start_time is not None and self.create_end_time is not None:
             self._draw_create_preview(painter)
 
-        # Draw effect name label LAST (on top of everything)
-        self._draw_effect_label(painter)
+        # Header strip (name/kind + bar range) on top of the segments
+        self._draw_header_strip(painter)
 
         # Draw riff indicator if this block came from a riff
         if self.block.riff_source:
             self._draw_riff_indicator(painter)
 
+        # Selection chrome last: accent border + soft glow rim
+        if self._is_multi_selected:
+            self._draw_selection_overlay(painter)
+
         # Draw the sublane marquee rectangle on top of everything else.
         if self._sublane_marquee_active:
             rect = self._compute_sublane_marquee_rect()
-            painter.setBrush(QBrush(QColor(0, 120, 215, 40)))
-            painter.setPen(QPen(QColor(0, 120, 215, 200), 2))
+            marquee_fill = QColor(ACCENT)
+            marquee_fill.setAlpha(40)
+            marquee_pen = QColor(ACCENT)
+            marquee_pen.setAlpha(200)
+            painter.setBrush(QBrush(marquee_fill))
+            painter.setPen(QPen(marquee_pen, 2))
             painter.drawRect(rect)
 
+    def _group_base_color(self) -> QColor:
+        """Base color for this block's fills and hairlines.
+
+        The lane's group data color when resolvable (North Star: blocks
+        read in their group's color), else a faint brand neutral so the
+        block still reads on the dark surface without inventing a
+        Material color.
+        """
+        if hasattr(self.lane_widget, "group_color"):
+            group = self.lane_widget.group_color()
+            if group:
+                return QColor(group)
+        return token_qcolor("text_secondary")
+
+    def sublane_fill_color(self, sublane_type: str, sublane_block=None) -> QColor:
+        """Base (pre-alpha) fill color for a sublane row.
+
+        Colour rows use the block's own RGBW data color (the real
+        content); every other row is a tint of the block's base colour
+        (part colour when the block sits inside one part region, lane
+        group colour otherwise). Exposed so tests can assert fills
+        derive from data colours rather than a fixed Material palette.
+        """
+        if sublane_type == "colour" and sublane_block is not None:
+            return self._get_colour_block_color(sublane_block)
+        return self.block_base_color()
+
+    def block_base_color(self) -> QColor:
+        """The block's chrome colour (body tint, header strip, frame,
+        segment tints).
+
+        Mock 06b tint rule: a block fully inside one part region reads
+        in that part's colour; a block crossing part boundaries (or
+        with no song structure) falls back to the lane's group colour;
+        no resolvable group keeps the brand neutral. Deterministic in
+        the block's span and the loaded song structure.
+        """
+        song_structure = getattr(self.timeline_widget, "song_structure", None)
+        part = part_containing_span(
+            song_structure, self.block.start_time, self.block.end_time)
+        part_color = getattr(part, "color", None) if part is not None else None
+        if part_color:
+            return QColor(part_color)
+        return self._group_base_color()
+
+    def _visible_sublane_rows(self):
+        """Ordered (sublane_type, sublane_blocks) rows this block
+        renders - the exact row order get_sublane_index assigns."""
+        caps = getattr(self.lane_widget, "capabilities", None)
+        has_dimmer = caps.has_dimmer if caps else True
+        has_colour = caps.has_colour if caps else False
+        has_movement = caps.has_movement if caps else False
+        has_special = caps.has_special if caps else False
+
+        rows = []
+        # Dimmer row shows when the group has dimmer OR colour (dimmer
+        # drives RGB intensity for no-dimmer fixtures).
+        if has_dimmer or has_colour:
+            rows.append(("dimmer", self.block.dimmer_blocks))
+        if has_colour:
+            rows.append(("colour", self.block.colour_blocks))
+        if has_movement:
+            rows.append(("movement", self.block.movement_blocks))
+        if has_special:
+            rows.append(("special", self.block.special_blocks))
+        return rows
+
     def _draw_envelope(self, painter):
-        """Draw the effect envelope as a subtle border/background."""
-        # Subtle background color
-        envelope_color = QColor(60, 60, 60, 100)
-        painter.setBrush(QBrush(envelope_color))
+        """Muted block body (mock 06b): base colour at ~0.08 alpha
+        fill, faint same-colour hairlines between the sub-rows, and a
+        solid 1px base-colour frame. Selected blocks skip the frame -
+        _draw_selection_overlay paints the accent chrome on top."""
+        base = self.block_base_color()
+        w, h = self.width(), self.height()
 
+        painter.fillRect(1, 1, w - 2, h - 2, _tinted(base, BODY_TINT_ALPHA))
+
+        # Sub-row hairlines at the interior band boundaries (shared
+        # geometry: bands sit below the strip zone).
+        rows = self._visible_sublane_rows()
+        _strip, bands = self.band_geometry()
+        painter.setPen(QPen(_tinted(base, ROW_HAIRLINE_ALPHA), 1))
+        for i in range(1, len(rows)):
+            y = int(bands[min(i, len(bands) - 1)][0])
+            painter.drawLine(1, y, w - 2, y)
+
+        if not self._is_multi_selected:
+            painter.setBrush(Qt.BrushStyle.NoBrush)
+            painter.setPen(QPen(base, 1))
+            # Hard corners (datasheet aesthetic, radius 0)
+            painter.drawRect(0, 0, w - 1, h - 1)
+
+    def _draw_header_strip(self, painter):
+        """16px header strip: block label left ("BASE · PULSE"), bar
+        range right ("BARS 3-8"). Fill = block colour at the stronger
+        strip alpha; a selected block tints the strip with the accent
+        and its label carries the check. The strip renders in the
+        dedicated strip zone ABOVE the first sublane band - it never
+        covers the dimmer band or its intensity handle."""
+        from gui.typography import mono_font
+
+        strip = self.header_strip_rect()
+        if strip.width() <= 0 or strip.height() <= 0:
+            return
+        # Opaque lane-surface backing keeps the strip tone constant
+        # regardless of the body tint underneath (mock 06b reading).
+        painter.fillRect(strip, token_qcolor("timeline_lane_bg"))
         if self._is_multi_selected:
-            # Multi-selection highlight - solid blue border
-            border_color = QColor(0, 120, 215, 255)
-            pen = QPen(border_color, 3, Qt.PenStyle.SolidLine)
+            painter.fillRect(strip, token_qcolor("accent", STRIP_TINT_ALPHA + 8))
         else:
-            # Border color - thicker dashed line
-            border_color = QColor(150, 150, 150, 200)
-            pen = QPen(border_color, 2, Qt.PenStyle.DashLine)
-            pen.setDashPattern([4, 3])  # Custom dash pattern: 4px dash, 3px gap
+            painter.fillRect(strip, _tinted(self.block_base_color(),
+                                            STRIP_TINT_ALPHA))
 
-        painter.setPen(pen)
-
-        # Draw envelope rectangle
-        painter.drawRoundedRect(self.rect().adjusted(1, 1, -1, -1), 3, 3)
-
-    def _draw_effect_label(self, painter):
-        """Draw effect name label on top of everything."""
-        from PyQt6.QtGui import QFont
-        from PyQt6.QtCore import QRect
-
-        # Set font
-        font = QFont()
-        font.setPointSize(9)
-        font.setBold(True)
-        painter.setFont(font)
-
-        # Get text
-        text = self._get_display_name()
-
-        # Calculate text size
+        painter.setFont(mono_font(7, QFont.Weight.DemiBold))
         metrics = painter.fontMetrics()
-        text_width = metrics.horizontalAdvance(text)
-        text_height = metrics.height()
+        pad = 5
+        avail = strip.width() - 2 * pad
+        if avail <= 0:
+            return
 
-        # Position at top-left with padding
-        x_pos = 6
-        y_pos = 6
-        padding = 4
+        left_text = block_header_label(
+            self.block.name, block_kind_label(self.block),
+            modified=self.block.modified, selected=self._is_multi_selected)
+        bar_text = bar_range_label(
+            getattr(self.timeline_widget, "song_structure", None),
+            self.block.start_time, self.block.end_time)
 
-        # Draw semi-transparent dark background behind text
-        bg_rect = QRect(x_pos - padding, y_pos - padding,
-                       text_width + 2 * padding, text_height + 2 * padding)
-        painter.setBrush(QBrush(QColor(30, 30, 30, 200)))  # Dark gray, semi-transparent
-        painter.setPen(QPen(QColor(100, 100, 100), 1))  # Subtle border
-        painter.drawRoundedRect(bg_rect, 3, 3)
+        # The name wins on narrow blocks: the bar range only renders
+        # when both fit side by side.
+        gap = 8
+        if bar_text and (metrics.horizontalAdvance(left_text) + gap
+                         + metrics.horizontalAdvance(bar_text)) > avail:
+            bar_text = ""
+        left_avail = avail
+        if bar_text:
+            left_avail -= metrics.horizontalAdvance(bar_text) + gap
 
-        # Draw text in white
-        painter.setPen(QPen(QColor(255, 255, 255)))  # White text
-        painter.drawText(x_pos, y_pos + text_height - 3, text)
+        left_drawn = elided(metrics, left_text, left_avail)
+        if left_drawn:
+            painter.setPen(QPen(token_qcolor("text")))
+            painter.drawText(
+                QRect(strip.left() + pad, strip.top(), int(left_avail),
+                      strip.height()),
+                Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter,
+                left_drawn)
+        if bar_text:
+            painter.setPen(QPen(token_qcolor("text_secondary")))
+            painter.drawText(
+                QRect(strip.left() + pad, strip.top(), int(avail),
+                      strip.height()),
+                Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter,
+                bar_text)
+
+    def _draw_selection_overlay(self, painter):
+        """Selected-block chrome: soft accent glow + crisp 1.5px accent
+        border. The mock's box-shadow is approximated with one wide
+        low-alpha stroke under the border - cheap, no real blur."""
+        w, h = self.width(), self.height()
+        painter.setBrush(Qt.BrushStyle.NoBrush)
+
+        glow = QPen(token_qcolor("accent", 45), 4)
+        painter.setPen(glow)
+        painter.drawRect(2, 2, w - 5, h - 5)
+
+        border = QPen(ACCENT, 1)
+        border.setWidthF(1.5)
+        painter.setPen(border)
+        painter.drawRect(2, 2, w - 5, h - 5)
 
     def _draw_riff_indicator(self, painter):
         """Draw indicator badge showing this block came from a riff."""
-        from PyQt6.QtGui import QFont
         from PyQt6.QtCore import QRect
 
-        # Choose indicator text and color based on modification state
+        # Choose indicator text and color based on modification state.
+        # Modified reads in the brand accent; unmodified stays a quiet
+        # neutral chip (brand tokens, no Material tan/green).
         if self.block.modified:
-            # Modified riff - yellow indicator with asterisk
             indicator_text = "R*"
-            bg_color = QColor(180, 150, 50, 220)  # Yellow-brown
-            border_color = QColor(220, 180, 70)
+            bg_color = token_qcolor("accent", 220)
+            border_color = token_qcolor("accent_line")
+            text_color = token_qcolor("on_accent")
         else:
-            # Unmodified riff - green indicator
             indicator_text = "R"
-            bg_color = QColor(50, 150, 80, 220)  # Green
-            border_color = QColor(80, 200, 120)
+            bg_color = token_qcolor("raised", 220)
+            border_color = token_qcolor("border")
+            text_color = token_qcolor("text_secondary")
 
         # Set font
         font = QFont()
@@ -289,91 +724,99 @@ class LightBlockWidget(QWidget):
         text_width = metrics.horizontalAdvance(indicator_text)
         text_height = metrics.height()
 
-        # Position in top-right corner (below the effect label if present)
+        # Position in top-right corner, below the header strip (the
+        # strip's right side carries the bar range)
         padding = 3
         x_pos = self.width() - text_width - padding * 2 - 4
-        y_pos = 6  # Same y as effect label
+        y_pos = HEADER_STRIP_HEIGHT + 5
 
         # Draw badge background
         bg_rect = QRect(x_pos - padding, y_pos - padding,
                        text_width + 2 * padding, text_height + 2 * padding)
         painter.setBrush(QBrush(bg_color))
         painter.setPen(QPen(border_color, 1))
-        painter.drawRoundedRect(bg_rect, 3, 3)
+        painter.drawRect(bg_rect)
 
         # Draw text
-        painter.setPen(QPen(QColor(255, 255, 255)))
+        painter.setPen(QPen(text_color))
         painter.drawText(x_pos, y_pos + text_height - 3, indicator_text)
 
     def _draw_sublane_blocks(self, painter):
-        """Draw individual sublane blocks within the envelope."""
-        sublane_height = self.lane_widget.sublane_height
+        """Draw the sub-row segments within the envelope (mock 06b).
 
-        # Get capabilities
-        caps = self.lane_widget.capabilities if hasattr(self.lane_widget, 'capabilities') and self.lane_widget.capabilities else None
-        has_dimmer = caps.has_dimmer if caps else True
-        has_colour = caps.has_colour if caps else False
-        has_movement = caps.has_movement if caps else False
-        has_special = caps.has_special if caps else False
+        Non-colour rows are labelled segments tinted in the block's
+        base colour; colour rows carry the block's own RGBW data colour
+        (painted as a real gradient when two colour blocks meet). A row
+        the block leaves empty gets a quiet "- · -" placeholder.
+        """
+        base = self.block_base_color()
 
-        # Draw dimmer blocks if lane has dimmer or colour capability
-        if has_dimmer or has_colour:
-            for dimmer_block in self.block.dimmer_blocks:
-                # Use orange/amber color if controlling RGB instead of dimmer
-                if not has_dimmer and has_colour:
-                    dimmer_color = QColor(255, 140, 0)  # Orange (RGB control mode)
+        for sublane_type, sublane_blocks in self._visible_sublane_rows():
+            if not sublane_blocks:
+                self._draw_empty_sublane_row(painter, sublane_type)
+                continue
+            for sublane_block in sublane_blocks:
+                if sublane_type == "colour":
+                    color = self._get_colour_block_color(sublane_block)
                 else:
-                    dimmer_color = QColor(255, 200, 100)  # Warm yellow (normal dimmer)
-
+                    color = _tinted(base, SEGMENT_TINT_ALPHA)
                 self._draw_sublane_block(
                     painter,
-                    dimmer_block,
-                    "dimmer",
-                    dimmer_color,
-                    sublane_height
-                )
-
-        # Draw colour blocks if lane has colour capability
-        if has_colour:
-            for colour_block in self.block.colour_blocks:
-                color = self._get_colour_block_color(colour_block)
-                self._draw_sublane_block(
-                    painter,
-                    colour_block,
-                    "colour",
+                    sublane_block,
+                    sublane_type,
                     color,
-                    sublane_height
+                    border_color=QColor(base),
                 )
 
-        # Draw movement blocks if lane has movement capability
-        if has_movement:
-            for movement_block in self.block.movement_blocks:
-                self._draw_sublane_block(
-                    painter,
-                    movement_block,
-                    "movement",
-                    QColor(100, 150, 255),  # Blue
-                    sublane_height
-                )
+    def _colour_gradient_target(self, colour_block):
+        """The colour block this one gradients into, or None.
 
-        # Draw special blocks if lane has special capability
-        if has_special:
-            for special_block in self.block.special_blocks:
-                self._draw_sublane_block(
-                    painter,
-                    special_block,
-                    "special",
-                    QColor(200, 100, 255),  # Purple
-                    sublane_height
-                )
+        A following colour block that starts where this one ends
+        (within GRADIENT_CONTIGUITY_EPS) and shows a different colour
+        makes the segment paint A -> B and its label read "COL A → B".
+        """
+        ordered = sorted(self.block.colour_blocks,
+                         key=lambda b: (b.start_time, b.end_time))
+        try:
+            index = ordered.index(colour_block)
+        except ValueError:
+            return None
+        if index + 1 >= len(ordered):
+            return None
+        nxt = ordered[index + 1]
+        if abs(nxt.start_time - colour_block.end_time) > GRADIENT_CONTIGUITY_EPS:
+            return None
+        if self._get_colour_block_color(nxt) == \
+                self._get_colour_block_color(colour_block):
+            return None
+        return nxt
 
-    def _draw_sublane_block(self, painter, sublane_block, sublane_type, color, sublane_height):
+    def _draw_empty_sublane_row(self, painter, sublane_type):
+        """Quiet "- · -" placeholder for a sub-row the block leaves
+        empty (dim disabled-text tone, never a bare band)."""
+        from gui.typography import mono_font
+
+        y, sublane_height = self.sublane_band_rect(sublane_type)
+
+        painter.setFont(mono_font(7))
+        metrics = painter.fontMetrics()
+        pad = 6
+        avail = self.width() - 2 * pad
+        text = elided(metrics, EMPTY_SUBROW_TEXT, avail)
+        if not text:
+            return
+        painter.setPen(QPen(token_qcolor("text_disabled")))
+        painter.drawText(
+            QRect(pad, int(y), int(avail), int(sublane_height)),
+            Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter,
+            text)
+
+    def _draw_sublane_block(self, painter, sublane_block, sublane_type, color,
+                            border_color=None):
         """Draw a single sublane block."""
-        # Get sublane row index
-        sublane_index = self.lane_widget.get_sublane_index(sublane_type)
-
-        # Calculate y position for this sublane
-        y_offset = sublane_index * sublane_height
+        # Band position/height from the shared geometry (below the
+        # strip zone).
+        y_offset, sublane_height = self.sublane_band_rect(sublane_type)
 
         # Calculate x position and width based on block times relative to envelope
         block_start_pixel = self.timeline_widget.time_to_pixel(sublane_block.start_time)
@@ -383,24 +826,42 @@ class LightBlockWidget(QWidget):
         x_offset = block_start_pixel - envelope_start_pixel
         width = block_end_pixel - block_start_pixel
 
-        # Draw the sublane block
-        painter.setBrush(QBrush(color))
+        # Draw the sublane block. Colour rows carry the real content
+        # colour; when a following colour block starts where this one
+        # ends the segment paints the actual A -> B gradient (mock
+        # "COL #E17126 → MAGENTA"). Other rows are a flat muted tint of
+        # the block's base colour.
+        segment_border = border_color
+        if sublane_type == "colour":
+            gradient = QLinearGradient(int(x_offset), 0,
+                                       int(x_offset + width), 0)
+            gradient.setColorAt(0.0, _tinted(color, COLOUR_SEGMENT_ALPHA))
+            gradient_target = self._colour_gradient_target(sublane_block)
+            right = (self._get_colour_block_color(gradient_target)
+                     if gradient_target is not None else color)
+            gradient.setColorAt(1.0, _tinted(right, COLOUR_SEGMENT_ALPHA))
+            painter.setBrush(QBrush(gradient))
+            segment_border = QColor(color)  # data colour frames its segment
+        else:
+            painter.setBrush(QBrush(color))
 
-        # Thicker, brighter border if this specific block is selected.
+        # Thicker accent border if this specific block is selected;
+        # otherwise a solid 1px line in the segment's own colour.
         is_selected = (sublane_block is self.selected_sublane_block)
         if is_selected:
-            painter.setPen(QPen(QColor(255, 255, 255), 3))  # Bright white border when selected
+            painter.setPen(QPen(ACCENT, 3))  # Accent border when selected
         else:
-            painter.setPen(QPen(color.darker(130), 2))
+            hairline = segment_border if segment_border is not None \
+                else color.darker(130)
+            painter.setPen(QPen(hairline, 1))
 
-        # Draw with some margin from edges
+        # Draw with some margin from edges; hard corners (radius 0)
         margin = 2
-        painter.drawRoundedRect(
+        painter.drawRect(
             int(x_offset + margin),
             int(y_offset + margin),
             int(width - 2 * margin),
             int(sublane_height - 2 * margin),
-            3, 3
         )
 
         # Draw grid and intensity handle for dimmer blocks
@@ -423,7 +884,7 @@ class LightBlockWidget(QWidget):
 
         # Draw resize handles if this specific block is selected.
         if is_selected:
-            handle_color = QColor(255, 255, 255, 150)
+            handle_color = token_qcolor("accent", 180)
             painter.setBrush(QBrush(handle_color))
             painter.setPen(Qt.PenStyle.NoPen)
 
@@ -434,82 +895,55 @@ class LightBlockWidget(QWidget):
             painter.drawRect(int(x_offset + width - margin - 4), int(y_offset + margin),
                            4, int(sublane_height - 2 * margin))
 
-    def _draw_sublane_block_label(self, painter, sublane_block, sublane_type, x_offset, y_offset, width, sublane_height, margin):
-        """Draw text label on sublane block if wide enough."""
-        from PyQt6.QtGui import QFont
-        from PyQt6.QtCore import QRect
-
-        # Minimum width to show label (in pixels)
-        MIN_WIDTH_FOR_LABEL = 60
-
-        if width < MIN_WIDTH_FOR_LABEL:
-            return  # Block too narrow, skip label
-
-        # For dimmer blocks, use effect type as the primary label
+    def _sublane_segment_text(self, sublane_block, sublane_type) -> str:
+        """Compact mono label for a sub-row segment (mock 06b): "PULSE
+        1/2", "FADE 208", "COL #E17126 → MAGENTA", "MOV · FIGURE-8",
+        "SPC · GOBO 2 + PRISM"."""
         if sublane_type == "dimmer":
-            effect_type = getattr(sublane_block, 'effect_type', 'static')
-            # Format effect type nicely (e.g., "ping_pong_smooth" -> "Ping Pong")
-            label_text = effect_type.replace('_', ' ').title()
-            # Shorten some common names
-            label_text = label_text.replace('Ping Pong Smooth', 'Ping Pong')
-            label_text = label_text.replace('Random Strobe', 'Random')
-            label_text = label_text.replace('Waterfall Down', 'Waterfall ↓')
-            label_text = label_text.replace('Waterfall Up', 'Waterfall ↑')
+            return dimmer_segment_label(
+                getattr(sublane_block, "effect_type", "static"),
+                getattr(sublane_block, "effect_speed", "1"),
+                getattr(sublane_block, "intensity", 255.0))
+        if sublane_type == "colour":
+            rgbw = (sublane_block.red, sublane_block.green,
+                    sublane_block.blue, getattr(sublane_block, "white", 0))
+            nxt = self._colour_gradient_target(sublane_block)
+            next_rgbw = ((nxt.red, nxt.green, nxt.blue,
+                          getattr(nxt, "white", 0))
+                         if nxt is not None else None)
+            return colour_segment_label(rgbw, next_rgbw)
+        if sublane_type == "movement":
+            return movement_segment_label(
+                getattr(sublane_block, "effect_type", "static"))
+        if sublane_type == "special":
+            return special_segment_label(
+                getattr(sublane_block, "gobo_index", 0),
+                getattr(sublane_block, "prism_enabled", False))
+        return ""
 
-            # Add intensity if wide enough
-            if width >= 100:
-                intensity = int(sublane_block.intensity)
-                full_text = f"{label_text} ({intensity})"
-            else:
-                full_text = label_text
-        else:
-            # Sublane type labels for other types
-            sublane_labels = {
-                "colour": "Colour",
-                "movement": "Movement",
-                "special": "Special"
-            }
+    def _draw_sublane_block_label(self, painter, sublane_block, sublane_type, x_offset, y_offset, width, sublane_height, margin):
+        """Left-aligned compact mono segment label, elided with "…" to
+        the segment width - text never paints outside the segment."""
+        from gui.typography import mono_font
 
-            # Get label text
-            label_text = sublane_labels.get(sublane_type, sublane_type.capitalize())
+        text = self._sublane_segment_text(sublane_block, sublane_type)
+        if not text:
+            return
 
-            # Get additional info if block is wide enough
-            info_text = ""
-            if width >= 100:  # Wide enough for additional info
-                info_text = self._get_sublane_block_info(sublane_block, sublane_type)
-
-            # Combine label and info
-            if info_text:
-                full_text = f"{label_text}: {info_text}"
-            else:
-                full_text = label_text
-
-        # Set font
-        font = QFont()
-        font.setPointSize(7)
-        font.setBold(True)
-        painter.setFont(font)
-
-        # Calculate text size
+        painter.setFont(mono_font(7))
         metrics = painter.fontMetrics()
-        text_width = metrics.horizontalAdvance(full_text)
-        text_height = metrics.height()
+        pad = 4
+        avail = width - 2 * margin - 2 * pad
+        text = elided(metrics, text, avail)
+        if not text:
+            return  # segment too narrow for any glyph
 
-        # Check if text fits within block width
-        if text_width + 10 > width - 2 * margin:
-            # Text too wide, try just the label without info
-            full_text = label_text
-            text_width = metrics.horizontalAdvance(full_text)
-            if text_width + 10 > width - 2 * margin:
-                return  # Even just label doesn't fit, skip
-
-        # Calculate centered position
-        text_x = int(x_offset + (width - text_width) / 2)
-        text_y = int(y_offset + (sublane_height + text_height) / 2 - 2)
-
-        # Draw text with dark outline for better visibility
-        painter.setPen(QPen(QColor(40, 40, 40)))
-        painter.drawText(text_x, text_y, full_text)
+        painter.setPen(QPen(token_qcolor("text")))
+        painter.drawText(
+            QRect(int(x_offset + margin + pad), int(y_offset + margin),
+                  int(avail), int(sublane_height - 2 * margin)),
+            Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter,
+            text)
 
     def _draw_rgb_icon(self, painter, x_offset, y_offset, width, sublane_height, margin):
         """Draw small RGB icon in corner of dimmer block to indicate RGB control mode."""
@@ -531,14 +965,14 @@ class LightBlockWidget(QWidget):
         icon_x = int(x_offset + width - text_width - 6)
         icon_y = int(y_offset + margin + text_height)
 
-        # Draw semi-transparent background
+        # Draw semi-transparent background (brand surface + text tokens)
         bg_rect = QRect(icon_x - 2, icon_y - text_height, text_width + 4, text_height + 2)
-        painter.setBrush(QBrush(QColor(0, 0, 0, 150)))
-        painter.setPen(QPen(QColor(255, 255, 255, 200), 1))
-        painter.drawRoundedRect(bg_rect, 2, 2)
+        painter.setBrush(QBrush(token_qcolor("window", 150)))
+        painter.setPen(QPen(token_qcolor("text", 200), 1))
+        painter.drawRect(bg_rect)
 
         # Draw text
-        painter.setPen(QPen(QColor(255, 255, 255)))
+        painter.setPen(QPen(token_qcolor("text")))
         painter.drawText(icon_x, icon_y, icon_text)
 
     def _draw_intensity_handle(self, painter, sublane_block, x_offset, y_offset, width, sublane_height, margin):
@@ -555,7 +989,7 @@ class LightBlockWidget(QWidget):
 
             # Draw darkened overlay above the handle
             if intensity < 255:
-                dark_overlay = QColor(0, 0, 0, 100)
+                dark_overlay = token_qcolor("window", 120)
                 painter.setBrush(QBrush(dark_overlay))
                 painter.setPen(Qt.PenStyle.NoPen)
                 painter.drawRect(
@@ -566,7 +1000,7 @@ class LightBlockWidget(QWidget):
                 )
 
             # Draw intensity handle line
-            handle_pen = QPen(QColor(255, 255, 255, 200), 2)
+            handle_pen = QPen(token_qcolor("text", 220), 2)
             painter.setPen(handle_pen)
             painter.drawLine(
                 int(x_offset + margin),
@@ -595,14 +1029,14 @@ class LightBlockWidget(QWidget):
                 label_x = int(x_offset + width / 2 - text_width / 2)
                 label_y = int(handle_y_offset - 5)
 
-                # Draw background
+                # Draw background (brand surface + text tokens)
                 bg_rect = QRect(label_x - 3, label_y - text_height, text_width + 6, text_height + 3)
-                painter.setBrush(QBrush(QColor(40, 40, 40, 200)))
-                painter.setPen(QPen(QColor(255, 255, 255), 1))
-                painter.drawRoundedRect(bg_rect, 2, 2)
+                painter.setBrush(QBrush(token_qcolor("panel", 210)))
+                painter.setPen(QPen(token_qcolor("text"), 1))
+                painter.drawRect(bg_rect)
 
                 # Draw text
-                painter.setPen(QPen(QColor(255, 255, 255)))
+                painter.setPen(QPen(token_qcolor("text")))
                 painter.drawText(label_x, label_y, intensity_text)
 
         except Exception as e:
@@ -647,8 +1081,9 @@ class LightBlockWidget(QWidget):
             # Calculate number of steps
             num_steps = int(block_duration / seconds_per_step)
 
-            # Draw grid lines (black for better visibility on yellow dimmer blocks)
-            grid_pen = QPen(QColor(0, 0, 0, 120), 1, Qt.PenStyle.DotLine)
+            # Draw beat grid lines (faint brand neutral, readable on the
+            # group-color tint over the dark surface)
+            grid_pen = QPen(token_qcolor("text_disabled", 150), 1, Qt.PenStyle.DotLine)
             painter.setPen(grid_pen)
 
             for step in range(1, num_steps):  # Skip first (start) and last (end)
@@ -707,8 +1142,8 @@ class LightBlockWidget(QWidget):
             # Calculate number of steps
             num_steps = int(block_duration / seconds_per_step)
 
-            # Draw grid lines (black like dimmer blocks for consistency)
-            grid_pen = QPen(QColor(0, 0, 0, 120), 1, Qt.PenStyle.DotLine)
+            # Draw beat grid lines (faint brand neutral, matches dimmer)
+            grid_pen = QPen(token_qcolor("text_disabled", 150), 1, Qt.PenStyle.DotLine)
             painter.setPen(grid_pen)
 
             for step in range(1, num_steps):  # Skip first (start) and last (end)
@@ -729,113 +1164,9 @@ class LightBlockWidget(QWidget):
             # Silently fail if grid cannot be drawn
             pass
 
-    def _get_sublane_block_info(self, sublane_block, sublane_type):
-        """Get short info text about sublane block content."""
-        try:
-            if sublane_type == "dimmer":
-                # Show effect type and intensity
-                intensity = int(sublane_block.intensity)
-                effect_type = getattr(sublane_block, 'effect_type', 'static')
-                # Capitalize first letter of effect type
-                effect_display = effect_type.capitalize()
-                return f"{effect_display} ({intensity})"
-            elif sublane_type == "colour":
-                # Show actual color name or hex value
-                r = int(getattr(sublane_block, 'red', 0))
-                g = int(getattr(sublane_block, 'green', 0))
-                b = int(getattr(sublane_block, 'blue', 0))
-                w = int(getattr(sublane_block, 'white', 0))
-
-                # Check for common color names
-                color_name = self._get_color_name(r, g, b, w)
-                if color_name:
-                    return color_name
-
-                # Fall back to hex code
-                return f"#{r:02X}{g:02X}{b:02X}"
-            elif sublane_type == "movement":
-                # Show effect type (and pan/tilt for static)
-                effect_type = getattr(sublane_block, 'effect_type', 'static')
-                effect_display = effect_type.replace('_', ' ').title()
-                if effect_type == "static" and hasattr(sublane_block, 'pan') and hasattr(sublane_block, 'tilt'):
-                    pan = int(sublane_block.pan)
-                    tilt = int(sublane_block.tilt)
-                    return f"P{pan}/T{tilt}"
-                return effect_display
-            elif sublane_type == "special":
-                # Show if any special effects are active
-                active_effects = []
-                if hasattr(sublane_block, 'gobo') and sublane_block.gobo:
-                    active_effects.append("Gobo")
-                if hasattr(sublane_block, 'prism') and sublane_block.prism:
-                    active_effects.append("Prism")
-                if active_effects:
-                    return active_effects[0]  # Show first effect
-                return "FX"
-        except Exception:
-            pass
-        return ""
-
-    def _get_color_name(self, r: int, g: int, b: int, w: int) -> str:
-        """Get a human-readable color name for common colors.
-
-        Args:
-            r, g, b: RGB values (0-255)
-            w: White value (0-255)
-
-        Returns:
-            Color name string, or empty string if no match
-        """
-        # Tolerance for color matching
-        tolerance = 30
-
-        def close_to(val, target):
-            return abs(val - target) <= tolerance
-
-        # Check for white (either via W channel or RGB)
-        if w > 200 and r < tolerance and g < tolerance and b < tolerance:
-            return "White"
-        if close_to(r, 255) and close_to(g, 255) and close_to(b, 255):
-            return "White"
-
-        # Check for black/off
-        if r < tolerance and g < tolerance and b < tolerance and w < tolerance:
-            return "Off"
-
-        # Check for primary colors
-        if close_to(r, 255) and g < tolerance and b < tolerance:
-            return "Red"
-        if r < tolerance and close_to(g, 255) and b < tolerance:
-            return "Green"
-        if r < tolerance and g < tolerance and close_to(b, 255):
-            return "Blue"
-
-        # Check for secondary colors
-        if close_to(r, 255) and close_to(g, 255) and b < tolerance:
-            return "Yellow"
-        if close_to(r, 255) and g < tolerance and close_to(b, 255):
-            return "Magenta"
-        if r < tolerance and close_to(g, 255) and close_to(b, 255):
-            return "Cyan"
-
-        # Check for other common colors
-        if close_to(r, 255) and close_to(g, 165) and b < tolerance:
-            return "Orange"
-        if close_to(r, 255) and close_to(g, 100) and b < tolerance:
-            return "Amber"
-        if close_to(r, 128) and g < tolerance and close_to(b, 128):
-            return "Purple"
-        if close_to(r, 255) and close_to(g, 105) and close_to(b, 180):
-            return "Pink"
-        if close_to(r, 180) and close_to(g, 255) and b < tolerance:
-            return "Lime"
-
-        # No match found
-        return ""
-
     def _draw_resize_handles(self, painter):
         """Draw resize handles on the envelope edges."""
-        handle_color = QColor(255, 255, 255, 100)
+        handle_color = token_qcolor("text", 100)
         painter.setBrush(QBrush(handle_color))
         painter.setPen(Qt.PenStyle.NoPen)
 
@@ -846,11 +1177,8 @@ class LightBlockWidget(QWidget):
 
     def _draw_create_preview(self, painter):
         """Draw preview of block being created."""
-        sublane_height = self.lane_widget.sublane_height
-
-        # Get sublane row index
-        sublane_index = self.lane_widget.get_sublane_index(self.creating_sublane)
-        y_offset = sublane_index * sublane_height
+        # Band position/height from the shared geometry.
+        y_offset, sublane_height = self.sublane_band_rect(self.creating_sublane)
 
         # Calculate x position and width
         start_pixel = self.timeline_widget.time_to_pixel(self.create_start_time)
@@ -860,36 +1188,25 @@ class LightBlockWidget(QWidget):
         x_offset = start_pixel - envelope_start_pixel
         width = end_pixel - start_pixel
 
-        # Get color for this sublane type (semi-transparent)
-        # Use RED if overlap detected (invalid placement)
+        # Preview tint from the group data color; the destructive token
+        # flags an invalid (overlapping) placement.
         if self.overlap_detected:
-            color = QColor(255, 0, 0, 150)  # RED - overlap warning!
-            border_color = QColor(255, 100, 100, 200)
+            color = token_qcolor("destructive", 150)  # overlap warning
+            border_color = token_qcolor("destructive", 220)
         else:
-            # Normal colors
-            if self.creating_sublane == "dimmer":
-                color = QColor(255, 200, 100, 120)  # Yellow, semi-transparent
-            elif self.creating_sublane == "colour":
-                color = QColor(100, 255, 150, 120)  # Green, semi-transparent
-            elif self.creating_sublane == "movement":
-                color = QColor(100, 150, 255, 120)  # Blue, semi-transparent
-            elif self.creating_sublane == "special":
-                color = QColor(200, 100, 255, 120)  # Purple, semi-transparent
-            else:
-                color = QColor(150, 150, 150, 120)  # Gray, semi-transparent
-            border_color = QColor(255, 255, 255, 150)
+            color = _tinted(self.block_base_color(), 120)
+            border_color = token_qcolor("text", 150)
 
         # Draw preview block
         painter.setBrush(QBrush(color))
         painter.setPen(QPen(border_color, 2, Qt.PenStyle.DashLine))
 
         margin = 2
-        painter.drawRoundedRect(
+        painter.drawRect(
             int(x_offset + margin),
             int(y_offset + margin),
             int(width - 2 * margin),
             int(sublane_height - 2 * margin),
-            3, 3
         )
 
     def _get_colour_block_color(self, colour_block):
@@ -902,26 +1219,20 @@ class LightBlockWidget(QWidget):
             QColor for display
         """
         if not colour_block:
-            return QColor(100, 255, 150)  # Default green
-
-        r = int(colour_block.red)
-        g = int(colour_block.green)
-        b = int(colour_block.blue)
-        w = int(getattr(colour_block, 'white', 0))
+            return self.block_base_color()  # No content: read in base color
 
         # Blend white channel into RGB for display (same as preview logic)
-        if w > 0:
-            factor = w / 255.0
-            r = min(255, int(r + (255 - r) * factor))
-            g = min(255, int(g + (255 - g) * factor))
-            b = min(255, int(b + (255 - b) * factor))
+        r, g, b = blend_white_channel(
+            colour_block.red, colour_block.green, colour_block.blue,
+            getattr(colour_block, 'white', 0))
 
         # Use blended RGB values if any color is present
         if r > 0 or g > 0 or b > 0:
             return QColor(r, g, b)
 
-        # Default to green (no color set)
-        return QColor(100, 255, 150)
+        # No color set: read in the block's base data color, not an
+        # arbitrary hue
+        return self.block_base_color()
 
     def _get_sublane_row_at_y(self, y_pos):
         """Detect which sublane row a Y position is in.
@@ -932,8 +1243,6 @@ class LightBlockWidget(QWidget):
         Returns:
             Sublane type string ("dimmer", "colour", "movement", "special") or None
         """
-        sublane_height = self.lane_widget.sublane_height
-
         # Check each sublane row based on capabilities
         sublane_types = []
         # Show dimmer sublane if has dimmer OR colour (dimmer controls RGB for no-dimmer fixtures)
@@ -946,10 +1255,12 @@ class LightBlockWidget(QWidget):
         if self.lane_widget.capabilities.has_special:
             sublane_types.append("special")
 
+        # Band bounds from the shared geometry: rows start below the
+        # strip zone, so a y inside the strip hits no sublane row.
+        _strip, bands = self.band_geometry()
         for i, sublane_type in enumerate(sublane_types):
-            y_min = i * sublane_height
-            y_max = (i + 1) * sublane_height
-            if y_min <= y_pos < y_max:
+            y_min, band_h = bands[min(i, len(bands) - 1)]
+            if y_min <= y_pos < y_min + band_h:
                 return sublane_type
 
         return None
@@ -963,8 +1274,6 @@ class LightBlockWidget(QWidget):
         Returns:
             Tuple of (sublane_type, sublane_block) or (None, None)
         """
-        sublane_height = self.lane_widget.sublane_height
-
         # Build list of sublane types based on fixture capabilities
         # This must match the rendering logic exactly
         sublane_block_lists = []
@@ -981,12 +1290,10 @@ class LightBlockWidget(QWidget):
             sublane_block_lists.append(("special", self.block.special_blocks))
 
         for sublane_type, sublane_blocks in sublane_block_lists:
-            # Get sublane row index
-            sublane_index = self.lane_widget.get_sublane_index(sublane_type)
-
-            # Calculate y bounds for this sublane row
-            y_min = sublane_index * sublane_height
-            y_max = (sublane_index + 1) * sublane_height
+            # Band bounds for this sublane row (shared geometry, below
+            # the strip zone)
+            y_min, band_h = self.sublane_band_rect(sublane_type)
+            y_max = y_min + band_h
 
             # Check if Y position is in this sublane row
             if not (y_min <= pos.y() <= y_max):
@@ -1036,12 +1343,10 @@ class LightBlockWidget(QWidget):
             return False
 
         try:
-            sublane_height = self.lane_widget.sublane_height
             margin = 2
 
-            # Get sublane row index
-            sublane_index = self.lane_widget.get_sublane_index(sublane_type)
-            y_offset = sublane_index * sublane_height
+            # Band position/height from the shared geometry
+            y_offset, sublane_height = self.sublane_band_rect(sublane_type)
 
             # Calculate handle Y position
             intensity = getattr(sublane_block, 'intensity', 255.0)
@@ -1096,28 +1401,15 @@ class LightBlockWidget(QWidget):
         return None
 
     def _get_block_color(self) -> QColor:
-        """Get color for block based on effect or parameters."""
+        """Get color for block based on effect or parameters.
+
+        Falls back to the lane's group data color (or a brand neutral)
+        rather than a Material per-effect palette.
+        """
         # Use color from parameters if set
         if self.block.parameters.get('color'):
             return QColor(self.block.parameters['color'])
-
-        # Default colors based on effect type
-        if not self.block.effect_name:
-            return QColor("#666666")
-
-        effect_lower = self.block.effect_name.lower()
-        if 'static' in effect_lower:
-            return QColor("#4CAF50")  # Green
-        elif 'fade' in effect_lower:
-            return QColor("#2196F3")  # Blue
-        elif 'pulse' in effect_lower or 'strobe' in effect_lower:
-            return QColor("#FF9800")  # Orange
-        elif 'wave' in effect_lower:
-            return QColor("#9C27B0")  # Purple
-        elif 'rainbow' in effect_lower or 'color' in effect_lower:
-            return QColor("#E91E63")  # Pink
-        else:
-            return QColor("#607D8B")  # Blue-gray
+        return self._group_base_color()
 
     def mousePressEvent(self, event: QMouseEvent):
         """Handle mouse press for dragging/resizing envelope or sublane blocks."""
@@ -1430,12 +1722,12 @@ class LightBlockWidget(QWidget):
 
             # Get sublane info
             sublane_type = "dimmer"  # Intensity handle only for dimmer blocks
-            sublane_height = self.lane_widget.sublane_height
             margin = 2
 
-            # Get sublane row index
-            sublane_index = self.lane_widget.get_sublane_index(sublane_type)
-            y_offset = sublane_index * sublane_height
+            # Band position/height from the shared geometry (below the
+            # strip zone), matching _is_on_intensity_handle and the
+            # painted handle exactly
+            y_offset, sublane_height = self.sublane_band_rect(sublane_type)
 
             # Calculate new intensity from Y position
             usable_height = sublane_height - 2 * margin
@@ -1622,6 +1914,12 @@ class LightBlockWidget(QWidget):
                 self.overlap_detected = False
                 self.update()
 
+            # One undo command per COMPLETED envelope drag (the live
+            # drag already mutated the block per pixel, so the command
+            # is pushed already-applied). Also emits block_edited -
+            # moves/resizes previously never triggered auto-save.
+            self._push_envelope_drag_undo()
+
             self.dragging = False
             self.resizing_left = False
             self.resizing_right = False
@@ -1634,6 +1932,42 @@ class LightBlockWidget(QWidget):
             self.dragging_sublane = None
             self.dragging_intensity_handle = None
             # Note: We keep self.selected_sublane_block so the selection persists after release
+
+    def _push_envelope_drag_undo(self):
+        """Push ONE Move/Resize command for a completed envelope drag.
+
+        Called from mouseReleaseEvent while the drag flags are still
+        set. The drag mutated the block live, so commands are pushed
+        already-applied (a Move's first redo must not shift the sublane
+        blocks a second time). A click without movement pushes nothing.
+        """
+        if self.drag_start_time is None or self.drag_start_duration is None:
+            return
+        moved = self.dragging and not self.shift_drag_copying
+        resized = self.resizing_left or self.resizing_right
+        if not (moved or resized):
+            return
+        old_start = self.drag_start_time
+        old_end = self.drag_start_time + self.drag_start_duration
+        new_start, new_end = self.block.start_time, self.block.end_time
+        if abs(new_start - old_start) < 1e-9 and abs(new_end - old_end) < 1e-9:
+            return
+        stack = None
+        if hasattr(self.lane_widget, "_get_undo_stack"):
+            stack = self.lane_widget._get_undo_stack()
+        if stack is not None:
+            from .undo_commands import MoveBlockCommand, ResizeBlockCommand
+            if moved:
+                stack.push(MoveBlockCommand(
+                    self.lane_widget, self.block, old_start, old_end,
+                    new_start, new_end, already_applied=True))
+            else:
+                # ResizeBlockCommand.redo sets absolute times, so the
+                # push-time redo is a harmless re-set of current values.
+                stack.push(ResizeBlockCommand(
+                    self.lane_widget, self.block, old_start, old_end,
+                    new_start, new_end))
+        self.block_edited.emit()
 
     def mouseDoubleClickEvent(self, event: QMouseEvent):
         """Handle double-click to open effect editor or sublane block editor."""
@@ -1871,7 +2205,6 @@ class LightBlockWidget(QWidget):
         Returns:
             List of (sublane_type, sublane_block) tuples.
         """
-        sublane_height = self.lane_widget.sublane_height
         caps = self.lane_widget.capabilities
 
         sublane_lists = []
@@ -1888,9 +2221,9 @@ class LightBlockWidget(QWidget):
         results = []
 
         for sublane_type, sublane_blocks in sublane_lists:
-            sublane_index = self.lane_widget.get_sublane_index(sublane_type)
-            row_top = sublane_index * sublane_height
-            row_bottom = row_top + sublane_height
+            # Band bounds from the shared geometry
+            row_top, band_h = self.sublane_band_rect(sublane_type)
+            row_bottom = row_top + band_h
             # Vertical overlap with marquee rect.
             if rect.bottom() < row_top or rect.top() > row_bottom:
                 continue

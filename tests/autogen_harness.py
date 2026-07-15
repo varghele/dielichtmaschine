@@ -241,13 +241,13 @@ def main():
     config = Configuration.load(args.config)
 
     # Find show
-    if args.show not in config.shows:
+    if args.show not in config.songs:
         print(f"ERROR: Show '{args.show}' not found. Available shows:")
-        for name in config.shows:
+        for name in config.songs:
             print(f"  - {name}")
         sys.exit(1)
 
-    show = config.shows[args.show]
+    show = config.songs[args.show]
     print(f"Show: {args.show} ({len(show.parts)} parts)")
 
     # Apply role overrides from CLI

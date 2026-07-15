@@ -1,6 +1,6 @@
 # 3D Visualizer
 
-The Visualizer is a separate PyQt6/ModernGL application that provides real-time 3D preview of lighting effects. It receives configuration via TCP and DMX data via ArtNet from the Show Creator (or from QLC+ directly).
+The Visualizer is a separate PyQt6/ModernGL application that provides real-time 3D preview of lighting effects. It receives configuration via TCP and DMX data via ArtNet from Die Lichtmaschine (or from QLC+ directly).
 
 ## Running
 

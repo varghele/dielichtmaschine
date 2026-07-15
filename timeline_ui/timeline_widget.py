@@ -3,9 +3,173 @@
 # Adapted from midimaker_and_show_structure/ui/lane_widget.py
 
 import json
+import math
 from PyQt6.QtWidgets import QWidget, QMenu
 from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtGui import QPainter, QPen, QColor, QWheelEvent, QBrush
+
+
+# Shared width of the header column to the left of every timeline row
+# (master ruler, audio lane, light lanes). Timeline v3 (screen 06b)
+# pins it at 260 px; TimelineGrid and every lane header import this so
+# all track canvases stay column-aligned.
+HEADER_COLUMN_WIDTH = 260
+
+# Height of the block header-strip zone reserved at the TOP of every
+# light lane's content area. The block's "BASE · ..." strip renders
+# inside this zone and the sublane bands all start below it, so the
+# strip stacks on top of the dimmer band instead of painting over it
+# (and over the dimmer intensity handle). Lanes without sublane
+# content (master ruler, audio lane) reserve no strip zone - see
+# TimelineWidget.band_geometry.
+STRIP_ZONE_HEIGHT = 16
+
+
+def sublane_band_geometry(num_sublanes, sublane_height,
+                          strip_height=STRIP_ZONE_HEIGHT):
+    """Shared vertical geometry of a light lane's content area.
+
+    Returns ``(strip, bands)``: ``strip`` is the height of the header
+    strip zone at the top, ``bands`` a list of ``(y, height)`` float
+    pairs, one per sublane row, all starting below the strip zone. The
+    overall height stays ``num_sublanes * sublane_height``; the bands
+    compress evenly to make room for the strip zone.
+
+    This is the single source of truth for lane band geometry. All
+    three consumers derive from it so they cannot drift: the canvas
+    sublane separators (TimelineWidget.band_geometry), the block
+    widget's header strip / sub-rows / hit-tests (LightBlockWidget
+    band helpers), and the DIM/COL/MOV/SPC header-column labels
+    (LightLaneWidget.refresh_sublane_labels).
+    """
+    num = max(1, int(num_sublanes))
+    total = num * float(sublane_height)
+    # Degenerate safety: never let the strip eat more than half the
+    # lane, so every band keeps a usable height.
+    strip = max(0.0, min(float(strip_height), total / 2.0))
+    band_height = (total - strip) / num
+    bands = [(strip + i * band_height, band_height) for i in range(num)]
+    return strip, bands
+
+# Full triplet-swing ratio: at swing amount 1.0 the off-beat lands at 2/3
+# of the beat. Amounts between 0 and 1 interpolate linearly from the
+# straight 1/2 (see swing_ratio).
+SWING_RATIO = 2.0 / 3.0
+# Epsilon guards. Subdivision is now a float (steps per beat): coarse grids
+# are fractions (0.25 = a line every 4 beats), fine grids are >1 (16 = 1/16).
+_SUBDIVISION_EPS = 1e-6
+_STEP_EPS = 1e-9
+
+
+def swing_ratio(amount: float) -> float:
+    """Off-beat ratio for a swing ``amount`` in [0, 1].
+
+    0.0 keeps the straight grid (the off-beat stays at 1/2 of the beat),
+    1.0 is the full triplet feel (off-beat at ``SWING_RATIO`` = 2/3), and
+    intermediate amounts shift the off-beat linearly between the two.
+    Bools are accepted (``True`` == 1.0) for backward compatibility with
+    the former on/off toggle; out-of-range values clamp.
+    """
+    amount = min(1.0, max(0.0, float(amount)))
+    return 0.5 + amount * (SWING_RATIO - 0.5)
+
+
+def swing_warp(f: float, ratio: float = SWING_RATIO) -> float:
+    """Warp a within-beat fraction ``f`` in [0, 1) to a triplet (2:1) feel.
+
+    ``swing_warp(0) == 0`` (beat/bar lines are unaffected), ``swing_warp(0.5)``
+    lands on ``ratio`` (2/3), and the function is monotonic increasing on
+    [0, 1) with ``swing_warp(f) -> 1`` as ``f -> 1``. Two linear pieces map
+    the first and second half of the beat onto [0, ratio] and [ratio, 1].
+    """
+    if f < 0.5:
+        return (f / 0.5) * ratio
+    return ratio + ((f - 0.5) / 0.5) * (1.0 - ratio)
+
+
+def _is_multiple(value: float, base: float, eps: float = 1e-6) -> bool:
+    """True if ``value`` is (approximately) an integer multiple of ``base``."""
+    if base <= 0:
+        return False
+    r = value % base
+    return r < eps or (base - r) < eps
+
+
+def iter_grid_steps(part_start, seconds_per_beat, beats_per_bar, total_beats,
+                    subdivision, swing, is_last_part,
+                    pixels_per_second, min_subdivision_pixels):
+    """Yield ``(step_time, kind)`` grid lines for one part.
+
+    ``kind`` is ``"bar"`` (bar boundary), ``"beat"`` (beat boundary) or
+    ``"sub"`` (finer sub-beat line). ``subdivision`` is steps-per-beat as a
+    float: values <= 1 give sparse coarse grids (a line every 1/subdivision
+    beats) that are always drawn; values > 1 give fine sub-beat lines that
+    are hidden when they get denser than ``min_subdivision_pixels``.
+    ``swing`` is the swing amount in [0, 1] (bools accepted): sub-beat
+    fractions are warped by :func:`swing_warp` using the amount's
+    interpolated ratio; beat/bar lines (fraction 0) are never moved.
+    """
+    swing_amount = min(1.0, max(0.0, float(swing)))
+    ratio = swing_ratio(swing_amount)
+    subdivision = max(_SUBDIVISION_EPS, float(subdivision))
+    seconds_per_step = seconds_per_beat / subdivision
+    pixels_per_step = seconds_per_step * pixels_per_second
+    # Fine sub-lines become visual noise below the density floor: fall back
+    # to a beat-resolution grid. Coarse grids (<= 1) are sparse: always drawn.
+    if subdivision > 1.0 and pixels_per_step < min_subdivision_pixels:
+        sub = 1.0
+    else:
+        sub = subdivision
+
+    upper = total_beats + _STEP_EPS if is_last_part else total_beats - _STEP_EPS
+    step_index = 0
+    while True:
+        beat_pos = step_index / sub
+        if beat_pos > upper:
+            break
+        beat_index = int(math.floor(beat_pos + _STEP_EPS))
+        frac = beat_pos - beat_index
+        if frac < _STEP_EPS:
+            frac = 0.0
+        warped = (swing_warp(frac, ratio)
+                  if (swing_amount > 0.0 and frac > 0.0) else frac)
+        step_time = part_start + (beat_index + warped) * seconds_per_beat
+        if frac == 0.0:
+            kind = "bar" if _is_multiple(beat_index, beats_per_bar) else "beat"
+        else:
+            kind = "sub"
+        yield step_time, kind
+        step_index += 1
+
+
+def _snap_in_frame(target, frame_start, seconds_per_beat, subdivision, swing):
+    """Snap ``target`` to the grid within a single-tempo frame.
+
+    ``frame_start`` is the reference (part start or 0); ``subdivision`` is
+    steps-per-beat (float); ``swing`` is the swing amount in [0, 1] (bools
+    accepted). At amount 0 (or for coarse grids <= 1) this is plain
+    nearest-step rounding. With a positive amount and a fine grid,
+    candidate positions are the swing-warped sub-beat fractions of the
+    nearby beats, using the amount's interpolated off-beat ratio.
+    """
+    seconds_per_step = seconds_per_beat / subdivision
+    swing_amount = min(1.0, max(0.0, float(swing)))
+    if swing_amount <= 0.0 or subdivision <= 1.0:
+        step = round((target - frame_start) / seconds_per_step)
+        return frame_start + step * seconds_per_step
+
+    ratio = swing_ratio(swing_amount)
+    steps_per_beat = max(1, int(round(subdivision)))
+    beat = (target - frame_start) / seconds_per_beat
+    base_beat = int(math.floor(beat))
+    best = None
+    for b in (base_beat - 1, base_beat, base_beat + 1):
+        for k in range(steps_per_beat):
+            f = k / steps_per_beat
+            cand = frame_start + (b + swing_warp(f, ratio)) * seconds_per_beat
+            if best is None or abs(cand - target) < abs(best - target):
+                best = cand
+    return best
 
 
 class TimelineWidget(QWidget):
@@ -27,23 +191,42 @@ class TimelineWidget(QWidget):
         self.base_pixels_per_second = 60  # Base: 60 pixels per second
         self.pixels_per_second = self.base_pixels_per_second
         self.snap_to_grid = True
-        # Number of snap points per beat. 1=on-beat, 2=half-beat, 4=quarter-beat.
-        # Subdivision lines are visually rendered fainter than beat lines and
-        # are zoom-gated (hidden when too small to read — see draw_*_grid).
-        self.grid_subdivision = 1
-        # Below this many pixels per subdivision step, the extra grid lines
-        # become visual noise rather than guidance. Snap targets stay active.
+        # Grid steps per beat, as a float. 1.0=on-beat; fractions give coarse
+        # grids (0.25 = a line every 4 beats, 0.5 = every 2 beats); values > 1
+        # give fine sub-beat lines (2=1/2, 4=1/4, 8=1/8, 16=1/16). Fine lines
+        # render fainter than beat lines and are zoom-gated (hidden when too
+        # small to read — see draw_*_grid); coarse grids are always drawn.
+        self.grid_subdivision = 1.0
+        # Below this many pixels per subdivision step, the extra fine grid
+        # lines become visual noise rather than guidance. Snap targets stay
+        # active.
         self.min_subdivision_pixels = 12
+        # Swing amount for the off-beat grid, 0.0-1.0. At 1.0 sub-beat
+        # lines and snap targets warp so the eighth-note off-beat sits at
+        # 2/3 of the beat instead of 1/2; intermediate amounts shift the
+        # off-beat linearly. Beat/bar lines are never moved. 0.0 = off.
+        self.swing_amount = 0.0
         self.playhead_position = 0.0  # Position in seconds
         self.dragging_playhead = False
         self.min_zoom = 0.1
         self.max_zoom = 5.0
         self.song_structure = None
+        # Timeline v3 (stage T4): the Shows tab unifies the playhead as a
+        # 2px brand-accent line across master + audio + light lanes.
+        # Default stays the legacy red so the Structure tab's shared
+        # master/audio rows (and their goldens) are untouched; the Shows
+        # tab opts in (compact master/audio set it, TimelineGrid fans it
+        # out to light lanes from the master).
+        self.playhead_accent = False
 
         # Sublane support
         self.num_sublanes = 1  # Number of sublanes (1-4)
         self.sublane_height = 60  # Height per sublane in pixels
-        self.capabilities = None  # FixtureGroupCapabilities (for label drawing)
+        self.capabilities = None  # FixtureGroupCapabilities (for sublane layout)
+        # Optional callable, set by the owning LightLaneWidget: re-applies
+        # the timeline/show_sublane_labels setting to the header label
+        # column whenever update() runs (see update()).
+        self.sublane_labels_setting_hook = None
 
         # Drag-drop support for riffs
         self.setAcceptDrops(True)
@@ -104,11 +287,24 @@ class TimelineWidget(QWidget):
         """Enable/disable snap to grid."""
         self.snap_to_grid = snap
 
-    def set_grid_subdivision(self, subdivision: int):
-        """Set how many snap steps fit in one beat. 1/2/4 are the supported
-        UI choices; values outside that range still work mathematically.
+    def set_grid_subdivision(self, subdivision: float):
+        """Set how many grid steps fit in one beat (float, steps per beat).
+
+        0.25/0.5 give coarse grids (a line every 4/2 beats); 1 is on-beat;
+        2/4/8/16 give fine sub-beat grids. Values outside the UI catalog still
+        work mathematically.
         """
-        self.grid_subdivision = max(1, int(subdivision))
+        self.grid_subdivision = max(_SUBDIVISION_EPS, float(subdivision))
+        self.update()
+
+    def set_swing(self, amount: float):
+        """Set the swing amount on the sub-beat grid and repaint.
+
+        ``amount`` is 0.0-1.0: 0 keeps the straight grid, 1 is the full
+        triplet feel, in between the off-beat shift interpolates linearly.
+        Bools are accepted for backward compatibility (True == 1.0).
+        """
+        self.swing_amount = min(1.0, max(0.0, float(amount)))
         self.update()
 
     def set_playhead_position(self, position: float):
@@ -224,18 +420,35 @@ class TimelineWidget(QWidget):
     def find_nearest_beat_time(self, target_time: float) -> float:
         """Find the nearest snap position using song structure if available.
 
-        Honours ``self.grid_subdivision`` so half/quarter-beat snapping works
-        identically whether or not a song structure is loaded.
+        Honours ``self.grid_subdivision`` (float steps-per-beat, so coarse and
+        fine grids snap uniformly) and ``self.swing_amount`` (off-beat targets
+        shift toward the triplet feel with the amount), whether or not a song
+        structure is loaded. Snapping is done in-widget rather than delegating
+        to SongStructure so the float/swing behaviour matches the drawn grid
+        exactly.
         """
-        subdivision = max(1, int(self.grid_subdivision))
-        if not (self.song_structure and hasattr(self.song_structure, 'parts') and self.song_structure.parts):
-            # Fallback to simple beat snapping with default BPM
-            step_duration = (60.0 / self.bpm) / subdivision
-            nearest_step = round(target_time / step_duration)
-            return nearest_step * step_duration
+        subdivision = max(_SUBDIVISION_EPS, float(getattr(self, "grid_subdivision", 1.0)))
+        swing = float(getattr(self, "swing_amount", 0.0))
 
-        # Use song structure's snap function with current subdivision
-        return self.song_structure.find_nearest_beat_time(target_time, subdivision=subdivision)
+        ss = self.song_structure
+        if ss and hasattr(ss, 'parts') and ss.parts:
+            part = ss.get_part_at_time(target_time)
+            if part is None:
+                # Before the first part or past the last: no grid to snap to.
+                if target_time < 0:
+                    return 0.0
+                return target_time
+            if getattr(part, "transition", "instant") != "instant":
+                # Gradual transitions have no stable beat grid; punt (matches
+                # SongStructure.find_nearest_beat_time).
+                return target_time
+            seconds_per_beat = 60.0 / part.bpm
+            return _snap_in_frame(target_time, part.start_time,
+                                  seconds_per_beat, subdivision, swing)
+
+        # Fallback: bare-BPM snap with no song structure.
+        seconds_per_beat = 60.0 / self.bpm
+        return _snap_in_frame(target_time, 0.0, seconds_per_beat, subdivision, swing)
 
     def draw_grid(self, painter, width, height):
         """Draw grid with song structure awareness."""
@@ -257,7 +470,9 @@ class TimelineWidget(QWidget):
         bar_pen = QPen(QColor(127, 127, 127, 160), 2)
         part_pen = QPen(QColor(127, 127, 127, 220), 3)
 
-        subdivision = max(1, int(self.grid_subdivision))
+        subdivision = getattr(self, "grid_subdivision", 1.0)
+        swing = getattr(self, "swing_amount", 0.0)
+        min_px = getattr(self, "min_subdivision_pixels", 12)
 
         num_parts = len(self.song_structure.parts)
         for part_idx, part in enumerate(self.song_structure.parts):
@@ -265,39 +480,26 @@ class TimelineWidget(QWidget):
             total_beats_in_part = int(part.num_bars * beats_per_bar)
             seconds_per_beat = 60.0 / part.bpm
 
-            # Pixels per subdivision step govern whether sub-beat lines are
-            # visible at the current zoom — under min_subdivision_pixels they
-            # smear together into noise, so we draw beats only.
-            pixels_per_step = (seconds_per_beat / subdivision) * self.pixels_per_second
-            draw_subs = subdivision > 1 and pixels_per_step >= self.min_subdivision_pixels
-
             # Draw part boundary
             start_x = round(self.time_to_pixel(part.start_time))
             if 0 <= start_x <= width:
                 painter.setPen(part_pen)
                 painter.drawLine(start_x, 0, start_x, height)
 
-            # For all parts except the last, skip the final beat
             is_last_part = (part_idx == num_parts - 1)
-            max_beat = total_beats_in_part if is_last_part else total_beats_in_part - 1
-
-            steps_per_beat = subdivision if draw_subs else 1
-            seconds_per_step = seconds_per_beat / steps_per_beat
-            total_steps = max_beat * steps_per_beat + (steps_per_beat if is_last_part else 1)
-
-            for step_index in range(total_steps + 1):
-                step_time = part.start_time + (step_index * seconds_per_step)
+            for step_time, kind in iter_grid_steps(
+                    part.start_time, seconds_per_beat, beats_per_bar,
+                    total_beats_in_part, subdivision, swing, is_last_part,
+                    self.pixels_per_second, min_px):
                 step_x = round(self.time_to_pixel(step_time))
-
                 if not (0 <= step_x <= width):
                     continue
-
-                is_beat = (step_index % steps_per_beat == 0)
-                if not is_beat:
-                    painter.setPen(sub_pen)
+                if kind == "bar":
+                    painter.setPen(bar_pen)
+                elif kind == "beat":
+                    painter.setPen(beat_pen)
                 else:
-                    beat_index = step_index // steps_per_beat
-                    painter.setPen(bar_pen if beat_index % beats_per_bar == 0 else beat_pen)
+                    painter.setPen(sub_pen)
                 painter.drawLine(step_x, 0, step_x, height)
 
     def draw_basic_grid(self, painter, width, height):
@@ -306,33 +508,48 @@ class TimelineWidget(QWidget):
         beat_pen = QPen(QColor(127, 127, 127, 80), 1)
         bar_pen = QPen(QColor(127, 127, 127, 160), 2)
 
-        subdivision = max(1, int(self.grid_subdivision))
+        subdivision = getattr(self, "grid_subdivision", 1.0)
+        swing = getattr(self, "swing_amount", 0.0)
+        min_px = getattr(self, "min_subdivision_pixels", 12)
         seconds_per_beat = 60.0 / self.bpm
-        pixels_per_step = (seconds_per_beat / subdivision) * self.pixels_per_second
-        draw_subs = subdivision > 1 and pixels_per_step >= self.min_subdivision_pixels
-        steps_per_beat = subdivision if draw_subs else 1
-        seconds_per_step = seconds_per_beat / steps_per_beat
 
+        # Cover the visible width; treat it as one 4/4 "part".
         max_time = width / self.pixels_per_second
-        step_count = 0
-        step_time = 0.0
-        while step_time <= max_time:
+        total_beats = int(math.ceil(max_time / seconds_per_beat)) + 1
+        for step_time, kind in iter_grid_steps(
+                0.0, seconds_per_beat, 4.0, total_beats, subdivision, swing,
+                True, self.pixels_per_second, min_px):
             x = round(self.time_to_pixel(step_time))
-            if step_count % steps_per_beat != 0:
-                painter.setPen(sub_pen)
+            if not (0 <= x <= width):
+                continue
+            if kind == "bar":
+                painter.setPen(bar_pen)
+            elif kind == "beat":
+                painter.setPen(beat_pen)
             else:
-                beat_index = step_count // steps_per_beat
-                painter.setPen(bar_pen if beat_index % 4 == 0 else beat_pen)
+                painter.setPen(sub_pen)
             painter.drawLine(x, 0, x, height)
-            step_count += 1
-            step_time = step_count * seconds_per_step
+
+    def _playhead_color(self) -> QColor:
+        """Ink for the playhead line.
+
+        Brand accent when ``playhead_accent`` is set (timeline v3 look,
+        Shows tab); legacy red otherwise. Custom painters cannot reach
+        QSS roles, so the accent is read from the active theme tokens
+        (deferred import: light_block_widget imports config models only,
+        no cycle back into this module's importers).
+        """
+        if getattr(self, "playhead_accent", False):
+            from .light_block_widget import token_qcolor
+            return token_qcolor("accent")
+        return QColor("#FF4444")
 
     def draw_playhead(self, painter, width, height):
-        """Draw playhead at time position."""
+        """Draw playhead at time position (a 2px vertical line)."""
         playhead_x = round(self.time_to_pixel(self.playhead_position))
 
         if 0 <= playhead_x <= width:
-            playhead_pen = QPen(QColor("#FF4444"), 2)
+            playhead_pen = QPen(self._playhead_color(), 2)
             painter.setPen(playhead_pen)
             painter.drawLine(playhead_x, 0, playhead_x, height)
 
@@ -357,69 +574,47 @@ class TimelineWidget(QWidget):
         except Exception as e:
             print(f"Error drawing song structure background: {e}")
 
+    def band_geometry(self):
+        """``(strip, bands)`` for this canvas via sublane_band_geometry.
+
+        Only lanes with sublane content reserve the strip zone: the
+        master ruler and the audio lane leave ``capabilities`` unset
+        (None) and keep the legacy full-height geometry, so their rows
+        do not shift.
+        """
+        if self.capabilities is None:
+            h = float(self.sublane_height)
+            return 0.0, [(i * h, h) for i in range(max(1, self.num_sublanes))]
+        return sublane_band_geometry(self.num_sublanes, self.sublane_height)
+
     def draw_sublane_separators(self, painter, width, height):
-        """Draw horizontal lines separating sublanes."""
+        """Draw horizontal lines separating sublanes (at the shared
+        band boundaries, below the block header-strip zone)."""
         if self.num_sublanes <= 1:
             return
 
         separator_pen = QPen(QColor(127, 127, 127, 200), 1, Qt.PenStyle.DashLine)
         painter.setPen(separator_pen)
 
-        for i in range(1, self.num_sublanes):
-            y = i * self.sublane_height
+        _strip, bands = self.band_geometry()
+        for y, _h in bands[1:]:
             painter.drawLine(0, int(y), width, int(y))
 
-    def draw_sublane_labels(self, painter, width, height):
-        """Draw sublane type labels on the left side of each row."""
-        if self.num_sublanes <= 1 or not self.capabilities:
-            return
+    def update(self, *args):
+        """QWidget.update plus the sub-lane-label setting sync hook.
 
-        from PyQt6.QtGui import QFont
-        from PyQt6.QtCore import QRect
-
-        # Get sublane types in order
-        sublane_types = []
-        if self.capabilities.has_dimmer:
-            sublane_types.append(("Dimmer", QColor(255, 200, 100)))
-        if self.capabilities.has_colour:
-            sublane_types.append(("Colour", QColor(100, 255, 150)))
-        if self.capabilities.has_movement:
-            sublane_types.append(("Movement", QColor(100, 150, 255)))
-        if self.capabilities.has_special:
-            sublane_types.append(("Special", QColor(200, 100, 255)))
-
-        # Set font for labels
-        font = QFont()
-        font.setPointSize(8)
-        font.setBold(True)
-        painter.setFont(font)
-
-        # Draw each label
-        for i, (label, color) in enumerate(sublane_types):
-            y_offset = i * self.sublane_height
-
-            # Calculate text size
-            metrics = painter.fontMetrics()
-            text_width = metrics.horizontalAdvance(label)
-            text_height = metrics.height()
-
-            # Position at left with padding
-            x_pos = 4
-            y_pos = y_offset + (self.sublane_height + text_height) // 2 - 3
-            padding = 3
-
-            # Draw semi-transparent colored background
-            bg_rect = QRect(x_pos - padding, y_offset + 2,
-                           text_width + 2 * padding, text_height + padding)
-            bg_color = QColor(color)
-            bg_color.setAlpha(100)
-            painter.setBrush(bg_color)
-            painter.setPen(QPen(color.darker(130), 1))
-            painter.drawRoundedRect(bg_rect, 2, 2)
-
-            # Draw text in dark color for contrast
-            painter.setPen(QPen(QColor(40, 40, 40)))
-            painter.drawText(x_pos, y_pos, label)
+        The canvas no longer paints sub-lane purpose labels (timeline v3
+        moved them into the lane header column), but the Settings toggle
+        path (`ShowsTab.refresh_sublane_labels_setting`) still reaches
+        each lane by calling ``timeline_widget.update()``. The owning
+        LightLaneWidget registers ``sublane_labels_setting_hook`` so that
+        same call re-applies the ``timeline/show_sublane_labels`` setting
+        to its header label column - no shows-tab change needed.
+        """
+        hook = getattr(self, "sublane_labels_setting_hook", None)
+        if hook is not None:
+            hook()
+        super().update(*args)
 
     def paintEvent(self, event):
         """Draw the timeline."""
@@ -437,11 +632,10 @@ class TimelineWidget(QWidget):
         # Draw grid
         self.draw_grid(painter, width, height)
 
-        # Draw sublane separators
+        # Draw sublane separators. (Sub-lane purpose labels are no longer
+        # painted on the canvas - timeline v3 lists DIM/COL/MOV/SPC in the
+        # lane header column instead.)
         self.draw_sublane_separators(painter, width, height)
-
-        # Draw sublane labels
-        self.draw_sublane_labels(painter, width, height)
 
         # Draw drag preview (if dragging a riff)
         self.draw_drag_preview(painter, width, height)

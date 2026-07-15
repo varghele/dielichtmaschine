@@ -1,3 +1,5 @@
+from math import cos, radians, sin
+
 from PyQt6 import QtWidgets, QtGui, QtCore
 from PyQt6.QtCore import pyqtProperty
 from PyQt6.QtGui import QColor
@@ -16,12 +18,41 @@ _FALLBACK_LABEL = QColor(60, 60, 60)
 _FALLBACK_FIXTURE_TEXT = QColor(0, 0, 0)
 
 
+# Drag-and-drop contract between the Stage tab's element palette and the
+# 2D plan: the payload is the catalog kind, UTF-8 encoded. Kept here
+# because the drop target owns the format; the palette imports it.
+ELEMENT_MIME_TYPE = "application/x-lichtmaschine-element"
+
+
+def element_mime_data(kind: str) -> QtCore.QMimeData:
+    """The QMimeData a palette tile drags: one catalog kind."""
+    mime = QtCore.QMimeData()
+    mime.setData(ELEMENT_MIME_TYPE, QtCore.QByteArray(kind.encode("utf-8")))
+    return mime
+
+
+def element_kind_from_mime(mime) -> str:
+    """The catalog kind carried by a drag, or '' when it carries none."""
+    if mime is None or not mime.hasFormat(ELEMENT_MIME_TYPE):
+        return ""
+    return bytes(mime.data(ELEMENT_MIME_TYPE)).decode("utf-8", "replace")
+
+
 class StageView(QtWidgets.QGraphicsView):
     # Signal emitted when fixture positions/rotations/heights change
     fixtures_changed = QtCore.pyqtSignal()
 
     # Signal emitted when user requests to set orientation for selected fixtures
     set_orientation_requested = QtCore.pyqtSignal(list)  # List of FixtureItem
+
+    # Emitted with the freshly placed StageElement after a palette click
+    # or a palette drop (the tab refreshes its layer UI on it: placing a
+    # truss creates a stage layer).
+    stage_element_added = QtCore.pyqtSignal(object)
+
+    # Emitted whenever the set of stage marks (spots) changes - added,
+    # removed or renamed - so the Marks list in the tab can refresh.
+    spots_changed = QtCore.pyqtSignal()
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -95,10 +126,17 @@ class StageView(QtWidgets.QGraphicsView):
         # only works after the user has tabbed to the view.
         self.setFocusPolicy(QtCore.Qt.FocusPolicy.StrongFocus)
 
+        # Active-layer editing mode: when set to a layer name, only that
+        # layer's fixtures are interactive; everything else ghosts to a
+        # faint, locked reference. None = normal editing. UI state, not
+        # persisted to the config.
+        self.active_layer = None
+
         # List to store fixture items
         self.fixtures = {}
         self.spots = {}  # name: SpotItem
         self.spot_counter = 1  # Counter for generating unique spot names
+        self.stage_element_items = []  # StageElementItem per config.stage_elements entry
 
         # Initial update
         self.updateStage()
@@ -163,6 +201,10 @@ class StageView(QtWidgets.QGraphicsView):
 
     def set_config(self, config):
         """Update the configuration and refresh the view"""
+        if config is not self.config:
+            # A different project: the active-layer editing mode belongs
+            # to the previous config's layer set.
+            self.active_layer = None
         self.config = config
         self.update_from_config()
 
@@ -175,13 +217,17 @@ class StageView(QtWidgets.QGraphicsView):
 
         Returns:
             Tuple of (x_px, y_px) pixel coordinates
+
+        The audience/front (negative Y) renders at the BOTTOM of the
+        plan: screen Y grows downward, so negative y_m must map to a
+        LARGER y_px. The X mapping is unchanged.
         """
         # Center of stage in pixels
         center_x_px = self.padding + (self.stage_width_m / 2) * self.pixels_per_meter
         center_y_px = self.padding + (self.stage_depth_m / 2) * self.pixels_per_meter
 
         x_px = center_x_px + x_m * self.pixels_per_meter
-        y_px = center_y_px + y_m * self.pixels_per_meter
+        y_px = center_y_px - y_m * self.pixels_per_meter
 
         return x_px, y_px
 
@@ -199,8 +245,10 @@ class StageView(QtWidgets.QGraphicsView):
         center_x_px = self.padding + (self.stage_width_m / 2) * self.pixels_per_meter
         center_y_px = self.padding + (self.stage_depth_m / 2) * self.pixels_per_meter
 
+        # Inverse of meters_to_pixels: the Y axis is flipped so that a
+        # LOW screen y (bottom = audience/front) maps to a negative y_m.
         x_m = (x_px - center_x_px) / self.pixels_per_meter
-        y_m = (y_px - center_y_px) / self.pixels_per_meter
+        y_m = -(y_px - center_y_px) / self.pixels_per_meter
 
         return x_m, y_m
 
@@ -219,8 +267,22 @@ class StageView(QtWidgets.QGraphicsView):
             self.scene.removeItem(spot)
         self.spots.clear()
 
+        # Clear and update static stage elements
+        for item in self.stage_element_items:
+            self.scene.removeItem(item)
+        self.stage_element_items = []
+
         # Reset spot counter
         self.spot_counter = 1
+
+        # Stage elements draw under fixtures (zValue -1 in the item)
+        from gui.stage_items import StageElementItem
+        for element in getattr(self.config, 'stage_elements', []) or []:
+            item = StageElementItem(element, self.pixels_per_meter)
+            x_px, y_px = self.meters_to_pixels(element.x, element.y)
+            item.setPos(x_px, y_px)
+            self.scene.addItem(item)
+            self.stage_element_items.append(item)
 
         # Update fixtures
         if hasattr(self.config, 'fixtures'):
@@ -265,9 +327,13 @@ class StageView(QtWidgets.QGraphicsView):
                 fixture_item.group = fixture.group
                 fixture_item.current_mode = fixture.current_mode
                 fixture_item.available_modes = fixture.available_modes
+                fixture_item.layer = fixture.layer
+                fixture_item.docked_to = getattr(fixture, 'docked_to', "")
 
                 self.scene.addItem(fixture_item)
                 self.fixtures[fixture.name] = fixture_item
+
+        self.apply_layer_visibility()
 
         # Update spots
         if hasattr(self.config, 'spots'):
@@ -311,6 +377,8 @@ class StageView(QtWidgets.QGraphicsView):
                 config_fixture.roll = fixture_item.roll
                 config_fixture.orientation_uses_group_default = fixture_item.orientation_uses_group_default
                 config_fixture.z_uses_group_default = fixture_item.z_uses_group_default
+                config_fixture.layer = fixture_item.layer
+                config_fixture.docked_to = getattr(fixture_item, 'docked_to', "")
 
         # Save spot positions
         for spot_name, spot_item in self.spots.items():
@@ -321,8 +389,291 @@ class StageView(QtWidgets.QGraphicsView):
                 self.config.spots[spot_name].y = y_m
                 self.config.spots[spot_name].z = spot_item.z_height
 
+        # Save stage element positions (items hold their model directly;
+        # rotation/label/layer are written by the item's own actions)
+        for item in self.stage_element_items:
+            pos = item.pos()
+            x_m, y_m = self.pixels_to_meters(pos.x(), pos.y())
+            item.element.x = x_m
+            item.element.y = y_m
+
         # Emit signal to notify listeners (e.g., for TCP visualizer updates)
         self.fixtures_changed.emit()
+
+    def set_active_layer(self, name):
+        """Enter/leave active-layer editing mode (None leaves).
+
+        While a layer is active, its fixtures stay fully interactive and
+        every other fixture (other layers AND unassigned) ghosts: faint,
+        unselectable, undraggable — visible enough to place the active
+        layer's fixtures relative to them, locked so they can't be moved
+        by accident.
+        """
+        if name and (not self.config or self.config.get_stage_layer(name) is None):
+            name = None
+        self.active_layer = name
+        self.apply_layer_visibility()
+
+    def apply_layer_visibility(self):
+        """Show/hide fixture items according to their stage layer's
+        visible flag, and apply active-layer ghosting. Invisible
+        QGraphicsItems are excluded from itemAt / rubber-band hits, so
+        hidden layers can't be selected or dragged by accident."""
+        if not self.config:
+            return
+        active = self.active_layer
+        if active and self.config.get_stage_layer(active) is None:
+            # Layer was deleted underneath us.
+            active = self.active_layer = None
+        for fixture_item in self.fixtures.values():
+            config_fixture = next(
+                (f for f in self.config.fixtures if f.name == fixture_item.fixture_name),
+                None
+            )
+            if config_fixture is not None:
+                fixture_item.setVisible(self.config.is_fixture_visible(config_fixture))
+                fixture_item.set_ghosted(
+                    active is not None and config_fixture.layer != active
+                )
+
+        # Stage elements follow the same layer rules as fixtures:
+        # hidden layer -> hidden, active-layer mode -> non-members ghost.
+        for item in self.stage_element_items:
+            layer = (self.config.get_stage_layer(item.element.layer)
+                     if item.element.layer else None)
+            visible = layer.visible if layer is not None else True
+            item.setVisible(visible)
+            item.set_ghosted(
+                active is not None and item.element.layer != active
+            )
+
+    def add_stage_element(self, kind):
+        """Place a catalog element at stage center; returns the model.
+
+        Palette click-to-place. Everything happens in
+        :meth:`add_stage_element_at` so the drag-and-drop path and this
+        one cannot drift apart.
+        """
+        return self.add_stage_element_at(kind, 0.0, 0.0)
+
+    def add_stage_element_at(self, kind, x_m=0.0, y_m=0.0):
+        """Place a catalog element at (x_m, y_m); returns the model.
+
+        Trusses are their own layer: placing one auto-creates a
+        StageLayer (unique "Truss N" name, default hang height 4 m)
+        that the truss defines; docked fixtures join that layer and
+        its z_height is the hang height.
+
+        Any other element joins the layer currently being edited (if
+        any), so a placed element is never born ghosted.
+        """
+        from config.models import StageLayer
+        from gui.stage_items import StageElementItem
+        from utils.stage_element_catalog import is_truss, make_element
+        element = make_element(kind, x=float(x_m), y=float(y_m))
+        if not hasattr(self.config, 'stage_elements') or self.config.stage_elements is None:
+            self.config.stage_elements = []
+
+        if is_truss(kind):
+            n = 1
+            while self.config.get_stage_layer(f"Truss {n}") is not None:
+                n += 1
+            layer = StageLayer(name=f"Truss {n}", z_height=4.0)
+            self.config.stage_layers.append(layer)
+            element.layer = layer.name
+            element.label = layer.name
+        elif self.active_layer:
+            element.layer = self.active_layer
+
+        self.config.stage_elements.append(element)
+        item = StageElementItem(element, self.pixels_per_meter)
+        x_px, y_px = self.meters_to_pixels(element.x, element.y)
+        item.setPos(x_px, y_px)
+        self.scene.addItem(item)
+        self.stage_element_items.append(item)
+        self.apply_layer_visibility()
+        self.stage_element_added.emit(element)
+        self.fixtures_changed.emit()
+        return element
+
+    # ── Palette drag-and-drop ─────────────────────────────────────────
+
+    def _dropped_element_kind(self, event) -> str:
+        """The catalog kind of a palette drag, '' when it is some other
+        drag (fixture drags, file drops) - those fall through to the
+        QGraphicsView default so nothing existing breaks."""
+        from utils.stage_element_catalog import CATALOG
+        kind = element_kind_from_mime(event.mimeData())
+        return kind if kind in CATALOG else ""
+
+    def dragEnterEvent(self, event):
+        if self.config is not None and self._dropped_element_kind(event):
+            event.acceptProposedAction()
+            return
+        super().dragEnterEvent(event)
+
+    def dragMoveEvent(self, event):
+        if self.config is not None and self._dropped_element_kind(event):
+            event.acceptProposedAction()
+            return
+        super().dragMoveEvent(event)
+
+    def dropEvent(self, event):
+        """Drop a palette tile: create the element under the cursor."""
+        kind = self._dropped_element_kind(event) if self.config is not None else ""
+        if not kind:
+            super().dropEvent(event)
+            return
+        scene_pos = self.mapToScene(event.position().toPoint())
+        scene_pos = self.snap_to_grid_position(scene_pos)
+        x_m, y_m = self.pixels_to_meters(scene_pos.x(), scene_pos.y())
+        self.add_stage_element_at(kind, x_m, y_m)
+        event.acceptProposedAction()
+
+    def remove_stage_element(self, item):
+        """Remove an element item and its model from the config.
+
+        Removing a truss undocks its fixtures (they keep their layer,
+        position and Z); the truss's layer itself stays - remove it via
+        the layers panel if unwanted."""
+        element = item.element
+        if element.element_id:
+            for fixture in getattr(self.config, 'fixtures', []) or []:
+                if fixture.docked_to == element.element_id:
+                    fixture.docked_to = ""
+            for fixture_item in self.fixtures.values():
+                if getattr(fixture_item, 'docked_to', "") == element.element_id:
+                    fixture_item.docked_to = ""
+        if item in self.stage_element_items:
+            self.stage_element_items.remove(item)
+        try:
+            self.config.stage_elements.remove(element)
+        except (AttributeError, ValueError):
+            pass
+        self.scene.removeItem(item)
+        self.fixtures_changed.emit()
+
+    # ── Truss docking ─────────────────────────────────────────────────
+
+    def get_stage_element(self, element_id):
+        return next(
+            (e for e in (getattr(self.config, 'stage_elements', []) or [])
+             if e.element_id == element_id), None)
+
+    def _truss_item_at(self, scene_pos):
+        """The truss element item whose (rotated, padded) footprint
+        contains the scene position, or None."""
+        from utils.stage_element_catalog import is_truss
+        pad_px = 0.3 * self.pixels_per_meter
+        for item in self.stage_element_items:
+            element = item.element
+            if not is_truss(element.kind) or not element.element_id:
+                continue
+            local = item.mapFromScene(scene_pos)
+            # mapFromScene does NOT undo the paint-time rotation (the
+            # item rotates in paint(), not via setRotation) - rotate
+            # the local point into the truss frame ourselves.
+            angle = radians(-element.rotation)
+            lx = local.x() * cos(angle) - local.y() * sin(angle)
+            ly = local.x() * sin(angle) + local.y() * cos(angle)
+            half_w = element.width * self.pixels_per_meter / 2 + pad_px
+            half_d = element.depth * self.pixels_per_meter / 2 + pad_px
+            if abs(lx) <= half_w and abs(ly) <= half_d:
+                return item
+        return None
+
+    def handle_fixture_drop(self, fixture_item):
+        """Dock/undock on drop: released over a truss -> dock to it
+        (join its layer, snap Z to the hang height, snap onto the truss
+        axis for straight trusses); released elsewhere while docked ->
+        undock (clear docking AND the truss's layer; position and Z
+        stay). Manually assigned non-truss layers are never touched.
+        """
+        from utils.stage_element_catalog import is_truss  # noqa: F401 (doc)
+        truss_item = self._truss_item_at(fixture_item.pos())
+        was_docked = getattr(fixture_item, 'docked_to', "")
+
+        if truss_item is not None:
+            element = truss_item.element
+            layer = self.config.get_stage_layer(element.layer)
+            fixture_item.docked_to = element.element_id
+            if layer is not None:
+                fixture_item.layer = layer.name
+                fixture_item.z_height = layer.z_height
+                fixture_item.z_uses_group_default = False
+            if element.kind == "truss-straight":
+                fixture_item.setPos(self._project_onto_truss(
+                    truss_item, fixture_item.pos()))
+        elif was_docked:
+            fixture_item.docked_to = ""
+            truss = self.get_stage_element(was_docked)
+            # Only clear the layer if it is still the truss's own layer
+            # (the user may have reassigned manually since docking).
+            if truss is not None and fixture_item.layer == truss.layer:
+                fixture_item.layer = ""
+
+        self.save_positions_to_config()
+        self.apply_layer_visibility()
+
+    def _project_onto_truss(self, truss_item, scene_pos):
+        """Scene position snapped onto a straight truss's length axis,
+        clamped to its span."""
+        element = truss_item.element
+        local = truss_item.mapFromScene(scene_pos)
+        angle = radians(-element.rotation)
+        lx = local.x() * cos(angle) - local.y() * sin(angle)
+        half_w = element.width * self.pixels_per_meter / 2
+        lx = max(-half_w, min(half_w, lx))
+        ly = 0.0  # on the axis
+        back = radians(element.rotation)
+        x = lx * cos(back) - ly * sin(back)
+        y = lx * sin(back) + ly * cos(back)
+        return truss_item.mapToScene(QtCore.QPointF(x, y))
+
+    def move_docked_fixtures(self, element, delta):
+        """Carry docked fixtures along with their truss (delta in
+        scene px). Called live from the truss item's drag."""
+        if not element.element_id:
+            return
+        for fixture_item in self.fixtures.values():
+            if getattr(fixture_item, 'docked_to', "") == element.element_id:
+                fixture_item.setPos(fixture_item.pos() + delta)
+
+    def set_truss_height(self, element, z_m):
+        """Change a truss's hang height: updates its layer and snaps
+        every fixture on that layer (docked or manually assigned)."""
+        layer = self.config.get_stage_layer(element.layer)
+        if layer is None:
+            return
+        layer.z_height = z_m
+        for fixture in getattr(self.config, 'fixtures', []) or []:
+            if fixture.layer == layer.name:
+                fixture.z = z_m
+                fixture.z_uses_group_default = False
+        for fixture_item in self.fixtures.values():
+            if getattr(fixture_item, 'layer', "") == layer.name:
+                fixture_item.z_height = z_m
+                fixture_item.z_uses_group_default = False
+                fixture_item.update()
+        self.save_positions_to_config()
+        self.fixtures_changed.emit()
+
+    def assign_selected_to_layer(self, layer_name):
+        """Assign the selected fixtures to a stage layer ('' clears).
+
+        A layer is a Z-plane: assignment snaps the fixture's Z to the
+        layer's height (as an explicit per-fixture value). Clearing the
+        assignment leaves Z untouched.
+        """
+        layer = self.config.get_stage_layer(layer_name) if (self.config and layer_name) else None
+        for fixture_item in self.get_selected_fixtures():
+            fixture_item.layer = layer_name if layer is not None else ""
+            if layer is not None:
+                fixture_item.z_height = layer.z_height
+                fixture_item.z_uses_group_default = False
+            fixture_item.update()
+        self.save_positions_to_config()
+        self.apply_layer_visibility()
 
     def set_snap_to_grid(self, enabled):
         """Enable or disable snap to grid"""
@@ -386,10 +737,48 @@ class StageView(QtWidgets.QGraphicsView):
                 y=y_m,
                 z=z_m
             )
+        self.spots_changed.emit()
         return spot
+
+    def remove_spot(self, name: str) -> bool:
+        """Remove a single mark by name (scene, model and config)."""
+        spot = self.spots.pop(name, None)
+        if spot is None:
+            return False
+        self.scene.removeItem(spot)
+        if self.config and name in getattr(self.config, "spots", {}):
+            del self.config.spots[name]
+        self.spots_changed.emit()
+        return True
+
+    def rename_spot(self, old_name: str, new_name: str) -> bool:
+        """Rename a mark. Returns False on empty/duplicate/unknown name."""
+        new_name = (new_name or "").strip()
+        if not new_name or old_name not in self.spots:
+            return False
+        if new_name == old_name:
+            return True
+        if new_name in self.spots:
+            return False  # would collide with another mark
+        spot = self.spots.pop(old_name)
+        spot.prepareGeometryChange()  # boundingRect depends on the label
+        spot.name = new_name
+        self.spots[new_name] = spot
+        spot.update()
+        if self.config and old_name in getattr(self.config, "spots", {}):
+            # Rebuild in place so the renamed mark keeps its position in the
+            # list instead of jumping to the bottom.
+            self.config.spots[old_name].name = new_name
+            self.config.spots = {
+                (new_name if key == old_name else key): value
+                for key, value in self.config.spots.items()
+            }
+        self.spots_changed.emit()
+        return True
 
     def remove_selected_items(self):
         """Remove selected items from the stage"""
+        removed_spot = False
         for item in self.scene.selectedItems():
             if isinstance(item, FixtureItem):
                 self.scene.removeItem(item)
@@ -401,6 +790,7 @@ class StageView(QtWidgets.QGraphicsView):
                     del self.spots[item.name]
                     if self.config:
                         del self.config.spots[item.name]
+                    removed_spot = True
 
                     # Update spot counter if necessary
                     try:
@@ -410,6 +800,8 @@ class StageView(QtWidgets.QGraphicsView):
                             self.spot_counter = removed_number
                     except ValueError:
                         pass  # If the name doesn't follow the SpotX format, ignore
+        if removed_spot:
+            self.spots_changed.emit()
 
     def updateStage(self, width_m=None, depth_m=None):
         """Update stage dimensions"""
@@ -501,23 +893,45 @@ class StageView(QtWidgets.QGraphicsView):
             for y in range(self.padding, depth_px + self.padding + 1, grid_size_px):
                 painter.drawLine(self.padding, y, width_px + self.padding, y)
 
-            # Draw center lines with colors matching the 3D visualizer
-            # X axis (horizontal center line) - RED
-            painter.setPen(QtGui.QPen(QtGui.QColor(255, 80, 80), 2))
+            # Centre axes. Hues still match the 3D visualizer's X=red /
+            # Y=blue so the two views stay cross-readable, but per the
+            # North Star stage plan (card 5a) they are quiet 1px dashed
+            # marks instead of the old loud 2px lines.
+            x_axis = QtGui.QColor(255, 80, 80)
+            x_axis.setAlpha(90)
+            pen = QtGui.QPen(x_axis, 1, QtCore.Qt.PenStyle.DashLine)
+            painter.setPen(pen)
             painter.drawLine(self.padding, int(center_y_px), width_px + self.padding, int(center_y_px))
 
-            # Y axis (vertical center line / depth) - BLUE
-            painter.setPen(QtGui.QPen(QtGui.QColor(80, 80, 255), 2))
+            y_axis = QtGui.QColor(80, 80, 255)
+            y_axis.setAlpha(90)
+            pen = QtGui.QPen(y_axis, 1, QtCore.Qt.PenStyle.DashLine)
+            painter.setPen(pen)
             painter.drawLine(int(center_x_px), self.padding, int(center_x_px), depth_px + self.padding)
+
+        # AUDIENCE marker at the front edge, drawn along the BOTTOM band
+        # of the plan (negative Y = front now maps to the bottom).
+        try:
+            from gui.typography import mono_font as _mono_font
+            painter.setFont(_mono_font(8, tracking_em=0.2))
+        except Exception:
+            pass
+        painter.setPen(QtGui.QPen(self._stage_label_color, 1))
+        painter.drawText(
+            QtCore.QRect(self.padding, depth_px + self.padding + 4,
+                         width_px, self.padding - 4),
+            QtCore.Qt.AlignmentFlag.AlignHCenter |
+            QtCore.Qt.AlignmentFlag.AlignBottom,
+            "A U D I E N C E")
 
         # Draw dimension labels
         self._draw_dimension_labels(painter, width_px, depth_px, center_x_px, center_y_px)
 
     def _draw_dimension_labels(self, painter, width_px, depth_px, center_x_px, center_y_px):
         """Draw dimension labels at the edges of the stage"""
-        # Set up font for labels
-        font = QtGui.QFont("Arial", 8)
-        painter.setFont(font)
+        # Mono readout font per the design system (was hardcoded Arial).
+        from gui.typography import mono_font
+        painter.setFont(mono_font(7))
         painter.setPen(QtGui.QPen(self._stage_label_color, 1))
 
         # Calculate label interval (use 1m intervals, or 0.5m for small stages)
@@ -527,8 +941,12 @@ class StageView(QtWidgets.QGraphicsView):
 
         label_interval_px = int(label_interval_m * self.pixels_per_meter)
 
-        # Draw X-axis labels (bottom edge) - from center outward
+        # Draw X-axis labels (TOP edge) - from center outward. The plan
+        # was flipped so the audience sits at the bottom; the X meter
+        # numbers move up into the top padding band (where AUDIENCE used
+        # to sit) and the AUDIENCE marker owns the bottom band.
         half_width_m = self.stage_width_m / 2
+        x_label_y = self.padding - 20  # inside the top padding band
 
         # Draw labels from center to the right
         x_m = 0.0
@@ -536,10 +954,10 @@ class StageView(QtWidgets.QGraphicsView):
             x_px = center_x_px + x_m * self.pixels_per_meter
             if x_px <= self.padding + width_px + 1:
                 label = f"{x_m:.1f}" if x_m != int(x_m) else f"{int(x_m)}"
-                # Draw at bottom
+                # Draw at top
                 painter.drawText(
                     int(x_px) - 15,
-                    self.padding + depth_px + 15,
+                    x_label_y,
                     30, 15,
                     QtCore.Qt.AlignmentFlag.AlignCenter,
                     label
@@ -552,10 +970,10 @@ class StageView(QtWidgets.QGraphicsView):
             x_px = center_x_px + x_m * self.pixels_per_meter
             if x_px >= self.padding - 1:
                 label = f"{x_m:.1f}" if x_m != int(x_m) else f"{int(x_m)}"
-                # Draw at bottom
+                # Draw at top
                 painter.drawText(
                     int(x_px) - 15,
-                    self.padding + depth_px + 15,
+                    x_label_y,
                     30, 15,
                     QtCore.Qt.AlignmentFlag.AlignCenter,
                     label
@@ -565,11 +983,12 @@ class StageView(QtWidgets.QGraphicsView):
         # Draw Y-axis labels (left edge) - from center outward
         half_depth_m = self.stage_depth_m / 2
 
-        # Draw labels from center to the bottom (positive Y)
+        # Draw labels from center to the top (positive Y = back). The Y
+        # axis is flipped, so positive Y now maps toward the top edge.
         y_m = 0.0
         while y_m <= half_depth_m + 0.01:
-            y_px = center_y_px + y_m * self.pixels_per_meter
-            if y_px <= self.padding + depth_px + 1:
+            y_px = center_y_px - y_m * self.pixels_per_meter
+            if y_px >= self.padding - 1:
                 label = f"{y_m:.1f}" if y_m != int(y_m) else f"{int(y_m)}"
                 # Draw at left
                 painter.drawText(
@@ -581,11 +1000,12 @@ class StageView(QtWidgets.QGraphicsView):
                 )
             y_m += label_interval_m
 
-        # Draw labels from center to the top (negative Y)
+        # Draw labels from center to the bottom (negative Y = front /
+        # audience). The Y axis is flipped, so negative Y maps downward.
         y_m = -label_interval_m
         while y_m >= -half_depth_m - 0.01:
-            y_px = center_y_px + y_m * self.pixels_per_meter
-            if y_px >= self.padding - 1:
+            y_px = center_y_px - y_m * self.pixels_per_meter
+            if y_px <= self.padding + depth_px + 1:
                 label = f"{y_m:.1f}" if y_m != int(y_m) else f"{int(y_m)}"
                 # Draw at left
                 painter.drawText(
@@ -758,6 +1178,17 @@ class StageView(QtWidgets.QGraphicsView):
         orientation_action = menu.addAction("Set Orientation...")
         orientation_action.setEnabled(len(selected_fixtures) > 0)
 
+        # Assign to Layer submenu — only offered once layers exist.
+        layer_actions = {}
+        clear_layer_action = None
+        if self.config and self.config.stage_layers:
+            layer_menu = menu.addMenu("Assign to Layer")
+            for layer in self.config.stage_layers:
+                action = layer_menu.addAction(f"{layer.name} ({layer.z_height:g} m)")
+                layer_actions[action] = layer.name
+            layer_menu.addSeparator()
+            clear_layer_action = layer_menu.addAction("None")
+
         menu.addSeparator()
 
         # Select All action
@@ -772,6 +1203,10 @@ class StageView(QtWidgets.QGraphicsView):
         if action == orientation_action:
             # Emit signal to open orientation dialog
             self.set_orientation_requested.emit(selected_fixtures)
+        elif action in layer_actions:
+            self.assign_selected_to_layer(layer_actions[action])
+        elif clear_layer_action is not None and action == clear_layer_action:
+            self.assign_selected_to_layer("")
         elif action == select_all_action:
             for fixture_item in self.fixtures.values():
                 fixture_item.setSelected(True)
@@ -818,7 +1253,9 @@ class StageView(QtWidgets.QGraphicsView):
         # stage case (most common) and the multi-select-without-Shift
         # case (no item-level handler).
         item_at_pos = self.itemAt(event.position().toPoint())
-        if isinstance(item_at_pos, FixtureItem) and len(selected_fixtures) <= 1:
+        if (isinstance(item_at_pos, FixtureItem)
+                and not item_at_pos.ghosted
+                and len(selected_fixtures) <= 1):
             super().wheelEvent(event)
             return
 
@@ -884,4 +1321,22 @@ class StageView(QtWidgets.QGraphicsView):
             item for item in self.scene.selectedItems()
             if isinstance(item, FixtureItem)
         ]
+
+    def select_group_fixtures(self, group_name):
+        """Select every selectable fixture of a group (clears first).
+
+        Ghosted (off-active-layer) and hidden items are skipped: they
+        carry no ItemIsSelectable flag, so selecting them would be a
+        no-op that silently reports the wrong selection count.
+        """
+        self.scene.clearSelection()
+        selected = []
+        for fixture_item in self.fixtures.values():
+            if getattr(fixture_item, 'group', "") != group_name:
+                continue
+            if not fixture_item.isVisible() or fixture_item.ghosted:
+                continue
+            fixture_item.setSelected(True)
+            selected.append(fixture_item)
+        return selected
 

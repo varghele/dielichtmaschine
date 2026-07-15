@@ -1,8 +1,8 @@
 # Features
 
-A walkthrough of what QLC+ Show Creator does today, in the order you'd actually use it for a real show.
+A walkthrough of what Die Lichtmaschine does today, in the order you'd actually use it for a real show.
 
-The app exports to QLC+ workspace files (`.qxw`) - the show runs in QLC+ on the night, with the same fixture profiles you already use. Show Creator is the authoring environment, the preview window, and an optional live audio-reactive engine.
+Die Lichtmaschine is the authoring environment, the preview window, a native ArtNet playback engine, and an optional live audio-reactive engine. For interop it also exports QLC+ workspace files (`.qxw`), so a show authored here can run in QLC+ with the same fixture profiles you already use.
 
 ---
 
@@ -208,7 +208,7 @@ Hazers, smoke, lasers (vector), scanners, effect lights (centipede / derby / swe
 
 ### Dual input
 
-- **TCP (port 9000)** - Show Creator pushes the stage config (fixtures, positions, orientations, groups) once and on change.
+- **TCP (port 9000)** - Die Lichtmaschine pushes the stage config (fixtures, positions, orientations, groups) once and on change.
 - **ArtNet (UDP 6454)** - live DMX values at 44 Hz.
 
 The visualizer can also receive ArtNet from QLC+ directly, so you can use it as a live preview when the show is running off the QLC+ Console.
@@ -226,6 +226,6 @@ The visualizer can also receive ArtNet from QLC+ directly, so you can use it as 
 
 ## What this app is *not*
 
-- Not a replacement for the QLC+ runtime - it exports to QLC+ and QLC+ is what drives DMX on the night.
+- Not a QLC+ plugin or frontend - it drives DMX natively over ArtNet; the `.qxw` export is an interop path for rigs that run on QLC+.
 - Not a live-mixing console - Auto Mode is for unscripted moments inside a structured set, not "click and DJ a whole gig" (though see roadmap §2).
 - Not a fixture-library editor - write `.qxf` files in QLC+ itself; this app consumes them.

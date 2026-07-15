@@ -24,24 +24,10 @@ from PyQt6.QtWidgets import (
 )
 
 
-# Per-channel-function defaults applied in build mode. Anything not in the
-# table stays 0. Keeps colored fixtures lit white, mover targets centred on
-# stage, no gobo/prism/strobe artefacts.
-_BUILD_MODE_DEFAULTS = {
-    "dimmer": 255,
-    "red": 255,
-    "green": 255,
-    "blue": 255,
-    "white": 255,
-    "amber": 255,
-    "pan": 128,
-    "tilt": 128,
-    "pan_fine": 128,
-    "tilt_fine": 128,
-    "shutter": 255,  # most fixtures: 255 = open / no strobe
-    "focus": 128,
-    "zoom": 128,
-}
+# The build-look table and synthesizer live in visualizer/build_mode.py,
+# shared with the standalone viewer's BUILD chip so the two looks can
+# never drift apart.
+from visualizer.build_mode import build_mode_buffers
 
 
 class EmbeddedVisualizer(QWidget):
@@ -139,6 +125,12 @@ class EmbeddedVisualizer(QWidget):
         if self._preview_mode == "build":
             self._push_build_mode_dmx()
 
+    def set_highlighted_plane(self, name, rig_height: float = 3.0) -> None:
+        """Highlight one stage bounding-cuboid face in the 3D preview
+        (None clears). Forwarded to the engine, which buffers it if GL
+        hasn't initialized yet (inactive tab)."""
+        self._engine.set_highlighted_plane(name, rig_height)
+
     def feed_dmx(self, universe: int, dmx_bytes: bytes) -> None:
         """Forward a DMX frame to the engine.
 
@@ -190,6 +182,15 @@ class EmbeddedVisualizer(QWidget):
         provided by the hosting tab."""
         self._pop_out_callback = callback
 
+    def set_inner_pop_out_visible(self, visible: bool) -> None:
+        """Show or hide the visualizer's own Pop Out button.
+
+        Tabs whose 3D-pane header already carries a POP-OUT control
+        (the design references put it there) hide this one so the
+        action is not offered twice.
+        """
+        self._popout_btn.setVisible(visible)
+
     def cleanup(self) -> None:
         """Stop the FPS timer. The engine's GL teardown happens through Qt's
         normal child-deletion when the widget itself is destroyed."""
@@ -219,25 +220,15 @@ class EmbeddedVisualizer(QWidget):
         # circle during module import.
         from utils.tcp.protocol import _parse_qxf_for_visualizer
 
-        # Group fixtures by their universe so we send one buffer per universe.
-        per_universe: dict = {}
+        payload = []
         for fixture in self._config.fixtures:
-            per_universe.setdefault(fixture.universe, []).append(fixture)
-
-        for universe, fixtures in per_universe.items():
-            buffer = bytearray(512)
-            for fixture in fixtures:
-                qxf = _parse_qxf_for_visualizer(
-                    fixture.manufacturer, fixture.model, fixture.current_mode,
-                )
-                channel_mapping = qxf.get("channel_mapping", {})
-                # QLC+ addresses are 1-based; bytes are 0-based.
-                base_addr = max(0, fixture.address - 1)
-                for ch_num, func in channel_mapping.items():
-                    try:
-                        idx = base_addr + int(ch_num)
-                    except (TypeError, ValueError):
-                        continue
-                    if 0 <= idx < 512:
-                        buffer[idx] = _BUILD_MODE_DEFAULTS.get(func, 0)
-            self._engine.update_dmx(universe, bytes(buffer))
+            qxf = _parse_qxf_for_visualizer(
+                fixture.manufacturer, fixture.model, fixture.current_mode,
+            )
+            payload.append({
+                "universe": fixture.universe,
+                "address": fixture.address,
+                "channel_mapping": qxf.get("channel_mapping", {}),
+            })
+        for universe, buffer in build_mode_buffers(payload).items():
+            self._engine.update_dmx(universe, buffer)

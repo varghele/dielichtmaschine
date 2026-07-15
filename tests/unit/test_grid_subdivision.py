@@ -1,15 +1,21 @@
 """Unit tests for the master-timeline grid subdivision feature.
 
-Covers:
-- ``MasterTimelineContainer`` exposes a subdivision combobox whose entries
-  match the documented choices (1 / 1/2 / 1/4) and pushes new values into
-  the underlying ``MasterTimelineWidget`` + emits ``subdivision_changed``.
-- ``TimelineGrid`` fans the master subdivision out to the audio lane and
+The master timeline no longer carries its own Snap checkbox or Grid
+combobox: the toolbar's global GRID / SNAP / SWING chips are the single
+controls and fan out through ``TimelineGrid`` to master + audio + every
+lane. Covers:
+- ``MasterTimelineContainer.set_grid_subdivision`` pushes the value into
+  the underlying ``MasterTimelineWidget`` (grid drawing) with no combobox
+  and no ``subdivision_changed`` signal of its own.
+- ``TimelineGrid`` fans the subdivision / snap out to the audio lane and
   every light lane (including ones added *after* the user picked a fine
   setting).
 - ``TimelineWidget.find_nearest_beat_time`` honours the lane's
   ``grid_subdivision`` so block placement / drag snap to the same grid the
   user sees.
+- The swing AMOUNT (timeline v3 stage T1: 0.0 off, 1.0 = the old full
+  triplet feel, linear in between) moves the snapped pixel positions:
+  the exact x targets are pinned for 0%, 50% and 100%.
 """
 
 from __future__ import annotations
@@ -32,58 +38,35 @@ def _make_song_structure():
     return ss
 
 
-def test_master_combobox_lists_documented_subdivisions(qapp):
-    from timeline_ui.master_timeline_widget import (
-        MasterTimelineContainer, SUBDIVISION_CHOICES,
-    )
+def test_master_has_no_snap_or_grid_controls(qapp):
+    """The master's own Snap checkbox + Grid combobox were removed - the
+    toolbar chips are the single global controls now."""
+    from timeline_ui.master_timeline_widget import MasterTimelineContainer
 
     container = MasterTimelineContainer()
     try:
-        values = [container.subdivision_combo.itemData(i)
-                  for i in range(container.subdivision_combo.count())]
-        assert values == [v for _label, v in SUBDIVISION_CHOICES]
-        assert values == [1, 2, 4]
+        assert not hasattr(container, "snap_checkbox")
+        assert not hasattr(container, "subdivision_combo")
+        assert not hasattr(container, "subdivision_label")
+        # And no leftover control signals on the container.
+        assert not hasattr(container, "subdivision_changed")
+        assert not hasattr(container, "snap_changed")
     finally:
         container.deleteLater()
 
 
-def test_master_combobox_pushes_into_timeline_and_emits_signal(qapp):
+def test_set_grid_subdivision_pushes_into_master_drawing(qapp):
+    """set_grid_subdivision still drives the master widget's grid drawing
+    (no combobox to sync, no signal to emit)."""
     from timeline_ui.master_timeline_widget import MasterTimelineContainer
 
     container = MasterTimelineContainer()
-    received = []
-    container.subdivision_changed.connect(received.append)
     try:
-        # Default state: subdivision==1.
-        assert container.timeline_widget.grid_subdivision == 1
-
-        # User picks 1/2-beat.
-        container.subdivision_combo.setCurrentIndex(1)
-        assert container.timeline_widget.grid_subdivision == 2
-        assert received == [2]
-
-        # User picks 1/4-beat.
-        container.subdivision_combo.setCurrentIndex(2)
-        assert container.timeline_widget.grid_subdivision == 4
-        assert received == [2, 4]
-    finally:
-        container.deleteLater()
-
-
-def test_set_grid_subdivision_updates_combobox_silently(qapp):
-    """Programmatic set should sync the combobox without re-emitting."""
-    from timeline_ui.master_timeline_widget import MasterTimelineContainer
-
-    container = MasterTimelineContainer()
-    received = []
-    container.subdivision_changed.connect(received.append)
-    try:
-        container.set_grid_subdivision(4)
-        assert container.timeline_widget.grid_subdivision == 4
-        assert container.subdivision_combo.currentData() == 4
-        # No signal — programmatic sync mustn't trigger a feedback loop with
-        # whoever is calling set_grid_subdivision.
-        assert received == []
+        assert container.timeline_widget.grid_subdivision == 1.0
+        container.set_grid_subdivision(4.0)
+        assert container.timeline_widget.grid_subdivision == 4.0
+        container.set_grid_subdivision(0.25)
+        assert container.timeline_widget.grid_subdivision == 0.25
     finally:
         container.deleteLater()
 
@@ -105,15 +88,16 @@ def test_timeline_grid_fans_subdivision_to_audio_and_lanes(qapp):
     grid.add_light_lane(lane)
 
     try:
-        grid.set_grid_subdivision(2)
-        assert master.timeline_widget.grid_subdivision == 2
-        assert audio.timeline_widget.grid_subdivision == 2
-        assert lane.timeline_widget.grid_subdivision == 2
+        # The toolbar's global GRID control drives this on the grid.
+        grid.set_grid_subdivision(2.0)
+        assert master.timeline_widget.grid_subdivision == 2.0
+        assert audio.timeline_widget.grid_subdivision == 2.0
+        assert lane.timeline_widget.grid_subdivision == 2.0
 
-        # Master combobox change must fan out automatically.
-        master.subdivision_combo.setCurrentIndex(2)  # 1/4-beat
-        assert audio.timeline_widget.grid_subdivision == 4
-        assert lane.timeline_widget.grid_subdivision == 4
+        grid.set_grid_subdivision(4.0)  # 1/4-beat
+        assert master.timeline_widget.grid_subdivision == 4.0
+        assert audio.timeline_widget.grid_subdivision == 4.0
+        assert lane.timeline_widget.grid_subdivision == 4.0
     finally:
         grid.deleteLater()
         master.deleteLater()
@@ -135,14 +119,14 @@ def test_late_added_light_lane_inherits_current_subdivision(qapp):
     grid.set_master(master)
 
     # Master is already at 1/4-beat when the new lane joins.
-    master.set_grid_subdivision(4)
+    master.set_grid_subdivision(4.0)
 
     lane_model = LightLane(name="L1", fixture_targets=["TestGroup"])
     lane = LightLaneWidget(lane_model, ["TestGroup"])
     grid.add_light_lane(lane)
 
     try:
-        assert lane.timeline_widget.grid_subdivision == 4
+        assert lane.timeline_widget.grid_subdivision == 4.0
     finally:
         grid.deleteLater()
         master.deleteLater()
@@ -173,6 +157,20 @@ def test_find_nearest_beat_time_uses_lane_subdivision(qapp):
 
         # 0.13 → 0.125 at quarter-beat (the sixteenth-note grid line).
         assert abs(tw.find_nearest_beat_time(0.13) - 0.125) < 1e-6
+
+        # Coarse grid: subdivision 0.25 == a line every 4 beats. Beat=0.5s so
+        # a step is 2.0s. A time near beat 3 (1.5s, i.e. 0.75 of a step)
+        # snaps up to beat 4 (2.0s).
+        tw.set_grid_subdivision(0.25)
+        assert abs(tw.find_nearest_beat_time(1.5) - 2.0) < 1e-6
+        assert abs(tw.find_nearest_beat_time(1.4) - 2.0) < 1e-6
+
+        # Fine grid: subdivision 16 == 1/16-beat steps (0.03125s). 0.10 snaps
+        # to the nearest 1/16-beat line.
+        tw.set_grid_subdivision(16.0)
+        step = 0.5 / 16.0
+        expected = round(0.10 / step) * step
+        assert abs(tw.find_nearest_beat_time(0.10) - expected) < 1e-6
     finally:
         tw.deleteLater()
 
@@ -192,11 +190,49 @@ def test_find_nearest_beat_time_fallback_path_uses_subdivision(qapp):
         tw.deleteLater()
 
 
-def test_master_snap_checkbox_fans_out_to_lanes(qapp):
-    """The master Snap checkbox pairs with the Grid combobox in the header.
-    Toggling it must fan out to every lane's timeline + per-lane checkbox so
-    the visible state in lane controls stays consistent.
+def test_swing_amount_moves_the_snapped_pixel_positions(qapp):
+    """Pin the actual snapped x positions on the 1/2-beat grid at 120 BPM
+    (beat = 0.5s, zoom 1.0 -> 60 px/s):
+
+    - amount 0.0 (off): off-beat at 1/2 beat = 0.25s -> x = 15.0 px
+    - amount 0.5: off-beat at 7/12 beat = 0.2916667s -> x = 17.5 px
+    - amount 1.0: off-beat at 2/3 beat = 0.3333s -> x = 20.0 px (the old
+      boolean triplet position, so blocks snap exactly as before at 100%)
     """
+    from timeline_ui.timeline_widget import TimelineWidget
+
+    tw = TimelineWidget()
+    tw.set_song_structure(_make_song_structure())
+    tw.set_grid_subdivision(2.0)
+    try:
+        assert tw.pixels_per_second == 60
+
+        tw.set_swing(0.0)
+        snapped = tw.find_nearest_beat_time(0.27)
+        assert abs(snapped - 0.25) < 1e-6
+        assert abs(tw.time_to_pixel(snapped) - 15.0) < 1e-4
+
+        tw.set_swing(0.5)
+        snapped = tw.find_nearest_beat_time(0.27)
+        assert abs(snapped - 0.5 * (7.0 / 12.0)) < 1e-6
+        assert abs(tw.time_to_pixel(snapped) - 17.5) < 1e-4
+
+        tw.set_swing(1.0)
+        snapped = tw.find_nearest_beat_time(0.30)
+        assert abs(snapped - 0.5 * (2.0 / 3.0)) < 1e-6
+        assert abs(tw.time_to_pixel(snapped) - 20.0) < 1e-4
+
+        # Beat/bar lines never move, whatever the amount.
+        assert abs(tw.find_nearest_beat_time(0.02) - 0.0) < 1e-6
+        assert abs(tw.find_nearest_beat_time(0.48) - 0.5) < 1e-6
+    finally:
+        tw.deleteLater()
+
+
+def test_global_snap_fans_out_to_master_and_lanes(qapp):
+    """The toolbar's global SNAP chip drives TimelineGrid.set_snap_to_grid,
+    which fans out to the master ruler + every lane's timeline + the
+    per-lane snap checkbox so the visible state stays consistent."""
     from timeline.light_lane import LightLane
     from timeline_ui import (
         LightLaneWidget, MasterTimelineContainer, TimelineGrid,
@@ -212,17 +248,15 @@ def test_master_snap_checkbox_fans_out_to_lanes(qapp):
 
     try:
         # Default: snap is on everywhere.
-        assert master.snap_checkbox.isChecked() is True
         assert master.timeline_widget.snap_to_grid is True
         assert lane.timeline_widget.snap_to_grid is True
         assert lane.snap_checkbox.isChecked() is True
 
-        # User unticks the master snap.
-        master.snap_checkbox.setChecked(False)
+        # Global SNAP turned off from the grid.
+        grid.set_snap_to_grid(False)
         assert master.timeline_widget.snap_to_grid is False
         assert lane.timeline_widget.snap_to_grid is False
-        # Per-lane checkbox should mirror the master so the visible state
-        # in lane controls doesn't lie about whether snap is active.
+        # Per-lane checkbox mirrors the global state.
         assert lane.snap_checkbox.isChecked() is False
     finally:
         grid.deleteLater()
@@ -230,14 +264,42 @@ def test_master_snap_checkbox_fans_out_to_lanes(qapp):
         lane.deleteLater()
 
 
-def test_master_header_uses_two_row_layout_after_detach(qapp):
-    """detach_pieces must produce a header that's a 2-row stack so the
-    Snap + Grid controls don't get pushed off-screen by the info widget
-    inside the 320 px header column.
+def test_per_lane_snap_is_an_individual_override(qapp):
+    """A lane's own snap checkbox toggles only that lane, not the master or
+    its siblings (the individual control the user wants)."""
+    from timeline.light_lane import LightLane
+    from timeline_ui import (
+        LightLaneWidget, MasterTimelineContainer, TimelineGrid,
+    )
 
-    Pin the QVBoxLayout shape so future refactors don't quietly revert
-    to a single-row layout (which is what caused the controls to be
-    invisible in the first place).
+    grid = TimelineGrid()
+    master = MasterTimelineContainer()
+    grid.set_master(master)
+
+    a = LightLaneWidget(LightLane(name="A", fixture_targets=["TestGroup"]),
+                        ["TestGroup"])
+    b = LightLaneWidget(LightLane(name="B", fixture_targets=["TestGroup"]),
+                        ["TestGroup"])
+    grid.add_light_lane(a)
+    grid.add_light_lane(b)
+
+    try:
+        a.snap_checkbox.setChecked(False)
+        assert a.timeline_widget.snap_to_grid is False
+        # The other lane and the master are untouched.
+        assert b.timeline_widget.snap_to_grid is True
+        assert master.timeline_widget.snap_to_grid is True
+    finally:
+        grid.deleteLater()
+        master.deleteLater()
+        a.deleteLater()
+        b.deleteLater()
+
+
+def test_master_header_uses_two_row_layout_after_detach(qapp):
+    """detach_pieces must produce a header that's a 2-row stack (title row
+    + info row). Pin the QVBoxLayout shape so future refactors don't
+    quietly revert to a single-row layout.
     """
     from PyQt6.QtWidgets import QVBoxLayout
     from timeline_ui.master_timeline_widget import MasterTimelineContainer
@@ -247,16 +309,9 @@ def test_master_header_uses_two_row_layout_after_detach(qapp):
         header, _stripe = master.detach_pieces()
         layout = header.layout()
         assert isinstance(layout, QVBoxLayout), \
-            "Master header must be a QVBoxLayout (controls row + info row)"
-        # Two children: a controls QHBoxLayout and the info_widget directly.
+            "Master header must be a QVBoxLayout (title row + info row)"
+        # Two children: a title QHBoxLayout and the info_widget directly.
         assert layout.count() == 2
-
-        # The Snap and Grid controls must live inside this header — earlier
-        # bug was that detach_pieces left them orphaned in the original
-        # top_row_layout that nothing rendered.
-        assert master.snap_checkbox.parent() is header
-        assert master.subdivision_combo.parent() is header
-        assert master.subdivision_label.parent() is header
         assert master.info_widget.parent() is header
     finally:
         master.deleteLater()

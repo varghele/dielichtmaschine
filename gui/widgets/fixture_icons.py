@@ -1,34 +1,178 @@
-"""2D icon library for fixtures, keyed off :class:`Chassis`.
+"""2D icon library for fixtures.
 
-One icon per chassis value. Used by ``FixtureItem.paint`` (Stage tab) and
-optionally by anywhere else that needs a tiny representative glyph
-(group-color picker preview, fixture browser, etc.).
+Primary path (North Star slice S1): the design handoff's stage-plot
+symbol set. Each mapped legacy fixture ``type`` string renders its
+``resources/stageplot/<symbol>.svg`` (48x48 viewBox, single-color line
+art) with the stroke token ``#8d9299`` substituted by the fixture's
+group color (taken from the painter's current brush). Used by
+``FixtureItem.paint`` (Stage tab) and ``gui/stage_plot.py`` (printable
+plot).
+
+Fallback path: the original hand-painted chassis primitives, kept for
+unknown / unmapped types and for callers that pass only a
+:class:`Chassis` (no ``fixture_type``).
 
 Conventions:
 - Icons are drawn centered at the painter's local origin ``(0, 0)``.
 - ``size`` is the nominal width of the bounding box; the BAR variants
+  (legacy primitives AND the led-bar / pixel-bar / sunstrip symbols)
   extend to ``2 * size`` along X to read as elongated.
-- The painter's existing brush + pen drive the body fill + outline.
-  Helpers that need accent colors (PIXELBAR cells, SUNSTRIP lamps,
-  MOVING_YOKE direction triangle) save/restore the painter state.
+- The painter's existing brush + pen drive the body fill + outline of
+  the legacy primitives; the SVG symbols take the brush color as their
+  stroke color (alpha becomes painter opacity, so the selected state's
+  translucent brush still reads).
+- Symbol orientation: the SVGs put the beam tick at the top ("up").
+  Non-bar symbols are rotated +90 degrees at paint time so the tick
+  lands on local +X, the facing direction the legacy MOVING_YOKE
+  triangle and the stage plot's orientation tick already use. Callers
+  keep rotating the painter by yaw exactly as before.
 - :func:`paint_fixture_icon` accepts an optional ``accent`` kwarg so a
   plain ``Chassis.BAR`` can render with the legacy "pixels" or "lamps"
-  ornament when the caller knows the fixture has per-cell control.
+  ornament when the caller knows the fixture has per-cell control
+  (fallback path only; the symbols carry their own cell ornaments).
 """
 
 from __future__ import annotations
 
-from typing import Optional
+import os
+from typing import Dict, Optional, Tuple
 
-from PyQt6.QtCore import QPointF, QRectF, Qt
-from PyQt6.QtGui import QBrush, QColor, QPainter, QPen
+from PyQt6.QtCore import QByteArray, QPointF, QRectF, Qt
+from PyQt6.QtGui import QBrush, QColor, QImage, QPainter, QPen, QPixmap
 
 from utils.fixture_capabilities import Chassis
+from utils.paths import get_project_root
 
 
 # Accent values understood by paint_fixture_icon.
 ACCENT_PIXELS = 'pixels'   # colored cells inside a BAR (PIXELBAR / pixel matrix)
 ACCENT_LAMPS = 'lamps'     # white lamp circles inside a BAR (SUNSTRIP)
+
+
+# ---------------------------------------------------------------------------
+# Stage-plot symbol set (design handoff, North Star slice S1)
+# ---------------------------------------------------------------------------
+
+# Legacy fixture ``type`` string -> symbol file stem in resources/stageplot/.
+# The legacy enum has no pixel-matrix / blinder / strobe / scanner / laser
+# strings yet; those symbols ship in resources/stageplot/ ready for the
+# richer taxonomy.
+STAGEPLOT_SYMBOL_BY_TYPE: Dict[str, str] = {
+    'PAR': 'par',
+    'MH': 'moving-head-spot',
+    'WASH': 'moving-wash',
+    'BAR': 'led-bar',
+    'PIXELBAR': 'pixel-bar',
+    'SUNSTRIP': 'sunstrip',
+}
+
+# Symbols whose artwork is a full-width bar: rendered into a 2*size box
+# (length along local X) and NOT rotated by the tick convention, so the
+# bar's length axis matches the legacy BAR primitives.
+_BAR_SYMBOLS = frozenset({'led-bar', 'pixel-bar', 'sunstrip'})
+
+# The single stroke/fill color token used by every handoff SVG.
+_SYMBOL_COLOR_TOKENS = ('#8d9299', '#8D9299')
+
+# Rasterize at 3x the target box so scaled-down draws (and PDF embeds)
+# stay crisp; mirrors the 1x/2x/3x ladder in gui/icons.py.
+_SYMBOL_SUPERSAMPLE = 3
+
+_symbol_svg_cache: Dict[str, Optional[str]] = {}
+_symbol_pixmap_cache: Dict[Tuple[str, int, int], QPixmap] = {}
+
+
+def stageplot_dir() -> str:
+    return os.path.join(get_project_root(), 'resources', 'stageplot')
+
+
+def stageplot_symbol_path(name: str) -> str:
+    return os.path.join(stageplot_dir(), f'{name}.svg')
+
+
+def symbol_for_fixture_type(fixture_type: Optional[str]) -> Optional[str]:
+    """Symbol file stem for a legacy fixture type string, or None."""
+    if not fixture_type:
+        return None
+    return STAGEPLOT_SYMBOL_BY_TYPE.get(fixture_type)
+
+
+def clear_symbol_caches() -> None:
+    """Drop cached SVG text + rendered pixmaps (tests / file changes)."""
+    _symbol_svg_cache.clear()
+    _symbol_pixmap_cache.clear()
+
+
+def _load_symbol_svg(name: str) -> Optional[str]:
+    if name in _symbol_svg_cache:
+        return _symbol_svg_cache[name]
+    try:
+        with open(stageplot_symbol_path(name), 'r', encoding='utf-8') as f:
+            svg = f.read()
+    except OSError:
+        svg = None
+    _symbol_svg_cache[name] = svg
+    return svg
+
+
+def _symbol_pixmap(name: str, color: QColor, px: int) -> Optional[QPixmap]:
+    """Rasterized symbol with the color token substituted, cached per
+    (symbol, opaque RGB, pixel size). Alpha is applied at draw time via
+    painter opacity so translucent variants share the cache entry."""
+    key = (name, color.rgb(), px)
+    cached = _symbol_pixmap_cache.get(key)
+    if cached is not None:
+        return cached
+
+    svg = _load_symbol_svg(name)
+    if svg is None:
+        return None
+
+    from PyQt6.QtSvg import QSvgRenderer
+
+    hex_color = QColor(color.rgb()).name()  # opaque #rrggbb
+    for token in _SYMBOL_COLOR_TOKENS:
+        svg = svg.replace(token, hex_color)
+    renderer = QSvgRenderer(QByteArray(svg.encode('utf-8')))
+    if not renderer.isValid():
+        return None
+
+    image = QImage(px, px, QImage.Format.Format_ARGB32_Premultiplied)
+    image.fill(Qt.GlobalColor.transparent)
+    p = QPainter(image)
+    p.setRenderHint(QPainter.RenderHint.Antialiasing)
+    renderer.render(p)
+    p.end()
+
+    pixmap = QPixmap.fromImage(image)
+    _symbol_pixmap_cache[key] = pixmap
+    return pixmap
+
+
+def _paint_symbol_icon(painter: QPainter, symbol: str, size: float) -> bool:
+    """Draw one stage-plot symbol centered at the origin. Returns False
+    when the SVG is missing/invalid so the caller can fall back."""
+    color = painter.brush().color()
+    is_bar = symbol in _BAR_SYMBOLS
+    box = size * 2 if is_bar else size
+    px = max(8, int(round(box * _SYMBOL_SUPERSAMPLE)))
+    pixmap = _symbol_pixmap(symbol, color, px)
+    if pixmap is None:
+        return False
+
+    painter.save()
+    if color.alpha() < 255:
+        painter.setOpacity(painter.opacity() * color.alpha() / 255.0)
+    painter.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform, True)
+    if not is_bar:
+        # Beam tick points "up" (-Y) in the artwork; rotate so it lands
+        # on local +X, the facing direction the callers' yaw rotation
+        # assumes (legacy triangle / stage-plot tick convention).
+        painter.rotate(90.0)
+    target = QRectF(-box / 2, -box / 2, box, box)
+    painter.drawPixmap(target, pixmap, QRectF(pixmap.rect()))
+    painter.restore()
+    return True
 
 
 def paint_fixture_icon(
@@ -37,16 +181,32 @@ def paint_fixture_icon(
     size: float,
     *,
     accent: Optional[str] = None,
-) -> None:
-    """Paint the chassis icon centered at the painter's origin.
+    fixture_type: Optional[str] = None,
+) -> bool:
+    """Paint the fixture icon centered at the painter's origin.
+
+    When ``fixture_type`` maps to a stage-plot symbol (North Star set),
+    the SVG renders in the painter's brush color and the function
+    returns True. Otherwise the legacy hand-painted chassis primitive
+    is drawn (brush + pen contract unchanged) and False is returned, so
+    callers can tell which visual language was used (e.g. to draw their
+    own selection ring around the line symbols).
 
     Args:
-        painter: Active QPainter. Brush + pen are the body fill + outline.
-        chassis: Which icon to paint.
+        painter: Active QPainter. Brush + pen are the body fill + outline
+            (legacy path); the brush color is the stroke color (symbol path).
+        chassis: Fallback icon when no symbol maps.
         size: Nominal size in painter units (existing FixtureItem uses 30px).
-        accent: Optional accent for BAR — ``"pixels"`` (colored cells) or
-            ``"lamps"`` (white lamp circles). Other chassis ignore it.
+        accent: Optional accent for the legacy BAR — ``"pixels"`` (colored
+            cells) or ``"lamps"`` (white lamp circles). Other chassis and
+            the symbol path ignore it.
+        fixture_type: Legacy fixture ``type`` string (``"PAR"``, ``"MH"``,
+            ...). Optional; chassis-only callers keep the legacy visuals.
     """
+    symbol = symbol_for_fixture_type(fixture_type)
+    if symbol is not None and _paint_symbol_icon(painter, symbol, size):
+        return True
+
     if chassis is Chassis.PAR:
         _paint_par_icon(painter, size)
     elif chassis is Chassis.BAR:
@@ -65,10 +225,11 @@ def paint_fixture_icon(
         _paint_laser_icon(painter, size)
     else:
         _paint_other_icon(painter, size)
+    return False
 
 
 # ---------------------------------------------------------------------------
-# Static / non-moving fixtures
+# Legacy fallback primitives (unknown / unmapped types keep these)
 # ---------------------------------------------------------------------------
 
 

@@ -1,0 +1,29 @@
+{
+  "name": "Chase",
+  "category": "intensity",
+  "description": "Classic one-at-a-time chase across the group",
+  "length_beats": 16,
+  "signature": "4/4",
+  "fixture_types": [],
+  "tags": [
+    "intensity",
+    "chase",
+    "runner"
+  ],
+  "author": "preset",
+  "version": "1.0",
+  "dimmer_blocks": [
+    {
+      "start_beat": 0,
+      "end_beat": 16,
+      "intensity": 230,
+      "strobe_speed": 0.0,
+      "iris": 255,
+      "effect_type": "chase",
+      "effect_speed": "2"
+    }
+  ],
+  "colour_blocks": [],
+  "movement_blocks": [],
+  "special_blocks": []
+}

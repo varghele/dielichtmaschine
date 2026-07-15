@@ -1,12 +1,10 @@
 # config/models.py
 
-from dataclasses import dataclass, field, asdict
+from dataclasses import dataclass, field, asdict, InitVar
 from typing import Dict, List, Optional, Tuple
 import yaml
 import xml.etree.ElementTree as ET
 import os
-import sys
-from utils.fixture_utils import determine_fixture_type
 
 
 @dataclass
@@ -22,9 +20,24 @@ class Fixture:
     manufacturer: str
     model: str
     name: str
-    group: str
     current_mode: str
     available_modes: List[FixtureMode]
+
+    # Group membership - the source of truth (multi-group plan stage 1,
+    # docs/multi-group-fixtures-plan.md). Order = the order the user
+    # added them; groups[0] is the PRIMARY group ("first group wins"):
+    # data color, orientation defaults, lighting role and export
+    # intensity all come from it. Empty list = ungrouped.
+    groups: List[str] = field(default_factory=list)
+
+    # Legacy single-group constructor keyword / YAML key. Consumed by
+    # __post_init__: Fixture(group="X") becomes groups=["X"] ("" -> [])
+    # unless `groups` was given too, in which case `groups` wins and
+    # this is ignored (dual-written files carry both). Reading/writing
+    # `fixture.group` goes through the compat property attached below
+    # the class (getter = primary group, setter REPLACES the list).
+    group: InitVar[Optional[str]] = None
+
     type: str = "PAR"  # Default type if none specified
     x: float = 0.0     # X position in meters
     y: float = 0.0     # Y position in meters
@@ -40,6 +53,31 @@ class Fixture:
     # Override flags (True = use own value, False = use group default)
     orientation_uses_group_default: bool = True
     z_uses_group_default: bool = True
+
+    # Stage layer assignment ("" = no layer). Layers are named Z-planes
+    # (ground stack / mid-truss / top-truss); see StageLayer.
+    layer: str = ""
+
+    # Truss docking: element_id of the truss StageElement this fixture
+    # hangs on ("" = not docked). A docked fixture lives on the truss's
+    # layer and follows the truss when it moves on the plan.
+    docked_to: str = ""
+
+    # Definition provenance (GDTF plan Phase 2). "qxf" or "gdtf"; absent
+    # in pre-GDTF configs, so the default keeps them loading unchanged.
+    # The GDTF FixtureTypeID GUID enables exact re-resolution and GDTF
+    # Share update checks; None for .qxf-sourced fixtures.
+    definition_source: str = "qxf"
+    gdtf_fixture_type_id: Optional[str] = None
+
+    def __post_init__(self, group: Optional[str]):
+        # Defensive: a YAML `groups:` key that is present but null.
+        if self.groups is None:
+            self.groups = []
+        # Legacy migration: single `group` string -> one-element list
+        # ("" -> stays ungrouped). An explicit non-empty `groups` wins.
+        if not self.groups and group:
+            self.groups = [group]
 
     def get_effective_orientation(self, group: Optional['FixtureGroup'] = None) -> tuple:
         """
@@ -64,12 +102,87 @@ class Fixture:
         return self.z
 
 
+def _fixture_group_get(self) -> str:
+    """Compat: the primary group (groups[0]), or "" when ungrouped."""
+    return self.groups[0] if self.groups else ""
+
+
+def _fixture_group_set(self, value: str) -> None:
+    """Compat: REPLACES the whole membership list with [value] ("" clears).
+
+    Existing single-group callers keep their replace semantics; multi-group
+    membership editing goes through `groups` directly (plan stage 2)."""
+    self.groups = [value] if value else []
+
+
+# Attached after the class body: the InitVar's class-level default (None)
+# must still be None when @dataclass generates __init__; a property named
+# `group` inside the body would be picked up as that default. Instances
+# never store a `group` attribute (InitVar), so this data descriptor
+# handles every read/write of `fixture.group`.
+Fixture.group = property(_fixture_group_get, _fixture_group_set)
+
+
+def fixture_asdict(fixture: Fixture) -> dict:
+    """asdict plus the legacy `group` key (= groups[0] or "").
+
+    Dual-write: saved configs carry `groups` (the source of truth) AND
+    the old single `group` string for one release so older builds still
+    open the file. Dropping the legacy key is stage 5 of
+    docs/multi-group-fixtures-plan.md."""
+    d = asdict(fixture)
+    d['group'] = fixture.group
+    return d
+
+
 @dataclass
 class Spot:
     name: str
     x: float = 0.0     # X position in meters
     y: float = 0.0     # Y position in meters
     z: float = 0.0     # Z height in meters (for 3D targeting)
+
+
+@dataclass
+class StageLayer:
+    """A named horizontal Z-plane of the rig (ground stack, mid-truss, ...).
+
+    Fixtures opt in via Fixture.layer. Assigning a fixture to a layer snaps
+    its Z to z_height; a layer with visible=False is omitted from the 2D
+    stage plot and every 3D preview (fixtures on it still exist, patch, and
+    export normally).
+    """
+    name: str
+    z_height: float = 3.0   # nominal plane height in meters
+    visible: bool = True
+
+
+@dataclass
+class StageElement:
+    """A static, non-DMX object on the stage plan (riser, wedge, amp,
+    FOH desk, truss shape, ...).
+
+    ``kind`` keys into the stageplot symbol set (resources/stageplot/
+    <kind>.svg, catalog in utils/stage_element_catalog.py). Purely
+    visual/planning data: elements render on the 2D stage plan and the
+    printable stage plot, participate in the layer system like
+    fixtures, and carry no DMX meaning. Truss docking (fixtures
+    attached to trusses) is future work; a truss placed today is just
+    a static shape.
+    """
+    kind: str
+    x: float = 0.0          # stage coords, meters, element center
+    y: float = 0.0
+    rotation: float = 0.0   # degrees, clockwise in the top view
+    width: float = 1.0      # footprint in meters
+    depth: float = 1.0
+    label: str = ""         # optional user caption on the plan
+    layer: str = ""         # StageLayer name; "" = unassigned.
+    #   For TRUSS kinds this is the layer the truss DEFINES (created
+    #   when the truss is placed): docked fixtures join it and the
+    #   layer's z_height is the truss hang height.
+    # Stable identity for docking references (Fixture.docked_to).
+    element_id: str = ""
 
 
 @dataclass
@@ -624,6 +737,56 @@ class RiffSpecialBlock:
 
 
 @dataclass
+class Scene:
+    """A whole-rig look that spans multiple fixture groups.
+
+    Unlike a :class:`Riff` (a per-group, beat-based pattern applied to the
+    current selection), a Scene is a static full-rig snapshot across
+    several groups, not tied to any single selection. Scenes are
+    predefined and populated later; this is the data shell plus JSON
+    round-trip, no engine resolve yet.
+    """
+    name: str
+    category: str = "general"
+    description: str = ""
+    # Optional display swatch hex (e.g. "#F0562E"); empty means no chip.
+    color: str = ""
+    # The fixture groups this look spans.
+    groups: List[str] = field(default_factory=list)
+    # Metadata.
+    tags: List[str] = field(default_factory=list)
+    author: str = ""
+    version: str = "1.0"
+
+    def to_dict(self) -> Dict:
+        """Serialize to dictionary for JSON storage."""
+        return {
+            "name": self.name,
+            "category": self.category,
+            "description": self.description,
+            "color": self.color,
+            "groups": self.groups,
+            "tags": self.tags,
+            "author": self.author,
+            "version": self.version,
+        }
+
+    @classmethod
+    def from_dict(cls, data: Dict) -> 'Scene':
+        """Deserialize from dictionary."""
+        return cls(
+            name=data.get("name", ""),
+            category=data.get("category", "general"),
+            description=data.get("description", ""),
+            color=data.get("color", ""),
+            groups=data.get("groups", []),
+            tags=data.get("tags", []),
+            author=data.get("author", ""),
+            version=data.get("version", "1.0"),
+        )
+
+
+@dataclass
 class Riff:
     """A reusable pattern of sublane blocks measured in beats."""
     name: str
@@ -1094,7 +1257,12 @@ class TimelineData:
 
 
 @dataclass
-class Show:
+class Song:
+    """A single song: parts, effects, timeline data, audio.
+
+    Formerly ``Show``. Since the setlist rework, a "show" is the whole
+    evening (see :class:`Setlist`); the parts + BPM + audio unit is a Song.
+    """
     name: str
     parts: List[ShowPart] = field(default_factory=list)
     effects: List[ShowEffect] = field(default_factory=list)  # Keep for backwards compatibility
@@ -1103,9 +1271,9 @@ class Show:
     trigger_channel: int = -1   # MIDI channel number (-1 = no trigger)
 
     def to_dict(self) -> Dict:
-        """Serialize this show's contents (excludes `name`; that's the key in
-        Configuration.shows). For a standalone show file, include the name
-        at the caller: ``{'name': show.name, **show.to_dict()}``."""
+        """Serialize this song's contents (excludes `name`; that's the key in
+        Configuration.songs). For a standalone song file, include the name
+        at the caller: ``{'name': song.name, **song.to_dict()}``."""
         return {
             'parts': [
                 {k: v for k, v in asdict(part).items() if k not in ('start_time', 'duration')}
@@ -1118,10 +1286,10 @@ class Show:
         }
 
     @classmethod
-    def from_dict(cls, name: str, data: Dict) -> 'Show':
-        """Deserialize a show. `name` is supplied externally (usually the
-        mapping key in Configuration.shows, or the `name:` field of a
-        standalone show YAML)."""
+    def from_dict(cls, name: str, data: Dict) -> 'Song':
+        """Deserialize a song. `name` is supplied externally (usually the
+        mapping key in Configuration.songs, or the `name:` field of a
+        standalone song YAML)."""
         parts = [
             ShowPart(
                 name=p['name'],
@@ -1160,6 +1328,143 @@ class Show:
                 if data.get('trigger_channel') is not None else -1
             ),
         )
+
+
+@dataclass
+class SongTrigger:
+    """How a setlist entry's song starts.
+
+    Modes: "manual" (operator hits go), "midi_pc" (MIDI program change,
+    ``value`` = program number), "midi_note" (``value`` = note number),
+    "mtc" / "smpte" (chase to ``timecode``, e.g. "00:14:32:00"), and
+    "follow" (chains automatically after the previous song's pause look).
+    The engine that listens arrives in slices: SMPTE/LTC with v1.4,
+    the rest (MIDI, MTC, follow) with v1.8; until then this is stored
+    and edited data only.
+    """
+    mode: str = "manual"   # "manual" | "midi_pc" | "midi_note" | "mtc" | "smpte" | "follow"
+    value: int = 0         # program / note number (midi_pc, midi_note)
+    channel: int = 1       # MIDI channel (1-16)
+    timecode: str = ""     # "HH:MM:SS:FF" start time for mtc/smpte
+
+    def to_dict(self) -> Dict:
+        return {
+            "mode": self.mode,
+            "value": self.value,
+            "channel": self.channel,
+            "timecode": self.timecode,
+        }
+
+    @classmethod
+    def from_dict(cls, data: Dict) -> 'SongTrigger':
+        return cls(
+            mode=data.get("mode", "manual"),
+            value=data.get("value", 0),
+            channel=data.get("channel", 1),
+            timecode=data.get("timecode", ""),
+        )
+
+
+@dataclass
+class PauseLook:
+    """The look on stage between two setlist songs.
+
+    Modes: "blackout", "warm_white" (``level`` percent), "hold_last"
+    (freeze the previous song's last look), "ambient_loop" (reuses the
+    screensaver rig behaviour once the engine lands). ``until`` decides
+    how the pause ends: "trigger" (next song's start trigger) or
+    "duration" (``duration_s`` seconds, then follow on).
+    """
+    mode: str = "hold_last"   # "blackout" | "warm_white" | "hold_last" | "ambient_loop"
+    level: int = 20           # percent, used by warm_white
+    until: str = "trigger"    # "trigger" | "duration"
+    duration_s: float = 0.0   # used when until == "duration"
+
+    def to_dict(self) -> Dict:
+        return {
+            "mode": self.mode,
+            "level": self.level,
+            "until": self.until,
+            "duration_s": self.duration_s,
+        }
+
+    @classmethod
+    def from_dict(cls, data: Dict) -> 'PauseLook':
+        return cls(
+            mode=data.get("mode", "hold_last"),
+            level=data.get("level", 20),
+            until=data.get("until", "trigger"),
+            duration_s=data.get("duration_s", 0.0),
+        )
+
+
+@dataclass
+class SetlistEntry:
+    """One slot of the setlist: a song (by name key into
+    Configuration.songs), its start trigger, and the pause look that
+    plays after it ends."""
+    song: str
+    trigger: SongTrigger = field(default_factory=SongTrigger)
+    pause_after: PauseLook = field(default_factory=PauseLook)
+
+    def to_dict(self) -> Dict:
+        return {
+            "song": self.song,
+            "trigger": self.trigger.to_dict(),
+            "pause_after": self.pause_after.to_dict(),
+        }
+
+    @classmethod
+    def from_dict(cls, data: Dict) -> 'SetlistEntry':
+        return cls(
+            song=data.get("song", ""),
+            trigger=SongTrigger.from_dict(data.get("trigger") or {}),
+            pause_after=PauseLook.from_dict(data.get("pause_after") or {}),
+        )
+
+
+@dataclass
+class Setlist:
+    """The whole evening: an ordered list of songs with triggers and
+    pause looks, plus the sync source the triggers listen to.
+
+    One setlist per config file for now (the design shows one per show
+    file)."""
+    name: str = ""
+    entries: List[SetlistEntry] = field(default_factory=list)
+    sync_mode: str = "manual"   # "midi" | "mtc" | "smpte" | "manual"
+    sync_device: str = ""       # MIDI/LTC input device hint
+
+    def to_dict(self) -> Dict:
+        return {
+            "name": self.name,
+            "entries": [e.to_dict() for e in self.entries],
+            "sync_mode": self.sync_mode,
+            "sync_device": self.sync_device,
+        }
+
+    @classmethod
+    def from_dict(cls, data: Dict) -> 'Setlist':
+        return cls(
+            name=data.get("name", ""),
+            entries=[SetlistEntry.from_dict(e) for e in data.get("entries", []) or []],
+            sync_mode=data.get("sync_mode", "manual"),
+            sync_device=data.get("sync_device", ""),
+        )
+
+    @classmethod
+    def from_song_names(cls, names) -> 'Setlist':
+        """Synthesize a setlist for configs that predate setlists: the
+        given songs in sorted-name order, manual triggers, hold-last
+        pause looks that wait for the next trigger."""
+        return cls(entries=[
+            SetlistEntry(
+                song=name,
+                trigger=SongTrigger(mode="manual"),
+                pause_after=PauseLook(mode="hold_last", until="trigger"),
+            )
+            for name in sorted(names)
+        ])
 
 
 @dataclass
@@ -1203,7 +1508,8 @@ class UniverseOutput:
 class Configuration:
     fixtures: List[Fixture] = field(default_factory=list)
     groups: Dict[str, FixtureGroup] = field(default_factory=dict)
-    shows: Dict[str, Show] = field(default_factory=dict)
+    songs: Dict[str, Song] = field(default_factory=dict)
+    setlist: Setlist = field(default_factory=Setlist)
     universes: Dict[int, Universe] = field(default_factory=dict)
     spots: Dict[str, Spot] = field(default_factory=dict)
     workspace_path: Optional[str] = None
@@ -1213,6 +1519,22 @@ class Configuration:
     stage_width: float = 10.0  # Stage width in meters
     stage_height: float = 6.0  # Stage depth in meters (called height for compatibility)
     grid_size: float = 0.5  # Grid spacing in meters
+    stage_layers: List[StageLayer] = field(default_factory=list)
+    stage_elements: List[StageElement] = field(default_factory=list)
+
+    def get_stage_layer(self, name: str) -> Optional[StageLayer]:
+        return next((l for l in self.stage_layers if l.name == name), None)
+
+    def is_fixture_visible(self, fixture: Fixture) -> bool:
+        """False only when the fixture sits on a hidden stage layer.
+
+        Fixtures without a layer, or referencing a layer that no longer
+        exists, are always visible.
+        """
+        if not fixture.layer:
+            return True
+        layer = self.get_stage_layer(fixture.layer)
+        return layer.visible if layer is not None else True
 
     @classmethod
     def from_workspace(cls, workspace_path: str) -> 'Configuration':
@@ -1259,10 +1581,10 @@ class Configuration:
             )
             config.fixtures.append(fixture)
 
-            if fixture.group:
-                if fixture.group not in config.groups:
-                    config.groups[fixture.group] = FixtureGroup(fixture.group, [])
-                config.groups[fixture.group].fixtures.append(fixture)
+            for group_name in fixture.groups:
+                if group_name not in config.groups:
+                    config.groups[group_name] = FixtureGroup(group_name, [])
+                config.groups[group_name].fixtures.append(fixture)
 
         return config
 
@@ -1304,7 +1626,10 @@ class Configuration:
     def save(self, filename: str):
         """Save configuration to YAML file"""
         data = {
-            'fixtures': [asdict(f) for f in self.fixtures],
+            # fixture_asdict dual-writes `groups` (source of truth) and
+            # the legacy `group` key for older builds (plan stage 5
+            # removes it).
+            'fixtures': [fixture_asdict(f) for f in self.fixtures],
             'groups': {
                 name: {
                     'name': group.name,
@@ -1316,7 +1641,7 @@ class Configuration:
                     'default_z_height': group.default_z_height,
                     'lighting_role': group.lighting_role,
                     'export_intensity': group.export_intensity,
-                    'fixtures': [asdict(f) for f in group.fixtures]
+                    'fixtures': [fixture_asdict(f) for f in group.fixtures]
                 }
                 for name, group in self.groups.items()
             },
@@ -1327,10 +1652,11 @@ class Configuration:
                 }
                 for universe in self.universes.values()
             },
-            'shows': {
-                show.name: show.to_dict()
-                for show in self.shows.values()
+            'songs': {
+                song.name: song.to_dict()
+                for song in self.songs.values()
             },
+            'setlist': self.setlist.to_dict() if self.setlist else Setlist().to_dict(),
             'midi_input_devices': [asdict(d) for d in self.midi_input_devices] if self.midi_input_devices else None,
             'pause_show': asdict(self.pause_show) if self.pause_show and self.pause_show.enabled else None,
             'spots': {
@@ -1346,6 +1672,8 @@ class Configuration:
             'stage_width': self.stage_width,
             'stage_height': self.stage_height,
             'grid_size': self.grid_size,
+            'stage_layers': [asdict(layer) for layer in self.stage_layers],
+            'stage_elements': [asdict(e) for e in self.stage_elements],
         }
 
         from config.compact_serializer import compact_serialize
@@ -1363,6 +1691,14 @@ class Configuration:
         """Load configuration from YAML file"""
         with open(filename, 'r') as f:
             data = yaml.safe_load(f)
+
+        # Legacy key migration: configs written before the setlist rework
+        # store the songs under a top-level `shows:` key. Accept it forever;
+        # the per-file block tables (block_defs / light_block_defs) are
+        # untouched by the rename, so expand_compact works on the migrated
+        # key exactly as before.
+        if 'songs' not in data and 'shows' in data:
+            data['songs'] = data.pop('shows')
 
         from config.compact_serializer import expand_compact
         data = expand_compact(data)
@@ -1386,32 +1722,71 @@ class Configuration:
 
             fixtures.append(Fixture(**f_data))
 
+        # Reconcile stored mode names against the resolved definitions.
+        # A GDTF definition can shadow a same-identity .qxf and carry
+        # differently-named modes; without this, such fixtures fall back
+        # to empty channel maps (docs/gdtf-coverage-note.md item 4).
+        from utils.fixture_io import reconcile_fixture_modes
+        from utils import user_warnings
+        for warning in reconcile_fixture_modes(fixtures):
+            user_warnings.warn(warning, category="config-load")
+
+        # Bring stored orientations onto the canonical mounting table
+        # (utils/orientation.py). Configs written before 2026-07-12 saved
+        # `mounting: hanging` next to yaw/pitch/roll = 0, and every
+        # consumer used the zeros and ignored the mounting - so a hanging
+        # rig aimed as if it were wall-mounted. Custom orientations are
+        # left untouched; the rewrite is idempotent.
+        from utils.orientation import migrate_orientation_angles
+        for fixture in fixtures:
+            fixture.yaw, fixture.pitch, fixture.roll = \
+                migrate_orientation_angles(fixture.mounting, fixture.yaw,
+                                           fixture.pitch, fixture.roll)
+
         # Handle groups with colors and orientation defaults
         # Groups reference the same fixture objects as the top-level fixtures list
         groups = {}
         for name, group_data in data.get('groups', {}).items():
-            # Find fixtures that belong to this group from the top-level fixtures
-            group_fixtures = [f for f in fixtures if f.group == name]
+            # Find fixtures that belong to this group from the top-level
+            # fixtures. Membership is the full `groups` list, so a fixture
+            # appears in every group it lists.
+            group_fixtures = [f for f in fixtures if name in f.groups]
 
+            group_mounting = group_data.get('default_mounting', 'hanging')
+            group_yaw, group_pitch, group_roll = migrate_orientation_angles(
+                group_mounting,
+                group_data.get('default_yaw', 0.0),
+                group_data.get('default_pitch', 0.0),
+                group_data.get('default_roll', 0.0),
+            )
             groups[name] = FixtureGroup(
                 name=name,
                 fixtures=group_fixtures,
                 color=group_data.get('color', '#808080'),
-                # Orientation defaults
-                default_mounting=group_data.get('default_mounting', 'hanging'),
-                default_yaw=group_data.get('default_yaw', 0.0),
-                default_pitch=group_data.get('default_pitch', 0.0),
-                default_roll=group_data.get('default_roll', 0.0),
+                # Orientation defaults (canonical angles - migrated above)
+                default_mounting=group_mounting,
+                default_yaw=group_yaw,
+                default_pitch=group_pitch,
+                default_roll=group_roll,
                 default_z_height=group_data.get('default_z_height', 3.0),
                 lighting_role=group_data.get('lighting_role', ''),
                 export_intensity=group_data.get('export_intensity', 255),
             )
 
-        # Handle shows
-        shows = {}
-        if 'shows' in data:
-            for show_name, show_data in data['shows'].items():
-                shows[show_name] = Show.from_dict(show_name, show_data)
+        # Handle songs (legacy `shows:` was migrated to `songs` above)
+        songs = {}
+        if 'songs' in data:
+            for song_name, song_data in data['songs'].items():
+                songs[song_name] = Song.from_dict(song_name, song_data)
+
+        # Handle setlist. Configs that predate setlists (legacy `shows:`
+        # files) get one synthesized from the sorted song names: manual
+        # triggers, hold-last pause looks until the next trigger.
+        setlist_data = data.get('setlist')
+        if setlist_data:
+            setlist = Setlist.from_dict(setlist_data)
+        else:
+            setlist = Setlist.from_song_names(songs.keys())
 
         # Handle universes
         universes = {}
@@ -1453,7 +1828,8 @@ class Configuration:
             fixtures=fixtures,
             groups=groups,
             universes=universes,
-            shows=shows,
+            songs=songs,
+            setlist=setlist,
             spots=spots,
             midi_input_devices=midi_input_devices,
             pause_show=pause_show,
@@ -1464,6 +1840,14 @@ class Configuration:
             stage_width=data.get('stage_width', 10.0),
             stage_height=data.get('stage_height', 6.0),
             grid_size=data.get('grid_size', 0.5),
+            stage_layers=[
+                StageLayer(**layer_data)
+                for layer_data in data.get('stage_layers', [])
+            ],
+            stage_elements=[
+                StageElement(**element_data)
+                for element_data in data.get('stage_elements', [])
+            ],
         )
 
         # Transient attribute (not persisted): the path the config was loaded
@@ -1476,97 +1860,23 @@ class Configuration:
 
     @staticmethod
     def _scan_fixture_definitions():
-        """Scan QLC+ fixture definitions"""
-        # Get QLC+ fixture directories
-        qlc_fixture_dirs = []
+        """Scan QLC+ fixture definitions (full-library sweep for .qxw import)."""
+        from utils.fixture_library import iter_definitions
 
-        # Add project custom_fixtures directory first (highest priority)
-        project_custom_fixtures = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'custom_fixtures')
-        if os.path.exists(project_custom_fixtures):
-            qlc_fixture_dirs.append(project_custom_fixtures)
-
-        if sys.platform.startswith('linux'):
-            qlc_fixture_dirs.extend([
-                '/usr/share/qlcplus/fixtures',
-                os.path.expanduser('~/.qlcplus/fixtures')
-            ])
-        elif sys.platform == 'win32':
-            qlc_fixture_dirs.extend([
-                os.path.join(os.path.expanduser('~'), 'QLC+', 'fixtures'),  # User fixtures
-                'C:\\QLC+\\Fixtures'  # System-wide fixtures
-            ])
-        elif sys.platform == 'darwin':
-            qlc_fixture_dirs.append(os.path.expanduser('~/Library/Application Support/QLC+/fixtures'))
-
-        # Scan all fixture definitions first
         fixture_definitions = {}
-        for dir_path in qlc_fixture_dirs:
-            if os.path.exists(dir_path):
-                for manufacturer_dir in os.listdir(dir_path):
-                    manufacturer_path = os.path.join(dir_path, manufacturer_dir)
-                    if os.path.isdir(manufacturer_path):
-                        for fixture_file in os.listdir(manufacturer_path):
-                            if fixture_file.endswith('.qxf'):
-                                fixture_path = os.path.join(manufacturer_path, fixture_file)
-                                try:
-                                    tree = ET.parse(fixture_path)
-                                    root = tree.getroot()
-                                    ns = {'': 'http://www.qlcplus.org/FixtureDefinition'}
-
-                                    manufacturer = root.find('.//Manufacturer', ns).text
-                                    model = root.find('.//Model', ns).text
-
-                                    # Determine fixture type once for all modes
-                                    fixture_type = determine_fixture_type(root)
-
-                                    # Get all available modes
-                                    modes = []
-                                    for mode in root.findall('.//Mode', ns):
-                                        mode_name = mode.get('Name')
-                                        channels = mode.findall('Channel', ns)
-                                        modes.append({
-                                            'name': mode_name,
-                                            'channels': len(channels),
-                                            'type': fixture_type  # Same type for all modes
-                                        })
-
-                                    fixture_definitions[(manufacturer, model)] = {
-                                        'path': fixture_path,
-                                        'modes': modes,
-                                        'type': fixture_type  # Store type at fixture level
-                                    }
-                                except Exception as e:
-                                    print(f"Error parsing fixture file {fixture_path}: {e}")
-                    elif manufacturer_path.endswith('.qxf'):
-                        try:
-                            tree = ET.parse(manufacturer_path)
-                            root = tree.getroot()
-                            ns = {'': 'http://www.qlcplus.org/FixtureDefinition'}
-
-                            manufacturer = root.find('.//Manufacturer', ns).text
-                            model = root.find('.//Model', ns).text
-
-                            # Determine fixture type once for all modes
-                            fixture_type = determine_fixture_type(root)
-
-                            # Get all available modes
-                            modes = []
-                            for mode in root.findall('.//Mode', ns):
-                                mode_name = mode.get('Name')
-                                channels = mode.findall('Channel', ns)
-                                modes.append({
-                                    'name': mode_name,
-                                    'channels': len(channels),
-                                    'type': fixture_type  # Same type for all modes
-                                })
-
-                            fixture_definitions[(manufacturer, model)] = {
-                                'path': manufacturer_path,
-                                'modes': modes,
-                                'type': fixture_type  # Store type at fixture level
-                            }
-                        except Exception as e:
-                            print(f"Error parsing fixture file {manufacturer_path}: {e}")
+        for defn in iter_definitions():
+            fixture_definitions[(defn.manufacturer, defn.model)] = {
+                'path': defn.path,
+                'modes': [
+                    {
+                        'name': mode.name,
+                        'channels': len(mode.channels),
+                        'type': defn.legacy_type,  # Same type for all modes
+                    }
+                    for mode in defn.modes
+                ],
+                'type': defn.legacy_type,
+            }
         return fixture_definitions
 
     @staticmethod

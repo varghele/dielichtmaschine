@@ -19,6 +19,7 @@ from PyQt6.QtCore import Qt, QTimer, pyqtSignal
 
 from utils.fixture_capabilities import Chassis, chassis_from_legacy_type
 from utils.geometry import GeometryBuilder
+from utils.orientation import MOUNTING_PRESET_ANGLES
 
 
 class OrientationPreviewWidget(QOpenGLWidget):
@@ -1899,15 +1900,16 @@ class OrientationPanel(QWidget):
         'custom': {'label': 'Custom', 'tooltip': 'Custom orientation (manually adjusted)'},
     }
 
-    # Absolute orientation values for each preset (yaw, pitch, roll)
-    # These are the actual world-space angles, not relative adjustments
+    # Absolute orientation values for each preset (yaw, pitch, roll),
+    # body orientations, not relative adjustments. The mounting presets
+    # come from utils/orientation.py - the ONE table
+    # (MOUNTING_PRESET_ANGLES); never keep a local copy of these numbers.
+    # 'hanging' is a +90 pitch that flips the chassis to hang from the
+    # truss (the pre-rebrand convention, restored 2026-07-13). See that
+    # module's comment for why the 2026-07-12 "beam-direction" values
+    # were wrong.
     PRESET_VALUES = {
-        'hanging': (0.0, 90.0, 0.0),      # Beam pointing down (-Z world)
-        'standing': (0.0, -90.0, 0.0),    # Beam pointing up (+Z world)
-        'wall_left': (-90.0, 0.0, 0.0),   # Beam pointing stage-right (+X world)
-        'wall_right': (90.0, 0.0, 0.0),   # Beam pointing stage-left (-X world)
-        'wall_back': (0.0, 0.0, 0.0),     # Beam pointing toward audience (-Y world)
-        'wall_front': (180.0, 0.0, 0.0),  # Beam pointing toward back (+Y world)
+        **MOUNTING_PRESET_ANGLES,
         'custom': None,  # No predefined values for custom
     }
 
@@ -1943,12 +1945,22 @@ class OrientationPanel(QWidget):
         self.info_label.setStyleSheet("font-weight: bold; font-size: 12px;")
         layout.addWidget(self.info_label)
 
-        # 3D Preview
-        preview_group = QGroupBox("3D Preview")
-        preview_layout = QVBoxLayout(preview_group)
+        # 3D Preview. Kept as an instance attribute so an embedder can hide
+        # it: the Stage tab already shows a live 3D visualizer at the top of
+        # the same column, so a second preview here is redundant and only
+        # steals vertical space from the presets and fine-adjustment
+        # controls. The standalone modal keeps it visible.
+        self.preview_group = QGroupBox("3D Preview")
+        preview_layout = QVBoxLayout(self.preview_group)
+        # The theme's QGroupBox only reserves top padding for the title, so
+        # the GL widget would otherwise render flush against (and appear to
+        # overlap) the border. Inset it. Top margin 0 because the theme
+        # already adds 8px padding-top; that balances the 8px bottom margin
+        # so the preview has equal top and bottom insets.
+        preview_layout.setContentsMargins(8, 0, 8, 8)
         self.preview_widget = OrientationPreviewWidget()
         preview_layout.addWidget(self.preview_widget)
-        layout.addWidget(preview_group, stretch=1)
+        layout.addWidget(self.preview_group, stretch=1)
 
         # Presets + Fine Adjustment live side-by-side in one row to share
         # vertical space with the 3D preview above. Otherwise the panel
@@ -1975,7 +1987,11 @@ class OrientationPanel(QWidget):
             btn = QPushButton(preset_info['label'])
             btn.setToolTip(preset_info['tooltip'])
             btn.setCheckable(True)
-            btn.setMaximumWidth(90)
+            btn.setMaximumWidth(84)
+            # Trim the theme's 14px horizontal button padding so the longest
+            # labels ("Wall-Front") fit the narrow two-column preset grid
+            # without clipping.
+            btn.setStyleSheet("padding: 5px 3px;")
             btn.clicked.connect(lambda checked, p=preset_id: self._on_preset_clicked(p))
             row, col = divmod(index, 2)
             presets_layout.addWidget(btn, row, col)
@@ -2009,13 +2025,18 @@ class OrientationPanel(QWidget):
             label.setStyleSheet("font-weight: bold;")
             label.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
             adjust_layout.addWidget(label, row_index, 0)
-            spin.setMaximumWidth(90)
+            # Cap width tightly: the spinbox min-size-hint (arrows + suffix)
+            # otherwise drives this group past the two-column budget for the
+            # Stage tab's right inspector. 64px still shows "-180°".
+            spin.setMaximumWidth(64)
+            spin.setMinimumWidth(1)
             adjust_layout.addWidget(spin, row_index, 1)
             if rotate_btn is not None:
                 # Override the theme's default 6px/14px button padding so the
-                # +90° text fits inside the 50px-wide button without clipping.
-                rotate_btn.setMinimumWidth(50)
-                rotate_btn.setMaximumWidth(60)
+                # +90° text fits inside the narrow button without clipping.
+                rotate_btn.setMinimumWidth(1)
+                rotate_btn.setMaximumWidth(46)
+                rotate_btn.setStyleSheet(rotate_btn.styleSheet() + " padding: 4px 2px;")
                 adjust_layout.addWidget(rotate_btn, row_index, 2)
 
         # Yaw
@@ -2081,25 +2102,27 @@ class OrientationPanel(QWidget):
 
         body_row.addWidget(adjust_group)
 
-        # Group Defaults — third box in the body row. Wrapping the
-        # apply-to-group checkbox in its own QGroupBox matches the visual
-        # weight of Presets / Fine Adjustment and keeps the panel as a
-        # single horizontal strip. Minimum width ensures the indicator
-        # and label have room — too narrow and Qt sometimes clips the
-        # click area to nothing.
+        # Two sub-panels only in the horizontal strip. A former third
+        # column (Group Defaults) pushed the body past the inspector width
+        # so the preset buttons ran off the right edge and needed a
+        # horizontal scrollbar to reach. Presets + Fine Adjustment fit the
+        # right column; the apply-to-group control drops to its own row.
+        layout.addLayout(body_row)
+
+        # Group Defaults — a full-width row directly beneath the two
+        # sub-panels. Below (rather than beside) it always has room for
+        # the indicator and label, and reads naturally as "this applies to
+        # the whole selection", which is what the checkbox does.
         group_defaults_group = QGroupBox("Group Defaults")
-        group_defaults_group.setMinimumWidth(140)
         gd_layout = QVBoxLayout(group_defaults_group)
         self.apply_to_group_checkbox = QCheckBox("Apply to group default")
         self.apply_to_group_checkbox.setToolTip(
             "If checked, also updates the group's default orientation"
         )
         gd_layout.addWidget(self.apply_to_group_checkbox)
-        gd_layout.addStretch()
-        body_row.addWidget(group_defaults_group)
         self._refresh_apply_to_group(self.fixtures)
 
-        layout.addLayout(body_row)
+        layout.addWidget(group_defaults_group)
 
     @staticmethod
     def _format_info_text(fixtures: list) -> str:
@@ -2192,6 +2215,16 @@ class OrientationPanel(QWidget):
         # Z-height edits don't reshape the gimbal, but inline embedders need
         # to know when the value changed so they can write it back.
         self.z_spin.valueChanged.connect(lambda _v: self.values_changed.emit())
+
+        # Ticking "apply to group default" must take effect immediately in
+        # the inline (Stage tab) path, which acts on values_changed. Without
+        # this the box read as broken: the modal reads it at Apply time, but
+        # inline nothing re-applied until some other value changed.
+        # `clicked` (not `toggled`): fire only on real user interaction, so
+        # the programmatic setChecked(False) that runs while re-binding the
+        # panel to a new selection does not spuriously re-apply values.
+        self.apply_to_group_checkbox.clicked.connect(
+            lambda _checked: self.values_changed.emit())
 
         # Connect preview widget's ring drag signal to update spin boxes
         self.preview_widget.orientation_changed.connect(self._on_preview_orientation_changed)

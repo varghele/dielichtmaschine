@@ -6,6 +6,8 @@ import struct
 import time
 from typing import Dict, Optional
 
+from utils import user_warnings
+
 
 class ArtNetSender:
     """
@@ -143,7 +145,11 @@ class ArtNetSender:
             self.last_send_time[universe] = current_time
             return True
         except Exception as e:
-            print(f"Error sending ArtNet packet: {e}")
+            # once_key folds a 44 Hz failure storm into one counted entry
+            user_warnings.warn(
+                f"ArtNet send to {self.target_ip} failed: {e}",
+                category="output",
+                once_key=f"artnet-send:{self.target_ip}")
             return False
 
     def close(self):

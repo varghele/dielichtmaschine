@@ -1,5 +1,5 @@
 """
-Audio playback engine for QLCAutoShow using sounddevice.
+Audio playback engine for Die Lichtmaschine using sounddevice.
 Manages audio stream and provides sample-accurate playback.
 Supports ASIO (Windows) and JACK (Linux) for low-latency operation.
 """

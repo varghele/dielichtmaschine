@@ -30,7 +30,7 @@ MANIFEST
 # PyInstaller
 *.manifest
 *.spec
-!qlcshowcreator.spec
+!lichtmaschine.spec
 
 # Installer logs
 pip-log.txt
@@ -99,3 +99,10 @@ archive/shows/audiofiles/backingtrack_*
 /tester.yaml
 /workspace_generated.qxw
 /workspace_saved.qxw
+
+# GDTF companion .qxf output from the .qxw exporter (generated per export).
+/gdtf_companion_fixtures/
+
+# GDTF fixture library folder: Share-downloaded files must never be committed
+# (gdtf-share.com terms of use). Self-authored test GDTFs live in tests/, not here.
+/gdtf_fixtures/

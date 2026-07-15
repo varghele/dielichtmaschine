@@ -14,7 +14,7 @@ Two formats are supported:
   (lanes, blocks, audio_file_path), and trigger metadata. Round-trips a
   show completely independently of the parent config.
 
-CSV detection is by file extension. YAML import uses ``Show.from_dict`` so
+CSV detection is by file extension. YAML import uses ``Song.from_dict`` so
 new fields flow through automatically as the data model grows.
 """
 from __future__ import annotations
@@ -24,7 +24,7 @@ from typing import List, Tuple
 
 import yaml
 
-from config.models import Show, ShowPart
+from config.models import Song, ShowPart
 
 
 CSV_FIELDNAMES = ['showpart', 'signature', 'bpm', 'num_bars', 'transition', 'color']
@@ -58,7 +58,7 @@ def read_show_structure_csv(path: str) -> List[ShowPart]:
     return parts
 
 
-def write_show_structure_csv(path: str, show: Show) -> None:
+def write_show_structure_csv(path: str, show: Song) -> None:
     """Write the parts of ``show`` to a 6-column structure CSV."""
     with open(path, 'w', newline='') as f:
         writer = csv.DictWriter(f, fieldnames=CSV_FIELDNAMES)
@@ -74,7 +74,7 @@ def write_show_structure_csv(path: str, show: Show) -> None:
             })
 
 
-def read_show_yaml(path: str) -> Show:
+def read_show_yaml(path: str) -> Song:
     """Read a standalone show YAML and reconstruct a Show.
 
     The file's top-level ``name:`` field is required; it becomes the show
@@ -87,10 +87,10 @@ def read_show_yaml(path: str) -> Show:
         raise ValueError(
             f"YAML show file is missing a 'name:' field at the top level: {path}"
         )
-    return Show.from_dict(name, data)
+    return Song.from_dict(name, data)
 
 
-def write_show_yaml(path: str, show: Show) -> None:
+def write_show_yaml(path: str, show: Song) -> None:
     """Write a Show as a standalone YAML file. Includes the name field so
     the file can be read back without external context."""
     data = {'name': show.name, **show.to_dict()}
@@ -98,7 +98,7 @@ def write_show_yaml(path: str, show: Show) -> None:
         yaml.dump(data, f, default_flow_style=False)
 
 
-def read_show(path: str) -> Tuple[Show, str]:
+def read_show(path: str) -> Tuple[Song, str]:
     """Format-agnostic entry point.
 
     Returns ``(show, format)`` where ``format`` is ``'csv'`` or ``'yaml'``.
@@ -109,11 +109,11 @@ def read_show(path: str) -> Tuple[Show, str]:
     if fmt == 'csv':
         parts = read_show_structure_csv(path)
         name = os.path.splitext(os.path.basename(path))[0]
-        return Show(name=name, parts=parts), 'csv'
+        return Song(name=name, parts=parts), 'csv'
     return read_show_yaml(path), 'yaml'
 
 
-def write_show(path: str, show: Show) -> str:
+def write_show(path: str, show: Song) -> str:
     """Format-agnostic entry point. Returns the chosen format string."""
     fmt = detect_format(path)
     if fmt == 'csv':

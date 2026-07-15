@@ -1,5 +1,5 @@
 """
-Audio file loading and management for QLCAutoShow.
+Audio file loading and management for Die Lichtmaschine.
 Supports WAV, MP3, FLAC, and OGG formats.
 """
 

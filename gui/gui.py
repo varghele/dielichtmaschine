@@ -8,15 +8,17 @@ from PyQt6.QtWidgets import QMainWindow, QFileDialog, QMessageBox
 from PyQt6.QtCore import QTimer, Qt
 from PyQt6.QtGui import QUndoStack, QKeySequence, QAction
 from config.models import Configuration
+from utils import app_identity
 from utils.create_workspace import create_qlc_workspace
 from gui.Ui_MainWindow import Ui_MainWindow
-from gui.tabs import (ConfigurationTab, FixturesTab, AutoTab, ShowsTab,
-                       StageTab, StructureTab)
+from gui.tabs import (ConfigurationTab, FixturesTab, AutoTab, LiveTab,
+                       ShowsTab, StageTab, StructureTab)
 from gui.audio_settings_dialog import AudioSettingsDialog
 from gui.dialogs.workspace_options_dialog import WorkspaceOptionsDialog
 from gui.progress_manager import ProgressManager, set_progress_manager
 from timeline_ui.riff_browser_widget import RiffBrowserWidget
 from riffs.riff_library import RiffLibrary
+from scenes.scene_library import SceneLibrary
 
 
 class MainWindow(QMainWindow, Ui_MainWindow):
@@ -57,6 +59,22 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         # Initialize undo stack
         self._create_undo_stack()
 
+        # With no menubar, actions living only in the overflow popup
+        # would never fire their shortcuts; re-register them all on the
+        # window (must run after every menu exists, incl. Edit/Render).
+        from gui.widgets.topbar import register_menu_shortcuts
+        register_menu_shortcuts(self, self.overflow_menu)
+
+        # Initial statusbar hint (tab changes keep it current after this).
+        self._update_status_hint(self.tabWidget.currentIndex())
+
+    def _update_status_hint(self, index: int) -> None:
+        """Show the current screen's contextual hint in the statusbar."""
+        from gui.widgets.topbar import screen_hints
+        hint = screen_hints().get(index)
+        if hint and hasattr(self, "status_hint"):
+            self.status_hint.setText(hint)
+
     def _setup_status_timer(self):
         """Set up timer for updating toolbar status indicators."""
         self.status_timer = QTimer()
@@ -66,29 +84,63 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self._update_toolbar_status()
 
     def _update_toolbar_status(self):
-        """Update ArtNet and TCP status indicators in toolbar.
+        """Update ArtNet and TCP status indicators in the topbar.
 
         Drives the QSS dynamic-property selectors (`status="off"|"on"|"active"|"ready"`)
         rather than re-applying inline stylesheets, so the active theme stays
-        in charge of the actual colors.
+        in charge of the actual colors. Also refreshes the topbar's
+        filename readout (config basename + dirty marker) on the same
+        1 s tick.
         """
-        # ArtNet
+        if hasattr(self, 'topbar'):
+            # Reaper-style dirty marker: the truth is the content
+            # fingerprint vs the last MANUAL save/load (autosave
+            # backups do not count), throttled because it hashes the
+            # whole config.
+            dirty = self._dirty_for_tick()
+            self._refresh_dirty_marker(dirty)
+            if getattr(self, 'config_path', None):
+                name = os.path.basename(self.config_path)
+            elif dirty:
+                # Edits exist but the project was never saved: own it.
+                name = "untitled"
+            else:
+                # Reference screen 01: the filename slot reads
+                # "no project loaded" until a project exists.
+                name = "no project loaded"
+            if dirty:
+                name += " *"
+            self.topbar.set_filename(
+                name,
+                tooltip="Unsaved changes · Ctrl+S saves" if dirty else "")
+            # Keep the Home checklist live while the user works.
+            if hasattr(self, 'home_screen') and self.home_screen.isVisible():
+                self.home_screen.refresh_checklist(self.config)
+        # OUTPUT (master DMX switch; native ArtNet). ON reflects the
+        # truth on the wire: either the timeline-context enable or any
+        # other producer (Auto) streaming through the shared arbiter.
         artnet_controller = getattr(self.shows_tab, 'artnet_controller', None)
         artnet_enabled = getattr(self.shows_tab, 'artnet_enabled', False)
-        if artnet_controller and artnet_enabled:
+        arbiter = getattr(self, "_output_arbiter", None)
+        streaming = arbiter is not None and arbiter.running
+        if (artnet_controller and artnet_enabled) or streaming:
             self.artnet_status_indicator.setText("ON")
             self._set_status(self.artnet_status_indicator, "on")
             self._set_status(self.artnet_toggle_btn, "on")
-            self.artnet_status_indicator.setToolTip("ArtNet DMX Output: Enabled")
-            self.artnet_toggle_btn.setToolTip("Click to disable ArtNet")
+            self.artnet_status_indicator.setToolTip(
+                "DMX output is streaming (native ArtNet)")
+            self.artnet_toggle_btn.setToolTip("Click to disable DMX output")
         else:
             self.artnet_status_indicator.setText("OFF")
             self._set_status(self.artnet_status_indicator, "off")
             self._set_status(self.artnet_toggle_btn, "off")
-            self.artnet_status_indicator.setToolTip("ArtNet DMX Output: Disabled")
-            self.artnet_toggle_btn.setToolTip("Click to enable ArtNet")
+            self.artnet_status_indicator.setToolTip(
+                "DMX output is off (native ArtNet)")
+            self.artnet_toggle_btn.setToolTip("Click to enable DMX output")
 
-        # TCP visualizer server
+        # VISUALIZER: one labelled action button (OPEN launches the
+        # standalone visualizer AND starts its TCP feed; STOP ends the
+        # feed) + a status readout showing the connection truth.
         tcp_server = getattr(self.shows_tab, 'tcp_server', None)
         if tcp_server and tcp_server.is_running():
             client_count = tcp_server.get_client_count()
@@ -97,20 +149,25 @@ class MainWindow(QMainWindow, Ui_MainWindow):
                 self._set_status(self.tcp_status_indicator, "active")
                 self._set_status(self.tcp_toggle_btn, "active")
                 self.tcp_status_indicator.setToolTip(
-                    f"TCP Visualizer Server: {client_count} client(s) connected"
+                    f"Visualizer feed: {client_count} viewer(s) connected"
                 )
             else:
                 self.tcp_status_indicator.setText("ON")
                 self._set_status(self.tcp_status_indicator, "ready")
                 self._set_status(self.tcp_toggle_btn, "ready")
-                self.tcp_status_indicator.setToolTip("TCP Visualizer Server: Running, no clients")
-            self.tcp_toggle_btn.setToolTip("Click to stop Visualizer Server")
+                self.tcp_status_indicator.setToolTip(
+                    "Visualizer feed running · no viewer connected yet")
+            self.tcp_toggle_btn.setText("STOP")
+            self.tcp_toggle_btn.setToolTip(
+                "Stop the visualizer feed (the viewer window stays open)")
         else:
             self.tcp_status_indicator.setText("OFF")
             self._set_status(self.tcp_status_indicator, "off")
             self._set_status(self.tcp_toggle_btn, "off")
-            self.tcp_status_indicator.setToolTip("TCP Visualizer Server: Not running")
-            self.tcp_toggle_btn.setToolTip("Click to start Visualizer Server")
+            self.tcp_status_indicator.setToolTip("Visualizer feed: off")
+            self.tcp_toggle_btn.setText("OPEN")
+            self.tcp_toggle_btn.setToolTip(
+                "Launch the standalone visualizer and start its feed")
 
     def _set_status(self, widget, value):
         """Set the `status` dynamic property on a widget and re-polish so QSS
@@ -120,6 +177,15 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         if style:
             style.unpolish(widget)
             style.polish(widget)
+
+    def _start_screensaver(self):
+        """View > Screensaver (North Star 11a). Manual trigger for now;
+        idle / LIVE-pause activation arrives with the Live milestones."""
+        from gui.screens.screensaver import ScreensaverWindow
+        self._screensaver = ScreensaverWindow()
+        self._screensaver.dismissed.connect(
+            lambda: setattr(self, "_screensaver", None))
+        self._screensaver.activate()
 
     def _toggle_fullscreen(self):
         """F11 — switch between fullscreen and the previous (maximized) state."""
@@ -131,12 +197,20 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             self.actionToggleFullscreen.setChecked(True)
 
     def _set_theme(self, name: str):
-        """Apply and persist the selected theme."""
+        """Apply and persist the selected theme (View > Theme).
+
+        This is the ONLY place a theme choice is persisted - apply()
+        itself deliberately doesn't save, so test runs and startup can
+        never overwrite the user's saved theme."""
         from gui.theme_manager import ThemeManager
-        ThemeManager().apply(QtWidgets.QApplication.instance(), name)
+        manager = ThemeManager()
+        manager.apply(QtWidgets.QApplication.instance(), name)
+        manager.set_current(name)
         # Force the toolbar-status pills to re-evaluate their dynamic props
-        # against the new theme.
+        # against the new theme, and re-rasterize the topbar line icons
+        # in the new theme's color.
         self._update_toolbar_status()
+        self.apply_shell_icons(name)
 
     def _toggle_artnet(self):
         """Toggle ArtNet output via shows tab."""
@@ -145,36 +219,25 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             self._update_toolbar_status()
 
     def _toggle_tcp(self):
-        """Toggle TCP server via shows tab."""
+        """The topbar VISUALIZER action. OPEN = start the TCP feed AND
+        launch the standalone visualizer in one click (clicking
+        VISUALIZER already says what the user wants - no question
+        dialog); STOP = end the feed, leaving the viewer window to
+        idle."""
         if hasattr(self.shows_tab, 'toggle_tcp'):
-            # Check if we're about to enable TCP (currently disabled)
-            tcp_enabled = getattr(self.shows_tab, 'tcp_enabled', False)
+            # Branch on the server's ACTUAL state (not a flag that can
+            # go stale and eat the first press).
+            tcp_server = getattr(self.shows_tab, 'tcp_server', None)
+            was_running = tcp_server is not None and tcp_server.is_running()
 
-            if not tcp_enabled:
-                # We're enabling TCP - check if visualizer is running
-                self.shows_tab.toggle_tcp()
-                self._update_toolbar_status()
+            self.shows_tab.toggle_tcp()
+            self._update_toolbar_status()
 
-                # Check if visualizer is connected after a short delay
-                # If no clients, offer to launch visualizer
+            if not was_running:
                 tcp_server = getattr(self.shows_tab, 'tcp_server', None)
-                if tcp_server and tcp_server.is_running():
-                    if tcp_server.get_client_count() == 0:
-                        # No visualizer connected, ask to launch
-                        reply = QMessageBox.question(
-                            self,
-                            "Launch Visualizer?",
-                            "The TCP server is now running but no Visualizer is connected.\n\n"
-                            "Would you like to launch the Visualizer?",
-                            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-                            QMessageBox.StandardButton.Yes
-                        )
-                        if reply == QMessageBox.StandardButton.Yes:
-                            self._launch_visualizer()
-            else:
-                # We're disabling TCP
-                self.shows_tab.toggle_tcp()
-                self._update_toolbar_status()
+                if (tcp_server and tcp_server.is_running()
+                        and tcp_server.get_client_count() == 0):
+                    self._launch_visualizer()
 
     def _launch_visualizer(self):
         """Launch the 3D Visualizer application."""
@@ -207,6 +270,274 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.setup_dir = os.path.join(self.project_root, "setup")
         self.config_path = None
 
+    def output_arbiter(self):
+        """The ONE shared OutputArbiter (docs/output-sync-plan.md):
+        every DMX producer (timeline, Auto, the Live busk layer) plugs
+        into it, so the exclusive playback slot and the merge actually
+        arbitrate across features. Created lazily - most sessions
+        never enable output."""
+        from utils.artnet.arbiter import (
+            OutputArbiter, artnet_target_from_config,
+        )
+        if getattr(self, "_output_arbiter", None) is None:
+            from utils.artnet.live_layer import LiveBuskLayer
+            from utils.artnet.live_engine import (
+                LiveEffectsBinder, LiveEngine, LiveMovementBinder,
+            )
+            from gui.tabs.live_tab import COLOUR_SWATCHES
+
+            arbiter = OutputArbiter(
+                config=self.config,
+                target_ip=artnet_target_from_config(self.config))
+
+            # The Live engine replays staged riffs on a looping beat
+            # clock through private DMXManagers (emit_safe_idle=False:
+            # a riff claims ONLY what its blocks drive). The binder
+            # follows LiveState on every state change.
+            def _live_manager_factory(structure, config_override=None):
+                from utils.artnet.dmx_manager import DMXManager
+                from utils.fixture_utils import (
+                    load_fixture_definitions_from_qlc,
+                )
+                # config_override is the movement binder's spot-overlay
+                # view (anchor spots live in the private manager only).
+                config = config_override \
+                    if config_override is not None else self.live_tab.config
+                models = {(f.manufacturer, f.model)
+                          for f in config.fixtures}
+                definitions = load_fixture_definitions_from_qlc(models)
+                return DMXManager(config, definitions, structure,
+                                  emit_safe_idle=False)
+
+            self._live_engine = LiveEngine(_live_manager_factory)
+            self._live_effects_binder = LiveEffectsBinder(
+                state=self.live_tab.state,
+                engine=self._live_engine,
+                config_provider=lambda: self.live_tab.config,
+                riff_provider=self.live_tab.riff_for_key,
+            )
+            self.live_tab.state.state_changed.connect(
+                self._live_effects_binder.sync)
+            self._live_effects_binder.sync()
+
+            # Intensity FX: the same binder class on its own slot, fed
+            # from LiveState.intensity (bundled dimmer riffs) - a
+            # dimmer pattern runs under a colour riff concurrently.
+            self._live_intensity_binder = LiveEffectsBinder(
+                state=self.live_tab.state,
+                engine=self._live_engine,
+                config_provider=lambda: self.live_tab.config,
+                riff_provider=self.live_tab.riff_for_key,
+                slot="intensity", state_attr="intensity",
+                record_kind="intensity",
+            )
+            self.live_tab.state.state_changed.connect(
+                self._live_intensity_binder.sync)
+            self._live_intensity_binder.sync()
+
+            # Movement shapes: same pattern, "movement" slot; the busk
+            # layer suppresses its static position aim for the groups
+            # the shape covers (the position is the shape's anchor).
+            self._live_movement_binder = LiveMovementBinder(
+                state=self.live_tab.state,
+                engine=self._live_engine,
+                config_provider=lambda: self.live_tab.config,
+            )
+            self.live_tab.state.state_changed.connect(
+                self._live_movement_binder.sync)
+            self._live_movement_binder.sync()
+
+            # The Live busk surface rides on top of whatever plays
+            # (busk-on-top): register its layer once, for the arbiter's
+            # lifetime. Channel maps arrive when a playback controller
+            # registers its own (the arbiter forwards them). The engine
+            # frame renders BELOW the layer's explicit writes.
+            self._live_busk_layer = LiveBuskLayer(
+                state=self.live_tab.state,
+                config_provider=lambda: self.live_tab.config,
+                swatches=COLOUR_SWATCHES,
+                scene_provider=self.live_tab.scene_for_key,
+                engine=self._live_engine,
+                shape_groups_provider=(
+                    self._live_movement_binder.active_groups),
+                dimmer_groups_provider=lambda: (
+                    self._live_effects_binder.dimmer_groups()
+                    | self._live_intensity_binder.dimmer_groups()),
+            )
+            arbiter.set_live_layer(self._live_busk_layer)
+
+            # The Live tab's GRAND fader and DBO drive the arbiter's
+            # post-merge master stage, capping playback too.
+            self._output_arbiter = arbiter
+            self.live_tab.state.state_changed.connect(
+                self._push_live_masters)
+            self._push_live_masters()
+
+            # Idle-floor policy follows the active shell section
+            # (editor visible, live blackout - locked 2026-07-11).
+            self._sync_idle_policy(self.tabWidget.currentIndex())
+
+            # The Live tab's OUT chip polls this arbiter's status.
+            self.live_tab.set_status_arbiter(arbiter)
+
+        # Re-resolve the ArtNet destination on EVERY access (OUTPUT
+        # toggle, PLAY): the user edits the universe's Target IP in the
+        # Setup tab and expects the wire to follow without a restart.
+        # The loopback mirror is ALWAYS on so the local standalone
+        # visualizer receives every frame regardless of the universe
+        # IPs (a unicast primary would otherwise starve it, and a
+        # broadcast primary is not reliably heard locally on a
+        # multi-homed machine).
+        target = artnet_target_from_config(self.config)
+        self._output_arbiter.set_target_ip(target)
+        self._output_arbiter.set_broadcast_mirror(True)
+
+        # Register channel maps from the config directly, so the
+        # "fixtures visible" idle floor lights the rig as soon as
+        # OUTPUT is on - previously the maps only arrived when a
+        # playback controller initialized, and OUTPUT-before-PLAY
+        # streamed an all-zero floor (found live against the NET-2,
+        # 2026-07-13). Playback re-registers its own identical maps.
+        try:
+            from utils.artnet.dmx_manager import DMXManager
+            maps = DMXManager.build_fixture_maps(self.config)
+            if maps:
+                self._output_arbiter.set_fixture_maps(maps)
+        except Exception as e:
+            from utils import user_warnings
+            user_warnings.warn(
+                f"Live output fixture maps could not be built; busk "
+                f"output is degraded: {e}",
+                category="output", once_key="arbiter-maps")
+        return self._output_arbiter
+
+    def _push_live_masters(self):
+        """Forward the Live tab's grandmaster/DBO into the arbiter."""
+        arbiter = getattr(self, "_output_arbiter", None)
+        if arbiter is None:
+            return
+        state = self.live_tab.state
+        arbiter.set_grandmaster(state.grandmaster)
+        arbiter.set_dbo(state.dbo)
+
+    # -- LTC chase (docs/ltc-plan.md phase 3): the shell owns the
+    # arm/disarm policy on the shared service, tabs only request and
+    # display - the same ownership rule as the output arbiter.
+
+    def ltc_service(self):
+        """The one LTCInputService, created lazily (most sessions never
+        chase timecode). Its signals feed the Live tab's SYNC chip."""
+        if getattr(self, "_ltc_service", None) is None:
+            from audio.ltc_input import LTCInputService
+            self._ltc_service = LTCInputService(parent=self)
+            self._ltc_last_tc_label = ""
+            self._ltc_service.state_changed.connect(self._on_ltc_state)
+            self._ltc_service.timecode.connect(self._on_ltc_timecode)
+        return self._ltc_service
+
+    def ltc_chase_armed(self) -> bool:
+        return getattr(self, "_ltc_timer", None) is not None
+
+    def _on_chase_arm_requested(self, armed: bool):
+        if armed:
+            if not self.arm_ltc_chase():
+                self.structure_tab.set_chase_armed(False)
+        else:
+            self.disarm_ltc_chase()
+
+    def arm_ltc_chase(self) -> bool:
+        """Start chasing incoming SMPTE: the desk becomes the transport
+        master (manual Play disabled, STOP disarms). False when the
+        audio input cannot be opened."""
+        if self.ltc_chase_armed():
+            return True
+        service = self.ltc_service()
+        service.device_hint = getattr(self.config.setlist,
+                                      "sync_device", "")
+        if not service.start():
+            self.statusBar().showMessage(
+                "LTC input could not be opened - check the sync device "
+                "in the Structure tab", 6000)
+            return False
+        self._ltc_runner = None    # built once the incoming rate is known
+        self.shows_tab.set_chase_armed(True, disarm=self.disarm_ltc_chase)
+        self.structure_tab.set_chase_armed(True)
+        self.live_tab.set_sync_status("ltc", "no_signal")
+        from PyQt6.QtCore import QTimer
+        timer = QTimer(self)
+        timer.setInterval(100)
+        timer.timeout.connect(self._ltc_tick)
+        timer.start()
+        self._ltc_timer = timer
+        return True
+
+    def disarm_ltc_chase(self):
+        """Back to manual transport. Reached from the ARM chip and from
+        the timeline's operator STOP - never from the runner."""
+        timer = getattr(self, "_ltc_timer", None)
+        if timer is None:
+            return
+        self._ltc_timer = None
+        timer.stop()
+        timer.deleteLater()
+        self._ltc_runner = None
+        if getattr(self, "_ltc_service", None) is not None:
+            self._ltc_service.stop()
+        self.shows_tab.set_chase_armed(False)
+        self.structure_tab.set_chase_armed(False)
+        self.live_tab.set_sync_status("int")
+
+    def _ltc_tick(self):
+        service = getattr(self, "_ltc_service", None)
+        if service is None:
+            return
+        if getattr(self, "_ltc_runner", None) is None:
+            # The entry timecodes parse at the DETECTED incoming rate,
+            # so the runner waits for the decoder's verdict.
+            rate = service.detected_rate()
+            if rate is not None:
+                from utils.timecode import SetlistTimecodeRunner
+                self._ltc_runner = SetlistTimecodeRunner(
+                    self.config.setlist,
+                    self.shows_tab.chase_transport(),
+                    duration_of=self._chase_song_duration,
+                    rate=rate)
+        if self._ltc_runner is not None:
+            self._ltc_runner.update(service.position())
+
+    def _chase_song_duration(self, name: str) -> float:
+        from timeline.song_structure import SongStructure
+        song = self.config.songs.get(name)
+        if song is None or not getattr(song, "parts", None):
+            return 0.0
+        structure = SongStructure()
+        structure.load_from_show_parts(song.parts)
+        return structure.get_total_duration()
+
+    def _on_ltc_state(self, state: str):
+        if self.ltc_chase_armed():
+            self.live_tab.set_sync_status(
+                "ltc", state, getattr(self, "_ltc_last_tc_label", ""))
+
+    def _on_ltc_timecode(self, label: str):
+        self._ltc_last_tc_label = label
+        if self.ltc_chase_armed():
+            self.live_tab.set_sync_status("ltc", self._ltc_service.state(),
+                                          label)
+
+    def _sync_idle_policy(self, tab_index: int):
+        """The shell owns the idle-floor policy: SETUP/SHOW keep the
+        rig visible for authoring, the LIVE section idles to blackout
+        (the pause look replaces blackout in v1.8)."""
+        arbiter = getattr(self, "_output_arbiter", None)
+        if arbiter is None:
+            return
+        from utils.artnet.arbiter import IDLE_BLACKOUT, IDLE_VISIBLE
+        section = self.shell_nav.section_for_tab(tab_index) \
+            if hasattr(self, "shell_nav") else None
+        arbiter.set_idle_policy(
+            IDLE_BLACKOUT if section == "live" else IDLE_VISIBLE)
+
     def _create_tabs(self):
         """Create and integrate tab components"""
         # Create tab instances with shared configuration
@@ -216,6 +547,12 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.structure_tab = StructureTab(self.config, self)
         self.shows_tab = ShowsTab(self.config, self)
         self.auto_tab = AutoTab(self.config, self)
+        self.live_tab = LiveTab(self.config, self)
+
+        # LTC chase: the Structure tab's ARM CHASE chip only requests;
+        # the SHELL arms/disarms (docs/ltc-plan.md phase 3).
+        self.structure_tab.chase_arm_requested.connect(
+            self._on_chase_arm_requested)
 
         # Replace placeholder tabs with actual tab widgets
         # The tab widget structure is created in Ui_MainWindow
@@ -302,13 +639,31 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         new_layout.setContentsMargins(0, 0, 0, 0)
         new_layout.addWidget(self.auto_tab)
 
+        # Live tab (tab_live)
+        layout = self.tab_live.layout()
+        if layout:
+            while layout.count():
+                item = layout.takeAt(0)
+                if item.widget():
+                    item.widget().deleteLater()
+            layout.deleteLater()
+
+        new_layout = QtWidgets.QVBoxLayout(self.tab_live)
+        new_layout.setContentsMargins(0, 0, 0, 0)
+        new_layout.addWidget(self.live_tab)
+
         # Create Riff Browser dockable panel
         self._create_riff_browser()
 
     def _create_riff_browser(self):
         """Create the riff browser dockable panel."""
-        # Initialize riff library
+        # Initialize riff library (effects) and scene library (whole-rig
+        # looks) and hand both to the Live tab's library-backed pools.
         self.riff_library = RiffLibrary()
+        self.scene_library = SceneLibrary()
+        if hasattr(self, "live_tab"):
+            self.live_tab.set_effect_library(self.riff_library)
+            self.live_tab.set_scene_library(self.scene_library)
 
         # Create riff browser widget
         self.riff_browser = RiffBrowserWidget(self.riff_library, self)
@@ -329,9 +684,9 @@ class MainWindow(QMainWindow, Ui_MainWindow):
 
         # Create Edit menu if it doesn't exist
         if not hasattr(self, 'menuEdit'):
-            self.menuEdit = QtWidgets.QMenu("Edit", parent=self.menubar)
+            self.menuEdit = QtWidgets.QMenu("Edit", parent=self)
             # Insert Edit menu after File menu (before Settings menu)
-            self.menubar.insertMenu(self.menuSettings.menuAction(), self.menuEdit)
+            self.overflow_menu.insertMenu(self.menuSettings.menuAction(), self.menuEdit)
 
         # Create undo action
         self.undo_action = self.undo_stack.createUndoAction(self, "Undo")
@@ -348,19 +703,180 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         # Connect clean state changed for save indicator (optional)
         self.undo_stack.cleanChanged.connect(self._on_undo_clean_changed)
 
-    def _on_undo_clean_changed(self, clean: bool):
-        """Handle undo stack clean state change.
+        # Undo/redo mutate the runtime timeline lanes directly; without
+        # this resync the config's timeline data drifts until the next
+        # ordinary edit (and stale selections would dangle).
+        self.undo_stack.indexChanged.connect(self._on_undo_index_changed)
 
-        Can be used to show unsaved changes indicator.
-        """
-        # Update window title to show unsaved state
+        self._init_autosave()
+
+    def _on_undo_index_changed(self, _index: int) -> None:
+        shows_tab = getattr(self, "shows_tab", None)
+        if shows_tab is not None and hasattr(shows_tab,
+                                             "on_undo_stack_changed"):
+            shows_tab.on_undo_stack_changed()
+
+    def _rebind_tabs_to_config(self):
+        """Point every tab and 3D preview at the current self.config and
+        refresh them. The one config-rebind ladder (used by file load and
+        by crash recovery) - add new tabs here, nowhere else."""
+        self._preload_fixture_definitions()
+
+        self.config_tab.config = self.config
+        self.config_tab.update_from_config()
+
+        self.fixtures_tab.config = self.config
+        self.fixtures_tab.schedule_update()
+
+        self.stage_tab.config = self.config
+        self.stage_tab.update_from_config()
+
+        self.structure_tab.config = self.config
+        self.structure_tab.update_from_config()
+
+        self.shows_tab.config = self.config
+        self.shows_tab.mark_config_dirty()
+        self.shows_tab.update_from_config()
+
+        # Auto tab was bound to the old Configuration at construction; without
+        # rebinding it keeps showing the previous session's fixtures.
+        self.auto_tab.config = self.config
+        self.auto_tab.update_from_config()
+
+        # Live busking surface - refresh its SELECT tiles from the new
+        # group set (no output engine wired yet).
+        self.live_tab.config = self.config
+        self.live_tab.update_from_config()
+
+        # Repaint all three embedded 3D previews with the new fixture set.
+        self.on_visualizer_config_changed()
+
+    def _clear_autosave(self):
+        """Drop the crash-recovery backup (and the pointer to it) after a
+        real save, so a later crash offers no stale recovery."""
+        if hasattr(self, "_autosave"):
+            self._autosave.clear()
+        from utils.app_settings import app_settings
+        app_settings().remove("autosave/last_project")
+        # Every real save lands here: reset the dirty-marker baseline.
+        self._mark_config_clean()
+
+    def _config_fingerprint(self):
+        """A value that changes when the config content changes, for the
+        autosave. Cheap enough at the autosave cadence."""
+        from dataclasses import asdict
+        try:
+            return hash(repr(asdict(self.config)))
+        except Exception:
+            return None
+
+    # -- dirty marker (Reaper-style " *" on the topbar filename + window
+    # title). Truth = the content fingerprint differs from the last
+    # MANUAL save/load; the undo stack is NOT the source (most edit
+    # paths never push undo commands), and autosave backups do not
+    # count as saves (they are crash recovery).
+
+    def _mark_config_clean(self):
+        """Remember the just-persisted content as the clean baseline."""
+        self._saved_fingerprint = self._config_fingerprint()
+        self._dirty_cache = False
+        self._dirty_ticks = 0
+        self._refresh_dirty_marker(False)
+
+    def is_config_dirty(self) -> bool:
+        """Does the live config differ from what was last manually
+        saved or loaded? (Recomputes the fingerprint - use
+        _dirty_for_tick on hot paths.)"""
+        saved = getattr(self, "_saved_fingerprint", None)
+        if saved is None:
+            return False   # no baseline yet (early startup)
+        return self._config_fingerprint() != saved
+
+    def _dirty_for_tick(self) -> bool:
+        """The 1 s status tick's throttled view: the fingerprint hashes
+        the whole config, so recompute at most every 5th tick. Save,
+        load and undo boundaries refresh immediately instead."""
+        self._dirty_ticks = getattr(self, "_dirty_ticks", 0) - 1
+        if self._dirty_ticks < 0:
+            self._dirty_cache = self.is_config_dirty()
+            self._dirty_ticks = 4
+        return getattr(self, "_dirty_cache", False)
+
+    def _refresh_dirty_marker(self, dirty: bool):
         title = self.windowTitle()
-        if clean:
-            if title.endswith(" *"):
-                self.setWindowTitle(title[:-2])
-        else:
-            if not title.endswith(" *"):
-                self.setWindowTitle(title + " *")
+        if dirty and not title.endswith(" *"):
+            self.setWindowTitle(title + " *")
+        elif not dirty and title.endswith(" *"):
+            self.setWindowTitle(title[:-2])
+
+    def _init_autosave(self):
+        """Crash-recovery autosave: every few seconds, unsaved changes are
+        written to a sidecar backup next to the project (Reaper-style).
+        Ctrl+S clears it; a crash leaves it for recovery on next launch
+        (see utils/autosave.py and _do_load_configuration)."""
+        from utils.autosave import AutosaveManager
+        self._autosave = AutosaveManager(
+            save_fn=lambda p: self.config.save(p),
+            fingerprint_fn=self._config_fingerprint,
+            current_path=lambda: self.config_path)
+        self._autosave.prime()
+        self._mark_config_clean()
+        self._autosave_timer = QTimer(self)
+        self._autosave_timer.setInterval(15000)  # 15 seconds
+        self._autosave_timer.timeout.connect(self._autosave_tick)
+        self._autosave_timer.start()
+        # After the window is up, offer to recover a previous session that
+        # ended (crashed) with unsaved changes.
+        QTimer.singleShot(300, self._offer_launch_recovery)
+
+    def _autosave_tick(self):
+        """Timer tick: back up if changed, and remember which project the
+        unsaved work belongs to so it can be recovered at next launch
+        (empty string == an unsaved, never-saved project)."""
+        if self._autosave.maybe_backup() is not None:
+            from utils.app_settings import app_settings
+            app_settings().setValue("autosave/last_project",
+                                    self.config_path or "")
+
+    def _offer_launch_recovery(self):
+        """At launch, if the last session left unsaved changes, offer to
+        recover them into the current (still empty) session."""
+        from PyQt6.QtWidgets import QMessageBox
+        from utils.app_settings import app_settings
+        from utils.autosave import autosave_dir, find_recoverable
+
+        # Only when nothing has been opened/edited yet this launch.
+        if self.config_path or self.config.fixtures or self.config.universes \
+                or self.config.groups or self.config.songs:
+            return
+        last = app_settings().value("autosave/last_project", "", type=str)
+        backup = find_recoverable(last or None, autosave_dir())
+        if not backup:
+            return
+        resp = QMessageBox.question(
+            self, "Recover unsaved changes",
+            "Unsaved changes from your last session were found.\n\n"
+            "Recover them?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
+        if resp != QMessageBox.StandardButton.Yes:
+            return
+        self.config = Configuration.load(backup)
+        self.config_path = last or None  # None keeps it an untitled project
+        self._rebind_tabs_to_config()
+        # Leave it dirty (no prime) so the recovered work keeps autosaving
+        # until the user saves it. Show the tab pages instead of Home.
+        if hasattr(self, "show_pages"):
+            self.show_pages()
+
+    def _on_undo_clean_changed(self, clean: bool):
+        """An undo boundary is a cheap moment to refresh the dirty
+        marker immediately. The ``clean`` argument is deliberately
+        ignored: the undo stack only covers timeline block edits and is
+        cleared on song switch, so it is NOT the truth about unsaved
+        changes - the content fingerprint is."""
+        self._dirty_cache = self.is_config_dirty()
+        self._dirty_ticks = 4
+        self._refresh_dirty_marker(self._dirty_cache)
 
     def get_undo_stack(self) -> QUndoStack:
         """Get the application's undo stack."""
@@ -384,6 +900,12 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.actionLoadConfig.triggered.connect(self.load_configuration)
         self.actionImportShowStructure.triggered.connect(self.import_show_structure_file)
         self.actionExportShowStructure.triggered.connect(self.export_show_structure_file)
+        self.actionImportFixtureList.triggered.connect(self.import_fixture_list_file)
+        self.actionExportFixtureList.triggered.connect(self.export_fixture_list_file)
+        self.actionImportCsvTable.triggered.connect(self.import_csv_lighting_table)
+        self.actionImportShowsFromConfig.triggered.connect(self.import_shows_from_config_file)
+        self.actionImportLegacyCsv.triggered.connect(self.import_legacy_csv_songs)
+        self.actionNewFromTemplate.triggered.connect(self.new_from_template)
         self.actionImportWorkspace.triggered.connect(self.import_workspace)
         self.actionCreateWorkspace.triggered.connect(self.create_workspace)
         self.actionExit.triggered.connect(self.close)
@@ -393,9 +915,23 @@ class MainWindow(QMainWindow, Ui_MainWindow):
 
         # Settings menu actions
         self.actionAudioSettings.triggered.connect(self.open_audio_settings)
+        self.actionLibraryPaths.triggered.connect(self.open_library_paths)
+        self.actionGDTFShareAccount.triggered.connect(
+            self.open_gdtf_share_account)
+
+        # Hidden deep setting: canvas sub-lane purpose labels in the Show
+        # Timeline. Reflect the persisted state in the check box, then
+        # persist + repaint on toggle.
+        from utils.app_settings import app_settings
+        self.actionShowSublaneLabels.setChecked(
+            app_settings().value(
+                "timeline/show_sublane_labels", True, type=bool))
+        self.actionShowSublaneLabels.toggled.connect(
+            self._on_toggle_sublane_labels)
 
         # View menu actions
         self.actionToggleFullscreen.triggered.connect(self._toggle_fullscreen)
+        self.actionScreensaver.triggered.connect(self._start_screensaver)
         self.actionThemeDark.triggered.connect(lambda: self._set_theme("dark"))
         self.actionThemeLight.triggered.connect(lambda: self._set_theme("light"))
         # Reflect the active theme in the menu's check state.
@@ -407,8 +943,8 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             self.actionThemeDark.setChecked(True)
 
         # Render menu (insert before Help)
-        self.menuRender = QtWidgets.QMenu("Render", parent=self.menubar)
-        self.menubar.insertMenu(self.menuHelp.menuAction(), self.menuRender)
+        self.menuRender = QtWidgets.QMenu("Render", parent=self)
+        self.overflow_menu.insertMenu(self.menuHelp.menuAction(), self.menuRender)
         self.actionRenderToVideo = QAction("Render Show to Video...", self)
         self.menuRender.addAction(self.actionRenderToVideo)
         self.actionRenderToVideo.triggered.connect(self.render_to_video)
@@ -427,7 +963,19 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.addAction(self.actionGotoAuto)
 
         # Help menu actions
+        self.actionOpenLogFolder.triggered.connect(self.open_log_folder)
+        self.actionDiagnostics.triggered.connect(self.open_diagnostics)
+        self.actionWarnings.triggered.connect(self.open_warnings)
         self.actionAbout.triggered.connect(self.show_about)
+
+        # Home screen quick actions + recents + checklist
+        self.home_screen.new_from_template_requested.connect(self.new_from_template)
+        self.home_screen.open_requested.connect(self.load_configuration)
+        self.home_screen.recent_requested.connect(self.open_recent_config)
+        self.home_screen.go_to_screen.connect(self.tabWidget.setCurrentIndex)
+        from utils.app_settings import recent_configs
+        self.home_screen.refresh(recent_configs())
+        self.home_screen.refresh_checklist(self.config)
 
     def _on_tab_changed(self, index):
         """Handle tab change - notify tabs of activation/deactivation."""
@@ -449,6 +997,8 @@ class MainWindow(QMainWindow, Ui_MainWindow):
                 tab_map[4] = self.shows_tab
             if hasattr(self, 'auto_tab'):
                 tab_map[5] = self.auto_tab
+            if hasattr(self, 'live_tab'):
+                tab_map[6] = self.live_tab
 
             # Call on_tab_deactivated on the previous tab
             if hasattr(self, '_current_tab_index') and self._current_tab_index in tab_map:
@@ -467,6 +1017,14 @@ class MainWindow(QMainWindow, Ui_MainWindow):
 
             # Show/hide riff browser based on tab (only visible in Shows tab = index 4)
             self._update_riff_browser_visibility(index)
+
+            # Contextual statusbar hint for the new screen.
+            self._update_status_hint(index)
+
+            # The output arbiter's idle floor follows the shell section
+            # (editor visible, LIVE blackout). No-op until output is
+            # first enabled (no arbiter exists before that).
+            self._sync_idle_policy(index)
 
         except Exception as e:
             print(f"ERROR in _on_tab_changed: {e}")
@@ -556,13 +1114,12 @@ class MainWindow(QMainWindow, Ui_MainWindow):
                 self.structure_tab.show_combo.blockSignals(False)
                 self.structure_tab._load_show(show_name)
         elif source_tab == 'structure':
-            # Update shows tab to match - refresh combo first so new shows appear
-            self.shows_tab.show_combo.blockSignals(True)
-            current = self.shows_tab.show_combo.currentText()
-            self.shows_tab.show_combo.clear()
-            self.shows_tab.show_combo.addItems(sorted(self.config.shows.keys()))
-            self.shows_tab.show_combo.setCurrentText(show_name)
-            self.shows_tab.show_combo.blockSignals(False)
+            # Update shows tab to match - refresh the combo first so new
+            # shows appear. The combo derives its "NN · Name" rows from
+            # config.setlist and carries the raw song name as itemData,
+            # so selection goes by data (findData inside the populate),
+            # never by display text.
+            self.shows_tab._populate_show_combo(select=show_name)
             # Use _load_show directly, not _on_show_changed: the latter would
             # call parent().on_show_selected('shows') and bounce right back
             # to update the Structure tab again, infinite loop.
@@ -582,16 +1139,18 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             if not self.config_path:
                 file_path, _ = QFileDialog.getSaveFileName(
                     self,
-                    "Save Configuration",
+                    "Save Project",
                     "",
-                    "YAML Files (*.yaml);;All Files (*)"
+                    app_identity.project_save_filter()
                 )
                 if not file_path:
                     return
-                self.config_path = file_path
+                self.config_path = app_identity.ensure_project_ext(file_path)
 
             # Save configuration
             self.config.save(self.config_path)
+            self._clear_autosave()
+            self._record_recent_config(self.config_path)
             QMessageBox.information(
                 self,
                 "Success",
@@ -608,6 +1167,45 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             print(f"Error saving configuration: {e}")
             import traceback
             traceback.print_exc()
+
+    def _record_recent_config(self, path: str) -> None:
+        """Track a config for the Home screen recents and refresh it
+        (including the FROM ZERO TO SHOW checklist states)."""
+        from utils.app_settings import recent_configs, record_recent_config
+        try:
+            record_recent_config(path)
+            if hasattr(self, "home_screen"):
+                self.home_screen.refresh(recent_configs())
+                self.home_screen.refresh_checklist(self.config)
+        except Exception as e:
+            print(f"recent configs: {e}")
+
+    def open_recent_config(self, path: str):
+        """Open a config picked from the Home screen recent list."""
+        if not os.path.isfile(path):
+            QMessageBox.warning(self, "File missing",
+                                f"The file no longer exists:\n{path}")
+            self._record_recent_config(self.config_path or "")
+            return
+        # Same deferred load flow as File -> Load Configuration.
+        self._pending_config_path = path
+        from PyQt6.QtWidgets import QApplication
+        dialog = self.progress_manager.start_modal(
+            "Loading Configuration", "Opening file...", maximum=8)
+        for _ in range(5):
+            QApplication.processEvents()
+        if dialog:
+            dialog.repaint()
+            QApplication.processEvents()
+        QTimer.singleShot(100, self._do_load_configuration)
+
+    def open_project_on_launch(self, path: str):
+        """Open a project handed to the app at startup: a command-line
+        path, or a file the OS passed us from a .lms double-click. Uses
+        the same deferred load flow as the recent list; setting the
+        project path here also suppresses the crash-recovery prompt (it
+        only fires on an untouched session)."""
+        self.open_recent_config(path)
 
     def save_configuration_as(self):
         """Save configuration to a new YAML file (always prompts for location)"""
@@ -623,18 +1221,20 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             default_dir = os.path.dirname(self.config_path) if self.config_path else ""
             file_path, _ = QFileDialog.getSaveFileName(
                 self,
-                "Save Configuration As",
+                "Save Project As",
                 default_dir,
-                "YAML Files (*.yaml);;All Files (*)"
+                app_identity.project_save_filter()
             )
             if not file_path:
                 return
 
             # Update the current config path to the new location
-            self.config_path = file_path
+            self.config_path = app_identity.ensure_project_ext(file_path)
 
             # Save configuration
             self.config.save(self.config_path)
+            self._clear_autosave()
+            self._record_recent_config(self.config_path)
             QMessageBox.information(
                 self,
                 "Success",
@@ -652,13 +1252,108 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             import traceback
             traceback.print_exc()
 
+    def new_from_template(self):
+        """File -> New from Template: start a project from a starter rig.
+
+        Copy-then-open, never open-in-place: the chosen template (rig
+        only, or rig + demo show + audio) is copied to a user-picked
+        location and THAT file becomes the project, so Ctrl+S can never
+        overwrite a bundled template or write into the install dir.
+        """
+        from utils.templates import list_templates, instantiate_template
+
+        templates = list_templates()
+        if not templates:
+            QMessageBox.warning(
+                self, "No Templates",
+                "No starter rigs found (demos/rigs/ is missing)."
+            )
+            return
+
+        dialog = QtWidgets.QDialog(self)
+        dialog.setWindowTitle("New Project from Template")
+        dialog.resize(560, 380)
+        layout = QtWidgets.QVBoxLayout(dialog)
+
+        layout.addWidget(QtWidgets.QLabel("Choose a starter rig:"))
+        template_list = QtWidgets.QListWidget()
+        for template in templates:
+            item = QtWidgets.QListWidgetItem(
+                f"{template.name}  ({template.fixture_count} fixtures)\n"
+                f"    {template.description}"
+            )
+            item.setData(Qt.ItemDataRole.UserRole, template)
+            template_list.addItem(item)
+        template_list.setCurrentRow(0)
+        layout.addWidget(template_list)
+
+        include_show_check = QtWidgets.QCheckBox(
+            "Include the ready-to-play demo show + audio clip"
+        )
+        include_show_check.setChecked(True)
+        layout.addWidget(include_show_check)
+
+        buttons = QtWidgets.QDialogButtonBox(
+            QtWidgets.QDialogButtonBox.StandardButton.Ok |
+            QtWidgets.QDialogButtonBox.StandardButton.Cancel
+        )
+        buttons.accepted.connect(dialog.accept)
+        buttons.rejected.connect(dialog.reject)
+        layout.addWidget(buttons)
+
+        if dialog.exec() != QtWidgets.QDialog.DialogCode.Accepted:
+            return
+        current = template_list.currentItem()
+        if current is None:
+            return
+        template = current.data(Qt.ItemDataRole.UserRole)
+
+        dest_path, _ = QFileDialog.getSaveFileName(
+            self,
+            "Create Project From Template",
+            os.path.join(os.path.expanduser("~"),
+                         f"{template.key}{app_identity.PROJECT_EXT}"),
+            app_identity.project_save_filter()
+        )
+        if not dest_path:
+            return
+        dest_path = app_identity.ensure_project_ext(dest_path)
+
+        try:
+            new_path = instantiate_template(
+                template, dest_path,
+                include_show=include_show_check.isChecked(),
+            )
+        except Exception as e:
+            QMessageBox.critical(
+                self, "Template Failed",
+                f"Could not create the project:\n{e}"
+            )
+            return
+
+        # Open the copy through the normal deferred load flow (progress
+        # modal + all-tab refresh), same as File -> Load Configuration.
+        self._pending_config_path = new_path
+        from PyQt6.QtWidgets import QApplication
+        dialog = self.progress_manager.start_modal(
+            "Loading Configuration",
+            "Opening file...",
+            maximum=8
+        )
+        for _ in range(5):
+            QApplication.processEvents()
+        if dialog:
+            dialog.repaint()
+            QApplication.processEvents()
+        QTimer.singleShot(100, self._do_load_configuration)
+
     def load_configuration(self):
-        """Load configuration from YAML file"""
+        """Load a project (.lms, or a legacy .yaml/.yml)."""
         file_path, _ = QFileDialog.getOpenFileName(
             self,
-            "Load Configuration",
+            "Open Project",
             "",
-            "YAML Files (*.yaml);;All Files (*)"
+            app_identity.project_open_filter()
         )
 
         if not file_path:
@@ -696,57 +1391,49 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         try:
             file_path = self._pending_config_path
 
-            # Step 1: Parse YAML
+            # Step 1: Parse YAML. If a crash left an autosave backup newer
+            # than this project, offer to recover it; either way the project
+            # path is what Ctrl+S writes to.
             self.progress_manager.update_modal(1, "Parsing configuration...")
-            self.config = Configuration.load(file_path)
+            load_from = file_path
+            recovered = False
+            from utils.autosave import autosave_dir, find_recoverable
+            backup = find_recoverable(file_path, autosave_dir())
+            if backup:
+                resp = QMessageBox.question(
+                    self, "Recover unsaved changes",
+                    "Autosaved changes newer than this project were found, "
+                    "from a session that did not save.\n\nRecover them?",
+                    QMessageBox.StandardButton.Yes
+                    | QMessageBox.StandardButton.No)
+                if resp == QMessageBox.StandardButton.Yes:
+                    load_from = backup
+                    recovered = True
+            from utils import user_warnings
+            with user_warnings.operation("Load project"):
+                self.config = Configuration.load(load_from)
             self.config_path = file_path
+            if hasattr(self, "_autosave") and not recovered:
+                # Freshly loaded, unchanged content is clean. When recovered
+                # we leave it dirty so it keeps backing up until the user
+                # saves the recovered work.
+                self._autosave.prime()
+                self._mark_config_clean()
 
-            # Step 2: Pre-cache fixture definitions
-            self.progress_manager.update_modal(2, "Loading fixture definitions...")
-            self._preload_fixture_definitions()
-
-            # Step 3-7: Update tabs with progress
-            self.progress_manager.update_modal(3, "Updating configuration tab...")
-            self.config_tab.config = self.config
-            self.config_tab.update_from_config()
-
-            self.progress_manager.update_modal(4, "Updating fixtures tab...")
-            self.fixtures_tab.config = self.config
-            self.fixtures_tab.schedule_update()
-
-            self.progress_manager.update_modal(5, "Updating stage tab...")
-            self.stage_tab.config = self.config
-            self.stage_tab.update_from_config()
-
-            self.progress_manager.update_modal(6, "Updating structure tab...")
-            self.structure_tab.config = self.config
-            self.structure_tab.update_from_config()
-
-            self.progress_manager.update_modal(7, "Loading shows...")
-            self.shows_tab.config = self.config
-            self.shows_tab.mark_config_dirty()
-            self.shows_tab.update_from_config()
-
-            # Auto tab needs the same treatment — its self.config was
-            # bound at construction time and stays pointing at the old
-            # Configuration instance unless we explicitly rebind it
-            # here. Without this the Auto tab keeps showing fixtures
-            # from the previous session (or none at all), and its
-            # embedded visualizer renders an empty stage even after a
-            # config file is loaded.
-            self.auto_tab.config = self.config
-            self.auto_tab.update_from_config()
-
-            # Push the freshly-loaded config to every embedded 3D
-            # preview so all three (Stage / Shows / Auto) repaint with
-            # the new fixture set without waiting for the user to
-            # activate each tab.
-            self.on_visualizer_config_changed()
+            # Steps 2-7: rebind every tab and preview to the new config.
+            self.progress_manager.update_modal(4, "Updating tabs...")
+            self._rebind_tabs_to_config()
 
             self.progress_manager.update_modal(8, "Done")
             self.progress_manager.finish_modal()
 
             print(f"Configuration loaded from {file_path}")
+
+            # Home screen bookkeeping: remember the file and leave the
+            # landing page for the tab pages.
+            self._record_recent_config(file_path)
+            if hasattr(self, "show_pages"):
+                self.show_pages()
 
             # Legacy-CSV merge prompt. Old configs may have shows on disk in
             # the shows_directory hint that aren't in the YAML (the v1.0
@@ -760,29 +1447,73 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             print(f"Error loading configuration: {e}")
             import traceback
             traceback.print_exc()
+            # A failed load used to be console-only - the UI just sat
+            # there with the old (or no) project. Say it out loud.
+            QMessageBox.critical(
+                self, "Error",
+                f"Failed to load "
+                f"{getattr(self, '_pending_config_path', 'project')}:"
+                f"\n{e}")
 
-    def _offer_legacy_csv_merge(self):
-        """Scan config.shows_directory for *.csv shows not in config.shows.
+    def import_legacy_csv_songs(self):
+        """File > Import Legacy CSV Songs: pick a folder of pre-v1.0
+        show CSVs and merge them into config.songs.
+
+        This replaced the Structure tab's "SHOW DIRECTORY..." chip: the
+        only interactive reason to point at a folder was exactly this
+        merge, so it became an explicit import action. The chosen folder
+        is remembered as the shows_directory hint (which also keeps the
+        legacy audiofiles/ fallback working for old projects)."""
+        from PyQt6.QtWidgets import QFileDialog
+        start_dir = (getattr(self.config, 'shows_directory', None)
+                     or (os.path.dirname(self.config_path)
+                         if getattr(self, 'config_path', None) else '')
+                     or os.path.expanduser('~'))
+        chosen = QFileDialog.getExistingDirectory(
+            self, "Import Legacy CSV Songs", start_dir,
+            QFileDialog.Option.ShowDirsOnly)
+        if not chosen:
+            return
+        self.config.shows_directory = chosen
+        self._offer_legacy_csv_merge(interactive=True)
+
+    def _offer_legacy_csv_merge(self, interactive: bool = False):
+        """Scan config.shows_directory for *.csv shows not in config.songs.
 
         If any are found, prompt once. On accept, read each via
-        ``utils.show_io.read_show`` and add to ``config.shows`` in memory.
+        ``utils.show_io.read_show`` and add to ``config.songs`` in memory.
         Skips silently if shows_directory is unset / missing / has no
-        unrecognised CSVs.
+        unrecognised CSVs - except when ``interactive`` (the explicit
+        File > Import Legacy CSV Songs path), which reports the empty
+        result instead of leaving the user wondering.
         """
         shows_dir = getattr(self.config, 'shows_directory', None)
         if not shows_dir or not os.path.isdir(shows_dir):
+            if interactive:
+                QMessageBox.information(
+                    self, "No Folder",
+                    "The chosen folder does not exist.")
             return
         try:
             csv_files = [f for f in os.listdir(shows_dir) if f.lower().endswith('.csv')]
         except OSError:
+            if interactive:
+                QMessageBox.information(
+                    self, "No Legacy Songs",
+                    f"Could not read the folder:\n{shows_dir}")
             return
         candidates = []
         for csv_name in csv_files:
             stem = os.path.splitext(csv_name)[0]
-            if stem in self.config.shows:
+            if stem in self.config.songs:
                 continue
             candidates.append((stem, os.path.join(shows_dir, csv_name)))
         if not candidates:
+            if interactive:
+                QMessageBox.information(
+                    self, "No Legacy Songs",
+                    f"No CSV songs found in:\n{shows_dir}\n\n"
+                    "(Songs already in the config are skipped.)")
             return
 
         names_preview = ', '.join(stem for stem, _ in candidates[:5])
@@ -807,10 +1538,13 @@ class MainWindow(QMainWindow, Ui_MainWindow):
                 # Use the stem we derived from the filename in case the
                 # file's internal name disagrees.
                 show.name = stem
-                self.config.shows[stem] = show
+                self.config.songs[stem] = show
                 imported += 1
             except Exception as e:
-                print(f"Skipping {path}: {e}")
+                from utils import user_warnings
+                user_warnings.warn(
+                    f"Legacy CSV show skipped (unreadable): {path}: {e}",
+                    category="import")
         if imported:
             self.structure_tab.update_from_config()
             self.shows_tab.update_from_config()
@@ -838,7 +1572,10 @@ class MainWindow(QMainWindow, Ui_MainWindow):
                 get_cached_fixture_definitions(models_in_config)
                 print(f"Pre-loaded {len(models_in_config)} fixture definition(s) into cache")
         except Exception as e:
-            print(f"Warning: Could not pre-load fixture definitions: {e}")
+            from utils import user_warnings
+            user_warnings.warn(
+                f"Could not pre-load fixture definitions: {e}",
+                category="fixture-library")
 
     def import_workspace(self):
         """Import configuration from QLC+ workspace file"""
@@ -879,6 +1616,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             self.structure_tab.config = self.config
             self.shows_tab.config = self.config
             self.auto_tab.config = self.config
+            self.live_tab.config = self.config
 
             # Refresh all tabs
             self.progress_manager.update_modal(3, "Updating Configuration tab...")
@@ -899,6 +1637,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             # Auto tab refresh + central visualizer push so all 3D
             # previews repaint with the imported fixture set.
             self.auto_tab.update_from_config()
+            self.live_tab.update_from_config()
             self.on_visualizer_config_changed()
 
             self.progress_manager.finish_modal()
@@ -953,7 +1692,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             )
             return
 
-        if show.name in self.config.shows:
+        if show.name in self.config.songs:
             reply = QMessageBox.question(
                 self, "Overwrite Show?",
                 f"A show named '{show.name}' already exists in the config.\n\n"
@@ -963,7 +1702,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             if reply != QMessageBox.StandardButton.Yes:
                 return
 
-        self.config.shows[show.name] = show
+        self.config.songs[show.name] = show
         # Refresh the Structure tab so the imported show shows up + selects.
         self.structure_tab.update_from_config()
         if hasattr(self.structure_tab, 'show_combo'):
@@ -987,8 +1726,8 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         by the extension of the chosen path.
         """
         from utils.show_io import write_show
-        current_name = getattr(self.structure_tab, 'current_show_name', '')
-        show = self.config.shows.get(current_name) if current_name else None
+        current_name = getattr(self.structure_tab, 'current_song_name', '')
+        show = self.config.songs.get(current_name) if current_name else None
         if not show:
             QMessageBox.warning(
                 self, "No Show Selected",
@@ -1025,6 +1764,285 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             f"Exported '{show.name}' to {fmt.upper()}:\n{file_path}"
         )
 
+    def import_shows_from_config_file(self):
+        """File -> Import Shows from Config: pull selected shows from another
+        config.yaml into the current one without swapping the project.
+
+        The picker lists every show in the source config with its part
+        count, name conflicts, and any fixture groups this config doesn't
+        have. Missing groups are reported, not fixed — those lanes stay
+        dormant until re-pointed (retargeting is the v1.5b morphing work).
+        Audio files are copied into this config's audiofiles/ bundle.
+        """
+        from utils.config_merge import list_import_candidates, merge_shows
+
+        default_dir = os.path.dirname(self.config_path) if self.config_path else ""
+        file_path, _ = QFileDialog.getOpenFileName(
+            self,
+            "Import Shows from Config",
+            default_dir,
+            "Config files (*.yaml *.yml)"
+        )
+        if not file_path:
+            return
+        if self.config_path and os.path.abspath(file_path) == os.path.abspath(self.config_path):
+            QMessageBox.warning(
+                self, "Same Config",
+                "That is the currently open config — nothing to import."
+            )
+            return
+
+        try:
+            source = Configuration.load(file_path)
+        except Exception as e:
+            QMessageBox.critical(
+                self, "Import Failed",
+                f"Could not load {os.path.basename(file_path)}:\n{e}"
+            )
+            return
+        if not source.songs:
+            QMessageBox.warning(
+                self, "No Shows",
+                f"{os.path.basename(file_path)} contains no shows."
+            )
+            return
+
+        candidates = list_import_candidates(source, self.config)
+
+        # ── Picker dialog ────────────────────────────────────────────
+        dialog = QtWidgets.QDialog(self)
+        dialog.setWindowTitle(f"Import Shows from {os.path.basename(file_path)}")
+        dialog.resize(520, 420)
+        layout = QtWidgets.QVBoxLayout(dialog)
+
+        layout.addWidget(QtWidgets.QLabel("Select the shows to import:"))
+        show_list = QtWidgets.QListWidget()
+        for candidate in candidates:
+            text = f"{candidate.name}  —  {candidate.num_parts} part(s)"
+            if candidate.audio_file:
+                text += f", audio: {candidate.audio_file}"
+            if candidate.name_conflict:
+                text += "   [name exists]"
+            if candidate.missing_groups:
+                text += f"   [missing groups: {', '.join(candidate.missing_groups)}]"
+            item = QtWidgets.QListWidgetItem(text)
+            item.setFlags(item.flags() | Qt.ItemFlag.ItemIsUserCheckable)
+            item.setCheckState(Qt.CheckState.Checked)
+            item.setData(Qt.ItemDataRole.UserRole, candidate.name)
+            show_list.addItem(item)
+        layout.addWidget(show_list)
+
+        form = QtWidgets.QFormLayout()
+        conflict_combo = QtWidgets.QComboBox()
+        conflict_combo.addItem("Rename the imported show", "rename")
+        conflict_combo.addItem("Overwrite the existing show", "overwrite")
+        conflict_combo.addItem("Skip the imported show", "skip")
+        form.addRow("If a show name exists:", conflict_combo)
+        copy_audio_check = QtWidgets.QCheckBox("Copy audio files into this config's bundle")
+        copy_audio_check.setChecked(True)
+        form.addRow(copy_audio_check)
+        layout.addLayout(form)
+
+        buttons = QtWidgets.QDialogButtonBox(
+            QtWidgets.QDialogButtonBox.StandardButton.Ok |
+            QtWidgets.QDialogButtonBox.StandardButton.Cancel
+        )
+        buttons.accepted.connect(dialog.accept)
+        buttons.rejected.connect(dialog.reject)
+        layout.addWidget(buttons)
+
+        if dialog.exec() != QtWidgets.QDialog.DialogCode.Accepted:
+            return
+
+        selected = [
+            show_list.item(i).data(Qt.ItemDataRole.UserRole)
+            for i in range(show_list.count())
+            if show_list.item(i).checkState() == Qt.CheckState.Checked
+        ]
+        if not selected:
+            return
+
+        results = merge_shows(
+            self.config, source, selected,
+            on_conflict=conflict_combo.currentData(),
+            copy_audio=copy_audio_check.isChecked(),
+        )
+
+        # Refresh the Structure tab so the imported shows appear.
+        self.structure_tab.update_from_config()
+
+        lines = []
+        for r in results:
+            if r.action == 'skipped':
+                lines.append(f"- {r.source_name}: skipped (name exists)")
+                continue
+            line = f"- {r.source_name}: {r.action}"
+            if r.action == 'renamed':
+                line += f" as '{r.final_name}'"
+            if r.audio_action == 'copied':
+                line += ", audio copied"
+            elif r.audio_action == 'not-found':
+                line += ", AUDIO FILE NOT FOUND"
+            if r.missing_groups:
+                line += f", missing groups: {', '.join(r.missing_groups)}"
+            lines.append(line)
+        imported = sum(1 for r in results if r.action != 'skipped')
+        msg = f"Imported {imported} show(s) from {os.path.basename(file_path)}:\n\n"
+        msg += "\n".join(lines)
+        if any(r.missing_groups for r in results):
+            msg += (
+                "\n\nLanes targeting missing groups stay dormant until you "
+                "re-point them at this config's groups."
+            )
+        msg += "\n\nSave the config to persist the imported shows."
+        QMessageBox.information(self, "Imported", msg)
+
+    def import_fixture_list_file(self):
+        """File -> Import Fixture List: read a rig .csv or .json into the config.
+
+        CSV input: flat spec-sheet rows; each fixture arrives with a single
+        synthesized mode that library resolution upgrades to the real .qxf
+        mode list where possible. JSON input: full-fidelity rig including
+        group metadata and mode lists.
+
+        If the config already has fixtures, the user picks Replace (swap the
+        whole rig) or Add (append; name collisions get a numbered suffix).
+        """
+        from utils.fixture_io import (
+            apply_fixture_list, read_fixture_list, resolve_modes_from_library,
+        )
+        default_dir = os.path.dirname(self.config_path) if self.config_path else ""
+        file_path, _ = QFileDialog.getOpenFileName(
+            self,
+            "Import Fixture List",
+            default_dir,
+            "Fixture lists (*.csv *.json);;CSV (*.csv);;JSON (*.json)"
+        )
+        if not file_path:
+            return
+        try:
+            fixtures, group_props, layers, fmt = read_fixture_list(file_path)
+        except Exception as e:
+            QMessageBox.critical(
+                self, "Import Failed",
+                f"Could not import {os.path.basename(file_path)}:\n{e}"
+            )
+            return
+        if not fixtures:
+            QMessageBox.warning(
+                self, "Nothing to Import",
+                f"{os.path.basename(file_path)} contains no fixtures."
+            )
+            return
+
+        replace = False
+        if self.config.fixtures:
+            box = QMessageBox(self)
+            box.setWindowTitle("Import Fixture List")
+            box.setText(
+                f"The config already has {len(self.config.fixtures)} fixture(s).\n\n"
+                f"Replace the current rig with the {len(fixtures)} imported "
+                f"fixture(s), or add them to it?"
+            )
+            replace_btn = box.addButton(
+                "Replace", QMessageBox.ButtonRole.DestructiveRole)
+            add_btn = box.addButton("Add", QMessageBox.ButtonRole.AcceptRole)
+            box.addButton(QMessageBox.StandardButton.Cancel)
+            box.exec()
+            clicked = box.clickedButton()
+            if clicked is replace_btn:
+                replace = True
+            elif clicked is not add_btn:
+                return
+
+        # Resolution also warms the shared definitions cache, so the
+        # visualizer and capability detection see the imported models.
+        warnings = resolve_modes_from_library(fixtures)
+        apply_fixture_list(self.config, fixtures, group_props, layers, replace=replace)
+
+        self.fixtures_tab.update_from_config(force=True)
+        self.on_groups_changed()
+
+        msg = f"Imported {len(fixtures)} fixture(s) from {fmt.upper()}."
+        if warnings:
+            msg += "\n\nWarnings:\n- " + "\n- ".join(warnings)
+        msg += "\n\nSave the config to persist the imported rig."
+        QMessageBox.information(self, "Imported", msg)
+
+    def import_csv_lighting_table(self):
+        """File -> Import Lighting Table (CSV): a foreign spreadsheet in,
+        mapped columns out.
+
+        The wizard (gui/dialogs/csv_import_wizard.py) sniffs delimiter,
+        encoding and header row, maps the sheet's columns onto the rig
+        fields, and previews the rig resolved through the same library
+        pipeline as Import Fixture List. Nothing touches the config
+        until the wizard's IMPORT is confirmed; the Replace/Add choice
+        mirrors the fixture-list import.
+        """
+        from gui.dialogs.csv_import_wizard import CsvImportWizard
+        from utils.fixture_io import apply_fixture_list
+        default_dir = os.path.dirname(self.config_path) if self.config_path else ""
+        wizard = CsvImportWizard(
+            existing_fixture_count=len(self.config.fixtures),
+            start_dir=default_dir, parent=self)
+        if wizard.exec() != QtWidgets.QDialog.DialogCode.Accepted:
+            return
+        fixtures = wizard.result_fixtures()
+        if not fixtures:
+            return
+        apply_fixture_list(self.config, fixtures,
+                           replace=wizard.replace_rig())
+
+        self.fixtures_tab.update_from_config(force=True)
+        self.on_groups_changed()
+
+        msg = f"Imported {len(fixtures)} fixture(s) from the lighting table."
+        notes = wizard.row_errors() + wizard.resolution_warnings()
+        if notes:
+            msg += "\n\nWarnings:\n- " + "\n- ".join(notes)
+        msg += "\n\nSave the config to persist the imported rig."
+        QMessageBox.information(self, "Imported", msg)
+
+    def export_fixture_list_file(self):
+        """File -> Export Fixture List: write the rig to .csv or .json.
+
+        CSV writes the flat spec sheet (effective z/orientation). JSON
+        writes the full-fidelity rig. Format is picked by the extension of
+        the chosen path.
+        """
+        from utils.fixture_io import write_fixture_list
+        if not self.config.fixtures:
+            QMessageBox.warning(
+                self, "No Fixtures",
+                "Add fixtures in the Fixtures tab before exporting a fixture list."
+            )
+            return
+        default_dir = os.path.dirname(self.config_path) if self.config_path else ""
+        default_path = os.path.join(default_dir, "fixtures.csv") if default_dir else "fixtures.csv"
+        file_path, _ = QFileDialog.getSaveFileName(
+            self,
+            "Export Fixture List",
+            default_path,
+            "CSV (*.csv);;JSON (*.json)"
+        )
+        if not file_path:
+            return
+        if not os.path.splitext(file_path)[1]:
+            file_path += ".csv"
+        try:
+            fmt = write_fixture_list(file_path, self.config)
+        except Exception as e:
+            QMessageBox.critical(
+                self, "Export Failed",
+                f"Could not export to {os.path.basename(file_path)}:\n{e}"
+            )
+            return
+        QMessageBox.information(
+            self, "Exported",
+            f"Exported {len(self.config.fixtures)} fixture(s) to {fmt.upper()}:\n{file_path}"
+        )
+
     def create_workspace(self):
         """Create QLC+ workspace file from configuration"""
         try:
@@ -1058,9 +2076,11 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             else:
                 self.progress_manager.update_modal(2, "Generating QLC+ workspace XML...")
 
+            from utils import user_warnings
             self.progress_manager.start_log_capture()
             try:
-                create_qlc_workspace(self.config, vc_options)
+                with user_warnings.operation("Export QLC+ workspace"):
+                    create_qlc_workspace(self.config, vc_options)
             finally:
                 self.progress_manager.stop_log_capture()
 
@@ -1071,11 +2091,29 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             self.progress_manager.finish_modal()
 
             workspace_path = os.path.join(self.project_root, 'workspace.qxw')
-            QMessageBox.information(
-                self,
-                "Success",
-                f"Workspace created at {workspace_path}"
-            )
+            _op, export_warnings = user_warnings.get_log().last_operation()
+            if export_warnings:
+                # The box that used to say plain "Success" while lanes
+                # were silently dropped. Offer the panel directly.
+                box = QMessageBox(self)
+                box.setIcon(QMessageBox.Icon.Warning)
+                box.setWindowTitle("Workspace created with warnings")
+                box.setText(
+                    f"Workspace created at {workspace_path}\n\n"
+                    f"{len(export_warnings)} warning(s) during export - "
+                    f"parts of the show may be missing from the file.")
+                view_btn = box.addButton(
+                    "View Warnings", QMessageBox.ButtonRole.ActionRole)
+                box.addButton(QMessageBox.StandardButton.Ok)
+                box.exec()
+                if box.clickedButton() is view_btn:
+                    self.open_warnings()
+            else:
+                QMessageBox.information(
+                    self,
+                    "Success",
+                    f"Workspace created at {workspace_path}"
+                )
             print(f"Workspace created at {workspace_path}")
 
         except Exception as e:
@@ -1093,7 +2131,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
     def render_to_video(self):
         """Open the render-to-video dialog."""
         try:
-            if not self.config.shows:
+            if not self.config.songs:
                 QMessageBox.warning(self, "No Shows", "No shows available to render.")
                 return
 
@@ -1112,6 +2150,40 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             QMessageBox.critical(self, "Error", f"Failed to open render dialog: {str(e)}")
             import traceback
             traceback.print_exc()
+
+    def _on_toggle_sublane_labels(self, checked):
+        """Persist the sub-lane-label deep setting and repaint the timeline."""
+        from utils.app_settings import app_settings
+        app_settings().setValue("timeline/show_sublane_labels", checked)
+        if hasattr(self, "shows_tab") and self.shows_tab is not None:
+            self.shows_tab.refresh_sublane_labels_setting()
+
+    def open_library_paths(self):
+        """Settings > Fixture Libraries: the user's own GDTF / .qxf
+        directories. Accepting persists via app_settings (which
+        invalidates the definition cache), so the next browser open or
+        config load rescans - nothing to push from here."""
+        from gui.dialogs.library_paths_dialog import LibraryPathsDialog
+        LibraryPathsDialog(parent=self).exec()
+
+    def open_diagnostics(self):
+        """Help > Diagnostics: the copyable bug-report block."""
+        from gui.dialogs.diagnostics_dialog import DiagnosticsDialog
+        DiagnosticsDialog(main_window=self, parent=self).exec()
+
+    def open_warnings(self):
+        """Help > Warnings: what the last export/load worked around."""
+        from gui.dialogs.warnings_dialog import WarningsDialog
+        WarningsDialog(parent=self).exec()
+
+    def open_gdtf_share_account(self):
+        """Settings > GDTF Share Account: credentials for the fixture
+        browser's Share tab (username in QSettings, password in the OS
+        credential store, never plaintext)."""
+        from gui.dialogs.gdtf_share_account_dialog import (
+            GDTFShareAccountDialog,
+        )
+        GDTFShareAccountDialog(parent=self).exec()
 
     def open_audio_settings(self):
         """Open audio settings dialog"""
@@ -1150,20 +2222,35 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             import traceback
             traceback.print_exc()
 
+    def open_log_folder(self):
+        """Open the application log directory in the system file browser."""
+        from PyQt6.QtCore import QUrl
+        from PyQt6.QtGui import QDesktopServices
+        from utils.app_logging import log_dir
+        directory = log_dir()
+        try:
+            os.makedirs(directory, exist_ok=True)
+        except OSError:
+            pass
+        QDesktopServices.openUrl(QUrl.fromLocalFile(directory))
+
     def show_about(self):
         """Show about dialog"""
+        from utils import app_identity
         QMessageBox.about(
             self,
-            "About QLC+ Show Creator",
-            "QLC+ Show Creator\n\n"
-            "A tool for creating QLC+ light shows with timeline-based editing.\n\n"
-            "Features:\n"
-            "- Fixture management and grouping\n"
-            "- Stage layout visualization\n"
-            "- Timeline-based show editing\n"
-            "- Audio playback with waveform display\n"
-            "- Real-time 3D Visualizer preview\n"
-            "- QLC+ workspace export"
+            f"About {app_identity.APP_NAME}",
+            f"{app_identity.APP_NAME}\n"
+            f"{app_identity.SLOGAN_EN}\n\n"
+            f"Version {app_identity.APP_VERSION} · {app_identity.APP_DOMAIN}\n\n"
+            "Visual light show authoring:\n"
+            "- Beat-synced timeline editing\n"
+            "- Fixture management and grouping (GDTF and QLC+ formats)\n"
+            "- Stage layout and printable stage plots\n"
+            "- Automatic show generation from audio\n"
+            "- Real-time 3D visualizer preview\n"
+            "- Live ArtNet/DMX playback\n"
+            "- QLC+ workspace export (interop)"
         )
 
     def closeEvent(self, event):
@@ -1178,5 +2265,10 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         # only place that stops it.
         if hasattr(self, 'auto_tab') and hasattr(self.auto_tab, 'cleanup'):
             self.auto_tab.cleanup()
+
+        # The shared output arbiter outlives the per-tab controllers;
+        # close its socket last.
+        if getattr(self, "_output_arbiter", None) is not None:
+            self._output_arbiter.shutdown()
 
         event.accept()

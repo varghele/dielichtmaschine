@@ -1,5 +1,5 @@
 # audio/__init__.py
-# Audio subsystem for QLCAutoShow
+# Audio subsystem for Die Lichtmaschine
 # Provides audio playback, mixing, live input, real-time analysis, and waveform visualization
 
 from .device_manager import DeviceManager, AudioDevice

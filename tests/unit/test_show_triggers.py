@@ -6,7 +6,7 @@ import pytest
 import tempfile
 import xml.etree.ElementTree as ET
 from config.models import (
-    Configuration, Show, ShowPart, MidiInputDevice,
+    Configuration, Song, ShowPart, MidiInputDevice,
     Fixture, FixtureMode, FixtureGroup, Universe
 )
 
@@ -33,12 +33,12 @@ class TestMidiInputDevice:
 class TestShowTriggerFields:
 
     def test_defaults(self):
-        show = Show(name="Test")
+        show = Song(name="Test")
         assert show.trigger_device == ""
         assert show.trigger_channel == -1
 
     def test_with_trigger(self):
-        show = Show(name="Test", trigger_device="Akai APC Mini mk2", trigger_channel=184)
+        show = Song(name="Test", trigger_device="Akai APC Mini mk2", trigger_channel=184)
         assert show.trigger_device == "Akai APC Mini mk2"
         assert show.trigger_channel == 184
 
@@ -55,15 +55,15 @@ class TestTriggerSerialization:
             fixtures=[fixture],
             groups={"G1": FixtureGroup("G1", [fixture])},
             universes={1: Universe(id=1, name="Uni 1", output={"plugin": "ArtNet"})},
-            shows={
-                "ShowA": Show(
+            songs={
+                "ShowA": Song(
                     name="ShowA",
                     trigger_device="Akai APC Mini mk2",
                     trigger_channel=184,
                     parts=[ShowPart(name="Intro", color="#ff0000", signature="4/4",
                                    bpm=120.0, num_bars=4, transition="instant")]
                 ),
-                "ShowB": Show(
+                "ShowB": Song(
                     name="ShowB",
                     parts=[ShowPart(name="Intro", color="#00ff00", signature="4/4",
                                    bpm=120.0, num_bars=4, transition="instant")]
@@ -86,10 +86,10 @@ class TestTriggerSerialization:
             loaded = Configuration.load(tmp_path)
 
             # Check show triggers
-            assert loaded.shows["ShowA"].trigger_device == "Akai APC Mini mk2"
-            assert loaded.shows["ShowA"].trigger_channel == 184
-            assert loaded.shows["ShowB"].trigger_device == ""
-            assert loaded.shows["ShowB"].trigger_channel == -1
+            assert loaded.songs["ShowA"].trigger_device == "Akai APC Mini mk2"
+            assert loaded.songs["ShowA"].trigger_channel == 184
+            assert loaded.songs["ShowB"].trigger_device == ""
+            assert loaded.songs["ShowB"].trigger_channel == -1
 
             # Check MIDI devices
             assert len(loaded.midi_input_devices) == 1
@@ -103,7 +103,7 @@ class TestTriggerSerialization:
     def test_save_without_triggers(self):
         """Config with no triggers should save/load cleanly."""
         config = Configuration(
-            shows={"S1": Show(name="S1", parts=[
+            songs={"S1": Song(name="S1", parts=[
                 ShowPart(name="P1", color="#fff", signature="4/4", bpm=120, num_bars=4, transition="instant")
             ])}
         )
@@ -112,8 +112,8 @@ class TestTriggerSerialization:
         try:
             config.save(tmp_path)
             loaded = Configuration.load(tmp_path)
-            assert loaded.shows["S1"].trigger_device == ""
-            assert loaded.shows["S1"].trigger_channel == -1
+            assert loaded.songs["S1"].trigger_device == ""
+            assert loaded.songs["S1"].trigger_channel == -1
             assert len(loaded.midi_input_devices) == 0
         finally:
             os.unlink(tmp_path)
@@ -131,8 +131,8 @@ class TestTriggerExportXML:
             fixtures=[fixture],
             groups={"G1": FixtureGroup("G1", [fixture])},
             universes={1: Universe(id=1, name="Uni 1", output={"plugin": "ArtNet"})},
-            shows={
-                "TestShow": Show(
+            songs={
+                "TestShow": Song(
                     name="TestShow",
                     trigger_device="Akai APC Mini mk2",
                     trigger_channel=184,

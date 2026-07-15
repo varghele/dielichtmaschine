@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="de"><head><meta charset="utf-8"><title>Die Lichtmaschine · Stage v2</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700;800;900&family=Barlow:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>*,*::before,*::after{box-sizing:border-box}html{background:#0e0e10}body{margin:0;font-family:Barlow,system-ui,sans-serif;display:flex;justify-content:center;align-items:flex-start;min-height:100vh}
+@keyframes lm-spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}@keyframes lm-pulse{0%,100%{opacity:0.35}50%{opacity:1}}</style>
+</head><body>
+<div data-screen-label="Stage v2" style="width:1920px;height:1080px;background:#141416;display:flex;flex-direction:column;overflow:hidden">
+    <div style="height:48px;background:#1e1e1e;border-bottom:1px solid #3a3a3a;display:flex;align-items:center;padding:0 20px;gap:20px;flex:none">
+      <div style="display:flex;align-items:center;gap:10px">
+        <svg width="20" height="20" viewBox="0 0 64 64"><circle cx="32" cy="32" r="23" fill="none" stroke="#f4f1ea" stroke-width="11" stroke-dasharray="9.03 9.03" transform="rotate(-11.25 32 32)"></circle><circle cx="32" cy="32" r="8" fill="#f0562e"></circle></svg>
+        <span style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:15px;letter-spacing:0.09em;color:#f4f1ea">DIE LICHTMASCHINE</span>
+      </div>
+      <div style="width:1px;height:20px;background:#3a3a3a"></div>
+      <div style="display:flex;gap:2px;height:48px;align-items:stretch">
+        <div style="display:flex;align-items:center;padding:0 16px;font-family:'Barlow Condensed',sans-serif;font-weight:600;font-size:15px;letter-spacing:0.12em;color:#f4f1ea;border-bottom:2px solid #f0562e">SETUP</div>
+        <div style="display:flex;align-items:center;padding:0 16px;font-family:'Barlow Condensed',sans-serif;font-weight:600;font-size:15px;letter-spacing:0.12em;color:#8d9299">SHOW</div>
+        <div style="display:flex;align-items:center;padding:0 16px;font-family:'Barlow Condensed',sans-serif;font-weight:600;font-size:15px;letter-spacing:0.12em;color:#8d9299">AUTO</div>
+        <div style="display:flex;align-items:center;padding:0 16px;font-family:'Barlow Condensed',sans-serif;font-weight:600;font-size:15px;letter-spacing:0.12em;color:#8d9299">LIVE</div>
+      </div>
+      <div style="flex:1"></div>
+      <div style="display:flex;gap:6px;align-items:center">
+        <span title="Speichern" style="width:30px;height:30px;display:flex;align-items:center;justify-content:center;border:1px solid #3a3a3a;color:#c9cdd2;font-size:14px"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M8 2.5v7M5.5 7L8 9.5L10.5 7M3 11.5v2h10v-2"></path></svg></span>
+        <span title="Export (.qxw u. a.)" style="width:30px;height:30px;display:flex;align-items:center;justify-content:center;border:1px solid #3a3a3a;color:#c9cdd2;font-size:14px"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6.5 4H3v9h9V9.5M9 3h4v4M13 3L7.5 8.5"></path></svg></span>
+        <span title="Show morphen" style="width:30px;height:30px;display:flex;align-items:center;justify-content:center;border:1px solid #3a3a3a;color:#c9cdd2;font-size:14px"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 5.5h11M10.5 3L13 5.5L10.5 8M14 10.5H3M5.5 8L3 10.5L5.5 13"></path></svg></span>
+        <span title="Audio: Geräte &amp; Analyse" style="width:30px;height:30px;display:flex;align-items:center;justify-content:center;border:1px solid #3a3a3a;color:#c9cdd2;font-size:14px"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M2 6.5v3M5 4v8M8 2.5v11M11 5v6M14 6.5v3"></path></svg></span>
+        <span title="Einstellungen: Universen, Output, Theme" style="width:30px;height:30px;display:flex;align-items:center;justify-content:center;border:1px solid #3a3a3a;color:#c9cdd2;font-size:14px"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M2 4h12M2 8h12M2 12h12"></path><circle cx="10.5" cy="4" r="1.8"></circle><circle cx="5" cy="8" r="1.8"></circle><circle cx="11.5" cy="12" r="1.8"></circle></svg></span>
+        <span title="Menü: alles Weitere" style="width:30px;height:30px;display:flex;align-items:center;justify-content:center;border:1px solid #3a3a3a;color:#c9cdd2;font-size:13px"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M3 4.5h10M3 8h10M3 11.5h6"></path></svg></span>
+      </div>
+      <div style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:#8d9299">neon_ruinen.lms</div>
+      <div style="display:flex;align-items:center;gap:6px;padding:4px 10px;background:#252526;border:1px solid #3a3a3a"><span style="width:7px;height:7px;border-radius:50%;background:#4caf50"></span><span style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:#c9cdd2">ARTNET OUT · 44 Hz</span></div>
+    </div>
+    <div style="height:38px;background:#18181a;border-bottom:1px solid #2d2d2d;display:flex;align-items:center;padding:0 20px;gap:4px;flex:none">
+      <div style="padding:5px 14px;font-size:13px;font-weight:600;color:#8d9299">Universes</div>
+      <div style="padding:5px 14px;font-size:13px;font-weight:600;color:#8d9299">Fixtures</div>
+      <div style="padding:5px 14px;font-size:13px;font-weight:600;color:#141416;background:#f0562e">Stage</div>
+      <div style="padding:5px 14px;font-size:13px;font-weight:600;color:#8d9299">Live Controls</div>
+      <div style="flex:1"></div>
+      <span style="font-family:'IBM Plex Mono',monospace;font-size:9px;letter-spacing:0.1em;color:#5c6068">AKTIVE EBENE</span>
+      <div style="display:flex;border:1px solid #3a3a3a">
+        <span style="padding:4px 12px;background:#f0562e;color:#141416;font-family:'IBM Plex Mono',monospace;font-size:10px;font-weight:600">BÜHNE 0.8 m ✓</span>
+        <span style="padding:4px 12px;font-family:'IBM Plex Mono',monospace;font-size:10px;color:#8d9299">RISER +0.4 m</span>
+        <span style="padding:4px 12px;font-family:'IBM Plex Mono',monospace;font-size:10px;color:#8d9299">FLOWN 4.0 m</span>
+        <span style="padding:4px 10px;font-family:'IBM Plex Mono',monospace;font-size:10px;color:#8d9299;border-left:1px solid #3a3a3a">＋ EBENE</span>
+        <span style="padding:4px 10px;font-family:'IBM Plex Mono',monospace;font-size:10px;color:#8d9299;border-left:1px solid #3a3a3a">⚙ DEFINIEREN</span>
+      </div>
+      <span style="font-family:'IBM Plex Mono',monospace;font-size:9px;color:#5c6068;margin-right:8px">ANDERE: 25 % · GESPERRT</span>
+      <div style="padding:6px 14px;border:1px solid #3a3a3a;font-family:'Barlow Condensed',sans-serif;font-weight:600;font-size:14px;letter-spacing:0.08em;color:#c9cdd2">⇄ MORPH…</div>
+      <div style="padding:6px 16px;border:1px solid #3a3a3a;font-family:'Barlow Condensed',sans-serif;font-weight:600;font-size:14px;letter-spacing:0.08em;color:#c9cdd2">⎙ EXPORT RIDER PDF</div>
+    </div>
+    <div style="flex:1;display:flex;min-height:0">
+      <!-- left: library -->
+      <div style="width:260px;background:#1e1e1e;border-right:1px solid #2d2d2d;display:flex;flex-direction:column;flex:none;overflow:hidden">
+        <div style="padding:10px 16px;font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.12em;color:#5c6068;border-bottom:1px solid #2d2d2d">RIG · FIXTURES</div>
+        <div style="padding:8px 16px;display:flex;align-items:center;gap:8px;border-left:3px solid #d9a441"><span style="font-size:13px;font-weight:600;color:#f4f1ea;flex:1">FRONT PARS</span><span style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:#5c6068">4× · FLOWN</span></div>
+        <div style="padding:8px 16px;display:flex;align-items:center;gap:8px;border-left:3px solid #4ecbd4"><span style="font-size:13px;font-weight:600;color:#f4f1ea;flex:1">REAR WASH</span><span style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:#5c6068">2× · FLOWN</span></div>
+        <div style="padding:8px 16px;display:flex;align-items:center;gap:8px;border-left:3px solid #c95fd0"><span style="font-size:13px;font-weight:600;color:#f4f1ea;flex:1">MOVERS</span><span style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:#5c6068">2× · FLOWN</span></div>
+        <div style="padding:8px 16px;display:flex;align-items:center;gap:8px;border-left:3px solid #6f9e4c"><span style="font-size:13px;font-weight:600;color:#f4f1ea;flex:1">PIXEL BAR</span><span style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:#5c6068">1× · BODEN</span></div>
+        <div style="padding:8px 16px;display:flex;align-items:center;gap:8px;border-left:3px solid #8d9299"><span style="font-size:13px;font-weight:600;color:#f4f1ea;flex:1">SUNSTRIP</span><span style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:#5c6068">1× · BODEN</span></div>
+        <div style="padding:10px 16px;font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.12em;color:#5c6068;border-top:1px solid #2d2d2d;border-bottom:1px solid #2d2d2d;margin-top:6px">BÜHNENELEMENTE · ZIEHEN</div>
+        <div style="flex:1;overflow:hidden">
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:1px;background:#2d2d2d">
+            <div style="background:#1e1e1e;padding:10px;display:flex;flex-direction:column;align-items:center;gap:6px"><img src="../assets/stageplot/drum-riser.svg" width="30" height="30"><span style="font-family:'IBM Plex Mono',monospace;font-size:9px;color:#c9cdd2">DRUM RISER</span></div>
+            <div style="background:#1e1e1e;padding:10px;display:flex;flex-direction:column;align-items:center;gap:6px"><img src="../assets/stageplot/wedge.svg" width="30" height="30"><span style="font-family:'IBM Plex Mono',monospace;font-size:9px;color:#c9cdd2">WEDGE</span></div>
+            <div style="background:#1e1e1e;padding:10px;display:flex;flex-direction:column;align-items:center;gap:6px"><img src="../assets/stageplot/amp.svg" width="30" height="30"><span style="font-family:'IBM Plex Mono',monospace;font-size:9px;color:#c9cdd2">AMP / CAB</span></div>
+            <div style="background:#1e1e1e;padding:10px;display:flex;flex-direction:column;align-items:center;gap:6px"><img src="../assets/stageplot/mic-stand.svg" width="30" height="30"><span style="font-family:'IBM Plex Mono',monospace;font-size:9px;color:#c9cdd2">MIC STAND</span></div>
+            <div style="background:#1e1e1e;padding:10px;display:flex;flex-direction:column;align-items:center;gap:6px"><img src="../assets/stageplot/keys.svg" width="30" height="30"><span style="font-family:'IBM Plex Mono',monospace;font-size:9px;color:#c9cdd2">KEYS</span></div>
+            <div style="background:#1e1e1e;padding:10px;display:flex;flex-direction:column;align-items:center;gap:6px"><img src="../assets/stageplot/distro.svg" width="30" height="30"><span style="font-family:'IBM Plex Mono',monospace;font-size:9px;color:#c9cdd2">DISTRO 32A</span></div>
+            <div style="background:#1e1e1e;padding:10px;display:flex;flex-direction:column;align-items:center;gap:6px"><img src="../assets/stageplot/riser.svg" width="30" height="30"><span style="font-family:'IBM Plex Mono',monospace;font-size:9px;color:#c9cdd2">RISER 2×1</span></div>
+            <div style="background:#1e1e1e;padding:10px;display:flex;flex-direction:column;align-items:center;gap:6px"><img src="../assets/stageplot/foh.svg" width="30" height="30"><span style="font-family:'IBM Plex Mono',monospace;font-size:9px;color:#c9cdd2">FOH PULT</span></div>
+          </div>
+          <div style="padding:10px 16px;font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.12em;color:#5c6068;border-top:1px solid #2d2d2d;border-bottom:1px solid #2d2d2d">TRAVERSEN · HÖHE FREI WÄHLBAR</div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:1px;background:#2d2d2d">
+            <div style="background:#1e1e1e;padding:10px;display:flex;flex-direction:column;align-items:center;gap:6px"><img src="../assets/stageplot/truss-straight.svg" width="30" height="30"><span style="font-family:'IBM Plex Mono',monospace;font-size:9px;color:#c9cdd2">TRUSS GERADE</span></div>
+            <div style="background:#1e1e1e;padding:10px;display:flex;flex-direction:column;align-items:center;gap:6px"><img src="../assets/stageplot/truss-tower.svg" width="30" height="30"><span style="font-family:'IBM Plex Mono',monospace;font-size:9px;color:#c9cdd2">TOWER / STAND</span></div>
+            <div style="background:#1e1e1e;padding:10px;display:flex;flex-direction:column;align-items:center;gap:6px"><img src="../assets/stageplot/truss-corner.svg" width="30" height="30"><span style="font-family:'IBM Plex Mono',monospace;font-size:9px;color:#c9cdd2">ECKE 90°</span></div>
+            <div style="background:#1e1e1e;padding:10px;display:flex;flex-direction:column;align-items:center;gap:6px"><img src="../assets/stageplot/truss-circle.svg" width="30" height="30"><span style="font-family:'IBM Plex Mono',monospace;font-size:9px;color:#c9cdd2">CIRCLE TRUSS</span></div>
+          </div>
+          <div style="margin:10px 16px;padding:8px 10px;border:1px dashed #3a3a3a;font-size:10.5px;color:#5c6068;line-height:1.5">Truss ziehen → Höhe + Länge setzen; Fixtures docken an. Ground-Support = Tower an beiden Enden.</div>
+        </div>
+      </div>
+      <!-- center: plot -->
+      <div style="flex:1;position:relative;min-width:0;background-image:linear-gradient(rgba(141,146,153,0.07) 1px,transparent 1px),linear-gradient(90deg,rgba(141,146,153,0.07) 1px,transparent 1px);background-size:40px 40px">
+        <div style="position:absolute;top:12px;left:20px;font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.12em;color:#5c6068">BÜHNENPLAN · DRAUFSICHT · 1 KÄSTCHEN = 0.5 m</div>
+        <div style="position:absolute;top:8px;right:16px;background:#252526;border:1px solid #f0562e;padding:4px 10px;font-family:'IBM Plex Mono',monospace;font-size:9px;color:#f0562e">AKTIVE EBENE: BÜHNE 0.8 m · FLOWN NUR ANGEDEUTET</div>
+        <!-- stage deck -->
+        <div style="position:absolute;left:120px;top:60px;width:960px;height:480px;border:2px solid #8d9299;background:rgba(141,146,153,0.04)"></div>
+        <div style="position:absolute;left:128px;top:66px;font-family:'IBM Plex Mono',monospace;font-size:9px;color:#8d9299">BÜHNE 12.0 × 6.0 m · KANTE H 0.8 m</div>
+        <div style="opacity:0.25">
+        <!-- trusses (flown, dashed) -->
+        <div style="position:absolute;left:160px;top:110px;width:880px;height:0;border-top:2px dashed #5c6068"></div>
+        <div style="position:absolute;left:164px;top:114px;font-family:'IBM Plex Mono',monospace;font-size:9px;color:#5c6068">BACK-TRUSS · FLOWN 4.0 m</div>
+        <div style="position:absolute;left:160px;top:472px;width:880px;height:0;border-top:2px dashed #5c6068"></div>
+        <div style="position:absolute;left:164px;top:476px;font-family:'IBM Plex Mono',monospace;font-size:9px;color:#5c6068">FRONT-TRUSS · FLOWN 4.0 m</div>
+        <!-- flown fixtures on trusses (dashed outline = other level) -->
+        <div style="position:absolute;left:296px;top:88px;display:flex;flex-direction:column;align-items:center;gap:2px"><span style="width:38px;height:38px;border:2px dashed #c95fd0;background:#1a1a1c;display:flex;align-items:center;justify-content:center"><img src="../assets/stageplot/moving-head-spot.svg" width="26" height="26"></span><span style="font-family:'IBM Plex Mono',monospace;font-size:7px;color:#8d9299">ML</span></div>
+        <div style="position:absolute;left:868px;top:88px;display:flex;flex-direction:column;align-items:center;gap:2px"><span style="width:38px;height:38px;border:2px dashed #c95fd0;background:#1a1a1c;display:flex;align-items:center;justify-content:center"><img src="../assets/stageplot/moving-head-spot.svg" width="26" height="26"></span><span style="font-family:'IBM Plex Mono',monospace;font-size:7px;color:#8d9299">MR</span></div>
+        <div style="position:absolute;left:446px;top:90px;display:flex;flex-direction:column;align-items:center;gap:2px"><span style="width:36px;height:36px;border:2px dashed #4ecbd4;background:#1a1a1c;display:flex;align-items:center;justify-content:center"><img src="../assets/stageplot/moving-wash.svg" width="24" height="24"></span><span style="font-family:'IBM Plex Mono',monospace;font-size:7px;color:#8d9299">W1</span></div>
+        <div style="position:absolute;left:696px;top:90px;display:flex;flex-direction:column;align-items:center;gap:2px"><span style="width:36px;height:36px;border:2px dashed #4ecbd4;background:#1a1a1c;display:flex;align-items:center;justify-content:center"><img src="../assets/stageplot/moving-wash.svg" width="24" height="24"></span><span style="font-family:'IBM Plex Mono',monospace;font-size:7px;color:#8d9299">W2</span></div>
+        <div style="position:absolute;left:276px;top:450px;display:flex;flex-direction:column;align-items:center;gap:2px"><span style="width:36px;height:36px;border:2px dashed #d9a441;background:#1a1a1c;display:flex;align-items:center;justify-content:center"><img src="../assets/stageplot/par.svg" width="24" height="24"></span><span style="font-family:'IBM Plex Mono',monospace;font-size:7px;color:#8d9299">P1</span></div>
+        <div style="position:absolute;left:476px;top:450px;display:flex;flex-direction:column;align-items:center;gap:2px"><span style="width:36px;height:36px;border:2px dashed #d9a441;background:#1a1a1c;display:flex;align-items:center;justify-content:center"><img src="../assets/stageplot/par.svg" width="24" height="24"></span><span style="font-family:'IBM Plex Mono',monospace;font-size:7px;color:#8d9299">P2</span></div>
+        <div style="position:absolute;left:676px;top:450px;display:flex;flex-direction:column;align-items:center;gap:2px"><span style="width:36px;height:36px;border:2px dashed #d9a441;background:#1a1a1c;display:flex;align-items:center;justify-content:center"><img src="../assets/stageplot/par.svg" width="24" height="24"></span><span style="font-family:'IBM Plex Mono',monospace;font-size:7px;color:#8d9299">P3</span></div>
+        <div style="position:absolute;left:876px;top:450px;display:flex;flex-direction:column;align-items:center;gap:2px"><span style="width:36px;height:36px;border:2px dashed #d9a441;background:#1a1a1c;display:flex;align-items:center;justify-content:center"><img src="../assets/stageplot/par.svg" width="24" height="24"></span><span style="font-family:'IBM Plex Mono',monospace;font-size:7px;color:#8d9299">P4</span></div>
+        </div>
+        <!-- ground-support towers for back truss -->
+        <div style="position:absolute;left:134px;top:96px;width:28px;height:28px;border:2px solid #8d9299;background:#1a1a1c"><svg width="24" height="24" viewBox="0 0 24 24"><path d="M0 0L24 24M24 0L0 24" stroke="#8d9299" stroke-width="1"></path></svg></div>
+        <div style="position:absolute;left:1038px;top:96px;width:28px;height:28px;border:2px solid #8d9299;background:#1a1a1c"><svg width="24" height="24" viewBox="0 0 24 24"><path d="M0 0L24 24M24 0L0 24" stroke="#8d9299" stroke-width="1"></path></svg></div>
+        <div style="position:absolute;left:134px;top:130px;font-family:'IBM Plex Mono',monospace;font-size:8px;color:#8d9299">TOWER H 4.5</div>
+        <!-- stage-level items (solid steel line-work) -->
+        <div style="position:absolute;left:480px;top:140px;width:240px;height:130px;border:2px solid #8d9299;background:#1a1a1c">
+          <svg width="240" height="130" viewBox="0 0 240 130" fill="none" stroke="#8d9299" stroke-width="1.5"><circle cx="120" cy="88" r="24"></circle><circle cx="85" cy="64" r="13"></circle><circle cx="101" cy="42" r="11"></circle><circle cx="139" cy="42" r="11"></circle><circle cx="161" cy="66" r="15"></circle><circle cx="56" cy="58" r="9"></circle><circle cx="52" cy="24" r="11"></circle><circle cx="52" cy="24" r="1.5" fill="#8d9299"></circle><circle cx="187" cy="26" r="12"></circle><circle cx="187" cy="26" r="1.5" fill="#8d9299"></circle></svg>
+          <span style="position:absolute;left:6px;top:4px;font-family:'IBM Plex Mono',monospace;font-size:9px;color:#c9cdd2">DRUM RISER 3×2 · H 0.4</span>
+        </div>
+        <!-- pixel bar on floor upstage -->
+        <div style="position:absolute;left:300px;top:150px;width:150px;height:14px;border:2px solid #f0562e;background:#1a1a1c;box-shadow:0 0 0 4px rgba(240,86,46,0.12);display:flex;align-items:center;justify-content:center"><span style="font-family:'IBM Plex Mono',monospace;font-size:8px;color:#f0562e">PIXEL BAR · BODEN ▶</span></div>
+        <!-- sunstrip behind drums -->
+        <div style="position:absolute;left:760px;top:150px;width:130px;height:12px;border:2px solid #8d9299;background:#1a1a1c;display:flex;align-items:center;justify-content:center"><span style="font-family:'IBM Plex Mono',monospace;font-size:8px;color:#c9cdd2">SUNSTRIP</span></div>
+        <!-- amps -->
+        <div style="position:absolute;left:200px;top:220px;width:60px;height:44px;border:2px solid #8d9299;background:#1a1a1c"><svg width="56" height="40" viewBox="0 0 56 40"><circle cx="28" cy="20" r="12" fill="none" stroke="#8d9299" stroke-width="1.2"></circle></svg><span style="position:absolute;left:2px;bottom:-16px;font-family:'IBM Plex Mono',monospace;font-size:8px;color:#8d9299">GTR AMP</span></div>
+        <div style="position:absolute;left:950px;top:220px;width:60px;height:52px;border:2px solid #8d9299;background:#1a1a1c"><svg width="56" height="48" viewBox="0 0 56 48"><circle cx="28" cy="24" r="14" fill="none" stroke="#8d9299" stroke-width="1.2"></circle></svg><span style="position:absolute;left:2px;bottom:-16px;font-family:'IBM Plex Mono',monospace;font-size:8px;color:#8d9299">BASS AMP</span></div>
+        <!-- keys SR -->
+        <div style="position:absolute;left:850px;top:330px;width:110px;height:36px;border:2px solid #8d9299;background:#1a1a1c"><svg width="106" height="32" viewBox="0 0 106 32"><path d="M10 0V32M19 0V32M28 0V32M37 0V32M46 0V32M55 0V32M64 0V32M73 0V32M82 0V32M91 0V32M100 0V32" stroke="#8d9299" stroke-width="0.7"></path><g fill="#8d9299"><rect x="7" y="0" width="5" height="18"></rect><rect x="16" y="0" width="5" height="18"></rect><rect x="34" y="0" width="5" height="18"></rect><rect x="43" y="0" width="5" height="18"></rect><rect x="52" y="0" width="5" height="18"></rect><rect x="70" y="0" width="5" height="18"></rect><rect x="79" y="0" width="5" height="18"></rect></g></svg><span style="position:absolute;left:2px;bottom:-16px;font-family:'IBM Plex Mono',monospace;font-size:8px;color:#8d9299">KEYS</span></div>
+        <!-- mic stands -->
+        <div style="position:absolute;left:590px;top:370px"><svg width="26" height="26" viewBox="0 0 26 26"><circle cx="13" cy="13" r="9" fill="none" stroke="#8d9299" stroke-width="1.5"></circle><path d="M13 4V22M4 13H22" stroke="#8d9299" stroke-width="1"></path></svg><span style="position:absolute;left:-6px;top:26px;font-family:'IBM Plex Mono',monospace;font-size:8px;color:#8d9299">VOC MAIN</span></div>
+        <div style="position:absolute;left:330px;top:340px"><svg width="26" height="26" viewBox="0 0 26 26"><circle cx="13" cy="13" r="9" fill="none" stroke="#8d9299" stroke-width="1.5"></circle><path d="M13 4V22M4 13H22" stroke="#8d9299" stroke-width="1"></path></svg><span style="position:absolute;left:-8px;top:26px;font-family:'IBM Plex Mono',monospace;font-size:8px;color:#8d9299">VOC GTR</span></div>
+        <!-- wedges downstage -->
+        <div style="position:absolute;left:340px;top:492px"><svg width="40" height="26" viewBox="0 0 40 26"><polygon points="10,4 30,4 36,22 4,22" fill="#1a1a1c" stroke="#8d9299" stroke-width="1.5"></polygon></svg></div>
+        <div style="position:absolute;left:580px;top:492px"><svg width="40" height="26" viewBox="0 0 40 26"><polygon points="10,4 30,4 36,22 4,22" fill="#1a1a1c" stroke="#8d9299" stroke-width="1.5"></polygon></svg></div>
+        <div style="position:absolute;left:820px;top:492px"><svg width="40" height="26" viewBox="0 0 40 26"><polygon points="10,4 30,4 36,22 4,22" fill="#1a1a1c" stroke="#8d9299" stroke-width="1.5"></polygon></svg></div>
+        <!-- distro -->
+        <div style="position:absolute;left:150px;top:420px;width:40px;height:40px;border:2px solid #8d9299;background:#1a1a1c;display:flex;align-items:center;justify-content:center"><span style="font-family:'IBM Plex Mono',monospace;font-size:8px;color:#c9cdd2">32A</span></div>
+        <!-- audience + FOH -->
+        <div style="position:absolute;left:120px;top:580px;width:960px;border-top:1px solid #3a3a3a"></div>
+        <div style="position:absolute;left:128px;top:588px;font-family:'IBM Plex Mono',monospace;font-size:9px;color:#5c6068">PUBLIKUM ↓</div>
+        <div style="position:absolute;left:540px;top:620px;width:120px;height:44px;border:2px solid #8d9299;background:#1a1a1c;display:flex;align-items:center;justify-content:center"><span style="font-family:'IBM Plex Mono',monospace;font-size:9px;color:#c9cdd2">FOH / LICHT</span></div>
+        <!-- legend -->
+        <div style="position:absolute;left:120px;bottom:14px;display:flex;gap:18px;align-items:center;font-family:'IBM Plex Mono',monospace;font-size:9px;color:#8d9299">
+          <span style="display:flex;align-items:center;gap:6px"><span style="width:20px;border-top:2px solid #8d9299"></span>BÜHNENEBENE 0.8 m</span>
+          <span style="display:flex;align-items:center;gap:6px"><span style="width:20px;border-top:2px dashed #5c6068"></span>FLOWN 4.0 m</span>
+          <span style="display:flex;align-items:center;gap:6px"><span style="width:12px;height:12px;border-radius:50%;border:2px dashed #d9a441"></span>FIXTURE (FLOWN)</span>
+          <span style="display:flex;align-items:center;gap:6px"><span style="width:14px;height:8px;border:2px solid #6f9e4c"></span>FIXTURE (BODEN)</span>
+        </div>
+        <!-- title block -->
+        <div style="position:absolute;right:16px;bottom:14px;border:1px solid #3a3a3a;background:#1a1a1c;display:grid;grid-template-columns:auto auto;font-family:'IBM Plex Mono',monospace;font-size:9px;color:#8d9299">
+          <span style="padding:5px 10px;border-bottom:1px solid #2d2d2d;border-right:1px solid #2d2d2d;color:#f4f1ea">BÜHNENPLAN · NEON RUINEN</span><span style="padding:5px 10px;border-bottom:1px solid #2d2d2d">BLATT 1/1</span>
+          <span style="padding:5px 10px;border-right:1px solid #2d2d2d">KULTURHAUS · 12×6 m</span><span style="padding:5px 10px">M 1:50 · 2026-07-06</span>
+        </div>
+      </div>
+      <!-- right: 3D + inspector -->
+      <div style="width:380px;background:#1e1e1e;border-left:1px solid #2d2d2d;display:flex;flex-direction:column;flex:none">
+        <div style="height:30px;display:flex;align-items:center;justify-content:space-between;padding:0 14px;border-bottom:1px solid #2d2d2d;flex:none"><span style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.12em;color:#5c6068">3D PREVIEW · MIT BÜHNENELEMENTEN</span><span style="display:flex;gap:12px"><span style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:#8d9299" title="Pop-out auf 2. Monitor">⧉ POP-OUT</span><span style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:#8d9299">⟩⟩</span></span></div>
+        <div style="height:230px;background:repeating-linear-gradient(45deg,#161618 0 12px,#1a1a1c 12px 24px);display:flex;align-items:center;justify-content:center;border-bottom:1px solid #2d2d2d;flex:none"><span style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:#5c6068;text-align:center">[ 3d render · beams über riser/amps,<br>kollisionscheck sichtbar ]</span></div>
+        <div style="padding:14px 16px;border-bottom:1px solid #2d2d2d">
+          <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:12px"><span style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:17px;letter-spacing:0.05em;color:#f4f1ea">PIXEL BAR 12 RGBW</span><span style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:#6f9e4c">PIXEL BAR</span></div>
+          <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px">
+            <div style="background:#252526;border:1px solid #3a3a3a;padding:8px 10px"><div style="font-family:'IBM Plex Mono',monospace;font-size:9px;color:#5c6068">X / m</div><div style="font-family:'IBM Plex Mono',monospace;font-size:15px;color:#f4f1ea">3.20</div></div>
+            <div style="background:#252526;border:1px solid #3a3a3a;padding:8px 10px"><div style="font-family:'IBM Plex Mono',monospace;font-size:9px;color:#5c6068">Y / m</div><div style="font-family:'IBM Plex Mono',monospace;font-size:15px;color:#f4f1ea">1.30</div></div>
+            <div style="background:#252526;border:1px solid #3a3a3a;padding:8px 10px"><div style="font-family:'IBM Plex Mono',monospace;font-size:9px;color:#5c6068">Z / m</div><div style="font-family:'IBM Plex Mono',monospace;font-size:15px;color:#f4f1ea">0.00</div></div>
+          </div>
+          <div style="margin-top:10px;display:flex;align-items:center;gap:8px"><span style="font-family:'IBM Plex Mono',monospace;font-size:9px;color:#5c6068">EBENE</span><div style="flex:1;padding:8px 12px;background:#252526;border:1px solid #f0562e;font-family:'IBM Plex Mono',monospace;font-size:12px;color:#f0562e;display:flex;justify-content:space-between"><span>BÜHNE · 0.8 m</span><span>▾</span></div></div>
+          <div style="margin-top:8px;padding:9px 12px;background:#252526;border-left:3px solid #f0562e;font-size:11px;color:#c9cdd2;line-height:1.5">Nur Elemente der aktiven Ebene sind wählbar &amp; beweglich. Zum Bewegen von Flown-Fixtures: Ebene wechseln oder Fixture hierher umhängen.</div>
+        </div>
+        <div style="padding:14px 16px;flex:1">
+          <div style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.12em;color:#5c6068;margin-bottom:8px">EBENEN</div>
+          <div style="display:flex;justify-content:space-between;font-family:'IBM Plex Mono',monospace;font-size:12px;color:#c9cdd2;padding:6px 0;border-bottom:1px solid #2d2d2d"><span>Bühnendeck</span><span style="color:#f4f1ea">H 0.8 m</span></div>
+          <div style="display:flex;justify-content:space-between;font-family:'IBM Plex Mono',monospace;font-size:12px;color:#c9cdd2;padding:6px 0;border-bottom:1px solid #2d2d2d"><span>Riser</span><span style="color:#f4f1ea">+0.4 m</span></div>
+          <div style="display:flex;justify-content:space-between;font-family:'IBM Plex Mono',monospace;font-size:12px;color:#c9cdd2;padding:6px 0"><span>Trusses</span><span style="color:#f4f1ea">4.0 m ü. Deck</span></div>
+          <div style="margin-top:12px;padding:10px;border:1px dashed #3a3a3a;font-size:11px;color:#5c6068;line-height:1.5">Rider-Export: Draufsicht + Legende + Titelblock als PDF, Ebenen einzeln oder kombiniert.</div>
+        </div>
+      </div>
+    </div>
+    <div style="height:26px;background:#1e1e1e;border-top:1px solid #3a3a3a;display:flex;align-items:center;padding:0 20px;gap:24px;font-family:'IBM Plex Mono',monospace;font-size:10px;color:#5c6068;flex:none">
+      <span>AKTIVE EBENE: BÜHNE 0.8 m · ANDERE EBENEN 25 % SICHTBAR &amp; GESPERRT · QT6: Ebene = QGraphicsItemGroup mit setOpacity + setEnabled(false)</span><span style="flex:1"></span><span>SAVED 12:04</span>
+    </div>
+  </div>
+</body></html>

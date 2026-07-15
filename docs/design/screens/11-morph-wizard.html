@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="de"><head><meta charset="utf-8"><title>Die Lichtmaschine · Morph Wizard</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700;800;900&family=Barlow:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>*,*::before,*::after{box-sizing:border-box}html{background:#0e0e10}body{margin:0;font-family:Barlow,system-ui,sans-serif;display:flex;justify-content:center;align-items:flex-start;min-height:100vh}
+@keyframes lm-spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}@keyframes lm-pulse{0%,100%{opacity:0.35}50%{opacity:1}}</style>
+</head><body>
+<div data-screen-label="Morph Wizard" style="width:1380px;background:#1a1a1c;border:1px solid #3a3a3a;display:flex;flex-direction:column">
+    <div style="height:44px;background:#1e1e1e;border-bottom:1px solid #3a3a3a;display:flex;align-items:center;padding:0 18px;justify-content:space-between">
+      <span style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:17px;letter-spacing:0.08em;color:#f4f1ea">⇄ SHOW MORPHEN · NEON RUINEN</span>
+      <span style="font-family:'IBM Plex Mono',monospace;font-size:13px;color:#8d9299">✕</span>
+    </div>
+    <div style="display:flex;border-bottom:1px solid #2d2d2d">
+      <div style="flex:1;padding:14px 18px;border-right:1px solid #2d2d2d">
+        <div style="font-family:'IBM Plex Mono',monospace;font-size:9px;letter-spacing:0.12em;color:#5c6068;margin-bottom:6px">QUELLE</div>
+        <div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:19px;color:#f4f1ea">KULTURHAUS</div>
+        <div style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:#8d9299;margin-top:4px">BÜHNE 12×6 m · TRUSS 4.0 m · 10 FIXTURES · 5 GRUPPEN</div>
+      </div>
+      <div style="display:flex;align-items:center;padding:0 14px"><span style="font-family:'IBM Plex Mono',monospace;font-size:20px;color:#f0562e">→</span></div>
+      <div style="flex:1;padding:14px 18px">
+        <div style="font-family:'IBM Plex Mono',monospace;font-size:9px;letter-spacing:0.12em;color:#5c6068;margin-bottom:6px">ZIEL · RIG AUS SETUP LADEN ▾</div>
+        <div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:19px;color:#f4f1ea">JUZ HALLE</div>
+        <div style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:#8d9299;margin-top:4px">BÜHNE 8×4 m · TRUSS 3.2 m · 13 FIXTURES · 5 GRUPPEN</div>
+      </div>
+    </div>
+    <!-- mapping rows -->
+    <div style="padding:14px 18px">
+      <div style="display:grid;grid-template-columns:1.2fr 40px 1.2fr 0.8fr 1.4fr;padding:0 10px 8px;font-family:'IBM Plex Mono',monospace;font-size:9px;letter-spacing:0.1em;color:#5c6068"><span>QUELL-GRUPPE</span><span></span><span>ZIEL-GRUPPE</span><span>STATUS</span><span>ANPASSUNG</span></div>
+      <div style="display:grid;grid-template-columns:1.2fr 40px 1.2fr 0.8fr 1.4fr;padding:10px;background:#1e1e1e;border:1px solid #2d2d2d;align-items:center;border-left:3px solid #d9a441">
+        <span style="font-size:13px;font-weight:600;color:#f4f1ea">FRONT PARS <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:#5c6068">4×</span></span><span style="color:#5c6068">→</span>
+        <span style="font-size:13px;font-weight:600;color:#f4f1ea">FRONT PARS <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:#5c6068">6× ▾</span></span>
+        <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:#4caf50">AUTO ✓</span>
+        <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:#8d9299">CHASE 4→6 KÖPFE GESPREIZT</span>
+      </div>
+      <div style="display:grid;grid-template-columns:1.2fr 40px 1.2fr 0.8fr 1.4fr;padding:10px;background:#1e1e1e;border:1px solid #2d2d2d;border-top:none;align-items:center;border-left:3px solid #4ecbd4">
+        <span style="font-size:13px;font-weight:600;color:#f4f1ea">REAR WASH <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:#5c6068">2×</span></span><span style="color:#5c6068">→</span>
+        <span style="font-size:13px;font-weight:600;color:#f4f1ea">REAR WASH <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:#5c6068">2× ▾</span></span>
+        <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:#4caf50">AUTO ✓</span>
+        <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:#8d9299">1:1</span>
+      </div>
+      <div style="display:grid;grid-template-columns:1.2fr 40px 1.2fr 0.8fr 1.4fr;padding:10px;background:#1e1e1e;border:1px solid #2d2d2d;border-top:none;align-items:center;border-left:3px solid #c95fd0">
+        <span style="font-size:13px;font-weight:600;color:#f4f1ea">MOVERS <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:#5c6068">2×</span></span><span style="color:#5c6068">→</span>
+        <span style="font-size:13px;font-weight:600;color:#f4f1ea">MOVERS <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:#5c6068">4× ▾</span></span>
+        <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:#4caf50">AUTO ✓</span>
+        <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:#8d9299">FIG-8 L/R GESPIEGELT AUF 2 PAARE</span>
+      </div>
+      <div style="display:grid;grid-template-columns:1.2fr 40px 1.2fr 0.8fr 1.4fr;padding:10px;background:#252526;border:1px solid #ff9800;border-top:none;align-items:center;border-left:3px solid #6f9e4c">
+        <span style="font-size:13px;font-weight:600;color:#f4f1ea">PIXEL BAR <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:#5c6068">1×</span></span><span style="color:#5c6068">→</span>
+        <span style="font-size:13px;font-weight:600;color:#ff9800">KEIN GEGENSTÜCK ▾</span>
+        <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:#ff9800">OFFEN</span>
+        <span style="display:flex;gap:6px"><span style="padding:4px 10px;background:#f0562e;color:#141416;font-family:'IBM Plex Mono',monospace;font-size:9px;font-weight:600">→ SUNSTRIP</span><span style="padding:4px 10px;border:1px solid #3a3a3a;font-family:'IBM Plex Mono',monospace;font-size:9px;color:#8d9299">WEGLASSEN</span></span>
+      </div>
+      <div style="display:grid;grid-template-columns:1.2fr 40px 1.2fr 0.8fr 1.4fr;padding:10px;background:#1e1e1e;border:1px solid #2d2d2d;border-top:none;align-items:center;border-left:3px solid #3a3a3a">
+        <span style="font-size:13px;color:#5c6068">- NICHTS</span><span style="color:#5c6068">→</span>
+        <span style="font-size:13px;font-weight:600;color:#f4f1ea">BLINDER <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:#5c6068">2× NEU IM ZIEL</span></span>
+        <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:#2196f3">NEU</span>
+        <span style="display:flex;gap:6px"><span style="padding:4px 10px;background:#f0562e;color:#141416;font-family:'IBM Plex Mono',monospace;font-size:9px;font-weight:600">LANES PATCHEN ▾</span><span style="padding:4px 10px;border:1px solid #3a3a3a;font-family:'IBM Plex Mono',monospace;font-size:9px;color:#8d9299">AUS RUDIMENTEN</span><span style="padding:4px 10px;border:1px solid #3a3a3a;font-family:'IBM Plex Mono',monospace;font-size:9px;color:#8d9299">LEER</span></span>
+      </div>
+      <!-- lane patching detail (expanded for BLINDER) -->
+      <div style="padding:12px 14px 14px;background:#18181a;border:1px solid #2d2d2d;border-top:1px dashed #3a3a3a">
+        <div style="font-family:'IBM Plex Mono',monospace;font-size:9px;letter-spacing:0.1em;color:#5c6068;margin-bottom:10px">LANE-PATCHING · BLINDER ERBT LANES ANDERER GRUPPEN (LIVE-VERKNÜPFUNG, IM ZIEL-SHOWFILE EDITIERBAR)</div>
+        <div style="display:grid;grid-template-columns:56px 1fr 1fr;gap:6px 10px;align-items:center">
+          <span style="font-family:'IBM Plex Mono',monospace;font-size:9px;color:#8d9299">DIM</span>
+          <span style="padding:6px 10px;background:rgba(217,164,65,0.12);border:1px solid #d9a441;font-family:'IBM Plex Mono',monospace;font-size:10px;color:#f4f1ea">← FRONT PARS · DIM ▾</span>
+          <span style="font-family:'IBM Plex Mono',monospace;font-size:9px;color:#5c6068">SKALIERUNG: 4 KÖPFE → 2 · GESPREIZT</span>
+          <span style="font-family:'IBM Plex Mono',monospace;font-size:9px;color:#8d9299">COL</span>
+          <span style="padding:6px 10px;border:1px solid #2d2d2d;font-family:'IBM Plex Mono',monospace;font-size:10px;color:#5c6068">- KEINE (BLINDER: NUR DIMMER) ▾</span>
+          <span></span>
+          <span style="font-family:'IBM Plex Mono',monospace;font-size:9px;color:#8d9299">SPC</span>
+          <span style="padding:6px 10px;background:rgba(78,203,212,0.1);border:1px solid #4ecbd4;font-family:'IBM Plex Mono',monospace;font-size:10px;color:#f4f1ea">← REAR WASH · SPC (NUR STROBE) ▾</span>
+          <span style="font-family:'IBM Plex Mono',monospace;font-size:9px;color:#5c6068">FILTER: NICHT UNTERSTÜTZTE BLÖCKE WERDEN ÜBERSPRUNGEN</span>
+        </div>
+        <div style="margin-top:10px;font-family:'IBM Plex Mono',monospace;font-size:9px;color:#5c6068">AUCH FÜR BESTEHENDE GRUPPEN: MAPPING-ZEILE AUFKLAPPEN → EINZELNE LANES UMHÄNGEN STATT GANZER GRUPPE.</div>
+      </div>
+    </div>
+    <!-- options + action -->
+    <div style="display:flex;align-items:center;gap:14px;padding:12px 18px;border-top:1px solid #2d2d2d">
+      <span style="padding:6px 12px;background:rgba(240,86,46,0.1);border:1px solid #f0562e;font-family:'IBM Plex Mono',monospace;font-size:10px;color:#f0562e">POSITIONEN SKALIEREN 12×6 → 8×4 ✓</span>
+      <span style="padding:6px 12px;border:1px solid #3a3a3a;font-family:'IBM Plex Mono',monospace;font-size:10px;color:#c9cdd2">FARBEN BEIBEHALTEN ✓</span>
+      <span style="padding:6px 12px;border:1px solid #3a3a3a;font-family:'IBM Plex Mono',monospace;font-size:10px;color:#c9cdd2">TIMING UNVERÄNDERT ✓</span>
+      <span style="flex:1"></span>
+      <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:#5c6068">ERGEBNIS: neon_ruinen@juz.lms · ORIGINAL BLEIBT UNBERÜHRT</span>
+      <span style="padding:12px 30px;background:#f0562e;color:#141416;font-family:'Barlow Condensed',sans-serif;font-weight:800;font-size:18px;letter-spacing:0.1em">MORPHEN ▶</span>
+    </div>
+  </div>
+</body></html>

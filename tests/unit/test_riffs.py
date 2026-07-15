@@ -806,3 +806,67 @@ class TestRiffIntegration:
 
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
+
+
+# =============================================================================
+# Tag search + parse_tags (riff tagging, v1.3)
+# =============================================================================
+
+class TestParseTags:
+    """parse_tags: comma-separated user input -> clean tag list."""
+
+    def test_splits_strips_and_drops_empties(self):
+        from riffs.riff_library import parse_tags
+        assert parse_tags(" punchy , chorus ,, slow ") == \
+            ["punchy", "chorus", "slow"]
+
+    def test_strips_leading_hash(self):
+        from riffs.riff_library import parse_tags
+        assert parse_tags("#punchy, # chorus") == ["punchy", "chorus"]
+
+    def test_dedupes_case_insensitively_keeping_first_spelling(self):
+        from riffs.riff_library import parse_tags
+        assert parse_tags("Chorus, punchy, #chorus, PUNCHY") == \
+            ["Chorus", "punchy"]
+
+    def test_empty_input(self):
+        from riffs.riff_library import parse_tags
+        assert parse_tags("") == []
+        assert parse_tags(None) == []
+
+
+class TestTagSearch:
+    """Library search over tags, incl. the '#tag' tags-only scope."""
+
+    def _library_with_tags(self, temp_riffs_dir):
+        from config.models import Riff
+        library = RiffLibrary(temp_riffs_dir)
+        library.save_riff(Riff(name="warm_wash", tags=["chorus", "slow"]),
+                          "loops")
+        library.save_riff(Riff(name="chorus_hit", tags=["punchy"]),
+                          "fills")
+        library.save_riff(Riff(name="strobe_burst", tags=[]), "drops")
+        return library
+
+    def test_plain_query_matches_names_and_tags(self, temp_riffs_dir):
+        library = self._library_with_tags(temp_riffs_dir)
+        names = {r.name for r in library.search("chorus")}
+        # 'chorus' hits the TAG on warm_wash and the NAME of chorus_hit.
+        assert names == {"warm_wash", "chorus_hit"}
+
+    def test_hash_query_matches_tags_only(self, temp_riffs_dir):
+        library = self._library_with_tags(temp_riffs_dir)
+        names = {r.name for r in library.search("#chorus")}
+        assert names == {"warm_wash"}, \
+            "a #tag query must not drag in name matches"
+
+    def test_bare_hash_matches_nothing(self, temp_riffs_dir):
+        library = self._library_with_tags(temp_riffs_dir)
+        assert library.search("#") == []
+
+    def test_tags_survive_the_save_load_round_trip(self, temp_riffs_dir):
+        from config.models import Riff
+        library = RiffLibrary(temp_riffs_dir)
+        library.save_riff(Riff(name="tagged", tags=["a", "B"]), "loops")
+        reloaded = RiffLibrary(temp_riffs_dir)
+        assert reloaded.get_riff("loops/tagged").tags == ["a", "B"]

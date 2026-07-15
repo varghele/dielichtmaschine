@@ -6,7 +6,7 @@ import pytest
 from config.models import (
     Fixture, FixtureMode, FixtureGroup, FixtureGroupCapabilities, Spot,
     DimmerBlock, ColourBlock, MovementBlock, SpecialBlock,
-    LightBlock, LightLane, Show, ShowPart, ShowEffect,
+    LightBlock, LightLane, Song, ShowPart, ShowEffect,
     Configuration, Universe, TimelineData
 )
 

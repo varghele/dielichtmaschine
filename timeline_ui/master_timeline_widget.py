@@ -3,26 +3,52 @@
 # Adapted from midimaker_and_show_structure/ui/master_timeline_widget.py
 
 from PyQt6.QtWidgets import (QWidget, QHBoxLayout, QVBoxLayout, QLabel,
-                             QScrollArea, QStyle, QStyleOption, QComboBox,
-                             QCheckBox)
+                             QScrollArea, QStyle, QStyleOption)
 from PyQt6.QtCore import Qt, pyqtSignal, QPoint, QRectF
 from PyQt6.QtGui import QPainter, QPen, QColor, QPolygon, QBrush
-from .timeline_widget import TimelineWidget
+from .timeline_widget import TimelineWidget, iter_grid_steps, HEADER_COLUMN_WIDTH
 
 
+# Grid interval choices. First tuple element is the LABEL (grid interval in
+# beats, as shown on the chip/combobox); second is steps-per-beat (float).
+# "4" -> a line every 4 beats -> 0.25 steps/beat; "1/16" -> 16 steps/beat.
 SUBDIVISION_CHOICES = [
-    ("1 (beat)", 1),
-    ("1/2 (half)", 2),
-    ("1/4 (quarter)", 4),
+    ("4", 0.25),
+    ("2", 0.5),
+    ("1", 1.0),
+    ("1/2", 2.0),
+    ("1/4", 4.0),
+    ("1/8", 8.0),
+    ("1/16", 16.0),
 ]
 
 
+# Height of the compact parts band (timeline v3 regions row, screen 06b).
+PARTS_BAND_HEIGHT = 26
+# ~0.2-alpha tint of the part colour across a parts-band region.
+PARTS_BAND_TINT_ALPHA = 51
+# Width of the dark separator between adjacent parts-band regions.
+PARTS_BAND_SEPARATOR_PX = 2
+
+
 class MasterTimelineWidget(TimelineWidget):
-    """Master timeline widget with enhanced playhead and song structure display."""
+    """Master timeline widget with enhanced playhead and song structure display.
+
+    Two looks share this class:
+
+    - default (Structure tab): the North Star region bands (3px part-color
+      top bar over a ~0.18 tint, stacked name + BPM readout, red playhead
+      with the grab triangle) at the taller row height.
+    - ``parts_band=True`` (Shows tab, timeline v3 stage T4): the 26px
+      PARTS band from screen 06b - regions tinted in the part colour at
+      ~0.2 alpha, part name in condensed caps with a small mono BPM tag
+      inline, 2px dark separators between regions, and the unified 2px
+      accent playhead line.
+    """
 
     playhead_moved = pyqtSignal(float)  # Emits new playhead position in seconds
 
-    def __init__(self, parent=None):
+    def __init__(self, parent=None, parts_band=False):
         # Initialize attributes before calling super()
         self.song_structure = None
         self.playhead_position = 0.0
@@ -31,10 +57,13 @@ class MasterTimelineWidget(TimelineWidget):
         self.base_pixels_per_second = 60
         self.min_zoom = 0.1
         self.max_zoom = 5.0
+        self.parts_band = parts_band
 
         super().__init__(parent)
 
-        self.setMinimumHeight(40)
+        # Unified accent playhead is part of the v3 parts-band look.
+        self.playhead_accent = parts_band
+        self.setMinimumHeight(PARTS_BAND_HEIGHT if parts_band else 40)
         self.setMinimumWidth(2000)
         # Background and border come from the active theme via the
         # `MasterTimelineWidget` selector — no inline stylesheet here.
@@ -98,7 +127,18 @@ class MasterTimelineWidget(TimelineWidget):
         self.draw_playhead(painter, width, height)
 
     def draw_song_structure(self, painter, width, height):
-        """Draw song structure parts as colored segments with labels."""
+        """Draw song parts as North Star region bands (card 4a): each
+        band is a 3px part-color bar along the top edge over a
+        ~0.18-alpha tint of the same color, the part name in condensed
+        caps, hard corners, no border box. The tint keeps the theme
+        background readable, so labels render in the part color itself
+        (BPM readout in steel-gray tracked mono)."""
+        # Deferred import: the gui package imports timeline_ui at module
+        # load, so a top-level import here would be circular.
+        from gui.typography import display_font, mono_font
+        if self.parts_band:
+            self._draw_parts_band(painter, width, height)
+            return
         try:
             for part in self.song_structure.parts:
                 start_x = self.time_to_pixel(part.start_time)
@@ -107,45 +147,122 @@ class MasterTimelineWidget(TimelineWidget):
                 if end_x < 0 or start_x > width:
                     continue
 
-                # Draw colored background
-                color = QColor(part.color)
-                color.setAlpha(100)
-                painter.fillRect(int(start_x), 0, int(end_x - start_x), height, color)
+                x = int(start_x)
+                band_width = int(end_x - start_x)
+                band_color = QColor(part.color)
 
-                # Draw part border
-                border_pen = QPen(QColor(part.color), 2)
-                painter.setPen(border_pen)
-                painter.drawRect(int(start_x), 0, int(end_x - start_x), height)
+                # ~0.18-alpha tint of the part color across the band.
+                tint = QColor(band_color)
+                tint.setAlpha(46)
+                painter.fillRect(x, 0, band_width, height, tint)
 
-                # Draw part name if there's enough space. Use the part's
-                # color luminance to pick a contrasting text color so labels
-                # stay readable regardless of the chosen part color or
-                # active theme.
+                # 3px part-color bar along the top edge.
+                painter.fillRect(x, 0, band_width, 3, band_color)
+
+                # Part name in tracked condensed caps if there's space.
                 if end_x - start_x > 50:
-                    label_color = QColor("#000000") if QColor(part.color).lightness() > 140 else QColor("#ffffff")
-                    painter.setPen(QPen(label_color, 1))
-                    font = painter.font()
-                    font.setPointSize(9)
-                    font.setBold(True)
-                    painter.setFont(font)
+                    painter.setPen(QPen(band_color, 1))
+                    painter.setFont(display_font(9))
+                    text_rect = QRectF(start_x + 6, 7, end_x - start_x - 12, 16)
+                    painter.drawText(text_rect, Qt.AlignmentFlag.AlignLeft,
+                                     (part.name or "").upper())
 
-                    text_rect = QRectF(start_x + 5, 5, end_x - start_x - 10, 20)
-                    painter.drawText(text_rect, Qt.AlignmentFlag.AlignLeft, part.name)
-
-                    # Draw BPM info
-                    font.setPointSize(8)
-                    font.setBold(False)
-                    painter.setFont(font)
+                    # BPM readout: mono, steel gray (#8D9299 reads on
+                    # the near-background tint in both themes).
+                    painter.setPen(QPen(QColor(141, 146, 153), 1))
+                    painter.setFont(mono_font(7))
                     bpm_text = f"{part.bpm} BPM"
                     if part.transition == "gradual":
                         prev_bpm = self.get_previous_part_bpm(part)
                         if prev_bpm != part.bpm:
                             bpm_text = f"{prev_bpm}->{part.bpm} BPM"
 
-                    bpm_rect = QRectF(start_x + 5, 25, end_x - start_x - 10, 15)
+                    bpm_rect = QRectF(start_x + 6, 25, end_x - start_x - 12, 14)
                     painter.drawText(bpm_rect, Qt.AlignmentFlag.AlignLeft, bpm_text)
         except Exception as e:
             print(f"Error in draw_song_structure: {e}")
+
+    def _bpm_tag_text(self, part) -> str:
+        """"192 BPM" mono tag; "120->140 BPM" across a gradual ramp."""
+        bpm = f"{part.bpm:g}"
+        if getattr(part, "transition", "instant") == "gradual":
+            prev_bpm = self.get_previous_part_bpm(part)
+            if prev_bpm != part.bpm:
+                return f"{prev_bpm:g}->{bpm} BPM"
+        return f"{bpm} BPM"
+
+    def _draw_parts_band(self, painter, width, height):
+        """Timeline v3 parts band (mock 06b regions row): each region is
+        a ~0.2-alpha tint of the part colour with the part name in
+        condensed caps and a small mono BPM tag inline, separated from
+        the next region by a 2px window-dark hairline. Labels elide and
+        the BPM tag drops before anything paints outside its region."""
+        from PyQt6.QtGui import QFont
+        from gui.typography import display_font, mono_font
+        from .light_block_widget import active_tokens, elided
+
+        tokens = active_tokens()
+        name_color = QColor(tokens["text"])
+        separator_color = QColor(tokens["window"])
+        # Steel gray reads on the near-background tint in both themes
+        # (same value the block sub-row labels use).
+        bpm_color = QColor(141, 146, 153)
+
+        try:
+            parts = self.song_structure.parts
+            for index, part in enumerate(parts):
+                start_x = self.time_to_pixel(part.start_time)
+                end_x = self.time_to_pixel(part.start_time + part.duration)
+                if end_x < 0 or start_x > width:
+                    continue
+
+                x = int(start_x)
+                band_width = int(end_x - start_x)
+                tint = QColor(part.color)
+                tint.setAlpha(PARTS_BAND_TINT_ALPHA)
+                painter.fillRect(x, 0, band_width, height, tint)
+
+                # 2px dark separator between adjacent regions (none after
+                # the last - the band simply ends, per the mock).
+                if index < len(parts) - 1:
+                    painter.fillRect(int(end_x) - PARTS_BAND_SEPARATOR_PX, 0,
+                                     PARTS_BAND_SEPARATOR_PX, height,
+                                     separator_color)
+
+                # Part name in condensed caps, vertically centered.
+                label_left = start_x + 8
+                label_avail = end_x - 8 - label_left
+                if label_avail <= 12:
+                    continue
+                painter.setFont(display_font(9, QFont.Weight.Bold))
+                metrics = painter.fontMetrics()
+                name_text = elided(metrics, (part.name or "").upper(),
+                                   label_avail)
+                if not name_text:
+                    continue
+                painter.setPen(QPen(name_color, 1))
+                painter.drawText(
+                    QRectF(label_left, 0, label_avail, height),
+                    Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter,
+                    name_text)
+
+                # Small mono BPM tag inline after the name.
+                bpm_left = label_left + metrics.horizontalAdvance(name_text) + 8
+                bpm_avail = end_x - 8 - bpm_left
+                if bpm_avail <= 12:
+                    continue
+                painter.setFont(mono_font(7))
+                bpm_text = elided(painter.fontMetrics(),
+                                  self._bpm_tag_text(part), bpm_avail)
+                if not bpm_text:
+                    continue
+                painter.setPen(QPen(bpm_color, 1))
+                painter.drawText(
+                    QRectF(bpm_left, 0, bpm_avail, height),
+                    Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter,
+                    bpm_text)
+        except Exception as e:
+            print(f"Error in _draw_parts_band: {e}")
 
     def draw_grid(self, painter, width, height):
         """Draw time-based grid with beat lines and optional sub-beat lines."""
@@ -158,7 +275,9 @@ class MasterTimelineWidget(TimelineWidget):
                 bar_pen = QPen(QColor(127, 127, 127, 200), 1)
                 beat_pen = QPen(QColor(127, 127, 127, 100), 1)
 
-                subdivision = max(1, int(getattr(self, "grid_subdivision", 1)))
+                subdivision = getattr(self, "grid_subdivision", 1.0)
+                swing = getattr(self, "swing_amount", 0.0)
+                min_px = getattr(self, "min_subdivision_pixels", 12)
 
                 num_parts = len(self.song_structure.parts)
                 for part_idx, part in enumerate(self.song_structure.parts):
@@ -166,30 +285,20 @@ class MasterTimelineWidget(TimelineWidget):
                     total_beats_in_part = int(part.num_bars * beats_per_bar)
                     seconds_per_beat = 60.0 / part.bpm
 
-                    pixels_per_step = (seconds_per_beat / subdivision) * self.pixels_per_second
-                    min_px = getattr(self, "min_subdivision_pixels", 12)
-                    draw_subs = subdivision > 1 and pixels_per_step >= min_px
-                    steps_per_beat = subdivision if draw_subs else 1
-                    seconds_per_step = seconds_per_beat / steps_per_beat
-
                     is_last_part = (part_idx == num_parts - 1)
-                    max_beat_index = total_beats_in_part if is_last_part else total_beats_in_part - 1
-                    total_steps = max_beat_index * steps_per_beat + (steps_per_beat if is_last_part else 1)
-
-                    for step_index in range(total_steps + 1):
-                        step_time = part.start_time + (step_index * seconds_per_step)
+                    for step_time, kind in iter_grid_steps(
+                            part.start_time, seconds_per_beat, beats_per_bar,
+                            total_beats_in_part, subdivision, swing,
+                            is_last_part, self.pixels_per_second, min_px):
                         step_x_rounded = round(self.time_to_pixel(step_time))
-
                         if not (0 <= step_x_rounded <= width):
                             continue
-
-                        is_beat = (step_index % steps_per_beat == 0)
-                        if not is_beat:
-                            painter.setPen(sub_pen)
+                        if kind == "bar":
+                            painter.setPen(bar_pen)
+                        elif kind == "beat":
+                            painter.setPen(beat_pen)
                         else:
-                            beat_index = step_index // steps_per_beat
-                            is_bar_line = (beat_index % beats_per_bar == 0)
-                            painter.setPen(bar_pen if is_bar_line else beat_pen)
+                            painter.setPen(sub_pen)
                         painter.drawLine(step_x_rounded, 0, step_x_rounded, height)
 
             except Exception as e:
@@ -201,7 +310,15 @@ class MasterTimelineWidget(TimelineWidget):
             self.draw_basic_grid(painter, width, height)
 
     def draw_playhead(self, painter, width, height):
-        """Draw enhanced playhead with triangle."""
+        """Draw the playhead.
+
+        Parts-band mode uses the base class's unified 2px accent line
+        (timeline v3: one playhead look across master + audio + lanes);
+        the default look keeps the legacy red line + grab triangle.
+        """
+        if self.parts_band:
+            super().draw_playhead(painter, width, height)
+            return
         try:
             playhead_x = self.time_to_pixel(self.playhead_position)
             playhead_x_rounded = round(playhead_x)
@@ -235,17 +352,33 @@ class MasterTimelineWidget(TimelineWidget):
 
 
 class MasterTimelineContainer(QWidget):
-    """Container for master timeline with label and info display."""
+    """Container for master timeline with label and info display.
+
+    ``compact=True`` (Shows tab, timeline v3 stage T4) turns the master
+    row into the 26px PARTS band: the timeline widget renders in
+    parts-band mode and ``detach_pieces`` returns a single "PARTS"
+    header cell instead of the 2-row title + info stack.
+    ``embedded_row_height`` tells TimelineGrid the row height to pin.
+    """
 
     playhead_moved = pyqtSignal(float)
     scroll_position_changed = pyqtSignal(int)
     zoom_changed = pyqtSignal(float)
-    subdivision_changed = pyqtSignal(int)  # New value in {1, 2, 4}
-    snap_changed = pyqtSignal(bool)  # Master snap toggle — fan out to all lanes
 
-    def __init__(self, parent=None):
+    def __init__(self, parent=None, compact=False):
         super().__init__(parent)
+        self._compact = compact
+        self.embedded_row_height = PARTS_BAND_HEIGHT if compact else None
         self.setup_ui()
+
+    def _info_style(self, point_size: int) -> str:
+        """Info-readout stylesheet with the color sourced from the active
+        theme (text_secondary), not a hardcoded #333 that only reads on a
+        light background. Custom-styled QLabels can't reach a QSS role, so
+        we sniff the brand tokens the same way the block painter does."""
+        from .light_block_widget import active_tokens
+        return (f"color: {active_tokens()['text_secondary']}; "
+                f"font-size: {point_size}px;")
 
     def setup_ui(self):
         layout = QVBoxLayout(self)
@@ -258,62 +391,38 @@ class MasterTimelineContainer(QWidget):
 
         # Timeline label (matches lane control width)
         timeline_label = QWidget()
-        timeline_label.setFixedWidth(320)
+        timeline_label.setFixedWidth(HEADER_COLUMN_WIDTH)
         label_layout = QHBoxLayout(timeline_label)
         master_label = QLabel("Master Timeline")
         master_label.setStyleSheet("font-weight: bold; font-size: 13px;")
         label_layout.addWidget(master_label)
         label_layout.addStretch()
 
-        # Info display widget
+        # Info display widget. The master no longer carries its own
+        # Snap/Grid controls: the toolbar's global SNAP / GRID / SWING
+        # (fanned out via TimelineGrid) drive the master's grid drawing,
+        # and per-lane snap lives on each lane's own checkbox.
         self.info_widget = QLabel()
-        self.info_widget.setStyleSheet("color: #333; font-size: 10px; font-weight: bold;")
+        self.info_widget.setStyleSheet(self._info_style(10))
         self.info_widget.setText("Time: 0.00s | BPM: 120.0 | Zoom: 1.0x")
-
-        # Master snap toggle — when off, the playhead can be dragged to
-        # arbitrary times and lane block edits ignore the grid. The toggle
-        # fans out to every lane via TimelineGrid so all snapping stays in
-        # sync with what the user sees on the master ruler.
-        self.snap_checkbox = QCheckBox("Snap")
-        self.snap_checkbox.setChecked(True)
-        self.snap_checkbox.setToolTip(
-            "Snap playhead and block edits to the grid set in 'Grid' below."
-        )
-        self.snap_checkbox.toggled.connect(self._on_snap_toggled)
-
-        # Grid subdivision picker — controls how fine snap-to-grid is.
-        self.subdivision_label = QLabel("Grid:")
-        self.subdivision_label.setStyleSheet("font-size: 10px;")
-        self.subdivision_combo = QComboBox()
-        self.subdivision_combo.setToolTip(
-            "Snap-to-grid resolution. 1 = on the beat, 1/2 = half-beat, 1/4 = quarter-beat."
-        )
-        for label, value in SUBDIVISION_CHOICES:
-            self.subdivision_combo.addItem(label, value)
-        self.subdivision_combo.setCurrentIndex(0)
-        self.subdivision_combo.currentIndexChanged.connect(self._on_subdivision_changed)
 
         # NOTE: this top_row_layout is what shows BEFORE detach_pieces() runs
         # (e.g., if MasterTimelineContainer is used standalone). Once embedded
         # in TimelineGrid, detach_pieces() rebuilds the header into a 2-row
-        # stack so the controls don't fight the info_widget for space inside
-        # the 320 px header column.
+        # stack (title row + info row).
         top_row_layout.addWidget(timeline_label)
         top_row_layout.addWidget(self.info_widget, 1)
-        top_row_layout.addWidget(self.snap_checkbox)
-        top_row_layout.addWidget(self.subdivision_label)
-        top_row_layout.addWidget(self.subdivision_combo)
 
         # Bottom row with scrollable timeline
         bottom_row_layout = QHBoxLayout()
 
         # Empty space to align with lane controls
         spacer_widget = QWidget()
-        spacer_widget.setFixedWidth(320)
+        spacer_widget.setFixedWidth(HEADER_COLUMN_WIDTH)
 
         # Scrollable timeline area
         self.timeline_scroll = QScrollArea()
-        self.timeline_widget = MasterTimelineWidget()
+        self.timeline_widget = MasterTimelineWidget(parts_band=self._compact)
         self.timeline_widget.playhead_moved.connect(self.playhead_moved.emit)
         self.timeline_widget.zoom_changed.connect(self.zoom_changed.emit)
         self.timeline_widget.playhead_moved.connect(self.update_info_display)
@@ -359,39 +468,20 @@ class MasterTimelineContainer(QWidget):
         self.update_info_display(position)
 
     def set_snap_to_grid(self, snap: bool):
-        """Set snap to grid for playhead. Also syncs the snap checkbox so
-        programmatic toggles match the UI without re-emitting snap_changed.
+        """Set snap to grid for the master ruler's playhead.
+
+        Driven by the toolbar's global SNAP chip via TimelineGrid; the
+        master no longer owns a snap control of its own.
         """
         self.timeline_widget.set_snap_to_grid(snap)
-        if hasattr(self, "snap_checkbox") and self.snap_checkbox is not None:
-            self.snap_checkbox.blockSignals(True)
-            self.snap_checkbox.setChecked(snap)
-            self.snap_checkbox.blockSignals(False)
 
-    def _on_snap_toggled(self, checked: bool):
-        """User flipped the master Snap checkbox."""
-        self.timeline_widget.set_snap_to_grid(checked)
-        self.snap_changed.emit(checked)
+    def set_grid_subdivision(self, subdivision: float):
+        """Set the master timeline's grid drawing resolution.
 
-    def set_grid_subdivision(self, subdivision: int):
-        """Set the master timeline's grid subdivision and sync the combobox."""
-        self.timeline_widget.set_grid_subdivision(subdivision)
-        # Reflect on combobox without re-emitting subdivision_changed.
-        for i in range(self.subdivision_combo.count()):
-            if self.subdivision_combo.itemData(i) == subdivision:
-                self.subdivision_combo.blockSignals(True)
-                self.subdivision_combo.setCurrentIndex(i)
-                self.subdivision_combo.blockSignals(False)
-                break
-
-    def _on_subdivision_changed(self, _index: int):
-        """Combobox handler — pushes the new subdivision into the master
-        timeline and re-emits the value for the surrounding tab to fan out
-        to other lanes via TimelineGrid.
+        Driven by the toolbar's global GRID chips via TimelineGrid; the
+        master no longer owns a grid combobox of its own.
         """
-        value = int(self.subdivision_combo.currentData())
-        self.timeline_widget.set_grid_subdivision(value)
-        self.subdivision_changed.emit(value)
+        self.timeline_widget.set_grid_subdivision(subdivision)
 
     def sync_scroll_position(self, position: int):
         """Sync scroll position with other timelines."""
@@ -406,18 +496,19 @@ class MasterTimelineContainer(QWidget):
     def detach_pieces(self):
         """Return (header_widget, stripe_widget) for embedding in TimelineGrid.
 
-        Inside TimelineGrid the header is constrained to a 320 px column to
-        match the lane controls. Stuffing title + info_widget + Snap + Grid
-        on a single row overflows that budget — the rightmost controls get
-        pushed off-screen. This method builds a 2-row stack instead:
+        Inside TimelineGrid the header is constrained to the shared
+        HEADER_COLUMN_WIDTH column to match the lane controls. The
+        header is a 2-row stack:
 
-            ┌─ MasterTimelineHeader (320 px wide) ───────────┐
-            │ Master Timeline      Snap ✓   Grid: [1 ▾]      │  ← controls
+            ┌─ MasterTimelineHeader (header-column wide) ────┐
+            │ Master                                         │  ← title
             │ Time: 0.00s | BPM: 120.0 | Zoom: 1.0x          │  ← info
             └────────────────────────────────────────────────┘
 
-        Signals on ``self`` remain wired (they pass through ``timeline_widget``
-        and the controls themselves), so callers keep using
+        The master's own Snap/Grid controls were removed - the toolbar's
+        global SNAP / GRID / SWING drive the master ruler's grid drawing
+        via TimelineGrid. Signals on ``self`` remain wired (they pass
+        through ``timeline_widget``), so callers keep using
         ``self.set_playhead_position``, ``self.playhead_moved``, etc.
         """
         from PyQt6.QtWidgets import QWidget, QHBoxLayout, QVBoxLayout, QLabel
@@ -429,11 +520,32 @@ class MasterTimelineContainer(QWidget):
         header.setObjectName("MasterTimelineHeader")
         header.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
 
+        if self._compact:
+            # Timeline v3 parts band: the header cell is just "PARTS" in
+            # tracked mono micro caps (mock 06b). Position readouts live
+            # in the toolbar's BAR chip, so the info widget stays hidden
+            # (the attribute survives - update_info_display keeps
+            # feeding it and callers keep their references).
+            from gui.typography import MicroLabel
+            row = QHBoxLayout(header)
+            row.setContentsMargins(12, 0, 8, 0)
+            row.setSpacing(6)
+            row.addWidget(MicroLabel("Parts", point_size=8))
+            row.addStretch()
+            if hasattr(self, "info_widget") and self.info_widget is not None:
+                self.info_widget.hide()
+                self.info_widget.setParent(header)
+            if hasattr(self, "timeline_scroll") and self.timeline_scroll is not None:
+                self.timeline_scroll.takeWidget()
+                self.timeline_scroll.setParent(None)
+                self.timeline_scroll = None
+            return header, self.timeline_widget
+
         outer = QVBoxLayout(header)
         outer.setContentsMargins(8, 4, 8, 4)
         outer.setSpacing(2)
 
-        # Row 1 — title and snap/grid controls.
+        # Row 1 — title only.
         controls_row = QHBoxLayout()
         controls_row.setContentsMargins(0, 0, 0, 0)
         controls_row.setSpacing(6)
@@ -441,26 +553,12 @@ class MasterTimelineContainer(QWidget):
         master_label.setStyleSheet("font-weight: bold; font-size: 12px;")
         controls_row.addWidget(master_label)
         controls_row.addStretch()
-        if hasattr(self, "snap_checkbox") and self.snap_checkbox is not None:
-            self.snap_checkbox.setParent(header)
-            self.snap_checkbox.setStyleSheet("font-size: 11px;")
-            controls_row.addWidget(self.snap_checkbox)
-        if hasattr(self, "subdivision_label") and self.subdivision_label is not None:
-            self.subdivision_label.setParent(header)
-            controls_row.addWidget(self.subdivision_label)
-        if hasattr(self, "subdivision_combo") and self.subdivision_combo is not None:
-            self.subdivision_combo.setParent(header)
-            # A compact combobox keeps the controls row inside the 320 px
-            # column even when the dropdown items are wider than the field.
-            self.subdivision_combo.setMinimumWidth(70)
-            self.subdivision_combo.setMaximumWidth(110)
-            controls_row.addWidget(self.subdivision_combo)
         outer.addLayout(controls_row)
 
         # Row 2 — info display (Time/BPM/Zoom/Part).
         if hasattr(self, "info_widget") and self.info_widget is not None:
             self.info_widget.setParent(header)
-            self.info_widget.setStyleSheet("font-size: 9px; color: gray;")
+            self.info_widget.setStyleSheet(self._info_style(9))
             outer.addWidget(self.info_widget)
 
         # Detach the timeline from the scrollarea so TimelineGrid can take it.

@@ -1,66 +1,76 @@
 """
-Auto DMX Controller — dedicated ArtNet output for Auto mode.
+Auto DMX Controller - Auto mode as an output-arbiter layer
+(docs/output-sync-plan.md phase 2).
 
-Runs its own DMXManager + ArtNetSender, completely independent
-from the main app's ShowsArtNetController. Supports configurable
-target IP and universe mapping for venue-specific setups.
+Auto renders through the arbiter's EXCLUSIVE playback slot (timeline
+XOR auto - starting one while the other holds the slot is refused,
+never silently evicted). The engine tick and DMX computation happen
+in ``render()`` at the arbiter's 44 Hz cadence (the old private loop
+ran at 30); universe remapping and the broadcast visualizer mirror
+are arbiter features now instead of a second private sender.
 """
 
-import time
-import threading
 from typing import Optional, Dict, Callable
 
+from utils.artnet.arbiter import Frame, IDLE_BLACKOUT, OutputArbiter
 from utils.artnet.dmx_manager import DMXManager
 from utils.artnet.sender import ArtNetSender
 from config.models import Configuration
 from auto.engine import AutoShowEngine
 
+# The slot owner tag; the Shows controller uses "timeline".
+SLOT_OWNER = "auto"
+
 
 class AutoDMXController:
-    """Manages DMX output for Auto mode on a dedicated 30Hz thread."""
+    """Auto mode's playback-slot adapter."""
 
     def __init__(self, config: Configuration, fixture_definitions: dict,
                  target_ip: str = "192.168.1.151",
-                 local_dmx_callback: Optional[Callable[[int, bytes], None]] = None):
+                 local_dmx_callback: Optional[Callable[[int, bytes], None]] = None,
+                 arbiter: Optional[OutputArbiter] = None):
         """
         Args:
             config: Fixture configuration from the main app
             fixture_definitions: QLC+ fixture definition dicts
             target_ip: ArtNet target IP address
             local_dmx_callback: Optional ``(universe, dmx_bytes)`` hook
-                invoked once per universe per frame, after the ArtNet
-                packet is sent. Used by the embedded visualizer in the
-                Auto tab to mirror what's going on the wire without a
-                TCP/ArtNet round-trip. Standalone visualizer keeps
-                receiving DMX over the wire as before — this is additive.
+                invoked with each post-merge frame (embedded
+                visualizer).
+            arbiter: Optional shared OutputArbiter (from MainWindow).
+                When omitted a private one is created.
         """
         self.config = config
 
-        # Own instances — separate from main app
+        # Renderer (no socket).
         self.dmx_manager = DMXManager(config, fixture_definitions)
-        self.artnet_sender = ArtNetSender(target_ip=target_ip)
 
-        # Second sender for visualizer (always broadcast)
-        self._visualizer_sender = ArtNetSender(target_ip="255.255.255.255")
-        self._mirror_to_visualizer = True
+        self._owns_arbiter = arbiter is None
+        if arbiter is None:
+            arbiter = OutputArbiter(
+                config=config, sender=ArtNetSender(target_ip=target_ip))
+        else:
+            arbiter.set_target_ip(target_ip)
+        self.arbiter = arbiter
+        # Kept for introspection/back-compat (the arbiter owns it).
+        self.artnet_sender = arbiter._sender
 
-        # Local in-process visualizer hook (see __init__ docstring).
-        self._local_dmx_callback = local_dmx_callback
+        self.arbiter.set_fixture_maps(self.dmx_manager.fixture_maps)
+        self.arbiter.set_local_dmx_callback(local_dmx_callback)
 
-        # Universe mapping: {config_universe_id: artnet_universe_number}
-        # Default: identity mapping (config universe 1 → artnet 0, etc.)
-        self._universe_mapping: Dict[int, int] = {}
-        for uid in config.universes.keys():
-            uid_int = int(uid)
-            self._universe_mapping[uid_int] = uid_int - 1  # 1-based → 0-based
+        # Auto is a live context: idle means blackout, not the
+        # editor's "fixtures visible" floor. Only a PRIVATE arbiter
+        # takes its policy from the producer - on the shared one the
+        # shell owns the policy (it follows the active nav section,
+        # and Auto lives inside LIVE, which idles to blackout anyway).
+        if self._owns_arbiter:
+            self.arbiter.set_idle_policy(IDLE_BLACKOUT)
 
         # Engine reference
         self._engine: Optional[AutoShowEngine] = None
+        self._running = False
 
-        # Thread control
-        self._thread: Optional[threading.Thread] = None
-        self._stop_event = threading.Event()
-        self._update_interval = 1.0 / 30.0  # 30Hz
+    # -- wiring ------------------------------------------------------------
 
     def set_engine(self, engine: AutoShowEngine):
         """Connect the Auto show engine."""
@@ -69,17 +79,17 @@ class AutoDMXController:
 
     def set_target_ip(self, ip: str):
         """Change ArtNet target IP at runtime."""
-        self.artnet_sender.target_ip = ip
+        self.arbiter.set_target_ip(ip)
 
     def set_mirror_to_visualizer(self, enabled: bool):
         """Enable/disable mirroring DMX to broadcast for the visualizer."""
-        self._mirror_to_visualizer = enabled
+        self.arbiter.set_broadcast_mirror(enabled)
 
     def set_local_dmx_callback(
         self, callback: Optional[Callable[[int, bytes], None]]
     ) -> None:
         """Update or clear the embedded-visualizer DMX hook after init."""
-        self._local_dmx_callback = callback
+        self.arbiter.set_local_dmx_callback(callback)
 
     def set_universe_mapping(self, mapping: Dict[int, int]):
         """Set universe mapping.
@@ -88,103 +98,52 @@ class AutoDMXController:
             mapping: {config_universe_id: artnet_universe_number}
                      e.g. {1: 0, 2: 1} for Enttec ODE port 0 + port 1
         """
-        self._universe_mapping = dict(mapping)
+        self.arbiter.set_universe_mapping(mapping)
 
-    def start(self):
-        """Start the DMX output thread."""
-        if self._thread and self._thread.is_alive():
-            return
+    # -- transport -----------------------------------------------------------
 
-        self._stop_event.clear()
+    def start(self) -> bool:
+        """Claim the playback slot and start streaming. Returns False
+        (and starts nothing) when the timeline holds the slot - the
+        caller surfaces that to the user."""
+        if self._running:
+            return True
+        if not self.arbiter.acquire_playback_slot(self, SLOT_OWNER):
+            return False
 
-        # Start the engine's riff cycle
         if self._engine:
             self._engine.start()
-
-        self._thread = threading.Thread(
-            target=self._update_loop,
-            name="AutoDMXController",
-            daemon=True,
-        )
-        self._thread.start()
+        self._running = True
+        self.arbiter.start()
+        return True
 
     def stop(self):
-        """Stop the DMX output thread and clear fixtures."""
-        # Stop engine first
+        """Stop the engine, release the slot and black out. On a
+        SHARED arbiter the loop is only stopped if Auto actually held
+        the slot - a failed start must not kill the timeline's
+        stream."""
         if self._engine:
             self._engine.stop()
+        was_streaming = self._running
+        self._running = False
+        self.arbiter.release_playback_slot(SLOT_OWNER)
+        if self._owns_arbiter:
+            self.arbiter.shutdown()
+        elif was_streaming:
+            self.arbiter.stop(blackout=True)
 
-        self._stop_event.set()
-        if self._thread:
-            self._thread.join(timeout=2.0)
-            self._thread = None
+    # -- the arbiter layer contract -------------------------------------------
 
-        # Send blackout
-        self._send_blackout()
-
-    def _update_loop(self):
-        """Main DMX update loop — runs at 30Hz."""
-        while not self._stop_event.is_set():
-            loop_start = time.monotonic()
-
-            try:
-                # Advance engine
-                if self._engine:
-                    self._engine.tick(loop_start)
-
-                # Compute DMX state
-                self.dmx_manager.update_dmx(loop_start)
-
-                # Send all universes
-                self._send_all_universes()
-
-            except Exception as e:
-                print(f"Auto DMX update error: {e}")
-
-            # Maintain consistent frame rate
-            elapsed = time.monotonic() - loop_start
-            sleep_time = self._update_interval - elapsed
-            if sleep_time > 0:
-                time.sleep(sleep_time)
-
-    def _send_all_universes(self):
-        """Send DMX data for all configured universes."""
-        for config_uid, artnet_uid in self._universe_mapping.items():
-            try:
-                dmx_data = self.dmx_manager.get_dmx_data(config_uid)
-                self.artnet_sender.send_dmx(artnet_uid, dmx_data)
-
-                # Mirror to broadcast for visualizer
-                if self._mirror_to_visualizer:
-                    self._visualizer_sender.send_dmx(artnet_uid, dmx_data)
-
-                # Forward the same frame to the in-process visualizer if
-                # one is wired up. Wrap in try/except so a misbehaving
-                # callback can't kill the DMX thread mid-show. Pass the
-                # 1-based config universe id to match what the embedded
-                # visualizer keys off (build_fixtures_payload uses
-                # fixture.universe directly, also 1-based).
-                if self._local_dmx_callback is not None:
-                    try:
-                        self._local_dmx_callback(config_uid, bytes(dmx_data))
-                    except Exception as cb_err:
-                        print(f"Auto local_dmx_callback raised: {cb_err}")
-            except Exception as e:
-                print(f"Error sending universe {config_uid}→{artnet_uid}: {e}")
-
-    def _send_blackout(self):
-        """Send all zeros to all universes (blackout).
-
-        Always blackouts both the wire and broadcast senders. The
-        broadcast viewer would otherwise hold whatever frame was last
-        sent if the user toggled mirroring off mid-show — we'd rather
-        a stray blackout packet at stop time than a stuck rig in the
-        visualiser.
-        """
-        blackout = bytearray(512)
-        for artnet_uid in self._universe_mapping.values():
-            try:
-                self.artnet_sender.send_dmx(artnet_uid, blackout, force=True)
-                self._visualizer_sender.send_dmx(artnet_uid, blackout, force=True)
-            except Exception:
-                pass
+    def render(self, now: float) -> Frame:
+        """One Auto frame: advance the engine, recompute DMX, return
+        per-universe (values, mask) pairs. Empty when not running."""
+        if not self._running:
+            return {}
+        if self._engine:
+            self._engine.tick(now)
+        self.dmx_manager.update_dmx(now)
+        frames: Frame = {}
+        for universe_id in self.config.universes.keys():
+            universe_int = int(universe_id)
+            frames[universe_int] = self.dmx_manager.get_frame(universe_int)
+        return frames

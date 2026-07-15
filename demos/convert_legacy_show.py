@@ -40,7 +40,7 @@ def main(argv=None):
 
     config = Configuration.load(args.config)
     converted = []
-    for name, show in config.shows.items():
+    for name, show in config.songs.items():
         if show.effects and show.timeline_data is None:
             audio = args.audio if name == args.audio_show else None
             convert_show_in_place(show, audio_file_path=audio)

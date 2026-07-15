@@ -1,6 +1,6 @@
 # gui/tabs/base_tab.py
 
-from PyQt6 import QtWidgets
+from PyQt6 import QtCore, QtWidgets
 from config.models import Configuration
 
 
@@ -19,6 +19,14 @@ class BaseTab(QtWidgets.QWidget):
             parent: Parent widget (typically MainWindow)
         """
         super().__init__(parent)
+        # Themed page background. A bare QWidget page falls back to the
+        # platform palette (light gray) because the app QSS only sets
+        # `color` on QWidget - this is why tab contents looked light in
+        # a dark app. role="tab-page" is painted $window$-dark by the
+        # theme template; WA_StyledBackground makes plain QWidgets
+        # honor it.
+        self.setProperty("role", "tab-page")
+        self.setAttribute(QtCore.Qt.WidgetAttribute.WA_StyledBackground, True)
         self.config = config
         self.setup_ui()
         self.connect_signals()

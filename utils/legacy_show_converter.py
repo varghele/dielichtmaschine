@@ -27,7 +27,7 @@ from collections import defaultdict
 from typing import Dict, List, Optional, Tuple
 
 from config.models import (
-    Show, TimelineData, LightLane, LightBlock,
+    Song, TimelineData, LightLane, LightBlock,
     DimmerBlock, ColourBlock, MovementBlock,
 )
 from timeline.song_structure import SongStructure
@@ -88,7 +88,7 @@ def _colour_from_hex(hex_str: str, start: float, end: float) -> Optional[ColourB
                        red=float(r), green=float(g), blue=float(b))
 
 
-def convert_legacy_show(show: Show) -> TimelineData:
+def convert_legacy_show(show: Song) -> TimelineData:
     """Convert a legacy effects-based :class:`Show` to modern ``TimelineData``.
 
     Returns fresh ``TimelineData`` (one lane per fixture group). The input
@@ -158,7 +158,7 @@ def convert_legacy_show(show: Show) -> TimelineData:
     return TimelineData(lanes=list(lanes.values()))
 
 
-def convert_show_in_place(show: Show, audio_file_path: Optional[str] = None) -> Show:
+def convert_show_in_place(show: Song, audio_file_path: Optional[str] = None) -> Song:
     """Populate ``show.timeline_data`` from its legacy effects (kept intact)."""
     td = convert_legacy_show(show)
     td.audio_file_path = audio_file_path

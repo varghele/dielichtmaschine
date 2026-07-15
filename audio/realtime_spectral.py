@@ -33,6 +33,27 @@ class LiveFeatureFrame:
     rms: float          # RMS energy
     contrast: float     # spectral contrast
     centroid_hz: float = 0.0  # spectral centroid in Hz (unnormalized)
+    # Onset strength for beat tracking: per-band (low/mid/high) positive
+    # log-magnitude flux, each band saturated against its own recent peak
+    # and reduced to its rising edge, then combined with the high band
+    # down-weighted. This makes an onset spike near-equal for a kick
+    # (narrowband, low) and a snare (broadband, mid) so a backbeat's
+    # every-beat periodicity survives, while hat/cymbal subdivision stays
+    # visibly weaker (band weight) instead of being equalized into a
+    # false double tempo. Range is ~0..2.4 (sum of band weights), NOT the
+    # normalized 0-1 of `flux` above; deliberately unsmoothed - the
+    # display flux passes a 0.6 s smoother that destroys beat-rate
+    # periodicity (its autocorrelation collapses to the shortest lag).
+    #
+    # Computed on the UNDECIMATED signal at the analyzer's
+    # `beat_frame_rate_hz` (~86 Hz for 44100 input): `flux_raw_hops`
+    # carries every beat-flux hop that elapsed during this (43 Hz)
+    # feature frame, oldest first; `flux_raw` is their max, kept for
+    # single-value consumers. The doubled rate matters because tempo
+    # resolution is lag-limited: at 43 Hz a 190 BPM beat is ~13.6
+    # frames, at 86 Hz it is ~27.
+    flux_raw: float = 0.0
+    flux_raw_hops: tuple = ()
 
 
 class _EMANormalizer:
@@ -137,7 +158,37 @@ class RealtimeSpectralAnalyzer:
 
         # State for sliding STFT
         self._prev_magnitude = None
+        self._prev_magnitude_log = None  # separate state for beat flux
         self._sliding_buffer = np.zeros(n_fft, dtype=np.float32)
+
+        # Beat-flux path (see LiveFeatureFrame.flux_raw): runs on the
+        # UNDECIMATED signal with its own sliding STFT (n_fft at the
+        # native rate, hop = hop_length native samples -> ~86 Hz for
+        # 44100 input), because tempo resolution is lag-limited and the
+        # decimated 43 Hz grid is too coarse above ~150 BPM. Band split:
+        # kick energy lives <200 Hz, snare/vocal body 200-4000 Hz, hats
+        # and cymbals above. Per-band saturation refs follow each band's
+        # recent peak with a ~3 s decay.
+        # The beat FFT window is 2x n_fft so its span in SECONDS (~93 ms
+        # at 44100) matches the decimated feature path: a 46 ms window
+        # resolves every micro-transient of sustained instruments and
+        # buries the beat in onset noise on real music.
+        self._beat_hop = hop_length
+        self._beat_n_fft = n_fft * 2
+        self._beat_window = np.hanning(self._beat_n_fft).astype(np.float32)
+        self._beat_buffer = np.zeros(self._beat_n_fft, dtype=np.float32)
+        self._beat_pending_samples = np.zeros(0, dtype=np.float32)
+        self._pending_beat_flux: List[float] = []
+        beat_bins = np.fft.rfftfreq(self._beat_n_fft, d=1.0 / sample_rate)
+        self._beat_band_masks = [
+            beat_bins < 200.0,
+            (beat_bins >= 200.0) & (beat_bins < 4000.0),
+            beat_bins >= 4000.0,
+        ]
+        self._beat_band_weights = (1.0, 1.0, 0.4)
+        self._beat_band_refs = [0.0, 0.0, 0.0]
+        self._beat_band_prev = [0.0, 0.0, 0.0]
+        self._beat_ref_decay = float(np.exp(-1.0 / (3.0 * self.beat_frame_rate_hz)))
 
         # MFCC delta tracking for vocal proxy (circular buffer of 10 frames)
         self._mfcc_history_size = 10
@@ -191,6 +242,26 @@ class RealtimeSpectralAnalyzer:
         self._stop_event = threading.Event()
         self._ring_buffer: Optional[AudioRingBuffer] = None
         self._start_time = 0.0
+
+    @property
+    def frame_rate_hz(self) -> float:
+        """LiveFeatureFrames emitted per second of audio.
+
+        With the default 44100 Hz input this is 22050/512 = ~43.07 Hz
+        (the 2:1 decimation halves the effective rate) - NOT the ~86 Hz
+        a 44100/512 hop would suggest. Consumers that convert frame
+        counts to time must use this value.
+        """
+        return self._analysis_sr / self.hop_length
+
+    @property
+    def beat_frame_rate_hz(self) -> float:
+        """Beat-flux hops per second of audio (undecimated path).
+
+        44100/512 = ~86.13 Hz for the default input. This is the rate to
+        construct AutoBPMDetector with when consuming `flux_raw_hops`.
+        """
+        return self.sample_rate / self.hop_length
 
     def start(self, ring_buffer: AudioRingBuffer) -> None:
         """Start the analysis thread.
@@ -254,6 +325,57 @@ class RealtimeSpectralAnalyzer:
     def _reset_state(self):
         """Reset internal state for a fresh start."""
         self._prev_magnitude = None
+        self._prev_magnitude_log = None
+        self._beat_buffer[:] = 0
+        self._beat_pending_samples = np.zeros(0, dtype=np.float32)
+        self._pending_beat_flux.clear()
+        self._beat_band_refs = [0.0, 0.0, 0.0]
+        self._beat_band_prev = [0.0, 0.0, 0.0]
+
+    def _push_beat_samples(self, samples: np.ndarray) -> None:
+        """Feed undecimated mono samples to the beat-flux path.
+
+        Called from the processing loop BEFORE decimation with the same
+        audio the feature path consumes. Produces one band-combined
+        onset value per `hop_length` native samples (~86 Hz); values
+        accumulate in `_pending_beat_flux` until the next feature frame
+        collects them into `flux_raw_hops`.
+        """
+        self._beat_pending_samples = np.concatenate(
+            [self._beat_pending_samples, samples.astype(np.float32)])
+        hop = self._beat_hop
+        n_fft = self._beat_buffer.size
+        while self._beat_pending_samples.size >= hop:
+            chunk = self._beat_pending_samples[:hop]
+            self._beat_pending_samples = self._beat_pending_samples[hop:]
+            self._beat_buffer[:n_fft - hop] = self._beat_buffer[hop:]
+            self._beat_buffer[n_fft - hop:] = chunk
+
+            mag_log = np.log1p(np.abs(
+                np.fft.rfft(self._beat_buffer * self._beat_window)))
+            if self._prev_magnitude_log is None:
+                self._prev_magnitude_log = mag_log
+                self._pending_beat_flux.append(0.0)
+                continue
+            dlog = mag_log - self._prev_magnitude_log
+            self._prev_magnitude_log = mag_log
+            dlog[dlog < 0] = 0
+            onset = 0.0
+            # Per band: saturate against the band's recent peak
+            # (equalizes kick vs snare spike heights), keep only the
+            # rising edge (equalizes spike shapes: a snare's noise tail
+            # keeps producing "new energy" for several frames, a kick
+            # doesn't), then combine with hats/cymbals down-weighted so
+            # subdivision stays distinguishable from the beat.
+            for i, (mask, w) in enumerate(zip(self._beat_band_masks,
+                                              self._beat_band_weights)):
+                v = float(dlog[mask].sum())
+                ref = max(v, self._beat_band_refs[i] * self._beat_ref_decay)
+                self._beat_band_refs[i] = ref
+                sat = v / (v + 0.5 * ref) if ref > 0 else 0.0
+                onset += w * max(0.0, sat - self._beat_band_prev[i])
+                self._beat_band_prev[i] = sat
+            self._pending_beat_flux.append(onset)
         self._sliding_buffer[:] = 0
         self._flux_ema = 0.0
         self._mfcc_history[:] = 0
@@ -294,6 +416,10 @@ class RealtimeSpectralAnalyzer:
             else:
                 samples = raw
 
+            # Beat flux runs on the undecimated signal (finer tempo
+            # resolution); must see the samples before decimation.
+            self._push_beat_samples(samples)
+
             # Decimate 2:1 if needed (simple averaging, fast)
             if self._decimate:
                 samples = (samples[0::2] + samples[1::2]) * 0.5
@@ -320,6 +446,12 @@ class RealtimeSpectralAnalyzer:
         magnitude = np.abs(spectrum)
         power = magnitude ** 2
 
+        # Collect the beat-flux hops that elapsed since the last frame
+        # (produced by _push_beat_samples on the undecimated signal).
+        beat_hops = tuple(self._pending_beat_flux)
+        self._pending_beat_flux.clear()
+        beat_flux = max(beat_hops) if beat_hops else 0.0
+
         # Avoid division by zero
         mag_sum = magnitude.sum()
         if mag_sum < 1e-10:
@@ -328,7 +460,8 @@ class RealtimeSpectralAnalyzer:
                 timestamp=time.monotonic() - self._start_time,
                 flux=0.0, transient=0.0, richness=0.0,
                 vocal=0.0, centroid=0.0, rms=0.0, contrast=0.0,
-                centroid_hz=0.0,
+                centroid_hz=0.0, flux_raw=beat_flux,
+                flux_raw_hops=beat_hops,
             )
 
         # 1. Spectral flux
@@ -383,6 +516,8 @@ class RealtimeSpectralAnalyzer:
             rms=self._smooth_rms.smooth(self._norm_rms.normalize(raw_rms)),
             contrast=self._smooth_contrast.smooth(self._norm_contrast.normalize(raw_contrast)),
             centroid_hz=float(raw_centroid),
+            flux_raw=beat_flux,
+            flux_raw_hops=beat_hops,
         )
 
     def _compute_spectral_contrast(self, power: np.ndarray) -> float:

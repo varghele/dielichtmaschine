@@ -13,16 +13,24 @@ import faulthandler
 faulthandler.enable()
 
 import os
-from PyQt6 import QtWidgets
-from PyQt6.QtGui import QIcon
-from gui import MainWindow
-from _version import __version__
-from utils.paths import get_project_root
+from utils import app_identity
 
 # Handle --version flag early
 if '--version' in sys.argv:
-    print(f"QLCShowCreator {__version__}")
+    print(app_identity.version_string())
     sys.exit(0)
+
+# Headless subcommands run BEFORE any PyQt import so they work with no
+# display: `lichtmaschine export config.yaml --out workspace.qxw
+# --qlc-version 5.2.1` (utils/export_cli.py).
+if len(sys.argv) > 1 and sys.argv[1] == 'export':
+    from utils.export_cli import run_export_cli
+    sys.exit(run_export_cli(sys.argv[2:]))
+
+from PyQt6 import QtWidgets
+from PyQt6.QtGui import QIcon
+from gui import MainWindow
+from utils.paths import get_project_root
 
 # Performance profiling - enable with --profile flag
 PROFILING_ENABLED = '--profile' in sys.argv
@@ -39,11 +47,37 @@ def main():
 
         # Start the application
         app = QtWidgets.QApplication(sys.argv)
-        app.setOrganizationName("QLCShowCreator")
-        app.setApplicationName("QLCShowCreator")
+        app.setOrganizationName(app_identity.SETTINGS_ORG)
+        app.setApplicationName(app_identity.SETTINGS_APP)
+        app.setApplicationDisplayName(app_identity.APP_NAME)
+        app.setApplicationVersion(app_identity.APP_VERSION)
+
+        # Structured local logging plus the crash reporter dialog.
+        # Installed right after QApplication creation so any startup
+        # failure below already lands in the log file.
+        from utils.app_logging import setup_logging, install_exception_hooks
+        from gui.dialogs.crash_dialog import install_crash_dialog
+        setup_logging()
+        install_exception_hooks(install_crash_dialog())
+
+        # One-shot copy of persisted settings from the pre-rebrand
+        # QLCShowCreator store (theme, splitter sizes, ...).
+        from utils.app_settings import migrate_legacy_settings
+        migrate_legacy_settings()
+
+        # UI language (i18n scaffolding): installs a translator only if
+        # ui/language is set and its compiled catalog exists; must run
+        # before any widget is created so shell strings translate.
+        from utils.translations import install_translator
+        install_translator(app)
+
+        # Brand fonts must register before any widget is created so the
+        # stylesheet's font families resolve on first paint.
+        from gui.fonts import register_brand_fonts
+        register_brand_fonts()
 
         # Set application icon
-        icon_path = os.path.join(project_root, "resources", "lightbulb.png")
+        icon_path = app_identity.app_icon_path()
         if os.path.exists(icon_path):
             app_icon = QIcon(icon_path)
             app.setWindowIcon(app_icon)
@@ -56,6 +90,14 @@ def main():
 
         window = MainWindow()
         window.showMaximized()
+
+        # A project path on the command line - or a file the OS handed us
+        # from a .lms double-click once the extension is associated - opens
+        # that project as soon as the window is up. Runs after the export
+        # subcommand dispatch above, so only GUI launches reach here.
+        launch_project = app_identity.project_path_from_argv(sys.argv[1:])
+        if launch_project and os.path.isfile(launch_project):
+            window.open_project_on_launch(os.path.abspath(launch_project))
 
         # If profiling, set up periodic report printing
         if PROFILING_ENABLED:
@@ -73,6 +115,8 @@ def main():
         sys.exit(app.exec())
 
     except Exception as e:
+        import logging
+        logging.getLogger("crash").exception("Error starting application")
         print(f"Error starting application: {e}")
         import traceback
         traceback.print_exc()

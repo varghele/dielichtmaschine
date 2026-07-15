@@ -8,7 +8,7 @@ from PyQt6.QtWidgets import (QVBoxLayout, QHBoxLayout, QWidget, QPushButton,
                              QMessageBox, QDialog)
 from PyQt6.QtCore import Qt
 
-from config.models import Configuration, Show, TimelineData, LightBlock
+from config.models import Configuration, Song, TimelineData, LightBlock
 from config.models import LightLane as LightLaneModel
 from .base_tab import BaseTab
 from timeline.song_structure import SongStructure
@@ -206,10 +206,10 @@ class ShowsTabTimeline(BaseTab):
         current_show = self.show_combo.currentText()
         self.show_combo.blockSignals(True)
         self.show_combo.clear()
-        self.show_combo.addItems(sorted(self.config.shows.keys()))
+        self.show_combo.addItems(sorted(self.config.songs.keys()))
 
         # Restore selection if possible
-        if current_show and current_show in self.config.shows:
+        if current_show and current_show in self.config.songs:
             self.show_combo.setCurrentText(current_show)
 
         self.show_combo.blockSignals(False)
@@ -220,10 +220,10 @@ class ShowsTabTimeline(BaseTab):
 
     def on_show_changed(self, show_name: str):
         """Load selected show into timeline."""
-        if not show_name or show_name not in self.config.shows:
+        if not show_name or show_name not in self.config.songs:
             return
 
-        show = self.config.shows[show_name]
+        show = self.config.songs[show_name]
 
         # Create song structure from show parts
         self.song_structure = SongStructure()
@@ -249,7 +249,7 @@ class ShowsTabTimeline(BaseTab):
         # Update playback engine
         self.playback_engine.set_lanes(self.lanes)
 
-    def migrate_from_effects(self, show: Show) -> TimelineData:
+    def migrate_from_effects(self, show: Song) -> TimelineData:
         """Convert old ShowEffect format to timeline lanes.
 
         Creates one lane per fixture group with blocks at show part times.
@@ -402,10 +402,10 @@ class ShowsTabTimeline(BaseTab):
     def save_to_config(self):
         """Save timeline data back to configuration."""
         current_show = self.show_combo.currentText()
-        if not current_show or current_show not in self.config.shows:
+        if not current_show or current_show not in self.config.songs:
             return
 
-        show = self.config.shows[current_show]
+        show = self.config.songs[current_show]
 
         # Create new timeline data from current lanes
         timeline_data = TimelineData()
@@ -417,7 +417,7 @@ class ShowsTabTimeline(BaseTab):
         # Also update legacy ShowEffect format for backwards compatibility
         self._update_legacy_effects(show)
 
-    def _update_legacy_effects(self, show: Show):
+    def _update_legacy_effects(self, show: Song):
         """Update legacy ShowEffect list from timeline data.
 
         Args:

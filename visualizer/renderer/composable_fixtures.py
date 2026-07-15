@@ -192,10 +192,12 @@ class FixtureRenderer:
         # --- chassis geometry ---
         # Pass the emitter so a BAR/PANEL with a CellArray uses the
         # cell-aware chassis (visible emitter slabs / lamp bulbs), and a
-        # PAR uses the lensed variant.
+        # PAR uses the lensed variant. GDTF-sourced fixtures try their
+        # embedded 3D models first (QLC_GDTF_MESHES=0 disables).
         self.chassis_geom: ChassisGeometry = make_chassis_geometry(
             ctx, capabilities.chassis, capabilities.body_dims_m,
             emitter=capabilities.emitter,
+            gdtf_source=self._resolve_gdtf_source(fixture_data, capabilities),
         )
 
         # --- state-only components (built only when the capability exists) ---
@@ -288,6 +290,29 @@ class FixtureRenderer:
                 result.append(c)
         result.append(self.emitter_runner)
         return result
+
+    @staticmethod
+    def _resolve_gdtf_source(fixture_data, capabilities):
+        """(gdtf_path, GdtfData, mode_name) when this fixture's definition
+        resolves to a GDTF with native geometry data; else None. Works in
+        both the embedded (in-process) and standalone (TCP) visualizer -
+        the library re-resolves from disk either way. QLC_GDTF_MESHES=0
+        is the kill switch back to the procedural chassis."""
+        import os
+        if os.environ.get('QLC_GDTF_MESHES', '1') == '0':
+            return None
+        manufacturer = fixture_data.get('manufacturer')
+        model = fixture_data.get('model')
+        if not manufacturer or not model:
+            return None
+        try:
+            from utils.fixture_library import get_definition
+            defn = get_definition(manufacturer, model)
+        except Exception:
+            return None
+        if defn is None or defn.gdtf is None:
+            return None
+        return (defn.path, defn.gdtf, capabilities.mode_name)
 
     def get_model_matrix(self) -> glm.mat4:
         """Chassis model matrix from position + yaw/pitch/roll.

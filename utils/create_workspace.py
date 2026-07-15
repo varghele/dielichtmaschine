@@ -3,6 +3,7 @@ import xml.dom.minidom as minidom
 import os
 from typing import Dict, Optional
 from config.models import Configuration, FixtureGroupCapabilities
+from utils import user_warnings
 from utils.to_xml.setup_to_xml import (create_universe_elements, create_fixture_elements,
                                        create_channels_groups)
 from utils.to_xml.shows_to_xml import create_shows
@@ -11,7 +12,8 @@ from utils.to_xml.virtual_console_to_xml import build_virtual_console
 from utils.fixture_utils import load_fixture_definitions_from_qlc, detect_fixture_group_capabilities
 
 
-def create_qlc_workspace(config: Configuration, vc_options: Optional[Dict[str, bool]] = None):
+def create_qlc_workspace(config: Configuration, vc_options: Optional[Dict[str, bool]] = None,
+                         output_path: Optional[str] = None):
     """
     Create QLC+ workspace file using Configuration data
 
@@ -29,10 +31,13 @@ def create_qlc_workspace(config: Configuration, vc_options: Optional[Dict[str, b
             - qlc_target_version: str - Version stamped into <Creator><Version>.
               Cosmetic only; the workspace XML schema is identical between
               QLC+ 4.x and 5.x. Default: "4.14.4".
+        output_path: Where to write the .qxw. Default keeps the historical
+            behaviour (workspace.qxw in the repo/app root); tests pass a
+            tmp path so parallel runs don't fight over one file.
     """
     # Set up base dir
     base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    workspace_path = os.path.join(base_dir, 'workspace.qxw')
+    workspace_path = output_path or os.path.join(base_dir, 'workspace.qxw')
 
     # Get set of models we need definitions for
     models_in_config = {(fixture.manufacturer, fixture.model)
@@ -82,7 +87,7 @@ def create_qlc_workspace(config: Configuration, vc_options: Optional[Dict[str, b
         from utils.midi_utils import ensure_midi_device_in_config
         pause_show = generate_pause_show(config, fixture_definitions, capabilities_map)
         if pause_show:
-            config.shows["PAUSE"] = pause_show
+            config.songs["PAUSE"] = pause_show
             _injected_pause = True
             # Ensure MIDI device exists for the pause trigger
             if config.pause_show.trigger_device:
@@ -155,7 +160,7 @@ def create_qlc_workspace(config: Configuration, vc_options: Optional[Dict[str, b
 
     # Remove injected PAUSE show from config (it's ephemeral, only for export)
     if _injected_pause:
-        del config.shows["PAUSE"]
+        del config.songs["PAUSE"]
 
     # Create SimpleDesk section
     simple_desk = ET.SubElement(engine, "SimpleDesk")
@@ -174,3 +179,48 @@ def create_qlc_workspace(config: Configuration, vc_options: Optional[Dict[str, b
         f.write('<?xml version="1.0" encoding="UTF-8"?>\n')
         f.write('<!DOCTYPE Workspace>\n')
         f.write('\n'.join(pretty_xml.split('\n')[1:]))
+
+    _write_gdtf_companion_qxfs(models_in_config, os.path.dirname(workspace_path))
+
+
+def _write_gdtf_companion_qxfs(models_in_config, out_dir: str):
+    """QLC+ interop for GDTF-sourced fixtures (GDTF plan Phase 2).
+
+    QLC+ cannot read .gdtf. For every patched fixture whose definition
+    came from a GDTF file and has no same-identity .qxf anywhere in the
+    library, serialize the transpiled definition into
+    ``<out_dir>/gdtf_companion_fixtures/`` and tell the user to drop the
+    files into QLC+'s fixture folder; with them installed the exported
+    workspace patches identically in QLC+.
+    """
+    from utils.fixture_library import (
+        companion_qxf_filename, find_qxf_twin, get_definition,
+        serialize_definition_to_qxf,
+    )
+
+    matched, generated = [], []
+    for manufacturer, model in sorted(models_in_config):
+        defn = get_definition(manufacturer, model)
+        if defn is None or defn.source != 'gdtf':
+            continue
+        if find_qxf_twin(manufacturer, model) is not None:
+            matched.append(f"{manufacturer} {model}")
+            continue
+        companion_dir = os.path.join(out_dir, 'gdtf_companion_fixtures')
+        os.makedirs(companion_dir, exist_ok=True)
+        out_path = os.path.join(companion_dir,
+                                companion_qxf_filename(manufacturer, model))
+        with open(out_path, 'w', encoding='UTF-8') as f:
+            f.write(serialize_definition_to_qxf(defn))
+        generated.append(out_path)
+
+    if matched:
+        print("GDTF fixtures with a same-identity .qxf in the QLC+ library "
+              "(no companion needed): " + ", ".join(matched))
+    if generated:
+        user_warnings.warn(
+            "GDTF fixtures unknown to QLC+; companion .qxf files were "
+            "written next to the workspace. Copy them into QLC+'s user "
+            "fixture folder or the workspace will not patch: "
+            + ", ".join(generated),
+            category="export")

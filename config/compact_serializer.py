@@ -127,13 +127,13 @@ def compact_serialize(data: dict) -> dict:
     """
     data = deepcopy(data)
 
-    shows = data.get('shows')
-    if not shows:
+    songs = data.get('songs')
+    if not songs:
         return data
 
-    # Check if any show has timeline_data with lanes
+    # Check if any song has timeline_data with lanes
     has_timeline = False
-    for show_data in shows.values():
+    for show_data in songs.values():
         td = show_data.get('timeline_data')
         if td and td.get('lanes'):
             has_timeline = True
@@ -149,8 +149,8 @@ def compact_serialize(data: dict) -> dict:
     # Registry for LightBlock templates
     lb_registry = _Registry('lb')
 
-    # Process all shows
-    for show_name, show_data in shows.items():
+    # Process all songs
+    for show_name, show_data in songs.items():
         td = show_data.get('timeline_data')
         if not td or not td.get('lanes'):
             continue
@@ -245,11 +245,13 @@ def expand_compact(data: dict) -> dict:
     block_defs = data.pop('block_defs', {})
     light_block_defs = data.pop('light_block_defs', {})
 
-    shows = data.get('shows')
-    if not shows:
+    # Configuration.load migrates the legacy `shows:` key to `songs`
+    # before calling this; accept both anyway for direct callers.
+    songs = data.get('songs') or data.get('shows')
+    if not songs:
         return data
 
-    for show_name, show_data in shows.items():
+    for show_name, show_data in songs.items():
         td = show_data.get('timeline_data')
         if not td or not td.get('lanes'):
             continue

@@ -1,6 +1,7 @@
 import os
 import xml.etree.ElementTree as ET
 from config.models import Configuration
+from utils import user_warnings
 from utils.to_xml.step_compaction import compact_step_values
 from effects.timing import movement_total_cycles
 
@@ -192,12 +193,18 @@ def _convert_dimmer_steps_to_rgb(steps, dimmer_block, colour_blocks, fixture_def
     channels_dict = get_channels_by_property(fixture_def, mode_name, ["IntensityRed", "IntensityGreen", "IntensityBlue"])
 
     if not channels_dict:
-        print("Warning: No RGB channels found for fixture without dimmer")
+        user_warnings.warn(
+            "No RGB channels found for a fixture without dimmer; its "
+            "steps export dark",
+            category="export", once_key="rgb-none")
         return steps
 
     # Verify we have all three RGB channels
     if 'IntensityRed' not in channels_dict or 'IntensityGreen' not in channels_dict or 'IntensityBlue' not in channels_dict:
-        print(f"Warning: Missing some RGB channels. Found: {list(channels_dict.keys())}")
+        user_warnings.warn(
+            f"Missing some RGB channels "
+            f"(found: {list(channels_dict.keys())}); steps export dark",
+            category="export", once_key="rgb-partial")
         return steps
 
     # Helper function to find overlapping colour block at a given time
@@ -682,9 +689,17 @@ def _generate_movement_shape_steps(movement_block, fixture_def, mode_name, fixtu
                 pan = center_pan
                 tilt = center_tilt
 
-            # Apply clipping to boundaries
+            # Apply clipping to boundaries (solver DMX space, like the
+            # native renderer's clamp)
             pan = max(pan_min, min(pan_max, pan))
             tilt = max(tilt_min, min(tilt_max, tilt))
+
+            # Convert the finished solver-space step to the fixture's
+            # real yoke - the per-step equivalent of the arbiter's
+            # hardware pass (identity for fixtures without a resolvable
+            # definition, so non-mover exports are untouched).
+            from utils.yoke import convert_solver_dmx
+            pan, tilt = convert_solver_dmx(fixture, pan, tilt)
 
             # Build channel values for this fixture
             channel_value_pairs = []
@@ -805,12 +820,16 @@ def create_tracks_from_timeline(show_function, engine, show, config, fixture_id_
         print(f"    Resolved targets: {targets}")
 
         if not targets:
-            print(f"Warning: Lane '{lane.name}' has no targets, skipping")
+            user_warnings.warn(
+                f"Lane '{lane.name}' has no targets and was left out of "
+                f"the export",
+                category="export")
             continue
 
         # Validate and warn about invalid targets
         for warning in validate_targets(targets, config):
-            print(f"Warning in lane '{lane.name}': {warning}")
+            user_warnings.warn(f"Lane '{lane.name}': {warning}",
+                               category="export")
 
         # Resolve targets to unique fixtures
         resolved_fixtures = resolve_targets_unique(targets, config)
@@ -819,7 +838,10 @@ def create_tracks_from_timeline(show_function, engine, show, config, fixture_id_
             print(f"      - {f.name}: group='{f.group}', universe={f.universe}, address={f.address}")
 
         if not resolved_fixtures:
-            print(f"Warning: No valid fixtures for lane '{lane.name}', skipping")
+            user_warnings.warn(
+                f"No valid fixtures for lane '{lane.name}'; the lane was "
+                f"left out of the export",
+                category="export")
             continue
 
         # Sort all fixtures in the lane by position (x coordinate) for cross-group effects
@@ -957,11 +979,19 @@ def create_tracks_from_timeline(show_function, engine, show, config, fixture_id_
                     print(f"      Generated {len(steps) if steps else 0} steps")
 
                     if not steps:
-                        print(f"Warning: No unified steps generated for block at {block_start_time_ms}ms")
+                        user_warnings.warn(
+                            f"Block at {block_start_time_ms}ms in lane "
+                            f"'{lane_display_name}' produced no steps and "
+                            f"was left out of the export",
+                            category="export")
                         continue
 
                 except Exception as e:
-                    print(f"Error creating unified sequence steps: {e}")
+                    user_warnings.warn(
+                        f"Block at {block_start_time_ms}ms in lane "
+                        f"'{lane_display_name}' failed to export and was "
+                        f"skipped: {e}",
+                        category="export")
                     import traceback
                     traceback.print_exc()
                     continue
@@ -1014,7 +1044,7 @@ def create_shows(engine, config: Configuration, fixture_id_map: dict, fixture_de
     function_id_counter = 0
 
     # Process each show in the configuration
-    for show_name, show in config.shows.items():
+    for show_name, show in config.songs.items():
         # Debug info
         has_timeline = show.timeline_data is not None
         has_lanes = has_timeline and len(show.timeline_data.lanes) > 0 if has_timeline else False
@@ -1050,7 +1080,10 @@ def create_shows(engine, config: Configuration, fixture_id_map: dict, fixture_de
             )
             print(f"Successfully created show from timeline: {show_name}")
         else:
-            print(f"    Skipping show '{show_name}' - no timeline data")
+            user_warnings.warn(
+                f"Song '{show_name}' has no timeline data and was left "
+                f"out of the workspace",
+                category="export")
 
     return function_id_counter
 

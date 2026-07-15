@@ -141,25 +141,28 @@ def patch_shows_tab():
 
 
 def patch_artnet_controller():
-    """Patch ArtNet controller methods with timing."""
+    """Patch output path methods with timing (arbiter pass: the layer
+    render + block scheduling on the controller, the merge-and-send
+    tick on the arbiter)."""
     try:
+        from utils.artnet.arbiter import OutputArbiter
         from utils.artnet.shows_artnet_controller import ShowsArtNetController
 
-        # Patch _update_and_send_dmx
-        original_update_dmx = ShowsArtNetController._update_and_send_dmx
-        def timed_update_dmx(self):
+        # Patch the playback layer render
+        original_render = ShowsArtNetController.render
+        def timed_render(self, now):
             if not _enabled:
-                return original_update_dmx(self)
+                return original_render(self, now)
             start = time.perf_counter()
             try:
-                return original_update_dmx(self)
+                return original_render(self, now)
             finally:
                 elapsed = time.perf_counter() - start
-                stats = _timings['ArtNet._update_and_send_dmx']
+                stats = _timings['ArtNet.render']
                 stats['count'] += 1
                 stats['total'] += elapsed
                 stats['max'] = max(stats['max'], elapsed)
-        ShowsArtNetController._update_and_send_dmx = timed_update_dmx
+        ShowsArtNetController.render = timed_render
 
         # Patch _process_lane_blocks
         original_process = ShowsArtNetController._process_lane_blocks
@@ -177,23 +180,23 @@ def patch_artnet_controller():
                 stats['max'] = max(stats['max'], elapsed)
         ShowsArtNetController._process_lane_blocks = timed_process
 
-        # Patch _send_all_universes
-        original_send = ShowsArtNetController._send_all_universes
-        def timed_send(self):
+        # Patch the arbiter tick (render + merge + send)
+        original_tick = OutputArbiter.tick_once
+        def timed_tick(self, now):
             if not _enabled:
-                return original_send(self)
+                return original_tick(self, now)
             start = time.perf_counter()
             try:
-                return original_send(self)
+                return original_tick(self, now)
             finally:
                 elapsed = time.perf_counter() - start
-                stats = _timings['ArtNet._send_all_universes']
+                stats = _timings['Arbiter.tick_once']
                 stats['count'] += 1
                 stats['total'] += elapsed
                 stats['max'] = max(stats['max'], elapsed)
-        ShowsArtNetController._send_all_universes = timed_send
+        OutputArbiter.tick_once = timed_tick
 
-        print("Patched ShowsArtNetController methods")
+        print("Patched ShowsArtNetController/OutputArbiter methods")
     except Exception as e:
         print(f"Could not patch ArtNet controller: {e}")
 
@@ -331,12 +334,12 @@ def patch_event_loop_latency():
 
 
 def patch_artnet_timer_latency():
-    """Measure ArtNet thread update latency separately."""
+    """Measure arbiter tick-to-tick latency separately."""
     try:
-        from utils.artnet.shows_artnet_controller import ShowsArtNetController
+        from utils.artnet.arbiter import OutputArbiter
 
-        original_update = ShowsArtNetController._update_and_send_dmx
-        def latency_update(self):
+        original_tick = OutputArbiter.tick_once
+        def latency_tick(self, now):
             global _last_artnet_time
             if _enabled and _last_artnet_time is not None:
                 latency = time.perf_counter() - _last_artnet_time
@@ -345,12 +348,12 @@ def patch_artnet_timer_latency():
                 stats['total'] += latency
                 stats['max'] = max(stats['max'], latency)
             _last_artnet_time = time.perf_counter()
-            return original_update(self)
-        ShowsArtNetController._update_and_send_dmx = latency_update
+            return original_tick(self, now)
+        OutputArbiter.tick_once = latency_tick
 
-        print("Patched ArtNet thread latency tracking")
+        print("Patched arbiter tick latency tracking")
     except Exception as e:
-        print(f"Could not patch ArtNet thread latency: {e}")
+        print(f"Could not patch arbiter tick latency: {e}")
 
 
 def patch_target_resolver():

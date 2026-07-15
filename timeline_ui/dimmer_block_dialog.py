@@ -26,27 +26,8 @@ class DimmerBlockDialog(QDialog):
         self.setMinimumWidth(450)
         self.setMinimumHeight(550)
 
-        self._apply_groupbox_style()
         self.setup_ui()
         self.load_current_values()
-
-    def _apply_groupbox_style(self):
-        """Apply consistent styling to group boxes."""
-        self.setStyleSheet("""
-            QGroupBox {
-                font-weight: bold;
-                border: 1px solid #555;
-                border-radius: 5px;
-                margin-top: 12px;
-                padding-top: 10px;
-            }
-            QGroupBox::title {
-                subcontrol-origin: margin;
-                subcontrol-position: top left;
-                left: 10px;
-                padding: 0 5px;
-            }
-        """)
 
     def setup_ui(self):
         main_layout = QVBoxLayout(self)
@@ -219,6 +200,8 @@ class DimmerBlockDialog(QDialog):
         buttons = QDialogButtonBox(
             QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
         )
+        self.ok_button = buttons.button(QDialogButtonBox.StandardButton.Ok)
+        self.ok_button.setProperty("role", "primary")
         buttons.accepted.connect(self.accept)
         buttons.rejected.connect(self.reject)
         main_layout.addWidget(buttons)

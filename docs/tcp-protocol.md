@@ -1,6 +1,6 @@
 # TCP Protocol (Visualizer Config Sync)
 
-The Show Creator runs a TCP server that sends stage and fixture configuration to connected Visualizer clients. This lets the Visualizer set up its 3D scene without manual configuration.
+Die Lichtmaschine runs a TCP server that sends stage and fixture configuration to connected Visualizer clients. This lets the Visualizer set up its 3D scene without manual configuration.
 
 ## Components
 

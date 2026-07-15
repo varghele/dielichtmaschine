@@ -72,7 +72,7 @@ jobs:
           pip install pyinstaller
 
       - name: Build with PyInstaller
-        run: pyinstaller --clean --noconfirm qlcshowcreator.spec
+        run: pyinstaller --clean --noconfirm lichtmaschine.spec
 
       - name: Determine version label
         id: version
@@ -90,21 +90,21 @@ jobs:
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
-          $archive = "QLCShowCreator-${{ matrix.artifact_suffix }}-${{ steps.version.outputs.label }}.zip"
-          Compress-Archive -Path "dist/QLCShowCreator/*" -DestinationPath $archive
+          $archive = "Lichtmaschine-${{ matrix.artifact_suffix }}-${{ steps.version.outputs.label }}.zip"
+          Compress-Archive -Path "dist/Lichtmaschine/*" -DestinationPath $archive
           echo "ARCHIVE_PATH=$archive" >> $env:GITHUB_ENV
 
       - name: Package (Linux)
         if: runner.os == 'Linux'
         run: |
-          archive="QLCShowCreator-${{ matrix.artifact_suffix }}-${{ steps.version.outputs.label }}.tar.gz"
-          tar -czf "$archive" -C dist QLCShowCreator
+          archive="Lichtmaschine-${{ matrix.artifact_suffix }}-${{ steps.version.outputs.label }}.tar.gz"
+          tar -czf "$archive" -C dist Lichtmaschine
           echo "ARCHIVE_PATH=$archive" >> "$GITHUB_ENV"
 
       - name: Upload build artifact
         uses: actions/upload-artifact@v7
         with:
-          name: QLCShowCreator-${{ matrix.artifact_suffix }}-${{ steps.version.outputs.label }}
+          name: Lichtmaschine-${{ matrix.artifact_suffix }}-${{ steps.version.outputs.label }}
           path: ${{ env.ARCHIVE_PATH }}
           if-no-files-found: error
           retention-days: 14

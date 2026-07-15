@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="de"><head><meta charset="utf-8"><title>Die Lichtmaschine · Show Structure</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700;800;900&family=Barlow:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>*,*::before,*::after{box-sizing:border-box}html{background:#0e0e10}body{margin:0;font-family:Barlow,system-ui,sans-serif;display:flex;justify-content:center;align-items:flex-start;min-height:100vh}
+@keyframes lm-spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}@keyframes lm-pulse{0%,100%{opacity:0.35}50%{opacity:1}}</style>
+</head><body>
+<div data-screen-label="Show Structure" style="width:1920px;height:1080px;background:#141416;display:flex;flex-direction:column;overflow:hidden">
+    <div style="height:48px;background:#1e1e1e;border-bottom:1px solid #3a3a3a;display:flex;align-items:center;padding:0 20px;gap:20px;flex:none">
+      <div style="display:flex;align-items:center;gap:10px">
+        <svg width="20" height="20" viewBox="0 0 64 64"><circle cx="32" cy="32" r="23" fill="none" stroke="#f4f1ea" stroke-width="11" stroke-dasharray="9.03 9.03" transform="rotate(-11.25 32 32)"></circle><circle cx="32" cy="32" r="8" fill="#f0562e"></circle></svg>
+        <span style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:15px;letter-spacing:0.09em;color:#f4f1ea">DIE LICHTMASCHINE</span>
+      </div>
+      <div style="width:1px;height:20px;background:#3a3a3a"></div>
+      <div style="display:flex;gap:2px;height:48px;align-items:stretch">
+        <div style="display:flex;align-items:center;padding:0 16px;font-family:'Barlow Condensed',sans-serif;font-weight:600;font-size:15px;letter-spacing:0.12em;color:#8d9299">SETUP</div>
+        <div style="display:flex;align-items:center;padding:0 16px;font-family:'Barlow Condensed',sans-serif;font-weight:600;font-size:15px;letter-spacing:0.12em;color:#f4f1ea;border-bottom:2px solid #f0562e">SHOW</div>
+        <div style="display:flex;align-items:center;padding:0 16px;font-family:'Barlow Condensed',sans-serif;font-weight:600;font-size:15px;letter-spacing:0.12em;color:#8d9299">AUTO</div>
+        <div style="display:flex;align-items:center;padding:0 16px;font-family:'Barlow Condensed',sans-serif;font-weight:600;font-size:15px;letter-spacing:0.12em;color:#8d9299">LIVE</div>
+      </div>
+      <div style="flex:1"></div>
+      <div style="display:flex;gap:6px;align-items:center">
+        <span title="Speichern" style="width:30px;height:30px;display:flex;align-items:center;justify-content:center;border:1px solid #3a3a3a;color:#c9cdd2;font-size:14px"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M8 2.5v7M5.5 7L8 9.5L10.5 7M3 11.5v2h10v-2"></path></svg></span>
+        <span title="Export (.qxw u. a.)" style="width:30px;height:30px;display:flex;align-items:center;justify-content:center;border:1px solid #3a3a3a;color:#c9cdd2;font-size:14px"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6.5 4H3v9h9V9.5M9 3h4v4M13 3L7.5 8.5"></path></svg></span>
+        <span title="Show morphen" style="width:30px;height:30px;display:flex;align-items:center;justify-content:center;border:1px solid #3a3a3a;color:#c9cdd2;font-size:14px"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 5.5h11M10.5 3L13 5.5L10.5 8M14 10.5H3M5.5 8L3 10.5L5.5 13"></path></svg></span>
+        <span title="Audio: Geräte &amp; Analyse" style="width:30px;height:30px;display:flex;align-items:center;justify-content:center;border:1px solid #3a3a3a;color:#c9cdd2;font-size:14px"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M2 6.5v3M5 4v8M8 2.5v11M11 5v6M14 6.5v3"></path></svg></span>
+        <span title="Einstellungen: Universen, Output, Theme" style="width:30px;height:30px;display:flex;align-items:center;justify-content:center;border:1px solid #3a3a3a;color:#c9cdd2;font-size:14px"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M2 4h12M2 8h12M2 12h12"></path><circle cx="10.5" cy="4" r="1.8"></circle><circle cx="5" cy="8" r="1.8"></circle><circle cx="11.5" cy="12" r="1.8"></circle></svg></span>
+        <span title="Menü: alles Weitere" style="width:30px;height:30px;display:flex;align-items:center;justify-content:center;border:1px solid #3a3a3a;color:#c9cdd2;font-size:13px"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M3 4.5h10M3 8h10M3 11.5h6"></path></svg></span>
+      </div>
+      <div style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:#8d9299">neon_ruinen.lms</div>
+      <div style="display:flex;align-items:center;gap:6px;padding:4px 10px;background:#252526;border:1px solid #3a3a3a"><span style="width:7px;height:7px;border-radius:50%;background:#4caf50"></span><span style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:#c9cdd2">ARTNET OUT · 44 Hz</span></div>
+    </div>
+    <div style="height:38px;background:#18181a;border-bottom:1px solid #2d2d2d;display:flex;align-items:center;padding:0 20px;gap:4px;flex:none">
+      <div style="padding:5px 14px;font-size:13px;font-weight:600;color:#141416;background:#f0562e">Structure</div>
+      <div style="padding:5px 14px;font-size:13px;font-weight:600;color:#8d9299">Timeline</div>
+      <div style="flex:1"></div>
+      <div style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:#8d9299">neon_ruinen.wav · 03:42 · <span style="color:#4caf50">ANALYZED ✓</span></div>
+      <div style="margin-left:16px;padding:6px 16px;border:1px solid #3a3a3a;font-family:'Barlow Condensed',sans-serif;font-weight:600;font-size:14px;letter-spacing:0.08em;color:#c9cdd2">⚙ AUTOGENERATE SHOW…</div>
+    </div>
+    <div style="flex:1;display:flex;min-height:0">
+      <div style="flex:1;padding:28px;min-width:0;display:flex;flex-direction:column;gap:28px">
+        <div>
+          <div style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.12em;color:#5c6068;margin-bottom:12px">PARTS · DRAG TO REORDER</div>
+          <div style="display:flex;align-items:stretch;gap:0">
+            <div style="width:190px;background:rgba(141,146,153,0.12);border:1px solid #3a3a3a;border-top:3px solid #8d9299;padding:14px 16px">
+              <div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:20px;letter-spacing:0.06em;color:#f4f1ea">INTRO</div>
+              <div style="font-family:'IBM Plex Mono',monospace;font-size:12px;color:#8d9299;margin-top:8px;line-height:1.8">8 BARS · 4/4<br><span style="color:#f4f1ea">120.0</span> BPM</div>
+            </div>
+            <div style="display:flex;align-items:center;padding:0 6px"><span style="font-family:'IBM Plex Mono',monospace;font-size:9px;color:#5c6068;background:#1e1e1e;border:1px solid #2d2d2d;padding:3px 7px">XFADE 2</span></div>
+            <div style="width:190px;background:rgba(78,203,212,0.12);border:1px solid #3a3a3a;border-top:3px solid #4ecbd4;padding:14px 16px">
+              <div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:20px;letter-spacing:0.06em;color:#f4f1ea">VERSE 1</div>
+              <div style="font-family:'IBM Plex Mono',monospace;font-size:12px;color:#8d9299;margin-top:8px;line-height:1.8">16 BARS · 4/4<br><span style="color:#f4f1ea">126.0</span> BPM</div>
+            </div>
+            <div style="display:flex;align-items:center;padding:0 6px"><span style="font-family:'IBM Plex Mono',monospace;font-size:9px;color:#5c6068;background:#1e1e1e;border:1px solid #2d2d2d;padding:3px 7px">FILL 1</span></div>
+            <div style="width:190px;background:rgba(240,86,46,0.14);border:1px solid #f0562e;border-top:3px solid #f0562e;padding:14px 16px;position:relative">
+              <div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:20px;letter-spacing:0.06em;color:#f0562e">CHORUS 1</div>
+              <div style="font-family:'IBM Plex Mono',monospace;font-size:12px;color:#8d9299;margin-top:8px;line-height:1.8">8 BARS · 4/4<br><span style="color:#f4f1ea">128.0</span> BPM</div>
+            </div>
+            <div style="display:flex;align-items:center;padding:0 6px"><span style="font-family:'IBM Plex Mono',monospace;font-size:9px;color:#5c6068;background:#1e1e1e;border:1px solid #2d2d2d;padding:3px 7px">INSTANT</span></div>
+            <div style="width:190px;background:rgba(201,95,208,0.12);border:1px solid #3a3a3a;border-top:3px solid #c95fd0;padding:14px 16px">
+              <div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:20px;letter-spacing:0.06em;color:#f4f1ea">DROP</div>
+              <div style="font-family:'IBM Plex Mono',monospace;font-size:12px;color:#8d9299;margin-top:8px;line-height:1.8">8 BARS · 4/4<br><span style="color:#f4f1ea">128.0</span> BPM</div>
+            </div>
+            <div style="display:flex;align-items:center;padding:0 6px"><span style="font-family:'IBM Plex Mono',monospace;font-size:9px;color:#5c6068;background:#1e1e1e;border:1px solid #2d2d2d;padding:3px 7px">XFADE 4</span></div>
+            <div style="width:190px;background:rgba(141,146,153,0.12);border:1px solid #3a3a3a;border-top:3px solid #8d9299;padding:14px 16px">
+              <div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:20px;letter-spacing:0.06em;color:#f4f1ea">OUTRO</div>
+              <div style="font-family:'IBM Plex Mono',monospace;font-size:12px;color:#8d9299;margin-top:8px;line-height:1.8">8 BARS · 4/4<br><span style="color:#f4f1ea">120.0</span> BPM</div>
+            </div>
+            <div style="display:flex;align-items:center;margin-left:14px"><span style="width:44px;height:44px;border:1px dashed #3a3a3a;display:flex;align-items:center;justify-content:center;font-size:18px;color:#5c6068">＋</span></div>
+          </div>
+        </div>
+        <div>
+          <div style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.12em;color:#5c6068;margin-bottom:12px">MASTER GRID · 48 BARS · 03:42</div>
+          <div style="position:relative;height:110px;background:#1e1e1e;border:1px solid #3a3a3a">
+            <div style="position:absolute;top:0;bottom:0;left:0;width:13.4%;background:rgba(141,146,153,0.16);border-right:1px solid #2d2d2d"></div>
+            <div style="position:absolute;top:0;bottom:0;left:13.4%;width:31%;background:rgba(78,203,212,0.16);border-right:1px solid #2d2d2d"></div>
+            <div style="position:absolute;top:0;bottom:0;left:44.4%;width:16.2%;background:rgba(240,86,46,0.18);border-right:1px solid #2d2d2d"></div>
+            <div style="position:absolute;top:0;bottom:0;left:60.6%;width:16.2%;background:rgba(201,95,208,0.16);border-right:1px solid #2d2d2d"></div>
+            <div style="position:absolute;top:0;bottom:0;left:76.8%;width:23.2%;background:rgba(141,146,153,0.14)"></div>
+            <div style="position:absolute;top:8px;left:1%;font-family:'IBM Plex Mono',monospace;font-size:10px;color:#8d9299">INTRO</div>
+            <div style="position:absolute;top:8px;left:14.4%;font-family:'IBM Plex Mono',monospace;font-size:10px;color:#8d9299">VERSE 1</div>
+            <div style="position:absolute;top:8px;left:45.4%;font-family:'IBM Plex Mono',monospace;font-size:10px;color:#f0562e">CHORUS 1</div>
+            <div style="position:absolute;top:8px;left:61.6%;font-family:'IBM Plex Mono',monospace;font-size:10px;color:#8d9299">DROP</div>
+            <div style="position:absolute;top:8px;left:77.8%;font-family:'IBM Plex Mono',monospace;font-size:10px;color:#8d9299">OUTRO</div>
+            <div style="position:absolute;left:0;right:0;top:34px;height:44px;background:repeating-linear-gradient(90deg,#232325 0 3px,#1a1a1c 3px 6px);display:flex;align-items:center;justify-content:center"><span style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:#5c6068">[ audio waveform · neon_ruinen.wav ]</span></div>
+            <div style="position:absolute;left:0;right:0;bottom:0;height:22px;border-top:1px solid #2d2d2d;background-image:repeating-linear-gradient(90deg,#3a3a3a 0 1px,transparent 1px 2.083%)"></div>
+            <div style="position:absolute;bottom:4px;left:0.4%;font-family:'IBM Plex Mono',monospace;font-size:9px;color:#5c6068">1</div>
+            <div style="position:absolute;bottom:4px;left:25%;font-family:'IBM Plex Mono',monospace;font-size:9px;color:#5c6068">13</div>
+            <div style="position:absolute;bottom:4px;left:50%;font-family:'IBM Plex Mono',monospace;font-size:9px;color:#5c6068">25</div>
+            <div style="position:absolute;bottom:4px;left:75%;font-family:'IBM Plex Mono',monospace;font-size:9px;color:#5c6068">37</div>
+          </div>
+          <div style="margin-top:10px;display:flex;gap:16px;font-family:'IBM Plex Mono',monospace;font-size:10px;color:#5c6068"><span>SNAP: BAR · ½ BEAT · ¼ BEAT</span><span>·</span><span>Every downstream feature snaps to this grid · timeline blocks, riffs, autogen phrases.</span></div>
+        </div>
+      </div>
+      <div style="width:400px;background:#1e1e1e;border-left:1px solid #2d2d2d;padding:20px;flex:none">
+        <div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:18px;letter-spacing:0.05em;color:#f0562e;margin-bottom:16px">CHORUS 1</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+          <div style="background:#252526;border:1px solid #3a3a3a;padding:10px 12px"><div style="font-family:'IBM Plex Mono',monospace;font-size:9px;color:#5c6068">BPM</div><div style="font-family:'IBM Plex Mono',monospace;font-size:22px;color:#f4f1ea">128.0</div></div>
+          <div style="background:#252526;border:1px solid #3a3a3a;padding:10px 12px"><div style="font-family:'IBM Plex Mono',monospace;font-size:9px;color:#5c6068">TIME SIG</div><div style="font-family:'IBM Plex Mono',monospace;font-size:22px;color:#f4f1ea">4/4</div></div>
+          <div style="background:#252526;border:1px solid #3a3a3a;padding:10px 12px"><div style="font-family:'IBM Plex Mono',monospace;font-size:9px;color:#5c6068">BARS</div><div style="font-family:'IBM Plex Mono',monospace;font-size:22px;color:#f4f1ea">8</div></div>
+          <div style="background:#252526;border:1px solid #3a3a3a;padding:10px 12px"><div style="font-family:'IBM Plex Mono',monospace;font-size:9px;color:#5c6068">DURATION</div><div style="font-family:'IBM Plex Mono',monospace;font-size:22px;color:#f4f1ea">15.0 s</div></div>
+        </div>
+        <div style="margin-top:14px"><div style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:#5c6068;margin-bottom:6px">TRANSITION OUT</div><div style="padding:9px 12px;background:#252526;border:1px solid #3a3a3a;font-size:13px;color:#c9cdd2;display:flex;justify-content:space-between"><span>Instant</span><span style="color:#5c6068">▾</span></div></div>
+        <div style="margin-top:14px"><div style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:#5c6068;margin-bottom:6px">AUDIO ANALYSIS</div>
+          <div style="display:flex;justify-content:space-between;font-family:'IBM Plex Mono',monospace;font-size:12px;color:#c9cdd2;padding:6px 0;border-bottom:1px solid #2d2d2d"><span>Energy</span><span style="color:#f4f1ea">0.82 HIGH</span></div>
+          <div style="display:flex;justify-content:space-between;font-family:'IBM Plex Mono',monospace;font-size:12px;color:#c9cdd2;padding:6px 0;border-bottom:1px solid #2d2d2d"><span>Vocals</span><span style="color:#f4f1ea">PRESENT</span></div>
+          <div style="display:flex;justify-content:space-between;font-family:'IBM Plex Mono',monospace;font-size:12px;color:#c9cdd2;padding:6px 0"><span>Contrast</span><span style="color:#f4f1ea">0.64 RICH</span></div>
+        </div>
+      </div>
+    </div>
+    <div style="height:26px;background:#1e1e1e;border-top:1px solid #3a3a3a;display:flex;align-items:center;padding:0 20px;gap:24px;font-family:'IBM Plex Mono',monospace;font-size:10px;color:#5c6068;flex:none">
+      <span>5 PARTS · 48 BARS · 03:42</span><span style="flex:1"></span><span>SAVED 12:04</span>
+    </div>
+  </div>
+</body></html>

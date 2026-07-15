@@ -18,7 +18,6 @@ from utils.create_workspace import create_qlc_workspace
 
 REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 RIGS_DIR = os.path.join(REPO_ROOT, "demos", "rigs")
-WORKSPACE_OUT = os.path.join(REPO_ROOT, "workspace.qxw")
 
 RIG_NAMES = [
     "club_band",
@@ -80,15 +79,13 @@ def _collect_overlaps(container, path, out):
             _collect_overlaps(c, path + "/" + _label(c), out)
 
 
-def _export_and_parse(rig_name):
+def _export_and_parse(rig_name, tmp_path):
+    """Export into tmp_path: a per-test path, so parallel (xdist) workers
+    never fight over one repo-root workspace.qxw (WinError 32)."""
     config = Configuration.load(os.path.join(RIGS_DIR, f"{rig_name}.yaml"))
-    try:
-        create_qlc_workspace(config, VC_OPTIONS)
-        tree = ET.parse(WORKSPACE_OUT)
-    finally:
-        # create_qlc_workspace writes into the repo root; never leave it behind.
-        if os.path.exists(WORKSPACE_OUT):
-            os.remove(WORKSPACE_OUT)
+    out = str(tmp_path / "workspace.qxw")
+    create_qlc_workspace(config, VC_OPTIONS, output_path=out)
+    tree = ET.parse(out)
     root = tree.getroot()
     for el in root.iter():
         if "}" in el.tag:
@@ -97,9 +94,9 @@ def _export_and_parse(rig_name):
 
 
 @pytest.mark.parametrize("rig_name", RIG_NAMES)
-def test_no_vc_widget_overlaps(rig_name):
+def test_no_vc_widget_overlaps(rig_name, tmp_path):
     """No two sibling VC widgets may overlap in any exported demo rig."""
-    root = _export_and_parse(rig_name)
+    root = _export_and_parse(rig_name, tmp_path)
     vc = root.find("VirtualConsole")
     assert vc is not None, "export produced no VirtualConsole"
     main_frame = vc.find("Frame")
@@ -111,13 +108,13 @@ def test_no_vc_widget_overlaps(rig_name):
 
 
 @pytest.mark.parametrize("rig_name", RIG_NAMES)
-def test_group_frames_clear_right_column(rig_name):
+def test_group_frames_clear_right_column(rig_name, tmp_path):
     """Left-column group frames must not intrude into the right-column band.
 
     The Master frame / SpeedDial live at the largest X in the main frame; every
     other top-level frame must stay strictly left of where that band begins.
     """
-    root = _export_and_parse(rig_name)
+    root = _export_and_parse(rig_name, tmp_path)
     main_frame = root.find("VirtualConsole").find("Frame")
     top = [(c, _rect(c)) for c in main_frame if c.tag in WIDGET_TAGS and _rect(c) is not None]
     if len(top) < 2:

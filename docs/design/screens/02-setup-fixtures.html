@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="de"><head><meta charset="utf-8"><title>Die Lichtmaschine · Setup Fixtures</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700;800;900&family=Barlow:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>*,*::before,*::after{box-sizing:border-box}html{background:#0e0e10}body{margin:0;font-family:Barlow,system-ui,sans-serif;display:flex;justify-content:center;align-items:flex-start;min-height:100vh}
+@keyframes lm-spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}@keyframes lm-pulse{0%,100%{opacity:0.35}50%{opacity:1}}</style>
+</head><body>
+<div data-screen-label="Setup Fixtures" style="width:1920px;height:1080px;background:#141416;display:flex;flex-direction:column;overflow:hidden">
+    <div style="height:48px;background:#1e1e1e;border-bottom:1px solid #3a3a3a;display:flex;align-items:center;padding:0 20px;gap:20px;flex:none">
+      <div style="display:flex;align-items:center;gap:10px">
+        <svg width="20" height="20" viewBox="0 0 64 64"><circle cx="32" cy="32" r="23" fill="none" stroke="#f4f1ea" stroke-width="11" stroke-dasharray="9.03 9.03" transform="rotate(-11.25 32 32)"></circle><circle cx="32" cy="32" r="8" fill="#f0562e"></circle></svg>
+        <span style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:15px;letter-spacing:0.09em;color:#f4f1ea">DIE LICHTMASCHINE</span>
+      </div>
+      <div style="width:1px;height:20px;background:#3a3a3a"></div>
+      <div style="display:flex;gap:2px;height:48px;align-items:stretch">
+        <div style="display:flex;align-items:center;padding:0 16px;font-family:'Barlow Condensed',sans-serif;font-weight:600;font-size:15px;letter-spacing:0.12em;color:#f4f1ea;border-bottom:2px solid #f0562e">SETUP</div>
+        <div style="display:flex;align-items:center;padding:0 16px;font-family:'Barlow Condensed',sans-serif;font-weight:600;font-size:15px;letter-spacing:0.12em;color:#8d9299">SHOW</div>
+        <div style="display:flex;align-items:center;padding:0 16px;font-family:'Barlow Condensed',sans-serif;font-weight:600;font-size:15px;letter-spacing:0.12em;color:#8d9299">AUTO</div>
+        <div style="display:flex;align-items:center;padding:0 16px;font-family:'Barlow Condensed',sans-serif;font-weight:600;font-size:15px;letter-spacing:0.12em;color:#8d9299">LIVE</div>
+      </div>
+      <div style="flex:1"></div>
+      <div style="display:flex;gap:6px;align-items:center">
+        <span title="Speichern" style="width:30px;height:30px;display:flex;align-items:center;justify-content:center;border:1px solid #3a3a3a;color:#c9cdd2;font-size:14px"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M8 2.5v7M5.5 7L8 9.5L10.5 7M3 11.5v2h10v-2"></path></svg></span>
+        <span title="Export (.qxw u. a.)" style="width:30px;height:30px;display:flex;align-items:center;justify-content:center;border:1px solid #3a3a3a;color:#c9cdd2;font-size:14px"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6.5 4H3v9h9V9.5M9 3h4v4M13 3L7.5 8.5"></path></svg></span>
+        <span title="Show morphen" style="width:30px;height:30px;display:flex;align-items:center;justify-content:center;border:1px solid #3a3a3a;color:#c9cdd2;font-size:14px"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 5.5h11M10.5 3L13 5.5L10.5 8M14 10.5H3M5.5 8L3 10.5L5.5 13"></path></svg></span>
+        <span title="Audio: Geräte &amp; Analyse" style="width:30px;height:30px;display:flex;align-items:center;justify-content:center;border:1px solid #3a3a3a;color:#c9cdd2;font-size:14px"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M2 6.5v3M5 4v8M8 2.5v11M11 5v6M14 6.5v3"></path></svg></span>
+        <span title="Einstellungen: Universen, Output, Theme" style="width:30px;height:30px;display:flex;align-items:center;justify-content:center;border:1px solid #3a3a3a;color:#c9cdd2;font-size:14px"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M2 4h12M2 8h12M2 12h12"></path><circle cx="10.5" cy="4" r="1.8"></circle><circle cx="5" cy="8" r="1.8"></circle><circle cx="11.5" cy="12" r="1.8"></circle></svg></span>
+        <span title="Menü: alles Weitere" style="width:30px;height:30px;display:flex;align-items:center;justify-content:center;border:1px solid #3a3a3a;color:#c9cdd2;font-size:13px"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M3 4.5h10M3 8h10M3 11.5h6"></path></svg></span>
+      </div>
+      <div style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:#8d9299">neon_ruinen.lms</div>
+      <div style="display:flex;align-items:center;gap:6px;padding:4px 10px;background:#252526;border:1px solid #3a3a3a"><span style="width:7px;height:7px;border-radius:50%;background:#4caf50"></span><span style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:#c9cdd2">ARTNET OUT · 44 Hz</span></div>
+    </div>
+    <div style="height:38px;background:#18181a;border-bottom:1px solid #2d2d2d;display:flex;align-items:center;padding:0 20px;gap:4px;flex:none">
+      <div style="padding:5px 14px;font-size:13px;font-weight:600;color:#8d9299">Universes</div>
+      <div style="padding:5px 14px;font-size:13px;font-weight:600;color:#141416;background:#f0562e">Fixtures</div>
+      <div style="padding:5px 14px;font-size:13px;font-weight:600;color:#8d9299">Stage</div>
+      <div style="padding:5px 14px;font-size:13px;font-weight:600;color:#8d9299">Live Controls</div>
+      <div style="flex:1"></div>
+      <div style="padding:6px 16px;background:#f0562e;color:#141416;font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:14px;letter-spacing:0.08em">+ IMPORT .QXF</div>
+    </div>
+    <div style="flex:1;display:flex;min-height:0">
+      <!-- groups -->
+      <div style="width:280px;background:#1e1e1e;border-right:1px solid #2d2d2d;display:flex;flex-direction:column;flex:none">
+        <div style="padding:12px 16px;display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid #2d2d2d"><span style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.12em;color:#5c6068">GROUPS</span><span style="font-family:'IBM Plex Mono',monospace;font-size:12px;color:#8d9299">＋</span></div>
+        <div style="padding:12px 16px;border-bottom:1px solid #2d2d2d;border-left:3px solid #d9a441;background:#252526">
+          <div style="display:flex;justify-content:space-between"><span style="font-size:14px;font-weight:600;color:#f4f1ea">FRONT PARS</span><span style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:#5c6068">4 FIX</span></div>
+          <div style="font-size:11px;color:#8d9299;margin-top:3px">Role: wash / key · PAR only</div>
+        </div>
+        <div style="padding:12px 16px;border-bottom:1px solid #2d2d2d;border-left:3px solid #4ecbd4">
+          <div style="display:flex;justify-content:space-between"><span style="font-size:14px;font-weight:600;color:#f4f1ea">REAR WASH</span><span style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:#5c6068">2 FIX</span></div>
+          <div style="font-size:11px;color:#8d9299;margin-top:3px">Role: texture · wash heads</div>
+        </div>
+        <div style="padding:12px 16px;border-bottom:1px solid #2d2d2d;border-left:3px solid #c95fd0">
+          <div style="display:flex;justify-content:space-between"><span style="font-size:14px;font-weight:600;color:#f4f1ea">MOVERS</span><span style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:#5c6068">2 FIX</span></div>
+          <div style="font-size:11px;color:#8d9299;margin-top:3px">Role: accent · moving heads</div>
+        </div>
+        <div style="padding:12px 16px;border-bottom:1px solid #2d2d2d;border-left:3px solid #6f9e4c">
+          <div style="display:flex;justify-content:space-between"><span style="font-size:14px;font-weight:600;color:#f4f1ea">PIXEL BAR</span><span style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:#5c6068">1 FIX</span></div>
+          <div style="font-size:11px;color:#8d9299;margin-top:3px">Role: texture · per-cell RGBW</div>
+        </div>
+        <div style="padding:12px 16px;border-bottom:1px solid #2d2d2d;border-left:3px solid #8d9299">
+          <div style="display:flex;justify-content:space-between"><span style="font-size:14px;font-weight:600;color:#f4f1ea">SUNSTRIP</span><span style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:#5c6068">1 FIX</span></div>
+          <div style="font-size:11px;color:#8d9299;margin-top:3px">Role: accent · per-cell dimmer</div>
+        </div>
+        <div style="flex:1"></div>
+        <div style="margin:16px;padding:12px;border:1px dashed #3a3a3a;font-size:11px;color:#5c6068;line-height:1.5">Groups are the unit the timeline, Autogen and Live Controls address. Keep them role-based.</div>
+      </div>
+      <!-- table -->
+      <div style="flex:1;display:flex;flex-direction:column;min-width:0">
+        <div style="display:grid;grid-template-columns:44px 1.6fr 1fr 0.7fr 0.6fr 0.8fr 1fr;padding:10px 16px;border-bottom:1px solid #3a3a3a;font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.1em;color:#5c6068">
+          <span>#</span><span>FIXTURE</span><span>TYPE</span><span>MODE</span><span>UNI</span><span>ADDRESS</span><span>GROUP</span>
+        </div>
+        <div style="display:grid;grid-template-columns:44px 1.6fr 1fr 0.7fr 0.6fr 0.8fr 1fr;padding:11px 16px;border-bottom:1px solid #232325;background:rgba(217,164,65,0.17);font-size:13px;color:#c9cdd2;align-items:center"><span style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:#5c6068">01</span><span style="color:#f4f1ea;font-weight:500">Stairville LED PAR 64 · A</span><span>PAR</span><span style="font-family:'IBM Plex Mono',monospace;font-size:11px">8 CH</span><span style="font-family:'IBM Plex Mono',monospace;font-size:11px">U1</span><span style="font-family:'IBM Plex Mono',monospace;font-size:11px">001–008</span><span style="color:#d9a441;font-weight:600;font-size:12px">FRONT PARS</span></div>
+        <div style="display:grid;grid-template-columns:44px 1.6fr 1fr 0.7fr 0.6fr 0.8fr 1fr;padding:11px 16px;border-bottom:1px solid #232325;background:rgba(217,164,65,0.17);font-size:13px;color:#c9cdd2;align-items:center"><span style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:#5c6068">02</span><span style="color:#f4f1ea;font-weight:500">Stairville LED PAR 64 · B</span><span>PAR</span><span style="font-family:'IBM Plex Mono',monospace;font-size:11px">8 CH</span><span style="font-family:'IBM Plex Mono',monospace;font-size:11px">U1</span><span style="font-family:'IBM Plex Mono',monospace;font-size:11px">009–016</span><span style="color:#d9a441;font-weight:600;font-size:12px">FRONT PARS</span></div>
+        <div style="display:grid;grid-template-columns:44px 1.6fr 1fr 0.7fr 0.6fr 0.8fr 1fr;padding:11px 16px;border-bottom:1px solid #232325;background:rgba(217,164,65,0.17);font-size:13px;color:#c9cdd2;align-items:center"><span style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:#5c6068">03</span><span style="color:#f4f1ea;font-weight:500">Stairville LED PAR 64 · C</span><span>PAR</span><span style="font-family:'IBM Plex Mono',monospace;font-size:11px">8 CH</span><span style="font-family:'IBM Plex Mono',monospace;font-size:11px">U1</span><span style="font-family:'IBM Plex Mono',monospace;font-size:11px">017–024</span><span style="color:#d9a441;font-weight:600;font-size:12px">FRONT PARS</span></div>
+        <div style="display:grid;grid-template-columns:44px 1.6fr 1fr 0.7fr 0.6fr 0.8fr 1fr;padding:11px 16px;border-bottom:1px solid #232325;background:rgba(217,164,65,0.17);font-size:13px;color:#c9cdd2;align-items:center"><span style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:#5c6068">04</span><span style="color:#f4f1ea;font-weight:500">Stairville LED PAR 64 · D</span><span>PAR</span><span style="font-family:'IBM Plex Mono',monospace;font-size:11px">8 CH</span><span style="font-family:'IBM Plex Mono',monospace;font-size:11px">U1</span><span style="font-family:'IBM Plex Mono',monospace;font-size:11px">025–032</span><span style="color:#d9a441;font-weight:600;font-size:12px">FRONT PARS</span></div>
+        <div style="display:grid;grid-template-columns:44px 1.6fr 1fr 0.7fr 0.6fr 0.8fr 1fr;padding:11px 16px;border-bottom:1px solid #232325;background:rgba(201,95,208,0.17);font-size:13px;color:#c9cdd2;align-items:center;outline:1px solid #f0562e;outline-offset:-1px"><span style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:#5c6068">05</span><span style="color:#f4f1ea;font-weight:500">MHX-50 Moving Head · L</span><span>MOVING HEAD</span><span style="font-family:'IBM Plex Mono',monospace;font-size:11px">16 CH</span><span style="font-family:'IBM Plex Mono',monospace;font-size:11px">U1</span><span style="font-family:'IBM Plex Mono',monospace;font-size:11px">033–048</span><span style="color:#c95fd0;font-weight:600;font-size:12px">MOVERS</span></div>
+        <div style="display:grid;grid-template-columns:44px 1.6fr 1fr 0.7fr 0.6fr 0.8fr 1fr;padding:11px 16px;border-bottom:1px solid #232325;background:rgba(201,95,208,0.17);font-size:13px;color:#c9cdd2;align-items:center"><span style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:#5c6068">06</span><span style="color:#f4f1ea;font-weight:500">MHX-50 Moving Head · R</span><span>MOVING HEAD</span><span style="font-family:'IBM Plex Mono',monospace;font-size:11px">16 CH</span><span style="font-family:'IBM Plex Mono',monospace;font-size:11px">U1</span><span style="font-family:'IBM Plex Mono',monospace;font-size:11px">049–064</span><span style="color:#c95fd0;font-weight:600;font-size:12px">MOVERS</span></div>
+        <div style="display:grid;grid-template-columns:44px 1.6fr 1fr 0.7fr 0.6fr 0.8fr 1fr;padding:11px 16px;border-bottom:1px solid #232325;background:rgba(78,203,212,0.17);font-size:13px;color:#c9cdd2;align-items:center"><span style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:#5c6068">07</span><span style="color:#f4f1ea;font-weight:500">Eurolite TMH-X4 · 1</span><span>WASH</span><span style="font-family:'IBM Plex Mono',monospace;font-size:11px">14 CH</span><span style="font-family:'IBM Plex Mono',monospace;font-size:11px">U1</span><span style="font-family:'IBM Plex Mono',monospace;font-size:11px">065–078</span><span style="color:#4ecbd4;font-weight:600;font-size:12px">REAR WASH</span></div>
+        <div style="display:grid;grid-template-columns:44px 1.6fr 1fr 0.7fr 0.6fr 0.8fr 1fr;padding:11px 16px;border-bottom:1px solid #232325;background:rgba(78,203,212,0.17);font-size:13px;color:#c9cdd2;align-items:center"><span style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:#5c6068">08</span><span style="color:#f4f1ea;font-weight:500">Eurolite TMH-X4 · 2</span><span>WASH</span><span style="font-family:'IBM Plex Mono',monospace;font-size:11px">14 CH</span><span style="font-family:'IBM Plex Mono',monospace;font-size:11px">U1</span><span style="font-family:'IBM Plex Mono',monospace;font-size:11px">079–092</span><span style="color:#4ecbd4;font-weight:600;font-size:12px">REAR WASH</span></div>
+        <div style="display:grid;grid-template-columns:44px 1.6fr 1fr 0.7fr 0.6fr 0.8fr 1fr;padding:11px 16px;border-bottom:1px solid #232325;background:rgba(111,158,76,0.17);font-size:13px;color:#c9cdd2;align-items:center"><span style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:#5c6068">09</span><span style="color:#f4f1ea;font-weight:500">Pixel Bar 12 RGBW</span><span>PIXEL BAR</span><span style="font-family:'IBM Plex Mono',monospace;font-size:11px">48 CH</span><span style="font-family:'IBM Plex Mono',monospace;font-size:11px">U2</span><span style="font-family:'IBM Plex Mono',monospace;font-size:11px">001–048</span><span style="color:#6f9e4c;font-weight:600;font-size:12px">PIXEL BAR</span></div>
+        <div style="display:grid;grid-template-columns:44px 1.6fr 1fr 0.7fr 0.6fr 0.8fr 1fr;padding:11px 16px;border-bottom:1px solid #232325;background:rgba(141,146,153,0.17);font-size:13px;color:#c9cdd2;align-items:center"><span style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:#5c6068">10</span><span style="color:#f4f1ea;font-weight:500">Sunstrip Active 10</span><span>SUNSTRIP</span><span style="font-family:'IBM Plex Mono',monospace;font-size:11px">10 CH</span><span style="font-family:'IBM Plex Mono',monospace;font-size:11px">U2</span><span style="font-family:'IBM Plex Mono',monospace;font-size:11px">049–058</span><span style="color:#8d9299;font-weight:600;font-size:12px">SUNSTRIP</span></div>
+        <div style="flex:1"></div>
+        <div style="padding:10px 16px;border-top:1px solid #2d2d2d;font-family:'IBM Plex Mono',monospace;font-size:10px;color:#5c6068">AUTO-PATCH: dropping a fixture allocates the next free address range</div>
+      </div>
+      <!-- detail -->
+      <div style="width:380px;background:#1e1e1e;border-left:1px solid #2d2d2d;display:flex;flex-direction:column;flex:none">
+        <div style="padding:14px 16px;border-bottom:1px solid #2d2d2d">
+          <div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:18px;letter-spacing:0.05em;color:#f4f1ea">MHX-50 MOVING HEAD · L</div>
+          <div style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:#5c6068;margin-top:4px">mhx-50.qxf · QLC+ LIBRARY</div>
+        </div>
+        <div style="padding:14px 16px;border-bottom:1px solid #2d2d2d">
+          <div style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.12em;color:#5c6068;margin-bottom:8px">CAPABILITIES</div>
+          <div style="display:flex;flex-wrap:wrap;gap:6px">
+            <span style="padding:3px 9px;background:#252526;border:1px solid #3a3a3a;font-family:'IBM Plex Mono',monospace;font-size:10px;color:#c9cdd2">PAN/TILT</span>
+            <span style="padding:3px 9px;background:#252526;border:1px solid #3a3a3a;font-family:'IBM Plex Mono',monospace;font-size:10px;color:#c9cdd2">RGBW</span>
+            <span style="padding:3px 9px;background:#252526;border:1px solid #3a3a3a;font-family:'IBM Plex Mono',monospace;font-size:10px;color:#c9cdd2">GOBO ×8</span>
+            <span style="padding:3px 9px;background:#252526;border:1px solid #3a3a3a;font-family:'IBM Plex Mono',monospace;font-size:10px;color:#c9cdd2">PRISM 3F</span>
+            <span style="padding:3px 9px;background:#252526;border:1px solid #3a3a3a;font-family:'IBM Plex Mono',monospace;font-size:10px;color:#c9cdd2">STROBE</span>
+            <span style="padding:3px 9px;background:#252526;border:1px solid #3a3a3a;font-family:'IBM Plex Mono',monospace;font-size:10px;color:#c9cdd2">ZOOM</span>
+          </div>
+        </div>
+        <div style="padding:14px 16px;flex:1;overflow:hidden">
+          <div style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.12em;color:#5c6068;margin-bottom:8px">CHANNEL MAP · MODE 16 CH</div>
+          <div style="font-family:'IBM Plex Mono',monospace;font-size:11.5px;line-height:2;color:#c9cdd2">
+            <div style="display:flex;justify-content:space-between;border-bottom:1px solid #232325"><span>01 PAN</span><span style="color:#5c6068">coarse</span></div>
+            <div style="display:flex;justify-content:space-between;border-bottom:1px solid #232325"><span>02 PAN FINE</span><span style="color:#5c6068">fine</span></div>
+            <div style="display:flex;justify-content:space-between;border-bottom:1px solid #232325"><span>03 TILT</span><span style="color:#5c6068">coarse</span></div>
+            <div style="display:flex;justify-content:space-between;border-bottom:1px solid #232325"><span>04 TILT FINE</span><span style="color:#5c6068">fine</span></div>
+            <div style="display:flex;justify-content:space-between;border-bottom:1px solid #232325"><span>05 DIMMER</span><span style="color:#5c6068">0–255</span></div>
+            <div style="display:flex;justify-content:space-between;border-bottom:1px solid #232325"><span>06 STROBE</span><span style="color:#5c6068">shutter</span></div>
+            <div style="display:flex;justify-content:space-between;border-bottom:1px solid #232325"><span>07 RED</span><span style="color:#5c6068">0–255</span></div>
+            <div style="display:flex;justify-content:space-between;border-bottom:1px solid #232325"><span>08 GREEN</span><span style="color:#5c6068">0–255</span></div>
+            <div style="display:flex;justify-content:space-between"><span>… 8 more</span><span style="color:#5c6068"></span></div>
+          </div>
+        </div>
+        <div style="padding:14px 16px;border-top:1px solid #2d2d2d;display:flex;gap:8px">
+          <div style="flex:1;padding:9px;text-align:center;background:#252526;border:1px solid #3a3a3a;font-size:13px;font-weight:600;color:#c9cdd2">Change mode</div>
+          <div style="flex:1;padding:9px;text-align:center;background:#252526;border:1px solid #3a3a3a;font-size:13px;font-weight:600;color:#c9cdd2">Re-patch…</div>
+        </div>
+      </div>
+    </div>
+    <div style="height:26px;background:#1e1e1e;border-top:1px solid #3a3a3a;display:flex;align-items:center;padding:0 20px;gap:24px;font-family:'IBM Plex Mono',monospace;font-size:10px;color:#5c6068;flex:none">
+      <span>10 FIXTURES · 5 GROUPS</span><span>U1 92/512 · U2 58/512</span><span style="flex:1"></span><span>SAVED 12:04</span>
+    </div>
+  </div>
+</body></html>

@@ -10,7 +10,8 @@ from typing import Dict, List, Optional, Callable, Any
 import moderngl
 import glm
 
-from config.models import Configuration, Show
+from config.models import Configuration, Song
+from utils import user_warnings
 from utils.fixture_utils import load_fixture_definitions_from_qlc
 from utils.target_resolver import resolve_targets_unique
 from utils.artnet.dmx_manager import DMXManager
@@ -24,7 +25,7 @@ class OfflineRenderer:
     def __init__(
         self,
         config: Configuration,
-        show: Show,
+        show: Song,
         fixture_definitions: Dict[str, Any],
         camera_preset_name: str = "Front",
         output_path: str = "output.mp4",
@@ -72,7 +73,7 @@ class OfflineRenderer:
             song_structure.load_from_show_parts(self.show.parts)
             duration = song_structure.get_total_duration()
             if duration <= 0:
-                print("Show has no duration, nothing to render")
+                user_warnings.warn("Show has no duration, nothing to render", category="render")
                 return False
 
             total_frames = int(duration * self.fps)
@@ -140,7 +141,7 @@ class OfflineRenderer:
                 ffmpeg_proc.wait(timeout=finalize_timeout)
 
                 if ffmpeg_proc.returncode != 0:
-                    print(f"FFmpeg error (exit code {ffmpeg_proc.returncode})")
+                    user_warnings.warn(f"FFmpeg failed (exit code {ffmpeg_proc.returncode}); no video was written", category="render")
                     return False
 
                 self._report_progress(total_frames, total_frames, "Done!")
@@ -148,11 +149,11 @@ class OfflineRenderer:
                 return True
 
             except BrokenPipeError:
-                print("FFmpeg pipe broken — encoding may have failed")
+                user_warnings.warn("FFmpeg pipe broken; encoding may have failed", category="render")
                 return False
 
         except Exception as e:
-            print(f"Render error: {e}")
+            user_warnings.warn(f"Render failed: {e}", category="render")
             import traceback
             traceback.print_exc()
             return False
@@ -177,7 +178,7 @@ class OfflineRenderer:
         song_structure.load_from_show_parts(self.show.parts)
         duration = song_structure.get_total_duration()
         if duration <= 0:
-            print("Show has no duration, nothing to capture")
+            user_warnings.warn("Show has no duration, nothing to capture", category="render")
             return []
 
         # Clamp + de-duplicate targets, keep them ordered.
@@ -239,7 +240,7 @@ class OfflineRenderer:
         song_structure.load_from_show_parts(self.show.parts)
         duration = song_structure.get_total_duration()
         if duration <= 0:
-            print("Show has no duration, nothing to render")
+            user_warnings.warn("Show has no duration, nothing to render", category="render")
             return False
 
         step = max(1, round(self.fps / max(1, gif_fps)))
@@ -504,7 +505,7 @@ class OfflineRenderer:
             import imageio_ffmpeg
             ffmpeg_path = imageio_ffmpeg.get_ffmpeg_exe()
         except ImportError:
-            print("imageio-ffmpeg not installed, cannot render video")
+            user_warnings.warn("imageio-ffmpeg is not installed; cannot render video (pip install imageio-ffmpeg)", category="render", once_key="imageio-missing")
             return None
 
         cmd = [

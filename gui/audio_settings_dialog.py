@@ -1,5 +1,5 @@
 # gui/audio_settings_dialog.py
-# Audio Settings Dialog for QLCAutoShow
+# Audio Settings Dialog for Die Lichtmaschine
 # Allows users to select audio output device and configure audio parameters
 
 from PyQt6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QLabel,

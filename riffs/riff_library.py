@@ -7,6 +7,20 @@ from typing import Dict, List, Optional
 from config.models import Riff, FixtureGroup
 
 
+def parse_tags(text: str) -> List[str]:
+    """Comma-separated user input -> a clean tag list.
+
+    Strips whitespace and leading '#', drops empties, deduplicates
+    case-insensitively while keeping the first spelling and the input
+    order ('Chorus, punchy, #chorus' -> ['Chorus', 'punchy'])."""
+    tags: List[str] = []
+    for part in (text or "").split(","):
+        tag = part.strip().lstrip("#").strip()
+        if tag and tag.lower() not in (t.lower() for t in tags):
+            tags.append(tag)
+    return tags
+
+
 class RiffLibrary:
     """Manages the collection of available riffs."""
 
@@ -183,6 +197,12 @@ class RiffLibrary:
             List of matching Riff objects
         """
         query_lower = query.lower()
+        # A leading '#' scopes the query to TAGS ONLY ('#chorus' finds
+        # riffs tagged chorus without dragging in every riff whose name
+        # happens to contain the word).
+        tags_only = query_lower.startswith("#")
+        if tags_only:
+            query_lower = query_lower[1:].strip()
         results = []
 
         for riff in self.riffs.values():
@@ -192,12 +212,18 @@ class RiffLibrary:
                 if not is_compatible:
                     continue
 
+            tag_hit = any(query_lower in tag.lower() for tag in riff.tags)
+            if tags_only:
+                if query_lower and tag_hit:
+                    results.append(riff)
+                continue
+
             # Search in name, description, and tags
             if query_lower in riff.name.lower():
                 results.append(riff)
             elif query_lower in riff.description.lower():
                 results.append(riff)
-            elif any(query_lower in tag.lower() for tag in riff.tags):
+            elif tag_hit:
                 results.append(riff)
 
         return sorted(results, key=lambda r: (r.category, r.name))

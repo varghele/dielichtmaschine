@@ -11,6 +11,45 @@ from gui.widgets.fixture_icons import (
 )
 
 
+def projected_bar_angle_2d(yaw: float, pitch: float, roll: float) -> float:
+    """2D top-down rotation (degrees) of a bar fixture's length axis.
+
+    Projects the fixture's local X-axis through the full yaw/pitch/roll
+    orientation onto the floor plane. Shared by the Stage tab's
+    FixtureItem and the stage-plot exporter so both draw bars at the
+    same apparent angle. Returns ``yaw + 90`` when the length axis is
+    near-vertical (no meaningful floor projection).
+
+    Coordinate systems:
+    - 3D World: X = stage right, Y = up (height), Z = toward audience (depth)
+    - 2D Stage view (top-down): X = stage right, Y = toward audience (maps to 3D Z)
+    """
+    yaw_rad = radians(yaw)
+    pitch_rad = radians(pitch)
+    roll_rad = radians(roll)
+
+    # Where does the local X unit vector (the bar's length) end up in
+    # world space after Yaw (Y) -> Pitch (X) -> Roll (Z)?
+    x1, y1, z1 = cos(yaw_rad), 0.0, -sin(yaw_rad)
+
+    x2 = x1
+    y2 = y1 * cos(pitch_rad) - z1 * sin(pitch_rad)
+    z2 = y1 * sin(pitch_rad) + z1 * cos(pitch_rad)
+
+    x3 = x2 * cos(roll_rad) - y2 * sin(roll_rad)
+    z3 = z2  # Z unchanged by roll around Z
+
+    # Project onto the floor plane. Near-vertical bars have no useful
+    # projection; show them rotated 90° from yaw like FixtureItem did.
+    proj_length = sqrt(x3 * x3 + z3 * z3)
+    if proj_length < 0.01:
+        return yaw + 90
+
+    # atan2(z, x) measures from +X toward +Z; positive Z (toward the
+    # audience) is negative screen-Y, hence the negation.
+    return atan2(-z3, x3) * 180.0 / 3.14159265359
+
+
 class FixtureItem(QGraphicsItem):
     # Class-level toggle for orientation-axis overlay (controlled by
     # stage_tab.py's "Show orientation axes" checkbox). When True every
@@ -31,6 +70,11 @@ class FixtureItem(QGraphicsItem):
         self.roll = 0.0
         self.orientation_uses_group_default = True
         self.z_uses_group_default = True  # Whether to use group's default_z_height
+        self.layer = ""  # Stage layer assignment ("" = none)
+        self.docked_to = ""  # element_id of the truss this hangs on
+        # Active-layer editing: fixtures NOT on the active layer ghost to
+        # a faint, locked reference (see StageView.set_active_layer).
+        self.ghosted = False
 
         # Enable dragging and mouse interaction
         self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsMovable)
@@ -50,9 +94,11 @@ class FixtureItem(QGraphicsItem):
         # For bar-type fixtures, account for the rotated extent
         if self.fixture_type in ("BAR", "PIXELBAR", "SUNSTRIP"):
             rotation_2d = self._get_2d_rotation_angle()
-            # Bar dimensions: width = size*2, height = size/3
+            # Bar symbol dimensions: width = size*2; the vertical extent
+            # covers the SVG bar body plus its beam tick (tick top sits
+            # 0.583*size above center) and the selection ring.
             bar_half_width = self.size  # half of bar_width
-            bar_half_height = self.size / 6  # half of bar_height
+            bar_half_height = self.size * 0.62
             # Calculate the extent after rotation
             angle_rad = radians(rotation_2d)
             horizontal_extent = abs(bar_half_width * cos(angle_rad)) + abs(bar_half_height * sin(angle_rad))
@@ -64,8 +110,27 @@ class FixtureItem(QGraphicsItem):
 
         return QRectF(-text_width / 2, -self.size / 2, text_width, self.size + self.text_height)
 
+    def set_ghosted(self, ghosted: bool):
+        """Ghost = barely visible + locked. Applied while another stage
+        layer is active for editing: the fixture stays on the plot as a
+        spatial reference but can't be selected, dragged, or wheel-edited."""
+        if ghosted == self.ghosted:
+            return
+        self.ghosted = ghosted
+        self.setOpacity(0.18 if ghosted else 1.0)
+        self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsMovable, not ghosted)
+        self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsSelectable, not ghosted)
+        if ghosted:
+            self.setSelected(False)
+        self.update()
+
     def mouseMoveEvent(self, event):
         """Handle mouse movement for dragging fixtures"""
+        if self.ghosted:
+            # Belt and braces on top of the cleared ItemIsMovable flag —
+            # this override moves the item itself, so it must not run.
+            event.ignore()
+            return
         if Qt.MouseButton.LeftButton & event.buttons():
             # Get the view
             view = self.scene().views()[0]
@@ -90,18 +155,28 @@ class FixtureItem(QGraphicsItem):
 
         super().mouseMoveEvent(event)
 
+    def mouseReleaseEvent(self, event):
+        """Drop = dock/undock check against truss elements (the view
+        owns the rules; see StageView.handle_fixture_drop)."""
+        super().mouseReleaseEvent(event)
+        if self.ghosted:
+            return
+        scene = self.scene()
+        if scene is not None:
+            views = scene.views()
+            if views and hasattr(views[0], 'handle_fixture_drop'):
+                views[0].handle_fixture_drop(self)
+
     def paint(self, painter, option, widget):
         painter.save()  # Save the current painter state
 
         # Apply rotation transformation
         painter.translate(0, 0)  # Translate to center point
-        # For bar-type fixtures, calculate 2D rotation from full 3D orientation
-        # This correctly projects the fixture's length onto the top-down view
-        if self.fixture_type in ("BAR", "PIXELBAR", "SUNSTRIP"):
-            rotation_2d = self._get_2d_rotation_angle()
-            painter.rotate(rotation_2d)
-        else:
-            painter.rotate(self.rotation_angle + 90)  # Add 90 degrees to make 0 point downwards
+        # The drawn direction (beam tick / orientation) is the vertical
+        # mirror of the stored orientation, because the plan renders the
+        # audience/front (negative stage-Y) at the BOTTOM - see
+        # _paint_rotation for why that is a negation.
+        painter.rotate(self._paint_rotation())
 
         # Set smaller font size
         font = painter.font()
@@ -118,9 +193,10 @@ class FixtureItem(QGraphicsItem):
             painter.setPen(QPen(Qt.GlobalColor.black, 2))
             painter.setBrush(QBrush(QColor(self.channel_color)))
 
-        # Draw the chassis-keyed icon. PIXELBAR / SUNSTRIP are both
-        # Chassis.BAR; the legacy fixture_type string still drives the
-        # accent so visual fidelity is preserved.
+        # Draw the fixture icon. Mapped types render their North Star
+        # stage-plot symbol (line art in the group color); unknown types
+        # fall back to the chassis-keyed primitives, where the legacy
+        # fixture_type string still drives the accent.
         chassis = chassis_from_legacy_type(self.fixture_type)
         if self.fixture_type == "PIXELBAR":
             accent = ACCENT_PIXELS
@@ -128,7 +204,22 @@ class FixtureItem(QGraphicsItem):
             accent = ACCENT_LAMPS
         else:
             accent = None
-        paint_fixture_icon(painter, chassis, self.size, accent=accent)
+        used_symbol = paint_fixture_icon(
+            painter, chassis, self.size, accent=accent,
+            fixture_type=self.fixture_type,
+        )
+        if used_symbol and self.isSelected():
+            # The line symbols have no filled body for the blue selection
+            # pen to outline (the legacy primitives got that for free), so
+            # draw an explicit selection ring around the symbol box.
+            painter.setBrush(Qt.BrushStyle.NoBrush)
+            if self.fixture_type in ("BAR", "PIXELBAR", "SUNSTRIP"):
+                ring = QRectF(-self.size - 2, -self.size * 0.62 - 2,
+                              2 * self.size + 4, 2 * self.size * 0.62 + 4)
+            else:
+                ring = QRectF(-self.size / 2 - 2, -self.size / 2 - 2,
+                              self.size + 4, self.size + 4)
+            painter.drawRect(ring)
 
         # Draw mounting indicator (colored dot/ring in center)
         self._draw_mounting_indicator(painter)
@@ -152,9 +243,10 @@ class FixtureItem(QGraphicsItem):
         # For bar-type fixtures, account for the rotated extent
         if self.fixture_type in ("BAR", "PIXELBAR", "SUNSTRIP"):
             rotation_2d = self._get_2d_rotation_angle()
-            # Bar dimensions: width = size*2, height = size/3
+            # Must match boundingRect's bar extents (symbol body + beam
+            # tick + selection ring) so labels clear the artwork.
             bar_half_width = self.size  # half of bar_width
-            bar_half_height = self.size / 6  # half of bar_height
+            bar_half_height = self.size * 0.62
             # Calculate the maximum vertical extent after rotation
             angle_rad = radians(rotation_2d)
             # The vertical extent is the max of the rotated corners
@@ -171,24 +263,30 @@ class FixtureItem(QGraphicsItem):
         # stage fill.
         text_color = self._theme_text_color()
 
-        font = painter.font()
-        font.setPointSize(8)
-        font.setBold(False)
-        painter.setFont(font)
+        # North Star stage plan labels: small mono name, and the Z/layer
+        # readout one step quieter (secondary label color, not bold - the
+        # old bold Z line dominated the whole plot).
+        from gui.typography import mono_font
+        painter.setFont(mono_font(7))
         painter.setPen(QPen(text_color))
 
         name_rect = QRectF(-text_width / 2, text_y_offset, text_width, 12)
         painter.drawText(name_rect, Qt.AlignmentFlag.AlignCenter, self.fixture_name)
 
-        # Draw Z-height (bold font)
-        font.setBold(True)
-        painter.setFont(font)
+        painter.setFont(mono_font(6))
+        painter.setPen(QPen(self._theme_label_color()))
 
         z_rect = QRectF(-text_width / 2, text_y_offset + 11, text_width, 12)
-        painter.drawText(z_rect, Qt.AlignmentFlag.AlignCenter, f"Z: {self.z_height:.1f}m")
+        z_label = f"Z {self.z_height:.1f}m"
+        if self.layer:
+            z_label += f" · {self.layer}"
+        painter.drawText(z_rect, Qt.AlignmentFlag.AlignCenter, z_label)
 
     def wheelEvent(self, event):
         """Handle mouse wheel events for changing z-height (Shift+scroll)."""
+        if self.ghosted:
+            event.ignore()
+            return
         modifiers = event.modifiers()
 
         # Only handle Z-height adjustment with Shift modifier
@@ -279,79 +377,38 @@ class FixtureItem(QGraphicsItem):
                 painter.drawEllipse(QRectF(-indicator_size/2, -indicator_size/2, indicator_size, indicator_size))
 
     def _is_custom_orientation(self) -> bool:
-        """Check if this fixture has a custom (non-preset) orientation.
+        """Whether pitch/roll differ from the mounting's preset.
 
-        Returns True if pitch or roll are non-zero, indicating user customization.
+        Compared against the canonical preset values: the presets are
+        body orientations with non-zero components (hanging = pitch 90),
+        so the old "any non-zero pitch/roll" test would flag every
+        preset as custom. Yaw is excluded - the item's rotation_angle is
+        free on-plan rotation, not an orientation override.
         """
-        return abs(self.pitch) > 0.1 or abs(self.roll) > 0.1
+        from utils.orientation import preset_angles
+        _, preset_pitch, preset_roll = preset_angles(self.mounting)
+        return (abs(self.pitch - preset_pitch) > 0.1
+                or abs(self.roll - preset_roll) > 0.1)
 
     def _get_2d_rotation_angle(self) -> float:
-        """Calculate the 2D rotation angle for top-down view based on full 3D orientation.
+        """2D rotation for the top-down view — see projected_bar_angle_2d."""
+        return projected_bar_angle_2d(self.rotation_angle, self.pitch, self.roll)
 
-        For bar-type fixtures (BAR, SUNSTRIP), this computes where the fixture's
-        local X-axis (its length) projects onto the floor plane (XZ in 3D world).
+    def _paint_rotation(self) -> float:
+        """Screen rotation (degrees) the symbol is drawn with so its
+        beam/direction points the correct way on the plan.
 
-        Coordinate systems:
-        - 3D World: X = stage right, Y = up (height), Z = toward audience (depth)
-        - 2D Stage view (top-down): X = stage right, Y = toward audience (maps to 3D Z)
-
-        Returns:
-            Rotation angle in degrees for the 2D painter rotation.
-        """
-        # Get orientation angles in radians
-        yaw_rad = radians(self.rotation_angle)  # rotation_angle stores yaw
-        pitch_rad = radians(self.pitch)
-        roll_rad = radians(self.roll)
-
-        # Start with local X-axis unit vector (1, 0, 0)
-        # This represents the "length" direction of the fixture
-
-        # Apply rotations in order: Yaw (Y) -> Pitch (X) -> Roll (Z)
-        # We compute where local X ends up in world space
-
-        # After Yaw rotation around Y-axis:
-        # x' = x*cos(yaw) + z*sin(yaw)
-        # y' = y
-        # z' = -x*sin(yaw) + z*cos(yaw)
-        # For (1, 0, 0): (cos(yaw), 0, -sin(yaw))
-        x1 = cos(yaw_rad)
-        y1 = 0.0
-        z1 = -sin(yaw_rad)
-
-        # After Pitch rotation around X-axis:
-        # x'' = x'
-        # y'' = y'*cos(pitch) - z'*sin(pitch)
-        # z'' = y'*sin(pitch) + z'*cos(pitch)
-        x2 = x1
-        y2 = y1 * cos(pitch_rad) - z1 * sin(pitch_rad)
-        z2 = y1 * sin(pitch_rad) + z1 * cos(pitch_rad)
-
-        # After Roll rotation around Z-axis:
-        # x''' = x''*cos(roll) - y''*sin(roll)
-        # y''' = x''*sin(roll) + y''*cos(roll)
-        # z''' = z''
-        x3 = x2 * cos(roll_rad) - y2 * sin(roll_rad)
-        y3 = x2 * sin(roll_rad) + y2 * cos(roll_rad)
-        z3 = z2  # Z is unchanged by roll around Z
-
-        # Project onto floor plane (XZ in 3D world = XY in 2D stage view)
-        # x3 = world X (stage left/right)
-        # z3 = world Z (stage depth, becomes Y in 2D view)
-
-        # Handle near-zero projection (fixture's length pointing straight up/down)
-        proj_length = sqrt(x3 * x3 + z3 * z3)
-        if proj_length < 0.01:
-            # Fixture's length is nearly vertical (pointing up or down)
-            # Show as vertical in 2D (rotated 90° from yaw)
-            return self.rotation_angle + 90
-
-        # Calculate angle in degrees
-        # atan2(z, x) gives angle from positive X-axis toward positive Z
-        # In 2D stage view: positive Z (toward audience) is negative Y on screen
-        # So we negate z3 to match screen coordinates
-        angle = atan2(-z3, x3) * 180.0 / 3.14159265359
-
-        return angle
+        The plan mirrors stage-Y vertically (audience/front at the
+        BOTTOM). The flip mirrored fixture POSITION only, so the drawn
+        direction must be mirrored too or a front-aimed beam still points
+        upstage. A vertical reflection composed with rotate(a) equals
+        rotate(-a) for a facing along the horizontal (local +X) axis - so
+        we negate the un-mirrored facing angle. Bars project their full
+        orientation; everything else faces yaw + 90 (the icon's beam tick
+        sits on local +X)."""
+        if self.fixture_type in ("BAR", "PIXELBAR", "SUNSTRIP"):
+            return -self._get_2d_rotation_angle()
+        return -(self.rotation_angle + 90)
 
     def _theme_text_color(self):
         """Return the theme-driven label colour from the parent
@@ -372,6 +429,19 @@ class FixtureItem(QGraphicsItem):
                 if color is not None and color.isValid():
                     return color
         return QColor(0, 0, 0)
+
+    def _theme_label_color(self):
+        """The quieter secondary label colour (StageView's
+        ``stageLabelColor`` qproperty), for the Z/layer readout."""
+        scene = self.scene()
+        if scene is not None:
+            views = scene.views()
+            if views:
+                view = views[0]
+                color = getattr(view, "stageLabelColor", None)
+                if color is not None and color.isValid():
+                    return color
+        return QColor(120, 120, 120)
 
     def _draw_orientation_axes(self, painter):
         """Draw orientation coordinate axes for the fixture.
@@ -430,20 +500,49 @@ class FixtureItem(QGraphicsItem):
 
 
 class SpotItem(QGraphicsItem):
+    """A spike mark: the taped stage position marker (screen 04 asset
+    resources/stageplot/spike-mark.svg - X through a circle). Labels
+    render in the brand mono voice, centered under the mark; colors
+    come from the active theme tokens (accent when selected)."""
+
+    SYMBOL = "spike-mark"
+
     def __init__(self, name: str, parent=None):
         super().__init__(parent)
         self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsMovable)
         self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsSelectable)
         self.setAcceptHoverEvents(True)
-        self.size = 20  # Size of the X
+        self.size = 32  # Symbol box (the SVG spans the whole box)
         self.name = name
         self.z_height = 0.0  # Z height in meters (for 3D targeting)
         self.last_pos = self.pos()  # Store last position for snapping
 
+    @staticmethod
+    def _tokens() -> dict:
+        """Active theme tokens; safe fallback for bare-item tests."""
+        try:
+            from gui.tabs.stage_tab import _active_tokens
+            return _active_tokens()
+        except Exception:
+            from gui.theme_tokens import THEMES
+            return THEMES["dark"]
+
+    def _label_fonts(self):
+        from gui.typography import mono_font
+        return mono_font(8), mono_font(7)
+
     def boundingRect(self):
-        text_width = max(len(self.name) * 8, 60)  # Approximate width of text
-        return QRectF(-self.size/2 - 2, -self.size/2 - 2,
-                     max(self.size + 4, text_width), self.size + 35)  # Extra space for Z-height
+        name_font, z_font = self._label_fonts()
+        name_w = QFontMetrics(name_font).horizontalAdvance(self.name)
+        z_w = QFontMetrics(z_font).horizontalAdvance(
+            f"Z: {self.z_height:.1f}m")
+        # +5: room for the selection ring (size/2 + 3 + pen width).
+        half_w = max(self.size / 2 + 5, name_w / 2, z_w / 2)
+        # Symbol box + two centered label lines below.
+        label_h = (QFontMetrics(name_font).height()
+                   + QFontMetrics(z_font).height() + 6)
+        return QRectF(-half_w, -self.size / 2 - 5,
+                      half_w * 2, self.size + 10 + label_h)
 
     def mouseMoveEvent(self, event):
         view = self.scene().views()[0]  # Get the main view
@@ -494,29 +593,275 @@ class SpotItem(QGraphicsItem):
             event.ignore()
 
     def paint(self, painter, option, widget):
+        from gui.widgets.fixture_icons import _paint_symbol_icon
+
+        tokens = self._tokens()
+        selected = self.isSelected()
+        # Spike marks always wear the brand accent; selection adds a
+        # ring in the text colour around the mark.
+        ink = QColor(tokens["accent"])
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        if selected:
+            painter.setPen(QPen(QColor(tokens["text"]), 1.5))
+            painter.setBrush(Qt.BrushStyle.NoBrush)
+            ring = self.size / 2 + 3
+            painter.drawEllipse(QRectF(-ring, -ring, ring * 2, ring * 2))
+
+        # The spike-mark symbol (SVG recolored to the ink), with the old
+        # primitive X as the fallback if the asset is missing.
+        painter.save()
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.setBrush(QBrush(ink))
+        drew_symbol = _paint_symbol_icon(painter, self.SYMBOL, self.size)
+        painter.restore()
+        if not drew_symbol:
+            painter.setPen(QPen(ink, 2))
+            painter.drawLine(QPointF(-self.size / 2, -self.size / 2),
+                             QPointF(self.size / 2, self.size / 2))
+            painter.drawLine(QPointF(-self.size / 2, self.size / 2),
+                             QPointF(self.size / 2, -self.size / 2))
+
+        # Labels: name + Z height, brand mono, centered under the mark.
+        name_font, z_font = self._label_fonts()
+        name_metrics = QFontMetrics(name_font)
+        z_metrics = QFontMetrics(z_font)
+
+        painter.setPen(QPen(QColor(tokens["text"]), 1))
+        painter.setFont(name_font)
+        name_y = self.size / 2 + 3 + name_metrics.ascent()
+        painter.drawText(
+            QPointF(-name_metrics.horizontalAdvance(self.name) / 2, name_y),
+            self.name)
+
+        z_text = f"Z: {self.z_height:.1f}m"
+        painter.setPen(QPen(QColor(tokens["text_secondary"]), 1))
+        painter.setFont(z_font)
+        painter.drawText(
+            QPointF(-z_metrics.horizontalAdvance(z_text) / 2,
+                    name_y + z_metrics.height()),
+            z_text)
+
+
+
+class StageElementItem(QGraphicsItem):
+    """A static stage element (riser, wedge, amp, truss shape, ...) on
+    the plan (StageElement model, utils/stage_element_catalog.py).
+
+    Renders the stageplot SVG symbol stretched to the element's real
+    footprint, draggable with grid snap, rotatable via context menu,
+    ghosted by the active-layer mode exactly like fixtures. Draws under
+    fixtures (zValue -1). Holds a direct reference to its StageElement
+    model; the view writes positions back on drag.
+    """
+
+    _renderers = {}  # kind -> QSvgRenderer (shared per session)
+
+    def __init__(self, element, pixels_per_meter, parent=None):
+        super().__init__(parent)
+        self.element = element
+        self.ppm = pixels_per_meter
+        self.ghosted = False
+        self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsMovable)
+        self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsSelectable)
+        self.setZValue(-1)  # under fixtures
+
+    @classmethod
+    def _renderer(cls, kind):
+        if kind not in cls._renderers:
+            from PyQt6.QtSvg import QSvgRenderer
+            from utils.stage_element_catalog import symbol_path
+            cls._renderers[kind] = QSvgRenderer(symbol_path(kind))
+        return cls._renderers[kind]
+
+    def _body_rect(self):
+        w = self.element.width * self.ppm
+        d = self.element.depth * self.ppm
+        return QRectF(-w / 2, -d / 2, w, d)
+
+    def boundingRect(self):
+        rect = self._body_rect()
+        # Rotation happens inside paint(); bound by the rotated extent
+        # plus the label strip and selection ring.
+        angle = radians(self.element.rotation)
+        half_w = abs(rect.width() / 2 * cos(angle)) + abs(rect.height() / 2 * sin(angle))
+        half_h = abs(rect.width() / 2 * sin(angle)) + abs(rect.height() / 2 * cos(angle))
+        label_h = 14 if self.element.label else 0
+        return QRectF(-half_w - 4, -half_h - 4,
+                      2 * half_w + 8, 2 * half_h + 8 + label_h)
+
+    def set_ghosted(self, ghosted: bool):
+        if ghosted == self.ghosted:
+            return
+        self.ghosted = ghosted
+        self.setOpacity(0.18 if ghosted else 1.0)
+        self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsMovable, not ghosted)
+        self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsSelectable, not ghosted)
+        if ghosted:
+            self.setSelected(False)
+        self.update()
+
+    def paint(self, painter, option, widget):
+        painter.save()
+        painter.rotate(self.element.rotation)
+        renderer = self._renderer(self.element.kind)
+        if renderer.isValid():
+            renderer.render(painter, self._body_rect())
+        else:
+            painter.setPen(QPen(QColor("#8D9299"), 1, Qt.PenStyle.DashLine))
+            painter.setBrush(Qt.BrushStyle.NoBrush)
+            painter.drawRect(self._body_rect())
+        painter.restore()
+
         if self.isSelected():
             painter.setPen(QPen(Qt.GlobalColor.blue, 2))
             painter.setBrush(Qt.BrushStyle.NoBrush)
-            painter.drawEllipse(QRectF(-self.size/2 - 2, -self.size/2 - 2,
-                                     self.size + 4, self.size + 4))
-            painter.setPen(QPen(Qt.GlobalColor.blue, 5))
+            body = self.boundingRect()
+            painter.drawRect(body.adjusted(2, 2, -2,
+                                           -(14 if self.element.label else 0) - 2))
+
+        if self.element.label:
+            from gui.typography import mono_font
+            painter.setFont(mono_font(6))
+            view_color = self._label_color()
+            painter.setPen(QPen(view_color))
+            body = self.boundingRect()
+            painter.drawText(
+                QRectF(body.left(), body.bottom() - 13, body.width(), 12),
+                Qt.AlignmentFlag.AlignCenter, self.element.label)
+
+    def _label_color(self):
+        scene = self.scene()
+        if scene is not None:
+            views = scene.views()
+            if views:
+                color = getattr(views[0], "stageLabelColor", None)
+                if color is not None and color.isValid():
+                    return color
+        return QColor(120, 120, 120)
+
+    def mouseMoveEvent(self, event):
+        if self.ghosted:
+            event.ignore()
+            return
+        if Qt.MouseButton.LeftButton & event.buttons():
+            view = self.scene().views()[0]
+            new_pos = event.scenePos()
+            if getattr(view, "snap_enabled", False):
+                new_pos = view.snap_to_grid_position(new_pos)
+            old_pos = self.pos()
+            self.setPos(new_pos)
+            # A truss carries its docked fixtures (truss = its own
+            # layer; the fixtures hang on it).
+            delta = self.pos() - old_pos
+            if not delta.isNull() and hasattr(view, "move_docked_fixtures"):
+                view.move_docked_fixtures(self.element, delta)
+            if hasattr(view, "save_positions_to_config"):
+                view.save_positions_to_config()
+            event.accept()
+            return
+        super().mouseMoveEvent(event)
+
+    def set_size(self, width_m: float, depth_m: float) -> None:
+        """Resize the element's footprint in metres (length x depth for a
+        straight truss). Bounds change, so callers must be inside a
+        prepareGeometryChange or call it via the context-menu path."""
+        self.element.width = max(0.1, float(width_m))
+        self.element.depth = max(0.1, float(depth_m))
+
+    def _edit_size(self) -> bool:
+        """Prompt for the footprint. Straight trusses ask only for length
+        (their depth is the truss profile); everything else asks for both.
+        Returns False when the user cancels."""
+        from PyQt6.QtWidgets import QInputDialog
+        from utils.stage_element_catalog import is_truss
+
+        straight = self.element.kind == "truss-straight"
+        length, ok = QInputDialog.getDouble(
+            None,
+            "Truss Length" if is_truss(self.element.kind) else "Element Size",
+            "Length (m):" if straight else "Width (m):",
+            self.element.width, 0.1, 100.0, 2)
+        if not ok:
+            return False
+        depth = self.element.depth
+        if not straight:
+            depth, ok = QInputDialog.getDouble(
+                None, "Element Size", "Depth (m):",
+                self.element.depth, 0.1, 100.0, 2)
+            if not ok:
+                return False
+        self.set_size(length, depth)
+        return True
+
+    def contextMenuEvent(self, event):
+        if self.ghosted:
+            event.ignore()
+            return
+        from PyQt6.QtWidgets import QMenu, QInputDialog
+        from utils.stage_element_catalog import is_truss
+        view = self.scene().views()[0]
+        menu = QMenu()
+        rotate_left = menu.addAction("Rotate -45°")
+        rotate_right = menu.addAction("Rotate +45°")
+        rename = menu.addAction("Set Label...")
+        size_action = menu.addAction(
+            "Truss Length..." if is_truss(self.element.kind)
+            else "Element Size...")
+        height_action = None
+        if is_truss(self.element.kind):
+            height_action = menu.addAction("Truss Height...")
+        layer_menu = menu.addMenu("Assign to Layer")
+        layer_actions = {}
+        clear_action = layer_menu.addAction("(none)")
+        config = getattr(view, "config", None)
+        for layer in getattr(config, "stage_layers", []) or []:
+            layer_actions[layer_menu.addAction(layer.name)] = layer.name
+        menu.addSeparator()
+        remove = menu.addAction("Remove Element")
+
+        chosen = menu.exec(event.screenPos())
+        if chosen is rotate_left:
+            self.element.rotation = (self.element.rotation - 45) % 360
+        elif chosen is rotate_right:
+            self.element.rotation = (self.element.rotation + 45) % 360
+        elif chosen is size_action:
+            if not self._edit_size():
+                event.accept()
+                return
+        elif height_action is not None and chosen is height_action:
+            config = getattr(view, "config", None)
+            layer = (config.get_stage_layer(self.element.layer)
+                     if config and self.element.layer else None)
+            current = layer.z_height if layer is not None else 4.0
+            value, ok = QInputDialog.getDouble(
+                None, "Truss Height",
+                "Hang height (m) - moves every fixture on this truss's layer:",
+                current, 0.0, 30.0, 1)
+            if ok and hasattr(view, "set_truss_height"):
+                view.set_truss_height(self.element, value)
+            event.accept()
+            return
+        elif chosen is rename:
+            text, ok = QInputDialog.getText(None, "Element Label",
+                                            "Label:", text=self.element.label)
+            if ok:
+                self.element.label = text
+        elif chosen is clear_action:
+            self.element.layer = ""
+        elif chosen in layer_actions:
+            self.element.layer = layer_actions[chosen]
+        elif chosen is remove:
+            if hasattr(view, "remove_stage_element"):
+                view.remove_stage_element(self)
+            event.accept()
+            return
         else:
-            painter.setPen(QPen(Qt.GlobalColor.black, 5))
-
-        # Draw X
-        painter.drawLine(QPointF(-self.size/2, -self.size/2),
-                        QPointF(self.size/2, self.size/2))
-        painter.drawLine(QPointF(-self.size/2, self.size/2),
-                        QPointF(self.size/2, -self.size/2))
-
-        # Draw name below the X
-        painter.setPen(QPen(Qt.GlobalColor.black, 1))
-        painter.setFont(QFont("Arial", 10))
-        painter.drawText(QPointF(-self.size/2, self.size + 5), self.name)
-
-        # Draw Z-height below the name
-        font = painter.font()
-        font.setBold(True)
-        painter.setFont(font)
-        painter.drawText(QPointF(-self.size/2, self.size + 18), f"Z: {self.z_height:.1f}m")
-
+            event.accept()
+            return
+        self.prepareGeometryChange()
+        self.update()
+        if hasattr(view, "save_positions_to_config"):
+            view.save_positions_to_config()
+        if hasattr(view, "apply_layer_visibility"):
+            view.apply_layer_visibility()
+        event.accept()

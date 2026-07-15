@@ -76,6 +76,16 @@ self.table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
 
 ## 3. `setCellWidget` makes the widget replace the cell display
 
+> **Resolved for the Fixtures tab (2026-07-12).** The tab was rebuilt to
+> the North Star screen: the table is now pure read-only
+> `QTableWidgetItem` display (all editing moved to the inspector panel),
+> so it hosts no cell widgets at all. Tints come from `BackgroundRole`
+> brushes, and selection rendering is handled by
+> `RowOutlineTableWidget` + `GroupRowDelegate` (gotcha #2). The
+> `tinted_table.py` / `tinted_rows_table.py` experiments were deleted
+> with the rebuild. This entry stays as the reference for any FUTURE
+> table that genuinely needs editable widgets in cells.
+
 ### Symptom
 
 A QTableWidget cell that hosts a widget via `setCellWidget(row, col, widget)` doesn't show the cell's `QTableWidgetItem` background underneath. `item.setBackground(color)` on cells that have a widget set has no visible effect, even though the brush is recorded on the item.
@@ -88,7 +98,7 @@ A QTableWidget cell that hosts a widget via `setCellWidget(row, col, widget)` do
 
 Pick one based on the use case:
 
-#### Per-widget stylesheet (current Fixtures-tab approach)
+#### Per-widget stylesheet (the former Fixtures-tab approach)
 
 For each cell widget, set a stylesheet that includes the per-row tint:
 
@@ -98,13 +108,16 @@ cell_widget.setStyleSheet(
 )
 ```
 
-This merges with the global theme rule (Qt only overrides the conflicting properties), so border / padding stay theme-styled. The visual reads as "fields colored" rather than "row colored with fields embedded" — acceptable as an interim, but not perfect.
+This merged with the global theme rule (Qt only overrides the conflicting properties), so border / padding stayed theme-styled. The visual read as "fields colored" rather than "row colored with fields embedded" — acceptable as an interim, but not perfect. This is what the rebuild replaced.
 
 #### Wrap the widget in a styled container
 
 Tried; doesn't work cleanly. `QSpinBox::up-button`, `QSpinBox::down-button`, `QComboBox::drop-down`, and the `QLineEdit` embedded inside an editable `QComboBox` all paint **opaque** sub-control backgrounds by default. Making the wrapper transparent doesn't help — the widget's sub-controls cover the wrapper's tint anyway. Setting all sub-controls transparent in QSS works visually but loses the affordance of "this is a clickable button".
 
-The unused `gui/widgets/tinted_table.py` and `gui/widgets/tinted_rows_table.py` are the experiments that didn't pan out. Don't delete them — they're a reference for the next attempt.
+(Historical: `gui/widgets/tinted_table.py` and
+`gui/widgets/tinted_rows_table.py` were the experiments that didn't pan
+out. They were deleted 2026-07-12 when the Fixtures tab went read-only,
+since the delegate + overlay approach below is the settled answer.)
 
 #### Selection outline via a viewport overlay (current approach)
 
@@ -115,11 +128,11 @@ Trade-offs of the overlay:
 - `paintEvent` calls `_overlay.update()` so any viewport repaint (selection change, scroll, data change) re-renders the outline correctly.
 - The overlay is always sized to the viewport via `resizeEvent`.
 
-#### Replace `setCellWidget` with a `QStyledItemDelegate` (deferred)
+#### Replace `setCellWidget` with a `QStyledItemDelegate` (or drop editing from the table entirely)
 
-The proper Qt-native answer for the *tint* part: the column gets a delegate whose `createEditor` returns the spinbox/combo only when the user starts editing; in display mode, `paint` renders the value as text and the cell's `BackgroundRole` paints normally. With the overlay solution above, this is no longer required for selection rendering — only for getting tints across the full cell rect (currently they read as "fields colored").
+The proper Qt-native answer for the *tint* part: the column gets a delegate whose `createEditor` returns the spinbox/combo only when the user starts editing; in display mode, `paint` renders the value as text and the cell's `BackgroundRole` paints normally.
 
-The Fixtures tab has 5 widget cells that would each need a delegate (Universe spin, Address spin, Mode combo, Group combo with "Add New…" magic item, Role combo). Significant refactor — not in the current rework's scope.
+What the Fixtures tab actually did (2026-07-12): rather than write five delegates (Universe spin, Address spin, Mode combo, Group combo, Role combo), the rebuild removed editing from the table altogether — the table became pure read-only display and all editing moved to the inspector panel. With no widget cells left, `BackgroundRole` tints paint across the full cell rect for free, and there was never a "fields colored" problem to solve. The delegate route above is still the right pattern for a table that genuinely needs in-cell editing.
 
 ---
 
@@ -361,6 +374,63 @@ and no colours changed.
 Audit `setup_ui()` of every tab for `self.config.X` accesses that
 build widget contents. Each one is a candidate for this bug. The
 in-source landmark below has the master list.
+
+---
+
+## 7. A modal dialog in a test hangs the whole suite, silently
+
+`QDialog.exec()` (and `QMenu.exec`, `QInputDialog.getText`,
+`QFileDialog.getSaveFileName`, `QMessageBox.warning`, and the other
+static convenience dialogs) spins its own event loop and blocks until a
+human answers. The offscreen platform does not change this: there is no
+human, so the loop runs forever. pytest shows no failure, no timeout,
+no output; the process just sits there. One such test cost hours before
+anyone looked at the process ages.
+
+The trap is easy to spring indirectly. A test that only wanted to check
+a signal connection:
+
+```python
+tab.stage_view.set_orientation_requested.emit([item])   # looks harmless
+```
+
+reaches the tab's real slot, which had just learned to open the
+orientation dialog. The emit now blocks. The test never mentions a
+dialog.
+
+### Fix
+
+An autouse fixture in `tests/conftest.py` (`_no_blocking_modals`)
+monkeypatches `QDialog.exec` and the blocking statics to raise a named
+`RuntimeError` instead of opening. A forgotten modal now fails in
+milliseconds with the offending class name. Tests that legitimately
+drive a dialog patch it out themselves (`patch.object(module,
+"OrientationDialog", FakeDialog)`) so their own accept/reject path still
+runs. The `tests/e2e/` harness has its own richer guard
+(`tests/e2e/conftest.py::modals`) that records a handler per dialog and
+answers it; the two coexist.
+
+**It sprang again 2026-07-14, through the guard's one blind spot:**
+`QMenu` is not a `QDialog`, so `QMenu.exec` was never patched. A
+Universes-tab test emitted a card's `context_requested` signal to check
+its own lambda received it - and the signal also fans out to the tab's
+real handler, which opens the right-click menu. Two consecutive full
+`-n auto` runs froze at ~96% (every other worker idle, the coordinator
+waiting on the one stuck worker). The guard now patches `QMenu.exec`
+too, and the test drives a real `QContextMenuEvent` with a local exec
+stub instead of emitting past the handler.
+
+Diagnosis recipe for the next silent freeze, which is what actually
+found this: `Get-Process python` and look at the AGES (a 3-minute suite
+whose workers are 20+ minutes old is hung, not slow), then
+`pip install py-spy; py-spy dump --pid <worker>` on each worker - the
+stuck one shows the exact test and the blocking call in its MainThread
+stack, no restart or instrumentation needed.
+
+Rule of thumb: never let a test drive a code path that can open a modal
+without either patching the dialog class or driving its
+accept/reject/get* directly. Emitting a SIGNAL counts as driving every
+connected slot, including the ones production code connected.
 
 ---
 

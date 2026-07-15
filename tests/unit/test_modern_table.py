@@ -39,27 +39,21 @@ def test_helper_left_aligns_header_text(qapp):
         table.deleteLater()
 
 
-def test_fixtures_and_configuration_tables_share_header_alignment(
+def test_fixtures_table_header_alignment_via_helper(
     qapp, sample_configuration
 ):
-    """End-to-end pin: the two tables the user originally compared
-    must come out with the same header alignment after construction."""
+    """End-to-end pin on the Fixtures table (the Configuration tab no
+    longer uses a QTableWidget - it became the North Star card list +
+    inspector, see gui/tabs/configuration_tab.py)."""
+    from PyQt6.QtCore import Qt
     from gui.theme_manager import ThemeManager
     from gui.tabs.fixtures_tab import FixturesTab
-    from gui.tabs.configuration_tab import ConfigurationTab
 
     ThemeManager().apply(qapp, "dark")
 
     fixtures = FixturesTab(sample_configuration, parent=None)
-    config = ConfigurationTab(sample_configuration, parent=None)
     try:
         f_align = fixtures.table.horizontalHeader().defaultAlignment()
-        c_align = config.universe_list.horizontalHeader().defaultAlignment()
-        assert f_align == c_align, (
-            f"Header alignment mismatch — fixtures={int(f_align)} "
-            f"vs configuration={int(c_align)}. Both should go through "
-            "apply_modern_table_style and end up identical."
-        )
+        assert f_align & Qt.AlignmentFlag.AlignLeft
     finally:
         fixtures.deleteLater()
-        config.deleteLater()

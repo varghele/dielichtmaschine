@@ -12,6 +12,24 @@ from PyQt6.QtGui import QPainter, QColor, QPen, QBrush, QPainterPath
 from config.models import MovementBlock
 
 
+def _active_tokens() -> dict:
+    """Token dict of the theme currently applied to the app.
+
+    Same stylesheet sniff as gui/tabs/stage_tab.py. Used only for the
+    neutral chrome (backdrop/border) of the pan/tilt canvas; the shape,
+    boundary and position overlays it paints are data colors.
+    """
+    from PyQt6.QtWidgets import QApplication
+    from gui.theme_tokens import THEMES
+
+    app = QApplication.instance()
+    qss = app.styleSheet() if app is not None else ""
+    light = THEMES.get("light")
+    if light is not None and light["window"] in qss:
+        return light
+    return THEMES["dark"]
+
+
 def generate_shape_points(effect_type: str, center_pan: float, center_tilt: float,
                           pan_amplitude: float, tilt_amplitude: float,
                           pan_min: float, pan_max: float, tilt_min: float, tilt_max: float,
@@ -174,7 +192,10 @@ class PanTiltWidget(QFrame):
         super().__init__(parent)
         self.setMinimumSize(250, 250)
         self.setFrameShape(QFrame.Shape.Box)
-        self.setStyleSheet("background-color: #1a1a2e; border: 1px solid #555;")
+        tokens = _active_tokens()
+        self.setStyleSheet(
+            f"background-color: {tokens['window']}; "
+            f"border: 1px solid {tokens['border']};")
 
         self._pan = 127.5
         self._tilt = 127.5
@@ -385,29 +406,10 @@ class MovementBlockDialog(QDialog):
         self.setMinimumWidth(650)
         self.setMinimumHeight(700)
 
-        self._apply_groupbox_style()
         self.setup_ui()
         self.load_current_values()
         self._connect_signals()
         self._update_ui_visibility()
-
-    def _apply_groupbox_style(self):
-        """Apply consistent styling to group boxes."""
-        self.setStyleSheet("""
-            QGroupBox {
-                font-weight: bold;
-                border: 1px solid #555;
-                border-radius: 5px;
-                margin-top: 12px;
-                padding-top: 10px;
-            }
-            QGroupBox::title {
-                subcontrol-origin: margin;
-                subcontrol-position: top left;
-                left: 10px;
-                padding: 0 5px;
-            }
-        """)
 
     def setup_ui(self):
         main_layout = QVBoxLayout(self)
@@ -487,7 +489,7 @@ class MovementBlockDialog(QDialog):
             "When a target spot is selected, pan/tilt values are calculated\n"
             "automatically for each fixture based on its position and orientation."
         )
-        self.target_info_label.setStyleSheet("color: #666; font-style: italic;")
+        self.target_info_label.setProperty("role", "stat-caption")
         target_layout.addRow(self.target_info_label)
 
         target_group.setLayout(target_layout)
@@ -682,6 +684,8 @@ class MovementBlockDialog(QDialog):
         buttons = QDialogButtonBox(
             QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
         )
+        self.ok_button = buttons.button(QDialogButtonBox.StandardButton.Ok)
+        self.ok_button.setProperty("role", "primary")
         buttons.accepted.connect(self.accept)
         buttons.rejected.connect(self.reject)
         main_layout.addWidget(buttons)

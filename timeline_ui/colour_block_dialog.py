@@ -9,6 +9,26 @@ from PyQt6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QFormLayout,
 from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QColor
 from config.models import ColourBlock
+from gui.typography import mono_font
+
+
+def _active_tokens() -> dict:
+    """Token dict of the theme currently applied to the app.
+
+    Same stylesheet sniff as gui/tabs/stage_tab.py: the light theme's
+    window color only ever appears in the light stylesheet. The colour
+    swatches below are *data* colors (the user's chosen colour), so only
+    their neutral chrome (borders) is sourced from the theme.
+    """
+    from PyQt6.QtWidgets import QApplication
+    from gui.theme_tokens import THEMES
+
+    app = QApplication.instance()
+    qss = app.styleSheet() if app is not None else ""
+    light = THEMES.get("light")
+    if light is not None and light["window"] in qss:
+        return light
+    return THEMES["dark"]
 
 
 class ColorPreviewWidget(QFrame):
@@ -18,41 +38,52 @@ class ColorPreviewWidget(QFrame):
         super().__init__(parent)
         self.setMinimumHeight(60)
         self.setFrameShape(QFrame.Shape.Box)
-        self.setStyleSheet("background-color: #000000; border: 2px solid #555;")
+        self._border = _active_tokens()["border"]
+        self.setStyleSheet(
+            f"background-color: #000000; border: 1px solid {self._border};")
         self._color = QColor(0, 0, 0)
 
     def set_color(self, color: QColor):
         """Update the preview color."""
         self._color = color
-        self.setStyleSheet(f"background-color: {color.name()}; border: 2px solid #555;")
+        self.setStyleSheet(
+            f"background-color: {color.name()}; "
+            f"border: 1px solid {self._border};")
 
     def color(self) -> QColor:
         return self._color
 
 
 class ColorPresetButton(QPushButton):
-    """Button for quick color selection."""
+    """Button for quick color selection.
+
+    The fill is a *data* color (a standard light colour); only the
+    neutral border comes from the active theme.
+    """
 
     def __init__(self, name: str, color: QColor, parent=None):
         super().__init__(name, parent)
         self.color_value = color
         self.setFixedHeight(35)
         self.setMinimumWidth(70)
+        tokens = _active_tokens()
+        border = tokens["border"]
+        accent = tokens["accent"]
         # Set button style with the color
         text_color = "#000000" if color.lightness() > 128 else "#ffffff"
         self.setStyleSheet(f"""
             QPushButton {{
                 background-color: {color.name()};
                 color: {text_color};
-                border: 2px solid #444;
-                border-radius: 4px;
+                border: 1px solid {border};
+                border-radius: 0px;
                 font-weight: bold;
             }}
             QPushButton:hover {{
-                border: 2px solid #888;
+                border: 1px solid {accent};
             }}
             QPushButton:pressed {{
-                border: 2px solid #fff;
+                border: 2px solid {accent};
             }}
         """)
 
@@ -100,28 +131,9 @@ class ColourBlockDialog(QDialog):
         self.setMinimumWidth(500)
         self.setMinimumHeight(650)
 
-        self._apply_groupbox_style()
         self.setup_ui()
         self.load_current_values()
         self._update_preview_from_sliders()
-
-    def _apply_groupbox_style(self):
-        """Apply consistent styling to group boxes."""
-        self.setStyleSheet("""
-            QGroupBox {
-                font-weight: bold;
-                border: 1px solid #555;
-                border-radius: 5px;
-                margin-top: 12px;
-                padding-top: 10px;
-            }
-            QGroupBox::title {
-                subcontrol-origin: margin;
-                subcontrol-position: top left;
-                left: 10px;
-                padding: 0 5px;
-            }
-        """)
 
     def setup_ui(self):
         main_layout = QVBoxLayout(self)
@@ -159,7 +171,7 @@ class ColourBlockDialog(QDialog):
         self.pick_color_btn = QPushButton("Pick Color...")
         self.pick_color_btn.clicked.connect(self._open_color_picker)
         self.hex_label = QLabel("#000000")
-        self.hex_label.setStyleSheet("font-family: monospace; font-size: 14px;")
+        self.hex_label.setFont(mono_font(11))
         hex_layout.addWidget(self.pick_color_btn)
         hex_layout.addWidget(self.hex_label)
         hex_layout.addStretch()
@@ -205,29 +217,16 @@ class ColourBlockDialog(QDialog):
         rgbw_group = QGroupBox("RGBW Values")
         rgbw_layout = QFormLayout()
 
-        # Create sliders for R, G, B, W
+        # Create sliders for R, G, B, W. The sliders adopt the themed
+        # look (accent handle); the channel is named by the row label.
         self.sliders = {}
-        for channel, label, color in [("red", "Red", "#ff4444"),
-                                       ("green", "Green", "#44ff44"),
-                                       ("blue", "Blue", "#4444ff"),
-                                       ("white", "White", "#ffffff")]:
+        for channel, label in [("red", "Red"),
+                               ("green", "Green"),
+                               ("blue", "Blue"),
+                               ("white", "White")]:
             row = QHBoxLayout()
             slider = QSlider(Qt.Orientation.Horizontal)
             slider.setRange(0, 255)
-            slider.setStyleSheet(f"""
-                QSlider::groove:horizontal {{
-                    background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
-                        stop:0 #333, stop:1 {color});
-                    height: 8px;
-                    border-radius: 4px;
-                }}
-                QSlider::handle:horizontal {{
-                    background: white;
-                    width: 16px;
-                    margin: -4px 0;
-                    border-radius: 8px;
-                }}
-            """)
 
             spinbox = QSpinBox()
             spinbox.setRange(0, 255)
@@ -257,6 +256,8 @@ class ColourBlockDialog(QDialog):
         buttons = QDialogButtonBox(
             QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
         )
+        self.ok_button = buttons.button(QDialogButtonBox.StandardButton.Ok)
+        self.ok_button.setProperty("role", "primary")
         buttons.accepted.connect(self.accept)
         buttons.rejected.connect(self.reject)
         main_layout.addWidget(buttons)

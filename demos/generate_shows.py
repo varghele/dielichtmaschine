@@ -39,7 +39,7 @@ PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if PROJECT_ROOT not in sys.path:
     sys.path.insert(0, PROJECT_ROOT)
 
-from config.models import Configuration, Show, ShowPart, TimelineData  # noqa: E402
+from config.models import Configuration, Song, ShowPart, TimelineData  # noqa: E402
 from timeline.song_structure import SongStructure  # noqa: E402
 from autogen.generator import generate_show  # noqa: E402
 
@@ -126,14 +126,14 @@ def load_structure_parts(config_path: str, show_name: str = None, slice_spec: st
     section — e.g. ``"4:6"`` for a short build-into-chorus demo excerpt.
     """
     cfg = Configuration.load(config_path)
-    if not cfg.shows:
+    if not cfg.songs:
         raise SystemExit(f"error: {config_path} has no shows to take structure from")
     if show_name:
-        if show_name not in cfg.shows:
-            raise SystemExit(f"error: show '{show_name}' not in {config_path}. Have: {', '.join(cfg.shows)}")
-        show = cfg.shows[show_name]
+        if show_name not in cfg.songs:
+            raise SystemExit(f"error: show '{show_name}' not in {config_path}. Have: {', '.join(cfg.songs)}")
+        show = cfg.songs[show_name]
     else:
-        show_name, show = next(iter(cfg.shows.items()))
+        show_name, show = next(iter(cfg.songs.items()))
     if not show.parts:
         raise SystemExit(f"error: show '{show_name}' has no parts")
 
@@ -196,12 +196,12 @@ def generate_for_rig(rig_name: str, audio_path: str, parts, audio_basename: str,
     if calm:
         calm_movement(lanes)
 
-    show = Show(
+    show = Song(
         name="Demo",
         parts=rig_parts,
         timeline_data=TimelineData(lanes=lanes, audio_file_path=audio_basename),
     )
-    cfg.shows[show.name] = show
+    cfg.songs[show.name] = show
     return cfg
 
 
@@ -250,7 +250,7 @@ def main(argv=None):
         cfg = generate_for_rig(rig_name, audio_path, parts, os.path.basename(audio_path), calm=args.calm_movement)
         out = os.path.join(args.out, f"{rig_name}.yaml")
         cfg.save(out)
-        show = cfg.shows["Demo"]
+        show = cfg.songs["Demo"]
         n_lanes = len(show.timeline_data.lanes)
         n_blocks = sum(len(l.light_blocks) for l in show.timeline_data.lanes)
         print(f"  {rig_name:22s} {len(show.parts)} parts  {n_lanes:2d} lanes  "

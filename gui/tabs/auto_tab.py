@@ -1,37 +1,73 @@
-"""
-AutoTab — real-time audio-reactive auto-generation tab.
+"""AutoTab - the audio-reactive engine screen, rebuilt to the reference
+docs/design/screens/07-auto.html.
 
-User-visible label is "Auto(Experimental)" to flag the auto-generation
-pipeline as still tuning. Two behavioural deltas worth knowing:
+Anatomy (left to right):
+
+- a 420px GROUPS · MODE panel: one row per fixture group with a 3px left
+  border in the group color, display-caps group name, a segmented
+  AUTO / CURATED / LOCKED chip selector, the currently selected riff
+  (mono, dim), a 120x8 intensity bar in the group color and the mono
+  percentage. Because the reference row is authored at 660px and we run
+  at 420px, the riff / bar / percentage wrap onto a second line.
+  Underneath: ENERGY SENSITIVITY (accent bar slider) and PLANE BIAS
+  (FRONT / MID / BACK chips).
+- the engine stage in the centre, on the engineering-grid background: a
+  mono state caption, the huge BPM readout, the BPM AUTO / TAP / SET
+  chip row, the RMS ENERGY / CONTRAST / VOCALS meter columns, the
+  FILL NOW + STOP/START action row and the colour-override row.
+- a 400px right column: the 3D PREVIEW · LIVE DMX header (pop-out +
+  collapse chevron), the embedded visualizer, the ENGINE LOG, the mono
+  key/value block (Input, Window) and a collapsed SETUP disclosure that
+  holds the plumbing the reference screen does not draw: ArtNet target /
+  universe mapping / mirror, audio host-API + device selection, the full
+  movement-target plane list, the movement speed cap and the manual BPM
+  spinbox.
+
+Backing model vs. presentation: ``_riff_constraints``
+(GroupRiffConstraintPanel) and ``_submasters`` (GroupSubmasterPanel)
+stay alive as *hidden* backing widgets - they own the riff checklists,
+the per-group constraint state and the submaster values, and they still
+emit ``constraints_changed`` / ``submaster_changed`` into the engine.
+The visible rows are a view onto them, so every existing signal path and
+the settings round-trip are untouched.
+
+Two behavioural deltas worth knowing:
 
 - **Lazy fixture-definition load.** ``on_tab_activated`` parses the QXF
   files on the first activation rather than blocking app startup.
 - **UI timer pauses when the tab isn't visible.** ``on_tab_deactivated``
   stops the 20 Hz UI tick to save cycles. The engine itself keeps
-  running — Auto Mode is performance-oriented and shouldn't auto-stop
+  running - Auto Mode is performance-oriented and shouldn't auto-stop
   when the user peeks at another tab.
 
 Cleanup runs from ``MainWindow.closeEvent`` via :meth:`cleanup`.
-Historically this tab lived as a standalone ``QMainWindow`` named
-``LiveModeWindow`` in ``live/window.py``; the UI modernization work
-folded it into a tab and the May 2026 rename swapped Live → Auto.
 """
+
+from collections import deque
+from datetime import datetime
+from typing import Dict, Optional
 
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QSplitter,
     QLabel, QPushButton, QSpinBox, QCheckBox, QSlider,
     QLineEdit, QComboBox, QGroupBox, QTableWidget, QTableWidgetItem,
-    QHeaderView, QProgressBar, QFrame,
+    QHeaderView, QFrame, QScrollArea, QMenu, QInputDialog, QDialog,
+    QApplication, QSizePolicy,
 )
-from PyQt6.QtCore import Qt, QTimer
-from PyQt6.QtGui import QFont
-from typing import Dict
+from PyQt6.QtCore import Qt, QTimer, QEvent, QPointF, pyqtSignal
+from PyQt6.QtGui import (
+    QColor, QConicalGradient, QFont, QPainter,
+)
+from utils import user_warnings
 
 from config.models import Configuration
 from audio.device_manager import DeviceManager
 from audio.live_input import LiveAudioInput
 from audio.realtime_spectral import RealtimeSpectralAnalyzer, LiveFeatureFrame
 from audio.live_feature_bridge import LiveFeatureBridge
+from gui.fonts import FONT_MONO
+from gui.icons import shell_icon
+from gui.typography import DisplayLabel, MicroLabel, display_font, mono_font
 from gui.widgets.embedded_visualizer import EmbeddedVisualizer
 from auto.engine import AutoShowEngine
 from auto.dmx_output import AutoDMXController
@@ -46,12 +82,417 @@ from autogen.spatial import compute_stage_planes
 
 from .base_tab import BaseTab
 
+# Reference geometry.
+LEFT_PANEL_WIDTH = 420
+RIGHT_PANEL_WIDTH = 400
+METER_BAR_SIZE = (110, 10)
+INTENSITY_BAR_SIZE = (120, 8)
+COLOR_WHEEL_BUTTON_SIZE = 34
+SWATCH_SIZE = 26
+PANE_HEADER_HEIGHT = 30
+
+# Data colors. Group fallbacks mirror the Fixtures screen palette; the
+# vocals meter takes the reference's cyan (a data color, not a token).
+GROUP_PALETTE = (
+    "#D9A441", "#4ECBD4", "#C95FD0", "#6F9E4C",
+    "#5F86C9", "#C96A5F", "#9A7FD0", "#8D9299",
+)
+VOCAL_COLOR = "#4ECBD4"
+
+# Colour-override presets (reference swatches).
+COLOR_PRESETS = ("#FF2850", "#C95FD0", "#4ECBD4")
+
+# Sentinel entry of the movement-plane combo.
+PLANE_NONE = "None (manual)"
+
+# PLANE BIAS chips -> movement-target plane. "MID" is the no-plane
+# (manual) case: the engine has Front/Back/Left/Right/Floor/Ceiling
+# planes but no mid plane, so MID releases the plane target instead of
+# inventing an engine parameter. The full plane list stays reachable
+# through the SETUP disclosure's Movement Target combo.
+PLANE_BIAS_CHIPS = (("Front", "Front"), ("Mid", PLANE_NONE), ("Back", "Back"))
+
+# How many engine-log entries we keep / show.
+ENGINE_LOG_CAPACITY = 50
+ENGINE_LOG_VISIBLE = 8
+
+
+def _active_tokens() -> dict:
+    """The token dict of the theme currently applied to the app.
+
+    Sniffs the applied stylesheet (ThemeManager.apply doesn't persist);
+    the light theme's window color is unique to light. Falls back to
+    dark. Same trick as gui/tabs/fixtures_tab.py.
+    """
+    from gui.theme_tokens import THEMES
+
+    app = QApplication.instance()
+    qss = app.styleSheet() if app is not None else ""
+    light = THEMES.get("light")
+    if light is not None and light["window"] in qss:
+        return light
+    return THEMES["dark"]
+
+
+def _mono_supports(char: str) -> bool:
+    """Does the mono family actually carry ``char``?
+
+    The reference prefixes riff names with a small triangle. Barlow and
+    the offscreen fallback font don't have it, so we only use the glyph
+    when the loaded IBM Plex Mono can draw it.
+    """
+    from PyQt6.QtGui import QFontMetrics
+    try:
+        return QFontMetrics(QFont(FONT_MONO, 10)).inFont(char)
+    except Exception:
+        return False
+
+
+def riff_display_text(riff_name: Optional[str], locked: bool,
+                      prefix: str = "") -> str:
+    """The riff line of a group row.
+
+    Empty riff renders as a dash; locked groups get a " (locked)" suffix
+    (no padlock glyph - Barlow has none).
+    """
+    body = riff_name or "-"
+    if locked and riff_name:
+        body = f"{body} (locked)"
+    return f"{prefix} {body}".strip() if prefix else body
+
+
+def constraint_mode(allowed) -> str:
+    """AUTO / CURATED / LOCKED for a group's allowed-riff set."""
+    if not allowed:
+        return "AUTO"
+    if len(allowed) == 1:
+        return "LOCKED"
+    return "CURATED"
+
+
+def contrast_word(value: float) -> str:
+    """The reference's qualitative contrast word."""
+    return "RICH" if value >= 0.5 else "FLAT"
+
+
+def vocal_word(value: float) -> str:
+    return "PRESENT" if value >= 0.5 else "ABSENT"
+
+
+# ---------------------------------------------------------------------------
+# Small painted primitives (data colors -> widget-local painting)
+# ---------------------------------------------------------------------------
+
+class _Bar(QWidget):
+    """A flat two-tone bar: track + fill. Fill color is a data color."""
+
+    def __init__(self, width: int, height: int, fill: str, parent=None):
+        super().__init__(parent)
+        self.setFixedSize(width, height)
+        self._fill = QColor(fill)
+        self._fraction: Optional[float] = None
+
+    def set_fill_color(self, color: str) -> None:
+        self._fill = QColor(color)
+        self.update()
+
+    def fraction(self) -> Optional[float]:
+        return self._fraction
+
+    def set_fraction(self, fraction: Optional[float]) -> None:
+        if fraction is not None:
+            fraction = max(0.0, min(1.0, float(fraction)))
+        self._fraction = fraction
+        self.update()
+
+    def paintEvent(self, event):
+        tokens = _active_tokens()
+        painter = QPainter(self)
+        painter.fillRect(self.rect(), QColor(tokens["border"]))
+        if self._fraction:
+            filled = int(round(self.width() * self._fraction))
+            if filled > 0:
+                painter.fillRect(0, 0, filled, self.height(), self._fill)
+        painter.end()
+
+
+class _IntensityBar(_Bar):
+    """The per-group 120x8 submaster bar. Click / drag sets the value."""
+
+    value_changed = pyqtSignal(float)
+
+    def __init__(self, fill: str, parent=None):
+        super().__init__(*INTENSITY_BAR_SIZE, fill, parent)
+        self.setCursor(Qt.CursorShape.SizeHorCursor)
+        self._fraction = 1.0
+
+    def _set_from_x(self, x: float) -> None:
+        fraction = max(0.0, min(1.0, x / max(1, self.width())))
+        if fraction != self._fraction:
+            self.set_fraction(fraction)
+            self.value_changed.emit(fraction)
+
+    def mousePressEvent(self, event):
+        if event.button() == Qt.MouseButton.LeftButton:
+            self._set_from_x(event.position().x())
+
+    def mouseMoveEvent(self, event):
+        if event.buttons() & Qt.MouseButton.LeftButton:
+            self._set_from_x(event.position().x())
+
+
+class _BarSlider(QWidget):
+    """The reference's slider: accent-filled progress bar with a handle."""
+
+    value_changed = pyqtSignal(float)
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setFixedHeight(16)
+        self.setMinimumWidth(80)
+        self.setCursor(Qt.CursorShape.SizeHorCursor)
+        self._value = 0.7
+
+    def value(self) -> float:
+        return self._value
+
+    def set_value(self, value: float) -> None:
+        self._value = max(0.0, min(1.0, float(value)))
+        self.update()
+
+    def _set_from_x(self, x: float) -> None:
+        value = max(0.0, min(1.0, x / max(1, self.width())))
+        if value != self._value:
+            self._value = value
+            self.update()
+            self.value_changed.emit(value)
+
+    def mousePressEvent(self, event):
+        if event.button() == Qt.MouseButton.LeftButton:
+            self._set_from_x(event.position().x())
+
+    def mouseMoveEvent(self, event):
+        if event.buttons() & Qt.MouseButton.LeftButton:
+            self._set_from_x(event.position().x())
+
+    def paintEvent(self, event):
+        tokens = _active_tokens()
+        painter = QPainter(self)
+        track_top = (self.height() - 8) // 2
+        painter.fillRect(0, track_top, self.width(), 8,
+                         QColor(tokens["border"]))
+        filled = int(round(self.width() * self._value))
+        if filled > 0:
+            painter.fillRect(0, track_top, filled, 8, QColor(tokens["accent"]))
+        handle_x = min(self.width() - 4, max(0, filled - 2))
+        painter.fillRect(handle_x, 0, 4, self.height(), QColor(tokens["text"]))
+        painter.end()
+
+
+class _ColorWheelButton(QWidget):
+    """34px conic-gradient disc that opens the HSV colour wheel."""
+
+    clicked = pyqtSignal()
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setFixedSize(COLOR_WHEEL_BUTTON_SIZE, COLOR_WHEEL_BUTTON_SIZE)
+        self.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.setToolTip("Colour override: pick a hue")
+
+    def mousePressEvent(self, event):
+        if event.button() == Qt.MouseButton.LeftButton:
+            self.clicked.emit()
+
+    def paintEvent(self, event):
+        tokens = _active_tokens()
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        centre = QPointF(self.width() / 2.0, self.height() / 2.0)
+        gradient = QConicalGradient(centre, 0.0)
+        for stop, color in ((0.0, "#FF4040"), (0.15, "#F0562E"),
+                            (0.35, "#40FF70"), (0.55, "#40C8FF"),
+                            (0.75, "#8040FF"), (0.9, "#FF40C0"),
+                            (1.0, "#FF4040")):
+            gradient.setColorAt(stop, QColor(color))
+        painter.setBrush(gradient)
+        painter.setPen(QColor(tokens["border"]))
+        painter.drawEllipse(2, 2, self.width() - 4, self.height() - 4)
+        painter.end()
+
+
+class _Swatch(QWidget):
+    """26px colour-preset square; selected gets a 2px text-colored border."""
+
+    clicked = pyqtSignal(str)
+
+    def __init__(self, color: str, parent=None):
+        super().__init__(parent)
+        self.setFixedSize(SWATCH_SIZE, SWATCH_SIZE)
+        self.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._color = color
+        self._selected = False
+        self.setToolTip(f"Colour override {color}")
+
+    def color(self) -> str:
+        return self._color
+
+    def is_selected(self) -> bool:
+        return self._selected
+
+    def set_selected(self, selected: bool) -> None:
+        self._selected = bool(selected)
+        self.update()
+
+    def mousePressEvent(self, event):
+        if event.button() == Qt.MouseButton.LeftButton:
+            self.clicked.emit(self._color)
+
+    def paintEvent(self, event):
+        tokens = _active_tokens()
+        painter = QPainter(self)
+        painter.fillRect(self.rect(), QColor(self._color))
+        if self._selected:
+            painter.setPen(QColor(tokens["text"]))
+            painter.drawRect(0, 0, self.width() - 1, self.height() - 1)
+            painter.drawRect(1, 1, self.width() - 3, self.height() - 3)
+        else:
+            painter.setPen(QColor(tokens["border"]))
+            painter.drawRect(0, 0, self.width() - 1, self.height() - 1)
+        painter.end()
+
+
+class _EngineLogView(QWidget):
+    """Mono log list: dim timestamp + message, accent for riff changes.
+
+    Purely UI-side. Fed by :meth:`AutoTab._log_event` from the events the
+    tab already observes; ``auto/engine.py`` is untouched.
+    """
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self._layout = QVBoxLayout(self)
+        self._layout.setContentsMargins(0, 0, 0, 0)
+        self._layout.setSpacing(3)
+        self._layout.addStretch(1)
+
+    def render_entries(self, entries) -> None:
+        tokens = _active_tokens()
+        while self._layout.count() > 1:
+            item = self._layout.takeAt(0)
+            widget = item.widget()
+            if widget is not None:
+                widget.deleteLater()
+        for stamp, message, accent in entries:
+            row = QWidget(self)
+            row_layout = QHBoxLayout(row)
+            row_layout.setContentsMargins(0, 0, 0, 0)
+            row_layout.setSpacing(8)
+            time_label = QLabel(stamp, row)
+            time_label.setFont(mono_font(8))
+            time_label.setStyleSheet(
+                f"color: {tokens['text_disabled']};"
+                f" font-family: '{FONT_MONO}';")
+            row_layout.addWidget(time_label)
+            text_label = QLabel(message, row)
+            text_label.setFont(mono_font(8))
+            color = tokens["accent_line"] if accent else tokens["text_secondary"]
+            text_label.setStyleSheet(
+                f"color: {color}; font-family: '{FONT_MONO}';")
+            row_layout.addWidget(text_label, 1)
+            self._layout.insertWidget(self._layout.count() - 1, row)
+
+
+class _GroupRow(QWidget):
+    """One GROUPS · MODE row: colour border, name, mode chips, riff, bar."""
+
+    mode_clicked = pyqtSignal(str, str)      # group, "AUTO"|"CURATED"|"LOCKED"
+    intensity_changed = pyqtSignal(str, float)
+
+    def __init__(self, group_name: str, color: str, prefix: str, parent=None):
+        super().__init__(parent)
+        self.group_name = group_name
+        self.setObjectName("GroupRow")
+        self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
+        self.setStyleSheet(f"#GroupRow {{ border-left: 3px solid {color}; }}")
+        self._prefix = prefix
+
+        outer = QVBoxLayout(self)
+        outer.setContentsMargins(13, 10, 16, 10)
+        outer.setSpacing(8)
+
+        top = QHBoxLayout()
+        top.setSpacing(14)
+        self.name_label = DisplayLabel(group_name, point_size=14,
+                                       weight=QFont.Weight.Bold,
+                                       tracking_em=0.05)
+        self.name_label.setFixedWidth(150)
+        top.addWidget(self.name_label)
+
+        self.mode_buttons: Dict[str, QPushButton] = {}
+        chip_row = QHBoxLayout()
+        chip_row.setSpacing(0)
+        for mode in ("AUTO", "CURATED", "LOCKED"):
+            button = QPushButton(mode, self)
+            # Theme-owned chrome: QPushButton[role="mode-chip"], filled
+            # with the accent when checked (warm text fill for LOCKED
+            # via the [state="locked"] variant).
+            button.setProperty("role", "mode-chip")
+            button.setProperty("state", mode.lower())
+            button.setCheckable(True)
+            button.setAutoExclusive(False)  # set_mode drives the state
+            button.setFont(mono_font(9, QFont.Weight.DemiBold))
+            button.setFixedHeight(28)
+            button.setCursor(Qt.CursorShape.PointingHandCursor)
+            button.clicked.connect(
+                lambda _checked=False, m=mode: self.mode_clicked.emit(
+                    self.group_name, m))
+            chip_row.addWidget(button)
+            self.mode_buttons[mode] = button
+        top.addLayout(chip_row)
+        top.addStretch()
+        outer.addLayout(top)
+
+        bottom = QHBoxLayout()
+        bottom.setSpacing(10)
+        self.riff_label = MicroLabel("-", point_size=8, tracking_em=0.0)
+        bottom.addWidget(self.riff_label, 1)
+        self.intensity_bar = _IntensityBar(color, self)
+        self.intensity_bar.value_changed.connect(
+            lambda value: self.intensity_changed.emit(self.group_name, value))
+        bottom.addWidget(self.intensity_bar)
+        self.percent_label = MicroLabel("100%", point_size=8, tracking_em=0.0)
+        self.percent_label.setFixedWidth(38)
+        self.percent_label.setAlignment(
+            Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        bottom.addWidget(self.percent_label)
+        outer.addLayout(bottom)
+
+    # -- state -> visuals ------------------------------------------------
+    def set_mode(self, mode: str) -> None:
+        """Check the active chip; the theme paints the fill (accent, or
+        warm text color for LOCKED)."""
+        for name, button in self.mode_buttons.items():
+            button.setChecked(name == mode)
+            style = button.style()
+            if style:
+                style.unpolish(button)
+                style.polish(button)
+
+    def set_riff(self, riff_name: Optional[str], locked: bool) -> None:
+        self.riff_label.setText(
+            riff_display_text(riff_name, locked, self._prefix))
+
+    def set_intensity(self, fraction: float) -> None:
+        self.intensity_bar.set_fraction(fraction)
+        self.percent_label.setText(f"{int(round(fraction * 100))}%")
+
 
 class AutoTab(BaseTab):
     """Real-time audio-reactive lighting embedded as a tab."""
 
     def __init__(self, config: Configuration, parent=None):
-        # All the non-UI state must be set before super().__init__ — that
+        # All the non-UI state must be set before super().__init__ - that
         # call invokes setup_ui() which references several of these.
         self.fixture_definitions: dict = {}
         self._fixtures_loaded = False
@@ -68,7 +509,7 @@ class AutoTab(BaseTab):
         self._auto_bpm = AutoBPMDetector()
         self._is_running = False
 
-        # 20 Hz UI tick — paused when the tab isn't visible (see
+        # 20 Hz UI tick - paused when the tab isn't visible (see
         # on_tab_deactivated) so it doesn't burn cycles in the background.
         self._ui_timer = QTimer()
         self._ui_timer.setInterval(50)
@@ -77,9 +518,19 @@ class AutoTab(BaseTab):
         # Latest feature frame for meters; replaced on each analyzer tick.
         self._latest_frame: LiveFeatureFrame = None
 
-        # Cached riffs payload — set from the engine callback (which may
+        # Cached riffs payload - set from the engine callback (which may
         # arrive on a worker thread); applied on the next UI tick.
         self._pending_riff_update = None
+
+        # Bounded UI-side engine log: (timestamp, message, accent).
+        self._engine_log = deque(maxlen=ENGINE_LOG_CAPACITY)
+        # Last riff seen per group, so we only log actual changes.
+        self._last_logged_riffs: Dict[str, str] = {}
+        self._last_logged_bpm: Optional[int] = None
+
+        self._group_rows: Dict[str, _GroupRow] = {}
+        self._group_colors: Dict[str, str] = {}
+        self._riff_prefix = "▸" if _mono_supports("▸") else ""
 
         super().__init__(config, parent)
 
@@ -90,199 +541,409 @@ class AutoTab(BaseTab):
         self._populate_input_apis()
         self._populate_devices()
         self._refresh_asio_hint()
+        self._refresh_input_readout()
 
-    # ── BaseTab overrides ─────────────────────────────────────────────
+    # -- BaseTab overrides -------------------------------------------------
 
     def setup_ui(self):
         main_layout = QHBoxLayout(self)
-        main_layout.setContentsMargins(8, 8, 8, 8)
+        main_layout.setContentsMargins(0, 0, 0, 0)
+        main_layout.setSpacing(0)
 
-        splitter = QSplitter(Qt.Orientation.Horizontal)
-        main_layout.addWidget(splitter)
+        main_layout.addWidget(self._build_groups_panel())
+        main_layout.addWidget(self._build_center_panel(), 1)
+        main_layout.addWidget(self._build_right_panel())
 
-        # ── Left panel: meters + energy + BPM display ──────────────
-        left_panel = QWidget()
-        left_layout = QVBoxLayout(left_panel)
-        left_layout.setContentsMargins(4, 4, 4, 4)
+        # Now that the visible shell exists, build the hidden backing
+        # panels + the visible group rows for the first time.
+        self._current_groups_fingerprint = None
+        self._rebuild_group_panels()
+        self._apply_chrome_icons()
+        self._sync_plane_chips()
+        self._refresh_color_row()
+        self._refresh_static_readouts()
 
-        meters_label = QLabel("Audio Meters")
-        meters_label.setStyleSheet("font-weight: bold;")
-        left_layout.addWidget(meters_label)
+    # -- Left panel: GROUPS · MODE ----------------------------------------
 
-        self._meter_bars = {}
-        for metric in ['flux', 'rms', 'transient', 'richness',
-                       'vocal', 'centroid', 'contrast']:
-            row = QHBoxLayout()
-            lbl = QLabel(metric[:6])
-            lbl.setFixedWidth(50)
-            lbl.setStyleSheet("font-size: 10px;")
-            bar = QProgressBar()
-            bar.setRange(0, 100)
-            bar.setValue(0)
-            bar.setFixedHeight(16)
-            bar.setTextVisible(False)
-            row.addWidget(lbl)
-            row.addWidget(bar)
-            left_layout.addLayout(row)
-            self._meter_bars[metric] = bar
+    def _build_groups_panel(self) -> QWidget:
+        panel = QWidget()
+        panel.setObjectName("AutoGroupsPanel")
+        panel.setProperty("role", "inspector")
+        panel.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
+        panel.setFixedWidth(LEFT_PANEL_WIDTH)
+        layout = QVBoxLayout(panel)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
 
-        left_layout.addSpacing(10)
+        header = QWidget()
+        header_row = QHBoxLayout(header)
+        header_row.setContentsMargins(16, 10, 16, 10)
+        header_row.addWidget(MicroLabel("Groups · Mode", point_size=8,
+                                        tracking_em=0.12))
+        header_row.addStretch()
+        header_row.addWidget(MicroLabel("Submaster", point_size=8,
+                                        tracking_em=0.12))
+        layout.addWidget(header)
 
-        self._energy_fader = EnergySensitivityFader()
+        rows_scroll = QScrollArea()
+        rows_scroll.setWidgetResizable(True)
+        rows_scroll.setFrameShape(QFrame.Shape.NoFrame)
+        rows_scroll.setHorizontalScrollBarPolicy(
+            Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self._groups_container = QWidget()
+        self._groups_layout = QVBoxLayout(self._groups_container)
+        self._groups_layout.setContentsMargins(0, 0, 0, 0)
+        self._groups_layout.setSpacing(0)
+        self._groups_layout.addStretch(1)
+        rows_scroll.setWidget(self._groups_container)
+        layout.addWidget(rows_scroll, 1)
+
+        # Bottom controls: ENERGY SENSITIVITY + PLANE BIAS.
+        footer = QWidget()
+        footer_row = QHBoxLayout(footer)
+        footer_row.setContentsMargins(16, 12, 16, 14)
+        footer_row.setSpacing(12)
+
+        energy_col = QVBoxLayout()
+        energy_col.setSpacing(6)
+        energy_col.addWidget(MicroLabel("Energy sensitivity", point_size=7,
+                                        tracking_em=0.1))
+        # The fader widget stays as the backing store (value(), settings
+        # round-trip); the visible control is the reference's bar slider.
+        self._energy_fader = EnergySensitivityFader(self)
         self._energy_fader.set_value(self._settings.energy_sensitivity / 100.0)
-        self._energy_fader.sensitivity_changed.connect(self._on_energy_sensitivity_changed)
-        left_layout.addWidget(self._energy_fader)
+        self._energy_fader.sensitivity_changed.connect(
+            self._on_energy_sensitivity_changed)
+        self._energy_fader.hide()
+        self._energy_slider = _BarSlider()
+        self._energy_slider.set_value(self._energy_fader.value())
+        self._energy_slider.value_changed.connect(self._on_energy_slider_moved)
+        energy_col.addWidget(self._energy_slider)
+        footer_row.addLayout(energy_col, 1)
 
-        left_layout.addSpacing(10)
-        bpm_label = QLabel("BPM")
-        bpm_label.setStyleSheet("font-weight: bold;")
-        left_layout.addWidget(bpm_label)
-        self._bpm_display = QLabel("120")
-        self._bpm_display.setObjectName("AutoBpmDisplay")
-        self._bpm_display.setFont(QFont("Monospace", 24, QFont.Weight.Bold))
-        self._bpm_display.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        left_layout.addWidget(self._bpm_display)
+        plane_col = QVBoxLayout()
+        plane_col.setSpacing(6)
+        plane_col.addWidget(MicroLabel("Plane bias · front · mid · back",
+                                       point_size=7, tracking_em=0.06))
+        chips = QHBoxLayout()
+        chips.setSpacing(4)
+        self._plane_chips: Dict[str, QPushButton] = {}
+        for label, plane_name in PLANE_BIAS_CHIPS:
+            chip = QPushButton(label.upper())
+            chip.setFont(mono_font(8, QFont.Weight.DemiBold))
+            chip.setCursor(Qt.CursorShape.PointingHandCursor)
+            chip.setFixedHeight(24)
+            chip.clicked.connect(
+                lambda _checked=False, p=plane_name: self._on_plane_chip(p))
+            chips.addWidget(chip, 1)
+            self._plane_chips[plane_name] = chip
+        plane_col.addLayout(chips)
+        footer_row.addLayout(plane_col, 1)
 
-        left_layout.addStretch()
-        left_panel.setFixedWidth(170)
-        splitter.addWidget(left_panel)
+        layout.addWidget(footer)
+        return panel
 
-        # ── Center panel: status + BPM + groove/fill + color wheel ──
-        center_panel = QWidget()
-        center_layout = QVBoxLayout(center_panel)
-        center_layout.setContentsMargins(4, 4, 4, 4)
+    # -- Center panel: the engine stage ------------------------------------
 
-        # Status frame — dark bar with three labels, theme-styled via QSS.
-        status_frame = QFrame()
-        status_frame.setObjectName("AutoStatusFrame")
-        status_layout = QHBoxLayout(status_frame)
-        self._status_riff = QLabel("Riff: ---")
-        self._status_riff.setObjectName("AutoStatusRiff")
-        self._status_bar_counter = QLabel("Bar: -/-")
-        self._status_bar_counter.setObjectName("AutoStatusBarCounter")
-        self._status_phase = QLabel("STOPPED")
+    def _build_center_panel(self) -> QWidget:
+        tokens = _active_tokens()
+        panel = QWidget()
+        panel.setObjectName("AutoEngineStage")
+        panel.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
+        # Engineering-grid motif, theme-owned: QWidget[role="grid-surface"].
+        panel.setProperty("role", "grid-surface")
+        layout = QVBoxLayout(panel)
+        layout.setContentsMargins(24, 24, 24, 24)
+        layout.setSpacing(28)
+        layout.addStretch(1)
+
+        # -- state caption + BPM readout + BPM chips -----------------------
+        head = QVBoxLayout()
+        head.setSpacing(2)
+        self._status_phase = MicroLabel("Engine stopped", point_size=8,
+                                        tracking_em=0.16)
         self._status_phase.setObjectName("AutoStatusPhase")
-        # `phase` is a dynamic property the QSS reads — we re-polish on
-        # change so the colour follows engine state without inline CSS.
         self._status_phase.setProperty("phase", "stopped")
-        status_layout.addWidget(self._status_riff)
-        status_layout.addStretch()
-        status_layout.addWidget(self._status_bar_counter)
-        status_layout.addWidget(self._status_phase)
-        center_layout.addWidget(status_frame)
+        self._status_phase.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        head.addWidget(self._status_phase)
 
-        # BPM controls
-        bpm_group = QGroupBox("BPM Control")
-        bpm_layout = QHBoxLayout(bpm_group)
+        self._bpm_display = QLabel(f"{float(self._settings.bpm):.1f}")
+        self._bpm_display.setObjectName("AutoBpmDisplay")
+        self._bpm_display.setFont(mono_font(60, QFont.Weight.DemiBold))
+        # Family pinned locally: the app-wide QWidget font-family rule
+        # beats setFont (see docs/qt-gotchas.md and CLAUDE.md).
+        self._bpm_display.setStyleSheet(
+            f"QLabel#AutoBpmDisplay {{ font-family: '{FONT_MONO}'; }}")
+        self._bpm_display.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        head.addWidget(self._bpm_display)
+
+        chips = QHBoxLayout()
+        chips.setSpacing(8)
+        chips.addStretch()
+        # Kept as the checkable control the feature-frame handler reads.
+        self._auto_bpm_checkbox = QPushButton("BPM AUTO")
+        self._auto_bpm_checkbox.setCheckable(True)
+        self._auto_bpm_checkbox.setProperty("role", "output-select")
+        self._auto_bpm_checkbox.setFont(mono_font(8, QFont.Weight.Medium))
+        self._auto_bpm_checkbox.toggled.connect(self._on_auto_bpm_toggled)
+        chips.addWidget(self._auto_bpm_checkbox)
 
         self._tap_btn = QPushButton("TAP")
-        self._tap_btn.setFixedSize(60, 40)
-        self._tap_btn.setStyleSheet("font-weight: bold; font-size: 14px;")
+        self._tap_btn.setProperty("role", "primary")
+        self._tap_btn.setFont(mono_font(8, QFont.Weight.DemiBold))
+        self._tap_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self._tap_btn.clicked.connect(self._on_tap_bpm)
-        bpm_layout.addWidget(self._tap_btn)
+        chips.addWidget(self._tap_btn)
 
-        self._auto_bpm_checkbox = QCheckBox("Auto")
-        self._auto_bpm_checkbox.toggled.connect(self._on_auto_bpm_toggled)
-        bpm_layout.addWidget(self._auto_bpm_checkbox)
+        self._bpm_set_btn = QPushButton("SET...")
+        self._bpm_set_btn.setProperty("role", "output-select")
+        self._bpm_set_btn.setFont(mono_font(8, QFont.Weight.Medium))
+        self._bpm_set_btn.setToolTip("Enter a BPM manually")
+        self._bpm_set_btn.clicked.connect(self._on_set_bpm)
+        chips.addWidget(self._bpm_set_btn)
+        chips.addStretch()
+        head.addLayout(chips)
+        layout.addLayout(head)
 
+        # Manual BPM value lives in the spinbox (settings round-trip, engine
+        # push). It is shown in the SETUP disclosure on the right.
         self._bpm_spinbox = QSpinBox()
         self._bpm_spinbox.setRange(30, 300)
         self._bpm_spinbox.setValue(self._settings.bpm)
         self._bpm_spinbox.setSuffix(" BPM")
         self._bpm_spinbox.valueChanged.connect(self._on_bpm_spinbox_changed)
-        bpm_layout.addWidget(self._bpm_spinbox)
 
-        # Groove-bars spinbox is intentionally absent. The engine no
-        # longer auto-fills at the end of a cycle — it grooves
-        # continuously and re-selects riffs every fixed _cycle_bars
-        # bars. Manual fills are still available via FILL NOW below.
+        # -- meter columns --------------------------------------------------
+        meters = QHBoxLayout()
+        meters.setSpacing(32)
+        meters.addStretch()
+        self._meter_bars: Dict[str, _Bar] = {}
+        self._meter_values: Dict[str, QLabel] = {}
+        for key, caption, color in (
+            ("rms", "RMS energy", tokens["accent"]),
+            ("contrast", "Contrast", tokens["text_secondary"]),
+            ("vocal", "Vocals", VOCAL_COLOR),
+        ):
+            column = QVBoxLayout()
+            column.setSpacing(5)
+            caption_label = MicroLabel(caption, point_size=7, tracking_em=0.1)
+            caption_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            column.addWidget(caption_label)
+            bar = _Bar(*METER_BAR_SIZE, color)
+            column.addWidget(bar, alignment=Qt.AlignmentFlag.AlignHCenter)
+            value = MicroLabel("-", point_size=8, tracking_em=0.0)
+            value.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            column.addWidget(value)
+            meters.addLayout(column)
+            self._meter_bars[key] = bar
+            self._meter_values[key] = value
+        meters.addStretch()
+        layout.addLayout(meters)
 
-        bpm_layout.addStretch()
-        center_layout.addWidget(bpm_group)
+        # Scrolling feature chart: still fed on every tick (it is the
+        # tuning instrument), but the reference screen has no room for it.
+        self._metrics_tracker = AutoMetricsTracker(panel)
+        self._metrics_tracker.hide()
 
-        # Per-group riff constraints. Built by _rebuild_group_panels so
-        # we can swap in a fresh instance whenever config.groups changes
-        # (the user loads a config file after MainWindow has already
-        # constructed this tab). Initial build happens at the end of
-        # setup_ui after both placeholders are in their respective
-        # layouts.
-        self._riff_constraints = None
-        self._riff_constraints_index = center_layout.count()
-        center_layout.addWidget(QWidget())  # placeholder, replaced below
-        self._center_layout = center_layout
-
-        # FILL NOW — manual one-shot fill bar. The engine grooves
-        # continuously now, so a "groove now" button is redundant —
-        # we're always in groove unless the user punches a fill.
+        # -- action row ------------------------------------------------------
+        actions = QHBoxLayout()
+        actions.setSpacing(14)
+        actions.addStretch()
         self._fill_btn = QPushButton("FILL NOW")
-        self._fill_btn.setFixedHeight(50)
-        self._fill_btn.setProperty("role", "destructive")
-        self._fill_btn.setStyleSheet("font-size: 16px;")
+        self._fill_btn.setProperty("role", "cta-accent")
+        self._fill_btn.setFont(display_font(20, QFont.Weight.ExtraBold,
+                                            tracking_em=0.1))
+        self._fill_btn.setFixedHeight(66)
+        self._fill_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._fill_btn.setStyleSheet(
+            'QPushButton[role="primary"] { padding: 20px 44px; }')
         self._fill_btn.clicked.connect(self._on_fill_now)
-        center_layout.addWidget(self._fill_btn)
+        actions.addWidget(self._fill_btn)
 
-        # Movement speed limiter
-        speed_row = QHBoxLayout()
-        speed_label = QLabel("Max Speed:")
-        speed_label.setStyleSheet("font-size: 10px;")
-        speed_label.setFixedWidth(65)
-        self._speed_slider = QSlider(Qt.Orientation.Horizontal)
-        self._speed_slider.setRange(0, 360)
-        self._speed_slider.setValue(self._settings.max_movement_speed)
-        self._speed_slider.setFixedHeight(20)
-        self._speed_value_label = QLabel(
-            "OFF" if self._settings.max_movement_speed == 0
-            else f"{self._settings.max_movement_speed}°/s"
-        )
-        self._speed_value_label.setFixedWidth(40)
-        self._speed_value_label.setAlignment(
-            Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter
-        )
-        self._speed_value_label.setStyleSheet("font-size: 10px;")
-        self._speed_slider.valueChanged.connect(self._on_speed_changed)
-        speed_row.addWidget(speed_label)
-        speed_row.addWidget(self._speed_slider)
-        speed_row.addWidget(self._speed_value_label)
-        center_layout.addLayout(speed_row)
+        # Both buttons exist (gui/tests drive them by name); only the one
+        # matching the engine state is visible, per the reference's single
+        # toggling button.
+        self._start_btn = QPushButton("START ENGINE")
+        self._stop_btn = QPushButton("STOP ENGINE")
+        for button in (self._start_btn, self._stop_btn):
+            button.setFont(display_font(15, QFont.Weight.Bold,
+                                        tracking_em=0.08))
+            button.setFixedHeight(66)
+            button.setCursor(Qt.CursorShape.PointingHandCursor)
+            button.setStyleSheet("QPushButton { padding: 20px 30px; }")
+            actions.addWidget(button)
+        self._start_btn.clicked.connect(self._on_start)
+        self._stop_btn.clicked.connect(self._on_stop)
+        self._stop_btn.setEnabled(False)
+        self._stop_btn.hide()
+        actions.addStretch()
+        layout.addLayout(actions)
 
-        center_layout.addSpacing(8)
-        self._color_wheel = HSVColorWheel()
+        # -- colour override row ----------------------------------------------
+        colors = QHBoxLayout()
+        colors.setSpacing(12)
+        colors.addStretch()
+        colors.addWidget(MicroLabel("Colour override", point_size=8,
+                                    tracking_em=0.1))
+
+        # The wheel widget itself lives in a popup dialog; the tab keeps
+        # the reference's 34px disc as the affordance.
+        self._color_wheel = HSVColorWheel(panel)
+        self._color_wheel.hide()
         self._color_wheel.set_state(
             self._settings.color_override_active,
             self._settings.color_override_hue,
             self._settings.color_override_saturation,
         )
         self._color_wheel.color_changed.connect(self._on_color_changed)
-        center_layout.addWidget(self._color_wheel)
+        self._color_wheel_dialog = None
 
-        self._metrics_tracker = AutoMetricsTracker()
-        center_layout.addWidget(self._metrics_tracker)
+        self._color_wheel_btn = _ColorWheelButton()
+        self._color_wheel_btn.clicked.connect(self._open_color_wheel)
+        colors.addWidget(self._color_wheel_btn)
 
-        center_layout.addStretch()
-        splitter.addWidget(center_panel)
+        self._swatches = []
+        for preset in COLOR_PRESETS:
+            swatch = _Swatch(preset)
+            swatch.clicked.connect(self._on_swatch_clicked)
+            colors.addWidget(swatch)
+            self._swatches.append(swatch)
 
-        # ── Right pane: embedded 3D preview on top, controls below ──
-        # Vertical splitter so the user can drag the visualizer height
-        # to taste; default ~290 px gives a roughly 16:9 preview at the
-        # 520-px column width. Persistence via QSettings under
-        # `auto/right_splitter`.
+        self._release_color_btn = QPushButton("RELEASE")
+        self._release_color_btn.setProperty("role", "output-select")
+        self._release_color_btn.setFont(mono_font(8, QFont.Weight.Medium))
+        self._release_color_btn.setToolTip("Clear the colour override")
+        self._release_color_btn.clicked.connect(self._on_release_color)
+        colors.addWidget(self._release_color_btn)
+        colors.addStretch()
+        layout.addLayout(colors)
+
+        layout.addStretch(1)
+        return panel
+
+    # -- Right panel: preview, log, readouts, setup -------------------------
+
+    def _build_right_panel(self) -> QWidget:
+        from gui.tabs.configuration_tab import TOOLBAR_BTN_WIDTH
+
+        panel = QWidget()
+        panel.setObjectName("AutoPreviewPanel")
+        panel.setProperty("role", "inspector")
+        panel.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
+        panel.setFixedWidth(RIGHT_PANEL_WIDTH)
+        layout = QVBoxLayout(panel)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
+
+        header = QWidget()
+        header.setFixedHeight(PANE_HEADER_HEIGHT)
+        header_row = QHBoxLayout(header)
+        header_row.setContentsMargins(14, 0, 6, 0)
+        header_row.setSpacing(12)
+        header_row.addWidget(MicroLabel("3D preview · live DMX", point_size=8,
+                                        tracking_em=0.12))
+        header_row.addStretch()
+        self._pop_out_btn = QPushButton("POP-OUT")
+        self._pop_out_btn.setFlat(True)
+        self._pop_out_btn.setFont(mono_font(8))
+        self._pop_out_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._pop_out_btn.setToolTip("Open the standalone visualizer")
+        self._pop_out_btn.setProperty("role", "pane-icon")
+        self._pop_out_btn.clicked.connect(self._launch_visualizer)
+        header_row.addWidget(self._pop_out_btn)
+        self._pane_toggle_btn = QPushButton()
+        self._pane_toggle_btn.setCheckable(True)
+        self._pane_toggle_btn.setChecked(True)
+        self._pane_toggle_btn.setFixedWidth(TOOLBAR_BTN_WIDTH)
+        self._pane_toggle_btn.setProperty("density", "compact")
+        # Flat: the reference draws a bare chevron, and the base
+        # QPushButton:checked rule would otherwise paint an accent border
+        # around a control that is "on" in its resting state.
+        # Theme-owned: QPushButton[role="pane-icon"].
+        self._pane_toggle_btn.setProperty("role", "pane-icon")
+        self._pane_toggle_btn.setToolTip("Collapse or restore the 3D preview")
+        self._pane_toggle_btn.toggled.connect(self._on_pane_toggle)
+        header_row.addWidget(self._pane_toggle_btn)
+        layout.addWidget(header)
+
+        # Vertical splitter: visualizer on top, everything else below.
         self._right_splitter = QSplitter(Qt.Orientation.Vertical)
-
-        # Embedded visualizer. Build mode at construction so all fixtures
-        # light up before the user hits START; preview flips to "live"
-        # in _on_start (DMX from AutoDMXController feeds it via the
-        # local_dmx_callback hook) and back to "build" in _on_stop.
         self.embedded_visualizer = EmbeddedVisualizer(self)
         self.embedded_visualizer.set_pop_out_callback(self._launch_visualizer)
         self.embedded_visualizer.set_config(self.config)
         self.embedded_visualizer.set_preview_mode("build")
+        # The 3D pane header carries POP-OUT (reference 07); don't offer
+        # the same action twice.
+        self.embedded_visualizer.set_inner_pop_out_visible(False)
         self._right_splitter.addWidget(self.embedded_visualizer)
 
-        # Existing right panel content (ArtNet + input + plane +
-        # submasters + START/STOP) goes below the visualizer.
-        right_panel = QWidget()
-        right_layout = QVBoxLayout(right_panel)
-        right_layout.setContentsMargins(4, 4, 4, 4)
+        lower = QWidget()
+        lower_layout = QVBoxLayout(lower)
+        lower_layout.setContentsMargins(16, 12, 16, 12)
+        lower_layout.setSpacing(8)
+
+        lower_layout.addWidget(MicroLabel("Engine log", point_size=8,
+                                          tracking_em=0.12))
+        self._engine_log_view = _EngineLogView()
+        lower_layout.addWidget(self._engine_log_view)
+        lower_layout.addStretch(1)
+
+        # Key/value readouts. No Latency row: nothing in audio/ exposes an
+        # input latency (see the report).
+        self._input_value = self._add_readout_row(lower_layout, "Input")
+        self._window_value = self._add_readout_row(lower_layout, "Window")
+
+        # SETUP disclosure - the plumbing the reference screen omits.
+        self._setup_toggle_btn = QPushButton("SETUP")
+        self._setup_toggle_btn.setCheckable(True)
+        self._setup_toggle_btn.setProperty("role", "output-select")
+        self._setup_toggle_btn.setFont(mono_font(8, QFont.Weight.Medium))
+        self._setup_toggle_btn.setToolTip(
+            "Show ArtNet, audio input and movement settings")
+        self._setup_toggle_btn.toggled.connect(self._on_setup_toggled)
+        lower_layout.addWidget(self._setup_toggle_btn)
+
+        self._setup_area = self._build_setup_area()
+        self._setup_area.hide()
+        lower_layout.addWidget(self._setup_area)
+
+        self._right_splitter.addWidget(lower)
+        self._right_splitter.setStretchFactor(0, 0)
+        self._right_splitter.setStretchFactor(1, 1)
+        self._right_splitter.setCollapsible(0, True)
+        self._right_splitter.setCollapsible(1, False)
+        self._right_splitter_default_sizes = [250, 600]
+        self._restore_right_splitter_state()
+        self._right_splitter.splitterMoved.connect(
+            self._save_right_splitter_state)
+        layout.addWidget(self._right_splitter, 1)
+        return panel
+
+    def _add_readout_row(self, layout, key: str) -> QLabel:
+        row = QWidget()
+        row_layout = QHBoxLayout(row)
+        row_layout.setContentsMargins(0, 2, 0, 2)
+        key_label = QLabel(key)
+        key_label.setFont(mono_font(8))
+        key_label.setStyleSheet(f"font-family: '{FONT_MONO}';")
+        row_layout.addWidget(key_label)
+        row_layout.addStretch()
+        value_label = QLabel("-")
+        value_label.setFont(mono_font(8))
+        value_label.setStyleSheet(f"font-family: '{FONT_MONO}';")
+        row_layout.addWidget(value_label)
+        layout.addWidget(row)
+        return value_label
+
+    def _build_setup_area(self) -> QWidget:
+        area = QScrollArea()
+        area.setWidgetResizable(True)
+        area.setFrameShape(QFrame.Shape.NoFrame)
+        area.setMinimumHeight(260)
+        inner = QWidget()
+        right_layout = QVBoxLayout(inner)
+        right_layout.setContentsMargins(0, 8, 0, 0)
+        right_layout.setSpacing(8)
 
         artnet_group = QGroupBox("ArtNet Output")
         artnet_layout = QVBoxLayout(artnet_group)
@@ -297,71 +958,47 @@ class AutoTab(BaseTab):
 
         artnet_layout.addWidget(QLabel("Universe Mapping:"))
         self._universe_table = QTableWidget(0, 2)
-        # Short labels — the right panel is only 220 px wide so the old
-        # "Config Univ" / "ArtNet Univ" headers got clipped to "Config…"
-        # in 100-px columns. Two-letter labels and a stretch resize mode
-        # let the columns split the available width evenly.
+        # Short labels - the column is narrow; two-letter labels and a
+        # stretch resize mode let the columns split the available width.
         self._universe_table.setHorizontalHeaderLabels(["Config", "ArtNet"])
         h_header = self._universe_table.horizontalHeader()
         h_header.setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
-        # Drop the row-number column on the left — it eats ~20 px we
-        # can't spare and adds no information for a 2-column mapping.
         self._universe_table.verticalHeader().setVisible(False)
-        # 120 px ≈ header + 3 rows, which covers the typical fixture
-        # universe count (most rigs use 1–3). Vertical scrollbar still
-        # appears for taller mappings.
         self._universe_table.setFixedHeight(120)
         self._populate_universe_table()
-        # Propagate ArtNet-uid edits to the running controller so
-        # mid-show remappings actually take effect on the wire (IP
-        # field already had editingFinished wired; universe column was
-        # silently editable but disconnected).
-        self._universe_table.itemChanged.connect(self._on_universe_mapping_edited)
+        # Propagate ArtNet-uid edits to the running controller so mid-show
+        # remappings actually take effect on the wire.
+        self._universe_table.itemChanged.connect(
+            self._on_universe_mapping_edited)
         artnet_layout.addWidget(self._universe_table)
 
-        # Mirror to broadcast — useful for the on-screen visualiser at home;
-        # leave off at venues to keep DMX off the LAN.
         self._mirror_checkbox = QCheckBox("Mirror to visualiser broadcast")
         self._mirror_checkbox.setChecked(self._settings.mirror_to_visualizer)
         self._mirror_checkbox.toggled.connect(self._on_mirror_toggled)
         artnet_layout.addWidget(self._mirror_checkbox)
-
         right_layout.addWidget(artnet_group)
 
         input_group = QGroupBox("Audio Input")
         input_layout = QVBoxLayout(input_group)
 
-        # Host API selector — drives the device combo. "Curated" is the
-        # default and applies mapper/telephony filtering + cross-API
-        # dedup. Per-API entries (Windows WASAPI / Windows WDM-KS / ASIO
-        # / …) narrow the list to a single API. "All devices (raw)" is
-        # the escape hatch for debugging.
         api_row = QHBoxLayout()
         api_row.setContentsMargins(0, 0, 0, 0)
         api_label = QLabel("Host API:")
-        api_label.setStyleSheet("font-size: 10px;")
         api_label.setFixedWidth(60)
         self._input_api_combo = QComboBox()
         api_row.addWidget(api_label)
         api_row.addWidget(self._input_api_combo, 1)
         input_layout.addLayout(api_row)
 
-        # Device row.
         dev_row = QHBoxLayout()
         dev_row.setContentsMargins(0, 0, 0, 0)
         dev_label = QLabel("Device:")
-        dev_label.setStyleSheet("font-size: 10px;")
         dev_label.setFixedWidth(60)
         self._input_device_combo = QComboBox()
         dev_row.addWidget(dev_label)
         dev_row.addWidget(self._input_device_combo, 1)
         input_layout.addLayout(dev_row)
 
-        # Refresh + ASIO hint. The refresh button re-enumerates so a
-        # newly-plugged-in audio interface (Focusrite, etc.) appears
-        # without restarting the app — particularly relevant for ASIO
-        # drivers that only register a host API once their hardware is
-        # connected.
         refresh_row = QHBoxLayout()
         refresh_row.setContentsMargins(0, 0, 0, 0)
         self._refresh_devices_btn = QPushButton("Refresh devices")
@@ -373,92 +1010,78 @@ class AutoTab(BaseTab):
 
         self._asio_hint_label = QLabel("")
         self._asio_hint_label.setWordWrap(True)
-        self._asio_hint_label.setStyleSheet("font-size: 10px; color: #888;")
         self._asio_hint_label.setVisible(False)
         input_layout.addWidget(self._asio_hint_label)
-
         right_layout.addWidget(input_group)
 
-        # Wire signals after both combos exist so the api-combo handler
-        # can always reach the device combo. _populate_devices is the
-        # single entry-point — it rebuilds both combos consistently.
+        # Wire after both combos exist so the api handler can reach the
+        # device combo. _populate_devices rebuilds both consistently.
         self._input_api_combo.currentTextChanged.connect(
-            self._on_input_api_changed
-        )
+            self._on_input_api_changed)
+        self._input_device_combo.currentIndexChanged.connect(
+            self._on_input_device_changed)
 
         plane_group = QGroupBox("Movement Target")
         plane_layout = QVBoxLayout(plane_group)
         self._plane_combo = QComboBox()
         self._stage_planes: dict = {}
         self._populate_plane_combo()
-        self._plane_combo.currentTextChanged.connect(self._on_target_plane_changed)
+        self._plane_combo.currentTextChanged.connect(
+            self._on_target_plane_changed)
         plane_layout.addWidget(self._plane_combo)
+
+        speed_row = QHBoxLayout()
+        speed_label = QLabel("Max Speed:")
+        speed_label.setFixedWidth(70)
+        self._speed_slider = QSlider(Qt.Orientation.Horizontal)
+        self._speed_slider.setRange(0, 360)
+        self._speed_slider.setValue(self._settings.max_movement_speed)
+        self._speed_value_label = QLabel(
+            "OFF" if self._settings.max_movement_speed == 0
+            else f"{self._settings.max_movement_speed}°/s"
+        )
+        self._speed_value_label.setFixedWidth(46)
+        self._speed_value_label.setAlignment(
+            Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        self._speed_slider.valueChanged.connect(self._on_speed_changed)
+        speed_row.addWidget(speed_label)
+        speed_row.addWidget(self._speed_slider)
+        speed_row.addWidget(self._speed_value_label)
+        plane_layout.addLayout(speed_row)
         right_layout.addWidget(plane_group)
 
-        # Group submasters — per-group dimmer trim faders. Same
-        # placeholder dance as _riff_constraints: we'll fill it in via
-        # _rebuild_group_panels so the panel can refresh when
-        # config.groups changes after construction.
+        bpm_group = QGroupBox("BPM")
+        bpm_layout = QHBoxLayout(bpm_group)
+        bpm_layout.addWidget(self._bpm_spinbox)
+        bpm_layout.addStretch()
+        right_layout.addWidget(bpm_group)
+
+        # The riff-constraint + submaster panels are the backing model of
+        # the left column's rows. Parented here (hidden) so Qt owns them.
+        self._riff_constraints = None
         self._submasters = None
-        self._submasters_index = right_layout.count()
-        right_layout.addWidget(QWidget())  # placeholder, replaced below
-        self._right_layout = right_layout
 
         right_layout.addStretch()
+        area.setWidget(inner)
+        area.setSizePolicy(QSizePolicy.Policy.Preferred,
+                           QSizePolicy.Policy.Expanding)
+        return area
 
-        btn_row = QHBoxLayout()
-        self._start_btn = QPushButton("START")
-        self._start_btn.setFixedHeight(40)
-        self._start_btn.setProperty("role", "success")
-        self._start_btn.setStyleSheet("font-size: 14px;")
-        self._start_btn.clicked.connect(self._on_start)
-        self._stop_btn = QPushButton("STOP")
-        self._stop_btn.setFixedHeight(40)
-        self._stop_btn.setEnabled(False)
-        self._stop_btn.setProperty("role", "destructive")
-        self._stop_btn.setStyleSheet("font-size: 14px;")
-        self._stop_btn.clicked.connect(self._on_stop)
-        btn_row.addWidget(self._start_btn)
-        btn_row.addWidget(self._stop_btn)
-        right_layout.addLayout(btn_row)
-
-        # right_panel now lives below the visualizer in the right
-        # splitter; the splitter as a whole replaces the old fixed-width
-        # right column. Bumped 220 → 520 px so the visualizer reads as a
-        # wide preview (≈ 520 × 290 ≈ 16:9) rather than a thin column.
-        self._right_splitter.addWidget(right_panel)
-        self._right_splitter.setStretchFactor(0, 0)
-        self._right_splitter.setStretchFactor(1, 1)
-        self._right_splitter.setCollapsible(0, True)
-        self._right_splitter.setCollapsible(1, False)
-        self._right_splitter_default_sizes = [290, 600]
-        self._restore_right_splitter_state()
-        self._right_splitter.splitterMoved.connect(self._save_right_splitter_state)
-        self._right_splitter.setMinimumWidth(520)
-        self._right_splitter.setMaximumWidth(520)
-        splitter.addWidget(self._right_splitter)
-
-        # Now that both placeholders are in their layouts, fill them in
-        # for the first time. Subsequent calls go through
-        # _rebuild_group_panels via update_from_config.
-        self._current_groups_fingerprint = None
-        self._rebuild_group_panels()
-
-    # ── Group-keyed panels (rebuild on config change) ─────────────────
+    # -- Group-keyed panels (rebuild on config change) ---------------------
 
     def _rebuild_group_panels(self) -> None:
-        """Rebuild ``_riff_constraints`` and ``_submasters`` from the
-        current ``config.groups``.
+        """Rebuild the backing constraint/submaster panels and the visible
+        group rows from the current ``config.groups``.
 
         Called from ``setup_ui`` (initial fill) and ``update_from_config``
-        (when the user loads a config file after construction). Skips
-        the rebuild if the group set hasn't changed.
+        (when the user loads a config file after construction). Skips the
+        rebuild if the group set hasn't changed.
 
         Captures the existing widgets' state first so live edits to
-        submasters / constraints survive when the user later adds a
-        group (which forces a rebuild) — ``self._settings`` is only
-        snapshotted on tab deactivation, so reading from it here would
-        re-introduce stale on-disk values from before the live moves.
+        submasters / constraints survive when the user later adds a group
+        (which forces a rebuild) - ``self._settings`` is only snapshotted
+        on tab deactivation, so reading from it here would re-introduce
+        stale on-disk values from before the live moves.
         """
         group_names = list(self.config.groups.keys())
         fingerprint = frozenset(group_names)
@@ -466,9 +1089,6 @@ class AutoTab(BaseTab):
             return
         self._current_groups_fingerprint = fingerprint
 
-        # Snapshot current widget state (if any) so live edits survive
-        # the rebuild. Fall back to the persisted settings for groups
-        # that don't have a widget yet (newly added groups, first build).
         current_constraints: Dict[str, set] = {}
         if self._riff_constraints is not None:
             current_constraints = dict(self._riff_constraints.get_constraints())
@@ -476,165 +1096,258 @@ class AutoTab(BaseTab):
         if self._submasters is not None:
             current_submasters = dict(self._submasters.get_values())
 
-        # Riff constraints panel — replace the placeholder/old widget.
-        new_constraints = GroupRiffConstraintPanel(group_names)
+        # -- backing riff-constraint panel (hidden) -------------------------
+        new_constraints = GroupRiffConstraintPanel(group_names, self)
+        new_constraints.hide()
         for g in group_names:
             if g in current_constraints:
                 new_constraints.set_constraint(g, set(current_constraints[g]))
             elif g in self._settings.group_constraints:
-                new_constraints.set_constraint(g, set(self._settings.group_constraints[g]))
+                new_constraints.set_constraint(
+                    g, set(self._settings.group_constraints[g]))
         new_constraints.constraints_changed.connect(self._on_constraints_changed)
-        # Disconnect the old widget before deletion — Qt's auto-disconnect
-        # is fine in practice but emits in the wake of setParent(None)
-        # could still hit our handler with a defunct group name.
         if self._riff_constraints is not None:
             try:
-                self._riff_constraints.constraints_changed.disconnect(self._on_constraints_changed)
+                self._riff_constraints.constraints_changed.disconnect(
+                    self._on_constraints_changed)
             except (TypeError, RuntimeError):
                 pass
-        self._swap_layout_widget(
-            self._center_layout, self._riff_constraints_index,
-            self._riff_constraints, new_constraints,
-        )
+            self._riff_constraints.setParent(None)
+            self._riff_constraints.deleteLater()
         self._riff_constraints = new_constraints
 
-        # Submasters panel — same swap.
-        new_submasters = GroupSubmasterPanel(group_names)
+        # -- backing submaster panel (hidden) -------------------------------
+        new_submasters = GroupSubmasterPanel(group_names, self)
+        new_submasters.hide()
         for g in group_names:
             if g in current_submasters:
                 new_submasters.set_value(g, current_submasters[g] / 100.0)
             elif g in self._settings.group_submasters:
-                new_submasters.set_value(g, self._settings.group_submasters[g] / 100.0)
+                new_submasters.set_value(
+                    g, self._settings.group_submasters[g] / 100.0)
         new_submasters.submaster_changed.connect(self._on_submaster_changed)
         if self._submasters is not None:
             try:
-                self._submasters.submaster_changed.disconnect(self._on_submaster_changed)
+                self._submasters.submaster_changed.disconnect(
+                    self._on_submaster_changed)
             except (TypeError, RuntimeError):
                 pass
-        self._swap_layout_widget(
-            self._right_layout, self._submasters_index,
-            self._submasters, new_submasters,
-        )
+            self._submasters.setParent(None)
+            self._submasters.deleteLater()
         self._submasters = new_submasters
 
-    @staticmethod
-    def _swap_layout_widget(layout, index, old_widget, new_widget):
-        """Replace the widget at ``index`` in ``layout`` with ``new_widget``.
+        self._rebuild_group_rows(group_names)
 
-        Removes whatever was there (placeholder or previous instance)
-        and inserts the new widget at the same position so the rest of
-        the panel doesn't shift.
+    def _group_color(self, index: int, group_name: str) -> str:
+        group = self.config.groups.get(group_name)
+        saved = getattr(group, "color", None) if group is not None else None
+        if saved and saved != "#808080" and QColor(saved).isValid():
+            return QColor(saved).name()
+        return GROUP_PALETTE[index % len(GROUP_PALETTE)]
+
+    def _rebuild_group_rows(self, group_names) -> None:
+        while self._groups_layout.count() > 1:
+            item = self._groups_layout.takeAt(0)
+            widget = item.widget()
+            if widget is not None:
+                widget.deleteLater()
+        self._group_rows = {}
+        self._group_colors = {}
+
+        submaster_values = self._submasters.get_values()
+        for index, name in enumerate(group_names):
+            color = self._group_color(index, name)
+            self._group_colors[name] = color
+            row = _GroupRow(name, color, self._riff_prefix)
+            row.mode_clicked.connect(self._on_mode_chip)
+            row.intensity_changed.connect(self._on_intensity_bar)
+            row.set_intensity(submaster_values.get(name, 100) / 100.0)
+            self._groups_layout.insertWidget(
+                self._groups_layout.count() - 1, row)
+            self._group_rows[name] = row
+        self._refresh_group_rows()
+
+    def _refresh_group_rows(self) -> None:
+        """Push mode + riff text from the backing constraint panel."""
+        if getattr(self, "_riff_constraints", None) is None:
+            return
+        constraints = self._riff_constraints.get_constraints()
+        for name, row in self._group_rows.items():
+            allowed = constraints.get(name)
+            mode = constraint_mode(allowed)
+            row.set_mode(mode)
+            if mode == "LOCKED":
+                row.set_riff(next(iter(allowed)), True)
+            else:
+                row.set_riff(self._last_logged_riffs.get(name), False)
+
+    # -- Group-row interactions --------------------------------------------
+
+    def _on_mode_chip(self, group_name: str, mode: str) -> None:
+        """AUTO clears the constraint; CURATED / LOCKED open a picker.
+
+        Both write through ``GroupRiffConstraintPanel.set_constraint``,
+        which emits ``constraints_changed`` -> the engine.
         """
-        # Remove the old item — could be the initial placeholder QWidget
-        # or a previously-built group panel.
-        existing = layout.itemAt(index)
-        if existing is not None:
-            w = existing.widget()
-            layout.removeItem(existing)
-            if w is not None:
-                w.setParent(None)
-                w.deleteLater()
-        layout.insertWidget(index, new_widget)
+        panel = self._riff_constraints
+        if panel is None:
+            return
+        if mode == "AUTO":
+            panel.set_constraint(group_name, None)
+            self._refresh_group_rows()
+            self._log_event(f"{group_name}: mode AUTO")
+            return
+        row = self._group_rows.get(group_name)
+        anchor = row.mode_buttons[mode] if row else self
+        if mode == "CURATED":
+            menu = panel._menus.get(group_name)
+            if menu is not None:
+                menu.exec(anchor.mapToGlobal(anchor.rect().bottomLeft()))
+                self._refresh_group_rows()
+                self._log_event(f"{group_name}: mode CURATED")
+            return
+        # LOCKED: pick exactly one riff.
+        menu = QMenu(self)
+        for riff in panel._rudiment_names:
+            action = menu.addAction(riff)
+            action.triggered.connect(
+                lambda _checked=False, g=group_name, r=riff:
+                self._lock_group_to(g, r))
+        menu.exec(anchor.mapToGlobal(anchor.rect().bottomLeft()))
 
-    def on_tab_activated(self):
-        # Pick up any config edits that happened while the tab was
-        # invisible — group submasters / riff constraints / movement
-        # plane all key off config.groups + stage geometry. This also
-        # refreshes the QXF fixture-definitions dict so engine / DMX
-        # spin-up at START doesn't run against a stale snapshot.
-        self.update_from_config()
+    def _lock_group_to(self, group_name: str, riff: str) -> None:
+        self._riff_constraints.set_constraint(group_name, {riff})
+        self._refresh_group_rows()
+        self._log_event(f"{group_name}: locked to {riff}")
 
-        # Re-enumerate audio devices so a USB mic plugged in after
-        # launch shows up without an app restart. Preserves the current
-        # selection where possible. Order: refresh APIs first (in case
-        # plugging in an interface added/removed an ASIO host API), then
-        # devices, then the ASIO status hint.
-        self._populate_input_apis()
-        self._populate_devices()
-        self._refresh_asio_hint()
+    def _on_intensity_bar(self, group_name: str, fraction: float) -> None:
+        row = self._group_rows.get(group_name)
+        if row is not None:
+            row.percent_label.setText(f"{int(round(fraction * 100))}%")
+        if self._submasters is not None:
+            # set_value is silent; push to the engine ourselves so the
+            # signal contract (submaster_changed -> engine) is unchanged.
+            self._submasters.set_value(group_name, fraction)
+        self._on_submaster_changed(group_name, fraction)
 
-        # If the engine is still running (e.g. the user peeked at another
-        # tab during a gig), restart the UI tick so meters update again.
-        if self._is_running:
-            self._ui_timer.start()
+    # -- Energy / plane bias ------------------------------------------------
 
-    def on_tab_deactivated(self):
-        # Stop the 20 Hz UI poll while we're invisible — the engine and
-        # DMX threads keep running so a peek at another tab doesn't
-        # interrupt the show.
-        self._ui_timer.stop()
-        try:
-            self._save_settings()
-        except Exception as e:
-            print(f"Error saving Auto Mode settings: {e}")
+    def _on_energy_slider_moved(self, value: float) -> None:
+        self._energy_fader.set_value(value)  # silent; keeps the backing store
+        self._on_energy_sensitivity_changed(value)
 
-    # BaseTab calls update_from_config / save_to_config on activate /
-    # deactivate by default. We override those hooks above instead, so
-    # the auto-save behaviour from BaseTab is replaced — the engine /
-    # DMX state lives in self, not in self.config.
-    def update_from_config(self):
-        # Refresh QXF fixture definitions for the current config. The
-        # one-shot ``_fixtures_loaded`` flag in on_tab_activated only
-        # primed the cache once; without this re-call, loading a YAML
-        # *after* the Auto tab had already been activated with an empty
-        # config left ``fixture_definitions`` empty forever — START
-        # would then build zero FixtureChannelMaps and DMXManager would
-        # silently skip every fixture in _apply_*_block (the
-        # ``if fixture.name not in self.fixture_maps: continue`` guard).
-        # Audio meters stayed alive because they don't depend on DMX,
-        # which is exactly the symptom the user reported.
-        self._load_fixture_definitions()
-        self._fixtures_loaded = True
+    def _on_plane_chip(self, plane_name: str) -> None:
+        index = self._plane_combo.findText(plane_name)
+        if index >= 0:
+            self._plane_combo.setCurrentIndex(index)  # fires the engine push
+        self._sync_plane_chips()
 
-        # Refresh the plane combo when stage geometry changes; harmless
-        # to call repeatedly because _populate_plane_combo restores the
-        # selection.
-        if hasattr(self, "_plane_combo"):
-            self._populate_plane_combo()
-        # Rebuild the universe-mapping table from the new
-        # ``config.universes`` set. Without this, the table stayed at
-        # whatever was populated at setup_ui time (0 rows for an empty
-        # initial config), and _on_start's _get_universe_mapping()
-        # returned ``{}`` — which then overwrote the controller's
-        # default mapping with empty, so _send_all_universes iterated
-        # nothing and ZERO DMX went anywhere (wire or local callback).
-        # The user's "audio meters tick but nothing moves" symptom is
-        # the visible end of that chain.
-        if hasattr(self, "_universe_table"):
-            self._populate_universe_table()
-        # Rebuild riff-constraints + submasters when the group set has
-        # changed (e.g. user loaded a config file after MainWindow had
-        # already constructed this tab — without this, the panel stays
-        # empty even though config.groups is now populated).
-        if hasattr(self, "_center_layout"):
-            self._rebuild_group_panels()
-        # And refresh the embedded visualizer's fixture set so reloaded
-        # fixtures appear in the 3D preview.
-        if hasattr(self, "embedded_visualizer") and self.embedded_visualizer:
-            self.embedded_visualizer.set_config(self.config)
-        # Propagate the new fixture/stage state into a running engine
-        # so the show keeps targeting the right groups when the user
-        # edits config mid-show. No-op when stopped.
-        if self._engine is not None:
-            try:
-                self._engine.refresh_from_config(self.config)
-            except Exception as e:
-                print(f"AutoTab: engine refresh_from_config failed: {e}")
+    def _sync_plane_chips(self) -> None:
+        """Reflect the movement-target combo on the PLANE BIAS chips.
 
-    # ── Embedded visualizer plumbing ──────────────────────────────────
+        No chip lights up when the combo names a plane the chips don't
+        cover (Floor / Ceiling / Left / Right, reachable via SETUP).
+        """
+        current = self._plane_combo.currentText()
+        for plane_name, chip in self._plane_chips.items():
+            # Theme-owned: QPushButton[role="bias-chip"]:checked.
+            chip.setCheckable(True)
+            chip.setProperty("role", "bias-chip")
+            chip.setChecked(plane_name == current)
+            style = chip.style()
+            if style:
+                style.unpolish(chip)
+                style.polish(chip)
+
+    # -- Colour override ----------------------------------------------------
+
+    def _open_color_wheel(self) -> None:
+        """Show the HSV wheel in a popup. The wheel widget itself is the
+        long-lived control (settings + engine); the dialog just hosts it."""
+        if self._color_wheel_dialog is None:
+            dialog = QDialog(self)
+            dialog.setWindowTitle("Colour override")
+            layout = QVBoxLayout(dialog)
+            layout.setContentsMargins(8, 8, 8, 8)
+            layout.addWidget(self._color_wheel)
+            self._color_wheel_dialog = dialog
+        self._color_wheel.show()
+        self._color_wheel_dialog.show()
+        self._color_wheel_dialog.raise_()
+
+    def _on_swatch_clicked(self, color: str) -> None:
+        rgb = QColor(color)
+        hue = max(0.0, rgb.hueF()) * 360.0
+        self._color_wheel.set_state(True, hue, rgb.saturationF())
+        self._refresh_color_row()
+
+    def _on_release_color(self) -> None:
+        hue, sat = self._color_wheel.get_hue_saturation()
+        self._color_wheel.set_state(False, hue, sat)
+        self._refresh_color_row()
+
+    def _refresh_color_row(self) -> None:
+        # Match on hue/saturation, not RGB: the wheel pins value to 1.0,
+        # so a preset's RGB never survives the round trip.
+        active = self._color_wheel.is_override_active()
+        hue, sat = self._color_wheel.get_hue_saturation()
+        for swatch in self._swatches:
+            color = QColor(swatch.color())
+            selected = (
+                active
+                and abs(max(0.0, color.hueF()) * 360.0 - hue) < 1.0
+                and abs(color.saturationF() - sat) < 0.01
+            )
+            swatch.set_selected(selected)
+        self._release_color_btn.setEnabled(active)
+
+    # -- Embedded visualizer plumbing --------------------------------------
+
+    def _apply_chrome_icons(self) -> None:
+        expanded = self._pane_toggle_btn.isChecked()
+        self._pane_toggle_btn.setIcon(
+            shell_icon("chevron-right" if expanded else "chevron-left"))
+
+    def changeEvent(self, event):
+        # Theme switches restyle the whole app via app.setStyleSheet, which
+        # lands here as a StyleChange - re-ink the themed icon + the
+        # widget-local (token-derived) chip fills.
+        if event.type() == QEvent.Type.StyleChange:
+            if hasattr(self, "_pane_toggle_btn"):
+                self._apply_chrome_icons()
+            if hasattr(self, "_plane_chips") and hasattr(self, "_plane_combo"):
+                self._sync_plane_chips()
+            if getattr(self, "_riff_constraints", None) is not None:
+                self._refresh_group_rows()
+        super().changeEvent(event)
+
+    def _on_pane_toggle(self, visible: bool) -> None:
+        """Collapse or restore the 3D preview inside the right splitter."""
+        self._apply_chrome_icons()
+        sizes = self._right_splitter.sizes()
+        if visible:
+            saved = getattr(self, "_saved_preview_sizes", None)
+            if not saved or len(saved) != 2 or saved[0] <= 0:
+                saved = list(self._right_splitter_default_sizes)
+            self._right_splitter.setSizes(saved)
+        else:
+            if len(sizes) == 2 and sizes[0] > 0:
+                self._saved_preview_sizes = sizes
+            self._right_splitter.setSizes([0, max(1, sum(sizes))])
+        self._save_right_splitter_state()
+
+    def _on_setup_toggled(self, checked: bool) -> None:
+        self._setup_area.setVisible(checked)
 
     def _launch_visualizer(self):
-        """Pop-out callback for the embedded visualizer. Delegates to
-        the Stage tab's standalone-visualizer launcher so QLC+ interop /
-        TCP / ArtNet to the standalone view stays the same."""
+        """Pop-out callback. Delegates to the Stage tab's standalone
+        launcher so QLC+ interop / TCP / ArtNet stays the same."""
         main_window = self.window()
         stage_tab = getattr(main_window, "stage_tab", None) if main_window else None
         launcher = getattr(stage_tab, "_launch_visualizer", None) if stage_tab else None
         if callable(launcher):
             launcher()
             return
-        # Fallback: minimal subprocess launch when Stage tab isn't
-        # reachable. Mirrors stage_tab._launch_visualizer's core flow.
         import os
         import subprocess
         import sys
@@ -646,10 +1359,8 @@ class AutoTab(BaseTab):
             subprocess.Popen([sys.executable, visualizer_path], cwd=project_root)
 
     def _restore_right_splitter_state(self) -> None:
-        """Load the [visualizer | controls] split sizes from QSettings;
-        fall back to the ~16:9 default when no setting is present."""
-        from PyQt6.QtCore import QSettings
-        settings = QSettings("QLCShowCreator", "QLCShowCreator")
+        from utils.app_settings import app_settings
+        settings = app_settings()
         state = settings.value("auto/right_splitter")
         if state is not None:
             try:
@@ -660,59 +1371,94 @@ class AutoTab(BaseTab):
         self._right_splitter.setSizes(self._right_splitter_default_sizes)
 
     def _save_right_splitter_state(self, *_args) -> None:
-        from PyQt6.QtCore import QSettings
-        settings = QSettings("QLCShowCreator", "QLCShowCreator")
-        settings.setValue("auto/right_splitter", self._right_splitter.saveState())
+        from utils.app_settings import app_settings
+        settings = app_settings()
+        settings.setValue("auto/right_splitter",
+                          self._right_splitter.saveState())
 
-    # ── Lazy fixture definitions ──────────────────────────────────────
+    # -- Engine log ---------------------------------------------------------
+
+    def _log_event(self, message: str, accent: bool = False) -> None:
+        """Append to the bounded UI-side engine log and re-render."""
+        stamp = datetime.now().strftime("%H:%M:%S")
+        self._engine_log.append((stamp, message, accent))
+        entries = list(self._engine_log)[-ENGINE_LOG_VISIBLE:]
+        self._engine_log_view.render_entries(reversed(entries))
+
+    def engine_log_entries(self):
+        """The log, newest last. Exposed for tests."""
+        return list(self._engine_log)
+
+    # -- Tab lifecycle ------------------------------------------------------
+
+    def on_tab_activated(self):
+        self.update_from_config()
+        self._populate_input_apis()
+        self._populate_devices()
+        self._refresh_asio_hint()
+        self._refresh_input_readout()
+        if self._is_running:
+            self._ui_timer.start()
+
+    def on_tab_deactivated(self):
+        self._ui_timer.stop()
+        try:
+            self._save_settings()
+        except Exception as e:
+            user_warnings.warn(f"Auto Mode settings could not be saved: {e}", category="config-load", once_key="auto-settings-save")
+
+    def update_from_config(self):
+        # Refresh QXF fixture definitions for the current config on every
+        # call: the one-shot ``_fixtures_loaded`` flag only primed the
+        # cache once, and a YAML loaded *after* the first activation would
+        # otherwise leave ``fixture_definitions`` empty forever - START
+        # then built zero FixtureChannelMaps and DMX went nowhere.
+        self._load_fixture_definitions()
+        self._fixtures_loaded = True
+
+        if hasattr(self, "_plane_combo"):
+            self._populate_plane_combo()
+            self._sync_plane_chips()
+        if hasattr(self, "_universe_table"):
+            self._populate_universe_table()
+        if hasattr(self, "_groups_layout"):
+            self._rebuild_group_panels()
+        if hasattr(self, "embedded_visualizer") and self.embedded_visualizer:
+            self.embedded_visualizer.set_config(self.config)
+        if hasattr(self, "_window_value"):
+            self._refresh_static_readouts()
+        if self._engine is not None:
+            try:
+                self._engine.refresh_from_config(self.config)
+            except Exception as e:
+                print(f"AutoTab: engine refresh_from_config failed: {e}")
+
+    # -- Lazy fixture definitions -------------------------------------------
 
     def _load_fixture_definitions(self):
         """Refresh QXF definitions for every (manufacturer, model) the
-        current config references.
-
-        Idempotent and cheap thanks to ``get_cached_fixture_definitions``
-        — only models that aren't already in the module-level cache
-        actually trigger a filesystem scan. Safe to call from
-        ``update_from_config`` on every config swap so the engine and
-        DMX manager don't operate on a stale dict from before the user
-        loaded a YAML / imported a workspace.
-
-        Failure is non-fatal: ``fixture_definitions`` is left empty,
-        START will fail to build any fixture maps, and DMX won't be
-        produced — but the rest of the tab UI stays interactive.
-        """
+        current config references. Idempotent and cheap thanks to
+        ``get_cached_fixture_definitions``."""
         try:
             models_in_config = {(f.manufacturer, f.model)
                                 for g in self.config.groups.values()
                                 for f in g.fixtures}
             from utils.fixture_utils import get_cached_fixture_definitions
-            # Returns the *full* cache dict, with any new models scanned
-            # in. Copy so subsequent live reloads don't mutate cache
-            # entries from under DMXManager mid-show.
             self.fixture_definitions = dict(
                 get_cached_fixture_definitions(models_in_config)
             )
         except Exception as e:
-            print(f"AutoTab: failed to load fixture definitions: {e}")
+            user_warnings.warn(f"Auto Mode could not load fixture definitions: {e}", category="fixture-library")
             self.fixture_definitions = {}
 
-    # ── Population helpers ────────────────────────────────────────────
+    # -- Population helpers -------------------------------------------------
 
-    # Host API combo entries — special labels reserved for "no filter"
-    # variants. Real host API names (e.g. "Windows WASAPI") never
-    # collide with these.
     _API_CURATED = "Curated (recommended)"
     _API_RAW = "All devices (raw)"
 
     def _populate_input_apis(self):
-        """Rebuild the host-API combo from the live host-API list.
-
-        Order: ``Curated`` first, then real APIs sorted by quality, then
-        ``All devices (raw)`` at the bottom. ASIO entries appear here
-        automatically when the host API is available — i.e. when the
-        user plugs in an ASIO-capable interface and the driver loads.
-        """
-        prev = self._input_api_combo.currentText() if self._input_api_combo.count() else None
+        prev = (self._input_api_combo.currentText()
+                if self._input_api_combo.count() else None)
         self._input_api_combo.blockSignals(True)
         try:
             self._input_api_combo.clear()
@@ -721,30 +1467,18 @@ class AutoTab(BaseTab):
                 self._input_api_combo.addItem(api_name)
             self._input_api_combo.addItem(self._API_RAW)
 
-            # Restore previous selection if it still exists; else saved
-            # value from settings; else default to Curated.
             target = prev or self._settings.input_host_api or self._API_CURATED
             idx = self._input_api_combo.findText(target)
             if idx < 0:
-                idx = 0  # fall back to Curated
+                idx = 0
             self._input_api_combo.setCurrentIndex(idx)
         finally:
             self._input_api_combo.blockSignals(False)
 
     def _current_api_filter_kwargs(self):
         """Translate the API combo selection into filter args for
-        ``enumerate_input_devices``.
-
-        Three modes:
-
-        - **Curated**: full filtering — mappers + telephony hidden,
-          cross-API dedup.
-        - **Specific host API**: same filtering, just scoped to one API.
-          The user gets a smaller list of clean entries within that API
-          (dedup off because there's only one API in play anyway).
-        - **Raw**: no filtering at all. The escape hatch for debugging
-          or for genuinely picking a telephony device.
-        """
+        ``enumerate_input_devices``: Curated filters + dedups, a specific
+        host API filters within that API, Raw is the debugging escape."""
         text = self._input_api_combo.currentText()
         if text == self._API_CURATED:
             return {
@@ -760,8 +1494,6 @@ class AutoTab(BaseTab):
                 "include_telephony": True,
                 "dedup_physical": False,
             }
-        # Specific host API: filter junk, but no cross-API dedup since
-        # there's only one API to look at.
         return {
             "host_api_filter": text,
             "include_mappers": False,
@@ -772,10 +1504,8 @@ class AutoTab(BaseTab):
     def _populate_devices(self):
         """Rebuild the device combo according to the current API filter.
 
-        Restoration priority:
-            1. The currently-selected device (so a refresh doesn't lose it).
-            2. The persisted ``input_device_name``.
-            3. The system default input device.
+        Restoration priority: live selection, persisted name, system
+        default.
         """
         prev_index = self._input_device_combo.currentData()
         kwargs = self._current_api_filter_kwargs()
@@ -788,9 +1518,6 @@ class AutoTab(BaseTab):
                 label = f"{device.display_name or device.name}  [{device.host_api}]"
                 self._input_device_combo.addItem(label, device.index)
 
-            # Restoration — try the live selection first, then the
-            # persisted name, then the system default. Whichever matches
-            # an item in the current (possibly filtered) list wins.
             chosen = -1
             if prev_index is not None:
                 for i in range(self._input_device_combo.count()):
@@ -819,52 +1546,61 @@ class AutoTab(BaseTab):
             self._input_device_combo.blockSignals(False)
 
     def _refresh_asio_hint(self):
-        """Update the ASIO status label below the device combo.
-
-        Only shown for the ``warn`` and ``info`` cases — the ``ok``
-        message would just add noise once everything's set up.
-        """
+        """Update the ASIO status label below the device combo (warn/info
+        only - the ``ok`` message would just add noise)."""
         from audio.device_manager import asio_status
+        tokens = _active_tokens()
         status = asio_status()
         level = status["level"]
         if level == "ok":
             self._asio_hint_label.setVisible(False)
             return
-        msg = status["message"]
-        color = "#e67e22" if level == "warn" else "#888"
-        self._asio_hint_label.setStyleSheet(
-            f"font-size: 10px; color: {color};"
-        )
-        self._asio_hint_label.setText(msg)
+        color = tokens["warning"] if level == "warn" else tokens["text_secondary"]
+        self._asio_hint_label.setStyleSheet(f"color: {color};")
+        self._asio_hint_label.setText(status["message"])
         self._asio_hint_label.setVisible(True)
+
+    def _device_label(self) -> str:
+        idx = self._input_device_combo.currentIndex()
+        if idx < 0:
+            return "No device"
+        label = self._input_device_combo.itemText(idx)
+        parts = label.rsplit(" [", 1)
+        return (parts[0].rstrip()
+                if len(parts) == 2 and parts[1].endswith("]") else label)
+
+    def _refresh_input_readout(self) -> None:
+        channels = self._live_input.channels if self._live_input else 1
+        self._input_value.setText(f"{self._device_label()} · {channels} CH")
+
+    def _refresh_static_readouts(self) -> None:
+        # Engine analysis window (its sliding feature window).
+        from auto.engine import _WINDOW_SECONDS
+        self._window_value.setText(f"{float(_WINDOW_SECONDS):.1f} s")
 
     def _on_input_api_changed(self, _text: str):
         self._populate_devices()
+        self._refresh_input_readout()
+
+    def _on_input_device_changed(self, _index: int):
+        self._refresh_input_readout()
 
     def _on_refresh_devices(self):
-        """Re-enumerate devices and host APIs.
-
-        Used after plugging in an audio interface so the new host API
-        (typically ASIO) and any new devices become selectable without
-        restarting the app.
-        """
         self._populate_input_apis()
         self._populate_devices()
         self._refresh_asio_hint()
+        self._refresh_input_readout()
 
     def _populate_plane_combo(self):
         planes = compute_stage_planes(self.config)
         self._stage_planes = {p.name: p for p in planes}
 
-        # Block signals while we tear down and rebuild — clear() fires
-        # ``currentTextChanged("")``, and the per-item addItem calls
-        # each fire it again, which would route through
-        # ``_on_target_plane_changed`` and either glitch the engine's
-        # plane target or noisily reroute through the L2 guard.
+        # Block signals while we tear down and rebuild - clear() fires
+        # ``currentTextChanged("")`` and each addItem fires it again.
         self._plane_combo.blockSignals(True)
         try:
             self._plane_combo.clear()
-            self._plane_combo.addItem("None (manual)")
+            self._plane_combo.addItem(PLANE_NONE)
             for plane in planes:
                 self._plane_combo.addItem(plane.name)
 
@@ -880,10 +1616,6 @@ class AutoTab(BaseTab):
     def _populate_universe_table(self):
         universes = list(self.config.universes.keys())
         saved = self._settings.universe_mapping
-        # Block signals while we tear down + rebuild — setItem fires
-        # ``itemChanged`` and would trigger ``_on_universe_mapping_edited``
-        # repeatedly during refresh, potentially clobbering the running
-        # controller with partial state.
         self._universe_table.blockSignals(True)
         try:
             self._universe_table.setRowCount(len(universes))
@@ -899,13 +1631,9 @@ class AutoTab(BaseTab):
             self._universe_table.blockSignals(False)
 
     def _get_universe_mapping(self) -> dict:
-        """Read the universe-mapping table.
-
-        Returns the full mapping or ``None`` if any cell is unparsable —
-        callers can then preserve the controller's current/default
-        mapping rather than partially overwriting it (which would
-        silently kill DMX to the affected universes).
-        """
+        """The universe-mapping table, or ``None`` when a cell is
+        unparsable (callers then keep the controller's mapping instead of
+        silently killing DMX to the affected universes)."""
         mapping = {}
         for row in range(self._universe_table.rowCount()):
             config_item = self._universe_table.item(row, 0)
@@ -919,13 +1647,6 @@ class AutoTab(BaseTab):
         return mapping
 
     def _on_universe_mapping_edited(self, _item) -> None:
-        """User edited an ArtNet-uid cell.
-
-        Push the rebuilt mapping into the running controller so wire
-        output reroutes immediately. Drops the edit if the mapping no
-        longer parses (single malformed cell ⇒ keep what the
-        controller had, avoid blacking out other universes by accident).
-        """
         if self._dmx_controller is None:
             return
         mapping = self._get_universe_mapping()
@@ -938,22 +1659,17 @@ class AutoTab(BaseTab):
             return
         self._dmx_controller.set_universe_mapping(mapping)
 
-    # ── Start / Stop ──────────────────────────────────────────────────
+    # -- Start / Stop -------------------------------------------------------
 
     def _on_start(self):
         if self._is_running:
             return
 
-        # Make sure fixture definitions are loaded — usually done by
-        # on_tab_activated, but if the user clicked START during the
-        # very first activation race we still want to not crash.
         if not self._fixtures_loaded:
             self._load_fixture_definitions()
             self._fixtures_loaded = True
 
-        # Precondition gates — surfaced as errors rather than silent
-        # no-ops. Each one was a separate "I clicked START and nothing
-        # happened" report waiting to be filed.
+        # Precondition gates - surfaced as errors rather than silent no-ops.
         if not self.config.groups:
             self.show_error(
                 "No fixture groups",
@@ -979,8 +1695,8 @@ class AutoTab(BaseTab):
         if self._input_device_combo.currentIndex() < 0:
             self.show_error(
                 "No audio input device",
-                "Select an input device in the Audio Input panel before "
-                "starting Auto mode.",
+                "Select an input device in the SETUP panel before starting "
+                "Auto mode.",
             )
             return
 
@@ -1004,22 +1720,24 @@ class AutoTab(BaseTab):
             self._bridge = LiveFeatureBridge(self._analyzer)
             self._bridge.feature_updated.connect(self._on_feature_frame)
 
+            # The detector converts flux-lag counts to BPM, so its rate must
+            # match the arrival rate of the values it buffers.
+            self._auto_bpm = AutoBPMDetector(
+                analysis_rate_hz=self._analyzer.beat_frame_rate_hz
+            )
+
             self._engine = AutoShowEngine(self.config, self.fixture_definitions)
             self._engine.set_bpm(self._bpm_spinbox.value())
             self._engine.set_energy_sensitivity(self._energy_fader.value())
             self._engine.set_on_riffs_updated(self._on_riffs_updated_from_engine)
             plane_text = self._plane_combo.currentText()
             plane = (self._stage_planes.get(plane_text)
-                     if plane_text != "None (manual)" else None)
+                     if plane_text != PLANE_NONE else None)
             self._engine.set_target_plane(plane)
 
-            # Push the current UI state for sticky per-group controls.
-            # Values restored from saved settings into the panels live
-            # in the widgets — the engine starts with its own defaults
-            # (submasters at 1.0, constraints None) and would otherwise
-            # ignore a 50% submaster slider until the user touched it.
-            # Max movement speed goes through the DMX manager, so we
-            # push it *after* set_engine wires it up (below).
+            # Push the current UI state for sticky per-group controls; the
+            # engine starts with its own defaults and would otherwise ignore
+            # a 50% submaster until the user touched it.
             if self._submasters is not None:
                 for g, v in self._submasters.get_values().items():
                     self._engine.set_group_submaster(g, v / 100.0)
@@ -1031,36 +1749,36 @@ class AutoTab(BaseTab):
                 self._engine.set_color_override((r, g, b))
 
             target_ip = self._ip_input.text().strip() or "192.168.1.151"
-            # Forward each DMX frame to the embedded visualizer in-process
-            # so the right-pane preview mirrors what's being broadcast
-            # over ArtNet — no extra TCP/ArtNet round-trip. Wrap in a
-            # guard so a torn-down visualizer can't blow up the DMX
-            # thread mid-show.
+
             def _feed_embedded(universe: int, dmx_bytes: bytes) -> None:
                 vis = getattr(self, "embedded_visualizer", None)
                 if vis is not None:
                     vis.feed_dmx(universe, dmx_bytes)
 
+            # Use the app-wide shared arbiter when hosted in the main
+            # window (exclusive playback slot: timeline XOR auto);
+            # standalone (tests) the controller builds a private one.
+            window = self.window()
+            shared_arbiter = window.output_arbiter() \
+                if hasattr(window, "output_arbiter") else None
+
             self._dmx_controller = AutoDMXController(
                 self.config, self.fixture_definitions, target_ip=target_ip,
                 local_dmx_callback=_feed_embedded,
+                arbiter=shared_arbiter,
             )
-            # Only override the controller's default mapping if the
-            # universe table actually has rows. An empty user mapping
-            # used to silently wipe the controller's default (built
-            # from ``config.universes``) and leave _send_all_universes
-            # iterating nothing — the dead-DMX symptom the user hit
-            # when the universe table hadn't been repopulated after a
-            # late config load.
+            # Only override the controller's default mapping if the universe
+            # table actually has rows - an empty user mapping used to wipe
+            # the controller's default and silence every universe.
             user_mapping = self._get_universe_mapping()
             if user_mapping:
                 self._dmx_controller.set_universe_mapping(user_mapping)
-            self._dmx_controller.set_mirror_to_visualizer(self._mirror_checkbox.isChecked())
+            self._dmx_controller.set_mirror_to_visualizer(
+                self._mirror_checkbox.isChecked())
             self._dmx_controller.set_engine(self._engine)
             self._dmx_controller.dmx_manager.set_stage_planes(self._stage_planes)
-            # set_engine wires up engine._dmx_manager — now the speed
-            # cap can actually take effect; calling it earlier silently
-            # no-ops because the engine forwards through dmx_manager.
+            # set_engine wires engine._dmx_manager - only now can the speed
+            # cap take effect.
             self._engine.set_max_movement_speed(float(self._speed_slider.value()))
 
             if not self._live_input.start():
@@ -1073,18 +1791,29 @@ class AutoTab(BaseTab):
                 self._cleanup()
                 return
             self._bridge.start(self._live_input.ring_buffer)
-            self._dmx_controller.start()
+            if not self._dmx_controller.start():
+                self.show_error(
+                    "DMX output refused",
+                    "The Show tab's timeline is playing and holds the "
+                    "DMX output. Stop timeline playback before "
+                    "starting Auto mode.",
+                )
+                self._cleanup()
+                return
 
             self._is_running = True
             self._ui_timer.start()
 
             self._start_btn.setEnabled(False)
+            self._start_btn.hide()
             self._stop_btn.setEnabled(True)
+            self._stop_btn.show()
             self._set_phase("running")
+            self._status_phase.setText("Engine running")
+            self._refresh_input_readout()
+            self._log_event("Engine start", accent=True)
 
             # Flip the preview to "live" so feed_dmx frames drive it.
-            # In build mode the visualizer ignores DMX so the synthetic
-            # full-on lights would mask the show.
             if self.embedded_visualizer is not None:
                 self.embedded_visualizer.set_preview_mode("live")
 
@@ -1107,17 +1836,28 @@ class AutoTab(BaseTab):
         self._cleanup()
 
         self._start_btn.setEnabled(True)
+        self._start_btn.show()
         self._stop_btn.setEnabled(False)
+        self._stop_btn.hide()
         self._set_phase("stopped")
-        self._status_riff.setText("Riff: ---")
-        self._status_bar_counter.setText("Bar: -/-")
+        self._status_phase.setText("Engine stopped")
+        self._clear_meters()
+        self._last_logged_riffs = {}
+        self._last_logged_bpm = None
+        self._log_event("Engine stop", accent=True)
+        self._refresh_group_rows()
 
-        # Drop the embedded preview back to build mode so every fixture
-        # is visibly lit again instead of frozen on the last live frame.
+        # Drop the embedded preview back to build mode so every fixture is
+        # visibly lit again instead of frozen on the last live frame.
         if self.embedded_visualizer is not None:
             self.embedded_visualizer.set_preview_mode("build")
 
         print("Auto Mode stopped")
+
+    def _clear_meters(self) -> None:
+        for key, bar in self._meter_bars.items():
+            bar.set_fraction(None)
+            self._meter_values[key].setText("-")
 
     def _cleanup(self):
         """Tear down audio + engine + DMX threads. Idempotent."""
@@ -1143,31 +1883,23 @@ class AutoTab(BaseTab):
         self._engine = None
 
     def cleanup(self):
-        """Called from MainWindow.closeEvent on app shutdown.
-
-        Saves user settings, tears down running threads, releases the
-        audio host.
-        """
+        """Called from MainWindow.closeEvent on app shutdown."""
         try:
             self._save_settings()
         except Exception as e:
-            print(f"Error saving Auto Mode settings: {e}")
+            user_warnings.warn(f"Auto Mode settings could not be saved: {e}", category="config-load", once_key="auto-settings-save")
         self._cleanup()
         try:
             self._device_manager.cleanup()
         except Exception:
             pass
-        # Stop the embedded visualizer's FPS timer; the GL surface gets
-        # torn down through Qt's normal child-deletion. Order matters:
-        # _cleanup above already stopped the DMX thread so feed_dmx
-        # can't be called once the engine is destroyed.
         if hasattr(self, "embedded_visualizer") and self.embedded_visualizer:
             try:
                 self.embedded_visualizer.cleanup()
             except Exception:
                 pass
 
-    # ── Engine event handlers ─────────────────────────────────────────
+    # -- Engine event handlers ----------------------------------------------
 
     def _on_feature_frame(self, frame: LiveFeatureFrame):
         """Receive feature frame from analyzer (Qt signal, main thread)."""
@@ -1183,34 +1915,44 @@ class AutoTab(BaseTab):
             self._bpm_spinbox.blockSignals(True)
             self._bpm_spinbox.setValue(int(round(bpm)))
             self._bpm_spinbox.blockSignals(False)
+            self._bpm_display.setText(f"{bpm:.1f}")
             if self._engine:
                 self._engine.set_bpm(bpm)
+            self._log_event(f"Tap tempo {bpm:.1f} BPM")
+
+    def _on_set_bpm(self):
+        """The reference's SET... chip: manual BPM entry into the spinbox
+        (which is the engine's write path)."""
+        value, ok = QInputDialog.getInt(
+            self, "Set BPM", "BPM:", self._bpm_spinbox.value(), 30, 300)
+        if ok:
+            self._bpm_spinbox.setValue(value)
+            self._log_event(f"BPM set to {value}")
 
     def _on_auto_bpm_toggled(self, checked):
         if checked:
             self._auto_bpm.reset()
-        # Auto BPM rewrites the spinbox on every UI tick (50 ms) — leaving
-        # the spinbox and TAP enabled then would silently overwrite the
-        # user's input. Disable the manual controls so the conflict is
-        # visible.
+        # Auto BPM rewrites the spinbox on every UI tick, so disable the
+        # manual controls to make the conflict visible.
         if hasattr(self, "_bpm_spinbox"):
             self._bpm_spinbox.setEnabled(not checked)
         if hasattr(self, "_tap_btn"):
             self._tap_btn.setEnabled(not checked)
+        if hasattr(self, "_bpm_set_btn"):
+            self._bpm_set_btn.setEnabled(not checked)
+        self._log_event(f"BPM auto {'on' if checked else 'off'}")
 
     def _on_bpm_spinbox_changed(self, value):
-        # Keep the large BPM display in sync with the spinbox even when
-        # the engine isn't running — otherwise the readout stays at
-        # whatever the engine last reported (or "120" if never started)
-        # which mismatches the spinbox the user just moved.
+        # Keep the readout in sync even when the engine isn't running.
         if hasattr(self, "_bpm_display"):
-            self._bpm_display.setText(str(int(value)))
+            self._bpm_display.setText(f"{float(value):.1f}")
         if self._engine:
             self._engine.set_bpm(float(value))
 
     def _on_fill_now(self):
         if self._engine:
             self._engine.force_fill()
+        self._log_event("Fill bar", accent=True)
 
     def _on_color_changed(self, r, g, b):
         if self._engine:
@@ -1218,6 +1960,12 @@ class AutoTab(BaseTab):
                 self._engine.set_color_override(None)
             else:
                 self._engine.set_color_override((r, g, b))
+        if hasattr(self, "_swatches"):
+            self._refresh_color_row()
+            if r < 0:
+                self._log_event("Colour override released")
+            else:
+                self._log_event(f"Colour override {QColor(r, g, b).name()}")
 
     def _on_energy_sensitivity_changed(self, value: float):
         if self._engine:
@@ -1243,14 +1991,15 @@ class AutoTab(BaseTab):
 
     def _on_target_plane_changed(self, text):
         # ``QComboBox.clear()`` synchronously fires ``currentTextChanged("")``
-        # before _populate_plane_combo refills it. Treat that as no-op
-        # so the engine's plane target doesn't briefly flicker to None.
+        # before _populate_plane_combo refills it - treat that as a no-op.
         if not text:
             return
         if self._engine:
             plane = (self._stage_planes.get(text)
-                     if text != "None (manual)" else None)
+                     if text != PLANE_NONE else None)
             self._engine.set_target_plane(plane)
+        if hasattr(self, "_plane_chips"):
+            self._sync_plane_chips()
 
     def _on_submaster_changed(self, group_name, value):
         if self._engine:
@@ -1261,44 +2010,43 @@ class AutoTab(BaseTab):
             self._engine.set_group_constraints(group_name, allowed)
 
     def _on_riffs_updated_from_engine(self, per_group_rudiments):
-        # Engine may invoke this from the DMX worker thread — defer the
+        # Engine may invoke this from the DMX worker thread - defer the
         # widget update to the next UI tick instead of touching widgets
         # off-thread.
         self._pending_riff_update = per_group_rudiments
 
-    # ── UI tick (20 Hz) ───────────────────────────────────────────────
+    # -- UI tick (20 Hz) -----------------------------------------------------
 
     def _update_ui(self):
         frame = self._latest_frame
         if frame:
-            self._meter_bars['flux'].setValue(int(frame.flux * 100))
-            self._meter_bars['rms'].setValue(int(frame.rms * 100))
-            self._meter_bars['transient'].setValue(int(frame.transient * 100))
-            self._meter_bars['richness'].setValue(int(frame.richness * 100))
-            self._meter_bars['vocal'].setValue(int(frame.vocal * 100))
-            self._meter_bars['centroid'].setValue(int(frame.centroid * 100))
+            self._meter_bars['rms'].set_fraction(frame.rms)
+            self._meter_bars['contrast'].set_fraction(frame.contrast)
+            self._meter_bars['vocal'].set_fraction(frame.vocal)
+            self._meter_values['rms'].setText(f"{frame.rms:.2f}")
+            self._meter_values['contrast'].setText(
+                f"{frame.contrast:.2f} {contrast_word(frame.contrast)}")
+            self._meter_values['vocal'].setText(vocal_word(frame.vocal))
             self._metrics_tracker.append_frame(frame)
-            self._meter_bars['contrast'].setValue(int(frame.contrast * 100))
 
         if self._engine and self._is_running:
-            self._status_riff.setText(f"Riff: {self._engine.current_groove_name}")
             total = self._engine.cycle_bars
             bar = self._engine.current_bar + 1
-            self._status_bar_counter.setText(f"Bar: {bar}/{total}")
-            phase = "fill" if self._engine.is_fill else "groove"
-            self._status_phase.setText("FILL" if self._engine.is_fill else "GROOVE")
-            self._set_phase(phase)
-            self._bpm_display.setText(str(int(self._engine.bpm)))
+            is_fill = self._engine.is_fill
+            state = "Engine fill" if is_fill else "Engine running"
+            self._status_phase.setText(f"{state} · bar {bar}/{total}")
+            self._set_phase("fill" if is_fill else "groove")
+            self._bpm_display.setText(f"{self._engine.bpm:.1f}")
 
-        # Capture-and-clear atomically so a worker-thread write that
-        # races with this read isn't silently dropped — pull the local
-        # reference first, then null the field, then dispatch.
+        # Capture-and-clear atomically so a worker-thread write that races
+        # with this read isn't silently dropped.
         pending = self._pending_riff_update
         if pending:
             self._pending_riff_update = None
             active = {g: r[0] for g, r in pending.items()}
             if self._riff_constraints is not None:
                 self._riff_constraints.update_active_riffs(active)
+            self._apply_active_riffs(active)
 
         if self._auto_bpm_checkbox.isChecked() and self._is_running:
             auto_bpm = self._auto_bpm.get_bpm()
@@ -1308,8 +2056,29 @@ class AutoTab(BaseTab):
                 self._bpm_spinbox.blockSignals(False)
                 if self._engine:
                     self._engine.set_bpm(auto_bpm)
+                locked = int(round(auto_bpm))
+                if locked != self._last_logged_bpm:
+                    self._last_logged_bpm = locked
+                    self._log_event(f"BPM lock {auto_bpm:.1f}")
 
-    # ── Phase property + theme ────────────────────────────────────────
+    def _apply_active_riffs(self, active: Dict[str, str]) -> None:
+        """Push engine-selected riffs into the rows and log the changes."""
+        constraints = (self._riff_constraints.get_constraints()
+                       if self._riff_constraints is not None else {})
+        for group_name, riff in active.items():
+            previous = self._last_logged_riffs.get(group_name)
+            self._last_logged_riffs[group_name] = riff
+            row = self._group_rows.get(group_name)
+            if row is not None:
+                allowed = constraints.get(group_name)
+                row.set_riff(riff, constraint_mode(allowed) == "LOCKED")
+            if previous and previous != riff:
+                self._log_event(f"{group_name}: {previous} -> {riff}",
+                                accent=True)
+            elif previous is None:
+                self._log_event(f"{group_name}: {riff}", accent=True)
+
+    # -- Phase property + theme ---------------------------------------------
 
     def _set_phase(self, phase: str):
         """Set the ``phase`` dynamic property + re-polish so the theme's
@@ -1322,15 +2091,12 @@ class AutoTab(BaseTab):
             style.unpolish(self._status_phase)
             style.polish(self._status_phase)
 
-    # ── Settings persistence ──────────────────────────────────────────
+    # -- Settings persistence -----------------------------------------------
 
     def _save_settings(self):
         hue, sat = self._color_wheel.get_hue_saturation()
         override_active = self._color_wheel.is_override_active()
 
-        # ``_riff_constraints`` / ``_submasters`` are placeholders until
-        # ``_rebuild_group_panels`` runs (config swap, etc.). Guard so a
-        # save before the first rebuild doesn't AttributeError.
         if self._riff_constraints is not None:
             constraints = {
                 g: sorted(allowed)
@@ -1344,28 +2110,16 @@ class AutoTab(BaseTab):
             submasters = self._settings.group_submasters
 
         device_name = None
-        idx = self._input_device_combo.currentIndex()
-        if idx >= 0:
-            # The combo's display label is "DeviceName  [HostApi]"
-            # (post the May 2026 audio rework). Strip only the trailing
-            # bracketed host-API tag — using ``rsplit`` with a maxsplit
-            # so device names containing their own brackets survive.
-            label = self._input_device_combo.itemText(idx)
-            parts = label.rsplit(" [", 1)
-            device_name = (parts[0].rstrip()
-                           if len(parts) == 2 and parts[1].endswith("]")
-                           else label)
+        if self._input_device_combo.currentIndex() >= 0:
+            device_name = self._device_label()
 
-        # Save the raw combo text — including the "None (manual)"
-        # sentinel — so the user's choice round-trips cleanly. Old
-        # versions saved "" for the manual case which then fell back to
-        # "Front" on load.
+        # Save the raw combo text - including the PLANE_NONE sentinel - so
+        # the user's choice round-trips cleanly.
         target_plane = self._plane_combo.currentText()
 
-        # If the universe table currently has a malformed row,
-        # ``_get_universe_mapping`` returns None — preserve the last
-        # known-good mapping rather than persisting an empty dict
-        # that would wipe the user's setup on next launch.
+        # A malformed universe row makes ``_get_universe_mapping`` return
+        # None; preserve the last known-good mapping instead of persisting
+        # an empty dict that would wipe the user's setup on next launch.
         universe_mapping = self._get_universe_mapping()
         if universe_mapping is None:
             universe_mapping = self._settings.universe_mapping
