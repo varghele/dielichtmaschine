@@ -97,21 +97,21 @@ assume one active config.
 
 ## Phase 2 - morph compile engine (design doc 3, 5)
 
-- [ ] **Plan model** `utils/morph/plan.py`: MorphPlan / MorphEdge
+- [x] **Plan model** `utils/morph/plan.py`: DONE 2026-07-16. MorphPlan / MorphEdge
       (source lane_id + sublane, target group, mode, transforms,
       priority), per-target-lane protection, seeds, source/target
       identity + hashes, YAML round-trip (`*.morphplan.yaml`).
-- [ ] **Compile** `utils/morph/compile.py`: routing, transforms
+- [x] **Compile** `utils/morph/compile.py`: DONE 2026-07-16 (v1 policies recorded in the module docstring: interval-union envelopes with NO block splits - the model cannot express phase-shifted rudiment continuation, answering design-doc open question 11.3 conservatively; fan-in clips only value-span blocks and drops cycled losers whole with a report entry; shared-channel gaps are flagged not synthesized; autogen strategy fails-clear until the analysis cache lands). routing, transforms
       (phase_offset, mirror/invert, intensity_scale, spatial_subset),
       fan-in resolution (dimmer HTP, others priority), re-enveloping
       (section-boundary + edge-union cuts, phase-preserving splits),
       shared-channel compositing rule, specials same-definition rule,
       regeneration strategies (manual, static_default,
       derive_from_intensity, autogen w/ seed).
-- [ ] **Lineage + provenance**: lineage record on the morphed setlist;
+- [x] **Lineage + provenance**: DONE 2026-07-16 (LightBlock.provenance + Song.lineage; morphed lane ids are DERIVED from song+target+edges so re-morph is reproducible - editor hand_edited marking rides the UI phase). lineage record on the morphed setlist;
       per-block provenance tag (morphed(edge) / hand_edited / authored),
       editor sets hand_edited on touch.
-- [ ] **Re-morph**: same plan + seeds -> replace, destroyed hand-edits
+- [x] **Re-morph**: DONE 2026-07-16 (pending_destruction manifest, apply_morph force gate, protected target lanes survive). same plan + seeds -> replace, destroyed hand-edits
       listed first, target-lane protection honored.
 - [ ] **Analysis cache** (design doc 5.7): per-section derived metrics in
       show YAML keyed by audio content hash; recompute fallback;

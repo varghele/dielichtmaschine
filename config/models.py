@@ -1157,6 +1157,12 @@ class LightBlock:
     # User-defined name for the effect block
     name: Optional[str] = None  # Custom name set by user (displays as "base" if None)
 
+    # Morph provenance (v1.5b, design doc 5.3): "" = authored in the
+    # editor; "morphed:<edge_id>" = written by a morph compile;
+    # "hand_edited" = a morphed block the editor touched afterwards.
+    # Re-morph uses this to list exactly what a replace will destroy.
+    provenance: str = ""
+
     # Legacy support (deprecated, kept for migration)
     duration: Optional[float] = None  # Deprecated: use end_time - start_time
     parameters: Dict[str, any] = field(default_factory=dict)  # Deprecated
@@ -1194,6 +1200,8 @@ class LightBlock:
             "riff_version": self.riff_version,
             # User-defined name
             "name": self.name,
+            # Morph provenance (only when set - keeps old files stable)
+            **({"provenance": self.provenance} if self.provenance else {}),
             # Legacy fields
             "duration": self.get_duration(),
             "parameters": self.parameters
@@ -1218,6 +1226,7 @@ class LightBlock:
             riff_source=data.get("riff_source"),
             riff_version=data.get("riff_version"),
             name=data.get("name"),
+            provenance=data.get("provenance", ""),
             duration=data.get("duration"),
             parameters=data.get("parameters", {})
         )
@@ -1342,6 +1351,10 @@ class Song:
     # palette_role are re-resolved by apply_palette(); blocks without a
     # role are untouched literals. Empty dict = no palette defined.
     palette: Dict[str, List[int]] = field(default_factory=dict)
+    # Morph lineage (v1.5b, design doc 5.3): set by the morph compile on
+    # songs it writes - source show hash, plan hash, config hashes, app
+    # version, timestamp. Empty dict = not a morphed song.
+    lineage: Dict[str, str] = field(default_factory=dict)
 
     def apply_palette(self) -> int:
         """Re-resolve every role-tagged colour block against ``palette``.
@@ -1382,6 +1395,8 @@ class Song:
         if self.palette:
             data['palette'] = {role: list(rgb)
                                for role, rgb in self.palette.items()}
+        if self.lineage:
+            data['lineage'] = dict(self.lineage)
         return data
 
     @classmethod
@@ -1423,6 +1438,7 @@ class Song:
             timeline_data=timeline_data,
             palette={role: list(rgb) for role, rgb
                      in (data.get('palette') or {}).items()},
+            lineage=dict(data.get('lineage') or {}),
             trigger_device=data.get('trigger_device', '') or '',
             trigger_channel=(
                 data.get('trigger_channel', -1)
