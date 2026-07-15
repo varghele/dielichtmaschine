@@ -989,6 +989,26 @@ class DMXManager:
                 else:
                     center_pan = block.pan
                     center_tilt = block.tilt
+            elif getattr(block, 'target_point', None) and self.config:
+                # Ad-hoc world point (v1.5a): a spot without a name,
+                # same per-fixture IK at the definition's real ranges.
+                point = block.target_point
+                fixture = fixture_map.fixture
+                group = self.config.groups.get(fixture.group) if fixture.group else None
+                mounting, yaw, pitch, roll = fixture.get_effective_orientation(group)
+                fixture_z = fixture.get_effective_z(group)
+                pan_degrees, tilt_degrees = calculate_pan_tilt(
+                    fixture_x=fixture.x, fixture_y=fixture.y, fixture_z=fixture_z,
+                    target_x=point[0], target_y=point[1], target_z=point[2],
+                    mounting=mounting, yaw=yaw, pitch=pitch, roll=roll,
+                    pan_range=fixture_map.pan_range,
+                    tilt_range=fixture_map.tilt_range,
+                )
+                pan_dmx, tilt_dmx = pan_tilt_to_dmx(
+                    pan_degrees, tilt_degrees,
+                    fixture_map.pan_range, fixture_map.tilt_range)
+                center_pan = float(pan_dmx)
+                center_tilt = float(tilt_dmx)
             else:
                 center_pan = block.pan
                 center_tilt = block.tilt

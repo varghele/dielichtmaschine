@@ -469,7 +469,8 @@ def test_dialog_omits_the_unbacked_reference_controls(dialog):
 
 
 def test_generation_report_carries_no_seed():
-    """The 'SEED 4211 . RERUN' readout of the reference cannot be
-    reproduced: generation samples the unseeded global RNG."""
+    """The 'SEED 4211 . RERUN' readout of the reference has nothing to
+    show: the generation pipeline is deterministic (2026-07-16 audit -
+    no RNG anywhere in autogen/), so no seed exists or is stored."""
     names = {f.name for f in fields(GenerationReport)}
     assert "seed" not in names

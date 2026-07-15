@@ -469,4 +469,10 @@ def apply_fixture_list(config, fixtures: List[Fixture],
                 config.groups[group_name] = group
             config.groups[group_name].fixtures.append(fixture)
 
+    # Canonical topology: imported groups keep their import order
+    # (manual mode) but snapshot it; pre-existing groups re-apply
+    # theirs with the newcomers appended.
+    for group in config.groups.values():
+        group.apply_fixture_order()
+
     config.ensure_universes_for_fixtures()

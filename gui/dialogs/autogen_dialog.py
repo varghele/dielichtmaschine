@@ -14,7 +14,10 @@
 # never clamps intensity) and the "Overwrite existing blocks" toggle
 # (replace-vs-append is asked after generation by the calling tab, not
 # configured here). The reference's "SEED 4211 . RERUN" readout is gone
-# for the same reason: generation draws from the unseeded global RNG.
+# for the same reason - and the 2026-07-16 determinism audit showed the
+# readout would be a lie anyway: the generation pipeline is fully
+# deterministic (no RNG anywhere in autogen/), so there is no seed to
+# show. (docs/focus-morphing-plan.md phase 0.)
 #
 # Public contract kept intact: AutogenDialog(parent) exec()s modally and
 # exposes result_config / result_key_signature / result_palette after

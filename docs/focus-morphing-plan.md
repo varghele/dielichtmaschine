@@ -45,26 +45,28 @@ assume one active config.
 
 ## Phase 0 - prerequisites (design doc section 4)
 
-- [ ] **Deterministic group topology.** `FixtureGroup.fixture_order`
+- [x] **Deterministic group topology.** DONE 2026-07-16: `FixtureGroup.fixture_order`
       (explicit name list) + derived-order accessor everyone consumes
       (target resolver, rudiments, export, live). Load snapshot for
       existing groups; spatial default for new; per-group re-sort/
       hand-order control in the Fixtures tab. Byte-identical export for
       existing configs is the acceptance gate.
-- [ ] **Stable lane ids.** `LightLane.lane_id` (uuid4 hex), assigned on
+- [x] **Stable lane ids.** DONE 2026-07-16: `LightLane.lane_id` (uuid4 hex), assigned on
       creation and on load where missing; serialized; never surfaced in
       UI. Plans key edges by lane_id + display name for diffability.
-- [ ] **Colour palette roles (decision 1).** `ShowPalette` on
+- [x] **Colour palette roles (decision 1).** DONE 2026-07-16 (model + apply_palette; editor role picker rides the later UI phase): `ShowPalette` on
       Configuration (role -> RGB), `ColourBlock.palette_role: str = ""`;
       realization resolves role -> literal at the same places literals
       are consumed today (playback DMX, export steps, visualizer
       payload); editor affordance minimal in this phase (role picker on
       the colour block inspector). Literal fallback everywhere.
-- [ ] **Autogen determinism audit (design doc 5.6).** Trace matcher /
+- [x] **Autogen determinism audit (design doc 5.6).** DONE 2026-07-16 - RESULT: the generation pipeline is ALREADY a pure function (no RNG in autogen/, stable sorts, hash-independent tiebreaks); nothing to seed. The only RNG lives in the EXPORT preset-scene path, untouched by morphing. Two consequences recorded: (1) the analysis cache must carry the per-section 32-float spectral_flux_envelope in addition to the SectionReport scalars (the rudiment matcher reads it: matcher.py envelope similarity + flux frequency), (2) generate_show calls ensure_default_spots(config) which MUTATES the config - the morph compile must guard config B (copy or pre-seed spots). Stale 'unseeded global RNG' claims in autogen_dialog docstring + test corrected.
+      Original scope: Trace matcher /
       variant selection / colour generation for stochastic choice;
       thread an explicit seed parameter through anything found; test
       that two runs with the same seed produce identical lanes.
-- [ ] **Two-configs-in-process audit (design doc 4.3).** Sweep for
+- [x] **Two-configs-in-process audit (design doc 4.3).** DONE 2026-07-16 - RESULT: NO must-fix blockers; config is threaded as a parameter everywhere, caches are library-keyed not config-keyed. Preview constraints recorded for phase 3: render A/B SEQUENTIALLY via OfflineRenderer (two live standalone moderngl contexts on one thread are unsafe), chassis.show_axes is a CLASS attribute (gizmo state bleeds between renderers - set once for both), avoid the TCP visualizer for the dual view (fixed port 9000, single config). Cosmetic: target_resolver._warned dedup spans configs (call reset_warnings between A/B); user_warnings intermixes A/B entries.
+      Original scope: Sweep for
       single-active-config assumptions (globals, TCP sync, spot
       resolution, fixture-map builders); fix what morphing + preview
       need; document what stays single-config on purpose (the shell).
@@ -158,3 +160,11 @@ assume one active config.
 
 - 2026-07-15: plan written; decisions 1-3 locked by user; branch
   v1.5-focus-morphing; design doc + 6d mockup filed under docs/.
+- 2026-07-16: phase 0 complete (topology + lane ids + palette roles +
+  both audits; .qxw export byte-identical for demos/rigs AND
+  demos/shows). Phase 1 world-space targets shipped in the same pass:
+  MovementBlock.target_point everywhere, the export sampler gained the
+  native renderer's world-plane path (shape chain extracted to
+  _solver_shape_position, plane targets now export), native playback
+  resolves points; tests in test_group_topology.py,
+  test_palette_roles.py, test_world_targets.py.

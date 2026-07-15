@@ -1251,8 +1251,10 @@ class FixturesTab(BaseTab):
     def _create_group(self, name: str, role: str = ""):
         """Create (or re-role) a group; empty groups persist until used."""
         if name not in self.config.groups:
+            # Newly created groups order spatially by default (v1.5
+            # topology decision); imported/derived groups stay manual.
             self.config.groups[name] = FixtureGroup(
-                name, [], lighting_role=role)
+                name, [], lighting_role=role, order_mode="spatial")
             self._manual_groups.add(name)
             self._ensure_group_color(name)
         elif role:
@@ -1277,6 +1279,10 @@ class FixturesTab(BaseTab):
                 'default_roll': getattr(group, 'default_roll', 0.0),
                 'default_z_height': getattr(group, 'default_z_height', 3.0),
                 'lighting_role': getattr(group, 'lighting_role', ''),
+                # Topology survives the rebuild: the LIVE order (list
+                # as-is) is the truth, not the possibly-stale snapshot.
+                'fixture_order': [f.name for f in group.fixtures],
+                'order_mode': getattr(group, 'order_mode', 'manual'),
             }
             for name, group in self.config.groups.items()
         }
@@ -1293,6 +1299,8 @@ class FixturesTab(BaseTab):
                 default_roll=props.get('default_roll', 0.0),
                 default_z_height=props.get('default_z_height', 3.0),
                 lighting_role=props.get('lighting_role', ''),
+                fixture_order=props.get('fixture_order', []),
+                order_mode=props.get('order_mode', 'manual'),
             )
 
         self.config.groups = {}
@@ -1303,6 +1311,10 @@ class FixturesTab(BaseTab):
                 if group_name not in self.config.groups:
                     self.config.groups[group_name] = build_group(group_name)
                 self.config.groups[group_name].fixtures.append(fixture)
+        # Re-establish each group's canonical order (manual: preserved
+        # order with newcomers appended; spatial: re-sorted).
+        for group in self.config.groups.values():
+            group.apply_fixture_order()
 
         for name in list(self._manual_groups):
             if name in self.config.groups:
@@ -1894,7 +1906,30 @@ class FixturesTab(BaseTab):
         delete_action = menu.addAction("Delete group")
         delete_action.triggered.connect(
             lambda: self._delete_group(name))
+        menu.addSeparator()
+        # Deterministic topology (v1.5): the group's fixture order is
+        # what Group:N targets and chases run along.
+        group = self.config.groups.get(name)
+        spatial_action = menu.addAction("Order spatially (stage X, Y)")
+        spatial_action.setCheckable(True)
+        spatial_action.setChecked(
+            getattr(group, "order_mode", "manual") == "spatial")
+        spatial_action.triggered.connect(
+            lambda checked: self._set_group_order_mode(name, checked))
         menu.exec(global_pos)
+
+    def _set_group_order_mode(self, name: str, spatial: bool):
+        """Toggle a group between spatial and manual (current-order) mode."""
+        group = self.config.groups.get(name)
+        if group is None:
+            return
+        if spatial:
+            group.sort_spatially()
+        else:
+            # Manual mode pins whatever order is current.
+            group.set_manual_order([f.name for f in group.fixtures])
+        self._sync_fingerprint()
+        self._notify_main_window()
 
     def _show_groups_panel_menu(self, panel, pos):
         """Right-click on empty groups-panel space: offer Add group."""
@@ -2260,6 +2295,7 @@ class FixturesTab(BaseTab):
         for group_name in new_fixture.groups:
             if group_name in self.config.groups:
                 self.config.groups[group_name].fixtures.append(new_fixture)
+                self.config.groups[group_name].apply_fixture_order()
 
         # Refresh table
         self.update_from_config(force=True)

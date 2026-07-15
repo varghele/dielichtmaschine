@@ -835,12 +835,18 @@ def test_group_row_right_click_offers_duplicate(qapp):
                 captured["actions"] = self._actions
                 return act
 
+            def addSeparator(self):
+                return None
+
             def exec(self, *a):
                 return None
 
         with patch.object(QtWidgets, "QMenu", FakeMenu):
             tab._show_group_context_menu("Wash", QPoint(0, 0))
         assert any(a.text() == "Duplicate group"
+                   for a in captured.get("actions", []))
+        # v1.5 topology: the order-mode toggle rides the same menu.
+        assert any(a.text().startswith("Order spatially")
                    for a in captured.get("actions", []))
     finally:
         tab.deleteLater()

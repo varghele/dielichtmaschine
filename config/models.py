@@ -5,6 +5,7 @@ from typing import Dict, List, Optional, Tuple
 import yaml
 import xml.etree.ElementTree as ET
 import os
+import uuid
 
 
 @dataclass
@@ -215,6 +216,44 @@ class FixtureGroup:
     # Max DMX intensity for export (0-255), used for brightness balancing across groups
     export_intensity: int = 255
 
+    # Deterministic topology (v1.5 morphing prerequisite, decided
+    # 2026-07-15): ``fixtures`` IS the canonical order every consumer
+    # reads (Group:N targets, chase direction, morph routing).
+    # ``fixture_order`` persists that order as a name list so it
+    # survives fixture-list reshuffles; groups loaded without one
+    # snapshot their derived order (zero behavior change for existing
+    # configs). ``order_mode`` records how the order is maintained:
+    # "manual" (the list as-is, user-arranged) or "spatial" (stage X,
+    # then Y - the default for NEWLY created groups).
+    fixture_order: List[str] = field(default_factory=list)
+    order_mode: str = "manual"  # "manual" | "spatial"
+
+    def apply_fixture_order(self) -> None:
+        """Bring ``fixtures`` into the canonical order.
+
+        Spatial mode re-derives from geometry; manual mode follows
+        ``fixture_order`` (unknown names keep their current relative
+        order, appended after the ordered ones). Always re-snapshots
+        ``fixture_order`` to the resulting membership."""
+        if self.order_mode == "spatial":
+            self.fixtures.sort(key=lambda f: (f.x, f.y, f.name))
+        elif self.fixture_order:
+            index = {name: i for i, name in enumerate(self.fixture_order)}
+            self.fixtures.sort(
+                key=lambda f: index.get(f.name, len(index)))
+        self.fixture_order = [f.name for f in self.fixtures]
+
+    def sort_spatially(self) -> None:
+        """Switch the group to spatial order (stage X, then Y)."""
+        self.order_mode = "spatial"
+        self.apply_fixture_order()
+
+    def set_manual_order(self, names: List[str]) -> None:
+        """Pin an explicit order (switches the group to manual mode)."""
+        self.order_mode = "manual"
+        self.fixture_order = list(names)
+        self.apply_fixture_order()
+
 
 @dataclass
 class FixtureGroupCapabilities:
@@ -327,8 +366,15 @@ class ColourBlock:
 
     modified: bool = False  # True if user edited this block after riff insertion
 
+    # Palette role (v1.5, decided 2026-07-15): the block's INTENT
+    # ("primary", "accent", ...). The literal channel values above stay
+    # authoritative for every consumer (playback, export, visualizer) -
+    # the role is metadata that Song.apply_palette() and the morph
+    # compile re-resolve into literals. "" = literal-only block.
+    palette_role: str = ""
+
     def to_dict(self) -> Dict:
-        return {
+        data = {
             "start_time": self.start_time,
             "end_time": self.end_time,
             "color_mode": self.color_mode,
@@ -348,6 +394,9 @@ class ColourBlock:
             "color_wheel_position": self.color_wheel_position,
             "modified": self.modified
         }
+        if self.palette_role:
+            data["palette_role"] = self.palette_role
+        return data
 
     @classmethod
     def from_dict(cls, data: Dict) -> 'ColourBlock':
@@ -369,7 +418,8 @@ class ColourBlock:
             saturation=data.get("saturation", 0.0),
             value=data.get("value", 0.0),
             color_wheel_position=data.get("color_wheel_position", 0),
-            modified=data.get("modified", False)
+            modified=data.get("modified", False),
+            palette_role=data.get("palette_role", "")
         )
 
 
@@ -418,6 +468,13 @@ class MovementBlock:
     # Target plane for world-space movement (takes priority over target_spot_name)
     target_plane_name: Optional[str] = None  # Name of stage plane ("Floor", "Front", etc.)
 
+    # Ad-hoc world-space aim point in stage coordinates (x, y, z metres)
+    # - v1.5a focus geometry. Resolution priority: plane > spot > point
+    # > manual pan/tilt. Unlike a named spot this needs no entry in
+    # Configuration.spots (click-to-aim writes here); like a spot, the
+    # per-fixture pan/tilt resolve from geometry at playback/export.
+    target_point: Optional[List[float]] = None
+
     modified: bool = False  # True if user edited this block after riff insertion
 
     def to_dict(self) -> Dict:
@@ -443,6 +500,8 @@ class MovementBlock:
             "phase_offset_degrees": self.phase_offset_degrees,
             "target_spot_name": self.target_spot_name,
             "target_plane_name": self.target_plane_name,
+            "target_point": (list(self.target_point)
+                             if self.target_point else None),
             "modified": self.modified
         }
 
@@ -470,6 +529,8 @@ class MovementBlock:
             phase_offset_degrees=data.get("phase_offset_degrees", 0.0),
             target_spot_name=data.get("target_spot_name"),
             target_plane_name=data.get("target_plane_name"),
+            target_point=(list(data["target_point"])
+                          if data.get("target_point") else None),
             modified=data.get("modified", False)
         )
 
@@ -1195,6 +1256,10 @@ class LightLane:
     muted: bool = False
     solo: bool = False
     light_blocks: List[LightBlock] = field(default_factory=list)
+    # Stable identity (v1.5 morphing): plans key edges by lane_id so a
+    # renamed lane keeps its routing. Assigned on creation / first load;
+    # never shown in the UI.
+    lane_id: str = field(default_factory=lambda: uuid.uuid4().hex)
 
     @property
     def fixture_group(self) -> str:
@@ -1209,6 +1274,7 @@ class LightLane:
     def to_dict(self) -> Dict:
         return {
             "name": self.name,
+            "lane_id": self.lane_id,
             "fixture_targets": self.fixture_targets,
             "muted": self.muted,
             "solo": self.solo,
@@ -1222,6 +1288,9 @@ class LightLane:
             muted=data.get("muted", False),
             solo=data.get("solo", False)
         )
+        # Lanes from before v1.5 get an id on first load; it persists on
+        # the next save.
+        lane.lane_id = data.get("lane_id") or lane.lane_id
         # Migration: handle old fixture_group format
         if "fixture_targets" in data:
             lane.fixture_targets = data["fixture_targets"]
@@ -1269,12 +1338,38 @@ class Song:
     timeline_data: Optional[TimelineData] = None  # NEW: Timeline representation
     trigger_device: str = ""    # MIDI input profile name (e.g. "Akai APC Mini mk2"), empty = no trigger
     trigger_channel: int = -1   # MIDI channel number (-1 = no trigger)
+    # Palette (v1.5): role -> (r, g, b) 0-255. Colour blocks carrying a
+    # palette_role are re-resolved by apply_palette(); blocks without a
+    # role are untouched literals. Empty dict = no palette defined.
+    palette: Dict[str, List[int]] = field(default_factory=dict)
+
+    def apply_palette(self) -> int:
+        """Re-resolve every role-tagged colour block against ``palette``.
+
+        Only the RGB literals are rewritten (the role stays); blocks
+        whose role is not in the palette are left alone. Returns the
+        number of blocks updated. Consumers (playback, export,
+        visualizer) keep reading literals - this is the realization
+        boundary the v1.5 design demands."""
+        updated = 0
+        if not self.timeline_data:
+            return updated
+        for lane in self.timeline_data.lanes:
+            for block in lane.light_blocks:
+                for cb in block.colour_blocks:
+                    rgb = self.palette.get(cb.palette_role)
+                    if not cb.palette_role or not rgb:
+                        continue
+                    cb.red, cb.green, cb.blue = (
+                        float(rgb[0]), float(rgb[1]), float(rgb[2]))
+                    updated += 1
+        return updated
 
     def to_dict(self) -> Dict:
         """Serialize this song's contents (excludes `name`; that's the key in
         Configuration.songs). For a standalone song file, include the name
         at the caller: ``{'name': song.name, **song.to_dict()}``."""
-        return {
+        data = {
             'parts': [
                 {k: v for k, v in asdict(part).items() if k not in ('start_time', 'duration')}
                 for part in self.parts
@@ -1284,6 +1379,10 @@ class Song:
             'trigger_device': self.trigger_device if self.trigger_device else None,
             'trigger_channel': self.trigger_channel if self.trigger_channel >= 0 else None,
         }
+        if self.palette:
+            data['palette'] = {role: list(rgb)
+                               for role, rgb in self.palette.items()}
+        return data
 
     @classmethod
     def from_dict(cls, name: str, data: Dict) -> 'Song':
@@ -1322,6 +1421,8 @@ class Song:
             parts=parts,
             effects=effects,
             timeline_data=timeline_data,
+            palette={role: list(rgb) for role, rgb
+                     in (data.get('palette') or {}).items()},
             trigger_device=data.get('trigger_device', '') or '',
             trigger_channel=(
                 data.get('trigger_channel', -1)
@@ -1586,6 +1687,9 @@ class Configuration:
                     config.groups[group_name] = FixtureGroup(group_name, [])
                 config.groups[group_name].fixtures.append(fixture)
 
+        for group in config.groups.values():
+            group.apply_fixture_order()
+
         return config
 
     def audio_bundle_dir(self, create: bool = False) -> Optional[str]:
@@ -1641,6 +1745,10 @@ class Configuration:
                     'default_z_height': group.default_z_height,
                     'lighting_role': group.lighting_role,
                     'export_intensity': group.export_intensity,
+                    # Canonical topology (v1.5): the order every indexed
+                    # target and chase consumes, pinned by name.
+                    'fixture_order': [f.name for f in group.fixtures],
+                    'order_mode': group.order_mode,
                     'fixtures': [fixture_asdict(f) for f in group.fixtures]
                 }
                 for name, group in self.groups.items()
@@ -1771,7 +1879,13 @@ class Configuration:
                 default_z_height=group_data.get('default_z_height', 3.0),
                 lighting_role=group_data.get('lighting_role', ''),
                 export_intensity=group_data.get('export_intensity', 255),
+                # Deterministic topology: a stored order re-applies; a
+                # config from before the field snapshots its derived
+                # order (identical to today's behavior, now pinned).
+                fixture_order=group_data.get('fixture_order', []),
+                order_mode=group_data.get('order_mode', 'manual'),
             )
+            groups[name].apply_fixture_order()
 
         # Handle songs (legacy `shows:` was migrated to `songs` above)
         songs = {}

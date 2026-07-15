@@ -721,123 +721,37 @@ def sample_dimmer_at_time(
     return base_intensity
 
 
-def sample_movement_at_time(
-    time_s: float,
-    movement_blocks: List,
-    fixture_idx: int,
-    total_fixtures: int,
-    step_idx: int,
-    total_steps: int,
-    bpm: float = 120.0,
-    signature: str = "4/4",
-    config: Any = None,
-    fixture: Any = None
-) -> Optional[Tuple[int, int]]:
-    """
-    Sample the pan/tilt position at a given time.
+def _solver_aim(config, fixture, target):
+    """Solver-convention 8-bit aim at a world target, real ranges."""
+    from utils.yoke import export_solver_aim_dmx
+    group = config.groups.get(fixture.group) if fixture.group else None
+    mounting, yaw, pitch, roll = fixture.get_effective_orientation(group)
+    fixture_z = fixture.get_effective_z(group)
+    return export_solver_aim_dmx(fixture, fixture_z, target,
+                                 mounting, yaw, pitch, roll)
 
-    Args:
-        time_s: Time in seconds
-        movement_blocks: List of MovementBlock objects
-        fixture_idx: Index of this fixture in the group
-        total_fixtures: Total number of fixtures in the group
-        step_idx: Current step index
-        total_steps: Total number of steps
-        bpm: Beats per minute for timing calculations
-        signature: Time signature (e.g., "4/4")
-        config: Configuration object (for spot lookup)
-        fixture: Fixture object (for position and orientation)
 
-    Returns:
-        Tuple of (pan, tilt) values (0-255) or None if no movement block at this time
-    """
-    # Find the movement block at this time
-    active_block = None
-    for block in movement_blocks:
-        if block.start_time <= time_s < block.end_time:
-            active_block = block
-            break
+def _stage_planes_for(config):
+    """Stage planes for world-space movement export, cached per config
+    (compute_stage_planes walks the whole rig; exports sample hundreds
+    of steps)."""
+    cache = getattr(config, '_export_stage_planes', None)
+    if cache is None:
+        from autogen.spatial import compute_stage_planes
+        cache = {plane.name: plane
+                 for plane in compute_stage_planes(config)}
+        try:
+            config._export_stage_planes = cache
+        except AttributeError:
+            pass
+    return cache
 
-    if not active_block:
-        return None
 
-    effect_type = active_block.effect_type
-
-    # Check if we have a target spot - if so, calculate pan/tilt to point at it
-    if active_block.target_spot_name and config and fixture and hasattr(config, 'spots'):
-        spot = config.spots.get(active_block.target_spot_name)
-        if spot:
-            # Get effective orientation (considering group defaults)
-            group = config.groups.get(fixture.group) if fixture.group else None
-            mounting, yaw, pitch, roll = fixture.get_effective_orientation(group)
-            fixture_z = fixture.get_effective_z(group)
-
-            # Aim with the solver at the definition's real ranges,
-            # UNCONVERTED: the shape math below runs in solver DMX
-            # space (exactly like the native renderer), and the WHOLE
-            # step converts to the real yoke at the end
-            # (convert_solver_dmx) - so QLC+ playback traces the same
-            # figure the app and the rig do. Before 2026-07-13 only
-            # the centre was converted and the pattern oscillated in
-            # solver space around it, a mixed frame that traced the
-            # wrong figure on a real head.
-            from utils.yoke import export_solver_aim_dmx
-            pan_dmx, tilt_dmx = export_solver_aim_dmx(
-                fixture, fixture_z, (spot.x, spot.y, spot.z),
-                mounting, yaw, pitch, roll)
-
-            # Use calculated values as center position
-            center_pan = float(pan_dmx)
-            center_tilt = float(tilt_dmx)
-        else:
-            # Spot not found, fall back to manual values
-            center_pan = active_block.pan
-            center_tilt = active_block.tilt
-    else:
-        # No target spot, use manual values
-        center_pan = active_block.pan
-        center_tilt = active_block.tilt
-    pan_amplitude = active_block.pan_amplitude
-    tilt_amplitude = active_block.tilt_amplitude
-    pan_min = active_block.pan_min
-    pan_max = active_block.pan_max
-    tilt_min = active_block.tilt_min
-    tilt_max = active_block.tilt_max
-
-    # Parse speed
-    speed = active_block.effect_speed
-    if '/' in speed:
-        num, denom = map(int, speed.split('/'))
-        speed_mult = num / denom
-    else:
-        speed_mult = float(speed)
-
-    # Calculate timing based on BPM (matches ArtNet implementation)
-    seconds_per_beat = 60.0 / bpm
-    numerator, denominator = map(int, signature.split('/'))
-    beats_per_bar = (numerator * 4) / denominator
-    seconds_per_bar = seconds_per_beat * beats_per_bar
-
-    # Calculate time within block
-    block_duration = active_block.end_time - active_block.start_time
-    time_in_block = time_s - active_block.start_time
-
-    # Calculate relative position for progress (0 to 1)
-    progress = time_in_block / block_duration if block_duration > 0 else 0
-
-    # Shared movement rate (matches ArtNet preview + shows_to_xml export).
-    total_cycles = movement_total_cycles(block_duration, seconds_per_bar, speed_mult)
-
-    # Calculate phase offset for this fixture
-    if active_block.phase_offset_enabled:
-        fixture_phase = (fixture_idx * active_block.phase_offset_degrees) * math.pi / 180.0
-    else:
-        fixture_phase = 0.0
-
-    # Calculate angle based on progress and total cycles
-    t = 2 * math.pi * total_cycles * progress + fixture_phase
-
-    # Calculate position based on effect type
+def _solver_shape_position(effect_type, t, progress, total_cycles,
+                           active_block, center_pan, center_tilt,
+                           pan_amplitude, tilt_amplitude):
+    """The movement shape chain in solver DMX space (shared by the
+    centre-based paths and, normalized, by the world-plane path)."""
     if effect_type == "static":
         pan = center_pan
         tilt = center_tilt
@@ -922,6 +836,152 @@ def sample_movement_at_time(
     else:
         pan = center_pan
         tilt = center_tilt
+
+    return pan, tilt
+
+
+def sample_movement_at_time(
+    time_s: float,
+    movement_blocks: List,
+    fixture_idx: int,
+    total_fixtures: int,
+    step_idx: int,
+    total_steps: int,
+    bpm: float = 120.0,
+    signature: str = "4/4",
+    config: Any = None,
+    fixture: Any = None
+) -> Optional[Tuple[int, int]]:
+    """
+    Sample the pan/tilt position at a given time.
+
+    Args:
+        time_s: Time in seconds
+        movement_blocks: List of MovementBlock objects
+        fixture_idx: Index of this fixture in the group
+        total_fixtures: Total number of fixtures in the group
+        step_idx: Current step index
+        total_steps: Total number of steps
+        bpm: Beats per minute for timing calculations
+        signature: Time signature (e.g., "4/4")
+        config: Configuration object (for spot lookup)
+        fixture: Fixture object (for position and orientation)
+
+    Returns:
+        Tuple of (pan, tilt) values (0-255) or None if no movement block at this time
+    """
+    # Find the movement block at this time
+    active_block = None
+    for block in movement_blocks:
+        if block.start_time <= time_s < block.end_time:
+            active_block = block
+            break
+
+    if not active_block:
+        return None
+
+    effect_type = active_block.effect_type
+
+    # Check if we have a target spot - if so, calculate pan/tilt to point at it
+    if active_block.target_spot_name and config and fixture and hasattr(config, 'spots'):
+        spot = config.spots.get(active_block.target_spot_name)
+        if spot:
+            # Aim with the solver at the definition's real ranges,
+            # UNCONVERTED: the shape math below runs in solver DMX
+            # space (exactly like the native renderer), and the WHOLE
+            # step converts to the real yoke at the end
+            # (convert_solver_dmx) - so QLC+ playback traces the same
+            # figure the app and the rig do. Before 2026-07-13 only
+            # the centre was converted and the pattern oscillated in
+            # solver space around it, a mixed frame that traced the
+            # wrong figure on a real head.
+            pan_dmx, tilt_dmx = _solver_aim(
+                config, fixture, (spot.x, spot.y, spot.z))
+
+            # Use calculated values as center position
+            center_pan = float(pan_dmx)
+            center_tilt = float(tilt_dmx)
+        else:
+            # Spot not found, fall back to manual values
+            center_pan = active_block.pan
+            center_tilt = active_block.tilt
+    elif getattr(active_block, 'target_point', None) and config and fixture:
+        # Ad-hoc world point (v1.5a): a spot without a name.
+        point = active_block.target_point
+        pan_dmx, tilt_dmx = _solver_aim(
+            config, fixture, (point[0], point[1], point[2]))
+        center_pan = float(pan_dmx)
+        center_tilt = float(tilt_dmx)
+    else:
+        # No target spot, use manual values
+        center_pan = active_block.pan
+        center_tilt = active_block.tilt
+    pan_amplitude = active_block.pan_amplitude
+    tilt_amplitude = active_block.tilt_amplitude
+    pan_min = active_block.pan_min
+    pan_max = active_block.pan_max
+    tilt_min = active_block.tilt_min
+    tilt_max = active_block.tilt_max
+
+    # Parse speed
+    speed = active_block.effect_speed
+    if '/' in speed:
+        num, denom = map(int, speed.split('/'))
+        speed_mult = num / denom
+    else:
+        speed_mult = float(speed)
+
+    # Calculate timing based on BPM (matches ArtNet implementation)
+    seconds_per_beat = 60.0 / bpm
+    numerator, denominator = map(int, signature.split('/'))
+    beats_per_bar = (numerator * 4) / denominator
+    seconds_per_bar = seconds_per_beat * beats_per_bar
+
+    # Calculate time within block
+    block_duration = active_block.end_time - active_block.start_time
+    time_in_block = time_s - active_block.start_time
+
+    # Calculate relative position for progress (0 to 1)
+    progress = time_in_block / block_duration if block_duration > 0 else 0
+
+    # Shared movement rate (matches ArtNet preview + shows_to_xml export).
+    total_cycles = movement_total_cycles(block_duration, seconds_per_bar, speed_mult)
+
+    # Calculate phase offset for this fixture
+    if active_block.phase_offset_enabled:
+        fixture_phase = (fixture_idx * active_block.phase_offset_degrees) * math.pi / 180.0
+    else:
+        fixture_phase = 0.0
+
+    # Calculate angle based on progress and total cycles
+    t = 2 * math.pi * total_cycles * progress + fixture_phase
+
+    # World-space plane rendering (v1.5a: export parity with the native
+    # renderer, which has had this path since the plane work): the shape
+    # runs NORMALIZED, its offsets land on the plane in metres, and each
+    # step's world target aims per fixture at the real ranges. Takes
+    # priority over spot/point/manual centres, matching dmx_manager.
+    plane = None
+    if getattr(active_block, 'target_plane_name', None) and config and fixture:
+        plane = _stage_planes_for(config).get(active_block.target_plane_name)
+    if plane is not None:
+        norm_pan, norm_tilt = _solver_shape_position(
+            effect_type, t, progress, total_cycles, active_block,
+            127.5, 127.5, 50.0, 50.0)
+        u_offset = (norm_pan - 127.5) / 50.0
+        v_offset = (norm_tilt - 127.5) / 50.0
+        # Same DMX-units -> metres convention as the native renderer.
+        amplitude_meters = active_block.pan_amplitude / 20.0
+        target = tuple(
+            plane.point[i]
+            + u_offset * amplitude_meters * plane.u_axis[i]
+            + v_offset * amplitude_meters * plane.v_axis[i]
+            for i in range(3))
+        pan, tilt = (float(v) for v in _solver_aim(config, fixture, target))
+    else:
+        pan, tilt = _solver_shape_position(
+            effect_type, t, progress, total_cycles, active_block,
+            center_pan, center_tilt, pan_amplitude, tilt_amplitude)
 
     # Apply clipping to boundaries (solver DMX space, like the native
     # renderer's clamp).
