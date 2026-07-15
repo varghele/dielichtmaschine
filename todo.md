@@ -57,6 +57,14 @@ checks below pass; v1.4 work continues on `v1.4-standalone-switch`.
 
 ## Release gate: pending manual verification (user, needs hardware/desktop)
 
+> **Bench kit prepared 2026-07-15** (untracked, in the repo root like
+> tester.lms): `bench_kit.lms` = tester.lms rig + two 16 s songs with
+> a circle movement block on the Movers and SMPTE triggers at
+> 01:00:02:00 / 01:00:20:00; `bench_ltc_25fps_01h.wav` = 45 s of
+> 25 fps LTC from 01:00:00:00 (decoder-verified round trip) - play it
+> into the line-in for the LTC check; `bench_kit.qxw` = the same
+> project exported for the QLC+ aim + movement-pattern check.
+
 - [ ] LTC chase bench checkpoint, HARDWARE HALF ONLY: the full bench
       script (arm, songs fire at their timecodes, playhead chases,
       cable-pull freewheels and never stops the show, replug re-locks
