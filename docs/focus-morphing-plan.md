@@ -113,7 +113,7 @@ assume one active config.
       editor sets hand_edited on touch.
 - [x] **Re-morph**: DONE 2026-07-16 (pending_destruction manifest, apply_morph force gate, protected target lanes survive). same plan + seeds -> replace, destroyed hand-edits
       listed first, target-lane protection honored.
-- [ ] **Analysis cache** (design doc 5.7): per-section derived metrics in
+- [x] **Analysis cache** (design doc 5.7): DONE 2026-07-16 (utils/morph/analysis_cache.py: Song.analysis_cache carries every SectionAnalysis scalar + the 32-float flux envelope keyed by audio content hash; resolve() trusts a cache without audio, recomputes+refreshes on stale hash, honest None otherwise; the autogen regenerate strategy now RUNS - per-section _select_movement_strategy over cached metrics, deterministic, ensure_default_spots mutation of B is reported): per-section derived metrics in
       show YAML keyed by audio content hash; recompute fallback;
       plan validation fails autogen edges cleanly when neither exists.
       Includes the metric-sufficiency check against the matcher's real

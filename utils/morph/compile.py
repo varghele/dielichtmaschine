@@ -356,12 +356,57 @@ def _regenerate_movement(edge: MorphEdge, source_dimmer: list,
                    f"block(s) (seed {edge.seed if edge.seed is not None else 'plan'})",
                    edge.edge_id)
         return blocks
+    if strategy == "autogen":
+        return _regenerate_autogen(edge, song, target_config, report)
     report.add("error", song.name,
-               f"regenerate strategy '{strategy}' is not available yet "
-               f"(autogen needs the analysis cache) - downgrade this "
-               f"edge to derive_from_intensity or static_default",
-               edge.edge_id)
+               f"unknown regenerate strategy '{strategy}'", edge.edge_id)
     return []
+
+
+def _regenerate_autogen(edge: MorphEdge, song: Song, target_config,
+                        report: MorphReport) -> list:
+    """The autogen movement-strategy pass over cached (or recomputed)
+    per-section metrics (design doc 3.2 strategy 4 + 5.7). Deterministic:
+    the selector rotates shapes by section index and thresholds on the
+    cached scalars - no RNG (2026-07-16 audit)."""
+    from utils.morph.analysis_cache import relative_energies, resolve
+    analysis, source = resolve(song, target_config)
+    if analysis is None:
+        report.add("error", song.name,
+                   f"autogen regeneration needs the song's analysis "
+                   f"cache or its bundled audio; neither is available - "
+                   f"downgrade this edge to derive_from_intensity or "
+                   f"static_default", edge.edge_id)
+        return []
+
+    from autogen.generator import _select_movement_strategy
+    from autogen.spatial import ensure_default_spots
+    had_spots = bool(getattr(target_config, "spots", None))
+    spot_names = ensure_default_spots(target_config)
+    if not had_spots and spot_names:
+        report.add("note", song.name,
+                   f"default spots {spot_names} created in the target "
+                   f"config for autogen movement targets", edge.edge_id)
+
+    energies = relative_energies(analysis)
+    blocks = []
+    for index, section in enumerate(analysis.sections):
+        bpm = song.parts[index].bpm if index < len(song.parts) else 120.0
+        strategy = _select_movement_strategy(
+            section, bpm, spot_names, section_index=index,
+            relative_energy=energies[index])
+        blocks.append(MovementBlock(
+            start_time=section.start_time, end_time=section.end_time,
+            effect_type=strategy.shape,
+            pan_amplitude=strategy.amplitude,
+            tilt_amplitude=strategy.amplitude * 0.6,
+            target_spot_name=strategy.target_spot))
+    report.add("regenerated", song.name,
+               f"movement -> {edge.target_group}: autogen emitted "
+               f"{len(blocks)} section block(s) from {source} analysis "
+               f"(seed {edge.seed if edge.seed is not None else 'plan'})",
+               edge.edge_id)
+    return blocks
 
 
 # ---------------------------------------------------------------------------

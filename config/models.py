@@ -1355,6 +1355,12 @@ class Song:
     # songs it writes - source show hash, plan hash, config hashes, app
     # version, timestamp. Empty dict = not a morphed song.
     lineage: Dict[str, str] = field(default_factory=dict)
+    # Cached per-section audio metrics (v1.5b, design doc 5.7): every
+    # SectionAnalysis scalar + the 32-float flux envelope, keyed by an
+    # audio content hash - lets the morph's autogen regeneration run
+    # without the audio file. utils/morph/analysis_cache.py owns the
+    # shape. Empty dict = never analyzed.
+    analysis_cache: Dict = field(default_factory=dict)
 
     def apply_palette(self) -> int:
         """Re-resolve every role-tagged colour block against ``palette``.
@@ -1397,6 +1403,8 @@ class Song:
                                for role, rgb in self.palette.items()}
         if self.lineage:
             data['lineage'] = dict(self.lineage)
+        if self.analysis_cache:
+            data['analysis_cache'] = dict(self.analysis_cache)
         return data
 
     @classmethod
@@ -1439,6 +1447,7 @@ class Song:
             palette={role: list(rgb) for role, rgb
                      in (data.get('palette') or {}).items()},
             lineage=dict(data.get('lineage') or {}),
+            analysis_cache=dict(data.get('analysis_cache') or {}),
             trigger_device=data.get('trigger_device', '') or '',
             trigger_channel=(
                 data.get('trigger_channel', -1)
