@@ -120,35 +120,11 @@ This is foundational for v1.5b but useful on its own, even without morphing. It 
 
 ## v1.5b - Show morphing (venue adaptation)
 
-With v1.5a in place, focus is portable. v1.5b tackles the rest: lane retargeting, type substitution, group remapping. The mechanics are the smaller half. The bigger half is figuring out *what a show even is* in a way that survives a rig change.
+**Design decided 2026-07-15:** the authoritative design is `docs/design-show-morphing.md` (user-authored); the task derivation and status live in `docs/focus-morphing-plan.md`. This section is the summary.
 
-### Prerequisites
+Morphing is a **compile step, never a runtime layer**: `(config A, setlist, patch plan, config B) -> new shows inside config B`. The morph is described by a user-authored **patch plan** (`*.morphplan.yaml`, diffable and reusable per venue), visualized as a patchbay: source lanes decomposed into sublane streams (INTENSITY / COLOUR / POSITION / BEAM = dimmer / colour / movement / special) wired onto target groups, with fan-out, fan-in (dimmer HTP, others by explicit priority), per-edge modes (`copy`, `copy+transform`, `regenerate(strategy)`) and composable transforms (phase offset, mirror, intensity scale, spatial subset). Manual-first: auto-suggestion only prefills, the user always confirms. Every morph produces a **report** (the plan's execution trace) and passes a live **completeness checker** whose saved expectations double as the show's minimum-rig manifest. Re-morph replaces (bluntly, with a destroyed-hand-edits manifest and per-target-lane protection flags); provenance tags (`morphed`/`hand_edited`/`authored`) make that honest; regeneration is seeded and deterministic. Venue adaptation is two-phase: the morph compile (anywhere) and the **on-site pre-flight** - a generated operator checklist (verify + capture item types, Live tab as the control surface) that reconciles config B with physical reality; captured values land in the CONFIG, never in show blocks, and the `.qxw` exporter warns hard when a checklist is incomplete (native playback resolves geometry at runtime, exports bake it in). The v1.5a calibration helper is absorbed into pre-flight as an item type. Explicitly out of scope for v1: runtime morphing, three-way merge, semantic gobo mapping, blended fan-in, quantity choreography beyond transforms, taxonomy-rethink-as-blocker, camera-assisted verification.
 
-- [ ] **Fixture role taxonomy rethink.** The current taxonomy is two parallel systems: per-fixture `type` (PAR / MH / BAR / PIXELBAR / SUNSTRIP / WASH, the legacy enum at `config/models.py:709`) and per-group `lighting_role` (`backbone` / `accent` / `ambient` / `movement` / `effect`). Neither covers the categories bigger venues actually have: **blinders** (audience-facing strong dimmers), **house lights**, **haze / fog**, **lasers**, **strobes**, decorative bar / truss. Open design questions:
-  - **Tag-based vs hierarchical vs single-role-with-importance?** A fixture could carry multiple tags (`[wash, accent, downstage]`), one primary role with sub-tags, or one role + an "importance" tier. Each shape changes how morphing's substitution logic finds the closest match in the target rig.
-  - **Is "role" per-fixture or per-group?** Today it's per-group via `lighting_role`. A blinder hung in the same group as washes complicates that.
-  - **Compatibility with `type`.** Decide whether the two systems collapse into one or stay parallel. The legacy enum's `# legacy 6-string types` comment already flags this for cleanup.
-  - **Default mapping for existing configs.** Whatever shape lands, existing user configs need a deterministic upgrade path.
-- [ ] **Fixture physical metadata.** Read `<Physical><Dimensions Weight="X" Width="Y" Height="Z" Depth="W"/>` (and bulb / power if present) from .qxf into `Fixture`. Surface in the Fixtures tab. The visualizer scales the rendered chassis to the dimensions in metres (the .qxf value is in millimetres). The morph engine uses physical size as one signal for substitution ("substitute a wash of similar throw, not a tiny par"). Could fold up into v1.5a if visualizer-only sizing lands earlier; the morph-relevant part stays here.
-
-### Open questions
-
-- **What rig do you author the first show on?** A maximal "reference rig" (PARs + washes + movers + bars + specials) so every venue is a subset? A "minimal viable rig" (just PARs and washes) so every venue is a superset? Or the actual rig you happen to own, with morphing assumed to lose detail in either direction?
-- **What transfers, and what doesn't?** Structure, BPM, transitions, section markers obviously transfer. Riffs probably transfer (they're abstract patterns). Movement transfers via v1.5a. Colour transfers. Special effects (gobo index, prism on) need a per-rig opinion. Need a tier-list of "always transfers / transfers if compatible / always re-authored".
-- **How do you handle missing fixture types?** Venue has no moving heads, but the show has a movement lane on the chorus. Options: drop the lane entirely, demote it to a static colour wash on a substitute group, redirect to a pixel bar's per-cell chase, or flag it for the user to resolve. Probably some combination triggered by the lane's "importance" tag (which doesn't exist yet and would need to).
-- **How do you handle *extra* fixture types?** Venue has eight movers when the show was authored for two. Mirror them? Spread the pattern? Leave the extras dark and let the user fill them in? Same question for pixel matrices added on top of a PAR-only show.
-- **Is there a baseline a show can declare?** A show could carry a "minimum requirements" manifest (this many washes, this many movers, these capabilities) so morphing to an undersized rig becomes an explicit error rather than a silent degradation. Similar in spirit to a media query.
-
-### Likely shape (subject to the questions above)
-
-- [ ] **Lane retargeting by role.** Lanes already target groups; the morph pass remaps group definitions to whatever fixtures in rig B fill the same role.
-- [ ] **Capability-based fixture substitution.** Moving wash substitutes for a moving head minus the gobo / prism blocks, PAR substitutes for a wash, etc.
-- [ ] **Show requirements manifest.** Declarable "minimum rig" the morph engine validates against.
-- [ ] **Per-lane importance tier.** Tells the morph pass what to drop first when the target rig is undersized.
-- [ ] **Morph report.** Same shape as autogen's `GenerationReport`: every retarget, substitution, dropped block, with reasons. Editable post-hoc.
-- [ ] **Side-by-side preview.** Original show on rig A vs. morphed show on rig B in the embedded visualizer, scrubbable, before the user commits.
-
-Depends on v1.1 (stable groups / roles, fixture-list import-export) and v1.5a (focus survives rig changes).
+Prerequisites (phase 0 of the plan): deterministic group topology (explicit order; existing groups snapshot their current order, new groups spatial-sort - decided 2026-07-15), stable lane ids, colour palette roles with literal fallback (decided 2026-07-15, in-milestone), autogen determinism audit, two-configs-in-process audit. The fixture role-taxonomy rethink is DEMOTED off the critical path (feeds auto-suggest prefill only); fixture physical metadata stays useful for suggestions but is no longer a blocker.
 
 ---
 
