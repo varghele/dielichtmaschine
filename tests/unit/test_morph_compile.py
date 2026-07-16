@@ -518,3 +518,45 @@ class TestSpotBaking:
         result = compile_setlist(a, plan, b)
         notes = " ".join(e.message for e in result.report.of_kind("note"))
         assert "exists in neither config" in notes
+
+
+class TestSetlistAdoption:
+    """The setlist is the gig: a target without one adopts the source
+    setlist (order, triggers, pause looks) filtered to morphed songs;
+    a target WITH a setlist keeps its own (2026-07-16 - a rig-only
+    venue used to end up with songs but no way to run them)."""
+
+    def _source_with_setlist(self):
+        from config.models import SetlistEntry
+        lane = _lane("Pars", ["PARS"],
+                     dimmer=[DimmerBlock(0.0, 16.0, intensity=200.0)])
+        a = _config({"PARS": [_fixture("p1")]},
+                    songs={"S": _song(lanes=[lane])})
+        a.setlist.entries = [SetlistEntry(song="S"),
+                             SetlistEntry(song="NotMorphed")]
+        a.setlist.entries[0].trigger.mode = "smpte"
+        a.setlist.entries[0].trigger.timecode = "01:00:02:00"
+        return a, lane
+
+    def test_empty_target_setlist_adopts_the_source(self):
+        a, lane = self._source_with_setlist()
+        b = _config({"WASH": [_fixture("w1", group="WASH")]})
+        plan = MorphPlan(edges=[_edge(lane, "dimmer", "WASH")])
+        result = compile_setlist(a, plan, b)
+        apply_morph(result, b, plan, force=True)
+        assert [e.song for e in b.setlist.entries] == ["S"]
+        assert b.setlist.entries[0].trigger.mode == "smpte"
+        assert b.setlist.entries[0].trigger.timecode == "01:00:02:00"
+        # Deep copy: editing the venue trigger must not touch the master.
+        b.setlist.entries[0].trigger.timecode = "09:09:09:09"
+        assert a.setlist.entries[0].trigger.timecode == "01:00:02:00"
+
+    def test_existing_target_setlist_wins(self):
+        from config.models import SetlistEntry
+        a, lane = self._source_with_setlist()
+        b = _config({"WASH": [_fixture("w1", group="WASH")]})
+        b.setlist.entries = [SetlistEntry(song="VenueOpener")]
+        plan = MorphPlan(edges=[_edge(lane, "dimmer", "WASH")])
+        result = compile_setlist(a, plan, b)
+        apply_morph(result, b, plan, force=True)
+        assert [e.song for e in b.setlist.entries] == ["VenueOpener"]

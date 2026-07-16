@@ -109,6 +109,12 @@ class MorphResult:
     songs: Dict[str, Song]
     report: MorphReport
     lineage: Dict[str, str]
+    #: deep copy of the source setlist, filtered to the compiled songs
+    #: (2026-07-16): apply_morph adopts it when the target has no
+    #: setlist of its own - the setlist IS the gig (order, triggers,
+    #: pause looks), and a rig-only target used to end up with 12
+    #: songs and no way to run them.
+    source_setlist: object = None
 
 
 # ---------------------------------------------------------------------------
@@ -695,7 +701,16 @@ def compile_setlist(source_config, plan: MorphPlan, target_config,
         if morphed is not None:
             morphed.lineage = dict(lineage)
             songs[name] = morphed
-    return MorphResult(songs=songs, report=report, lineage=lineage)
+
+    source_setlist = None
+    entries = getattr(getattr(source_config, "setlist", None),
+                      "entries", None)
+    if entries:
+        source_setlist = copy.deepcopy(source_config.setlist)
+        source_setlist.entries = [e for e in source_setlist.entries
+                                  if e.song in songs]
+    return MorphResult(songs=songs, report=report, lineage=lineage,
+                       source_setlist=source_setlist)
 
 
 # ---------------------------------------------------------------------------
@@ -749,6 +764,21 @@ def apply_morph(result: MorphResult, target_config, plan: MorphPlan,
                                   f"target lane '{lane.name}' is "
                                   f"protected - left untouched")
         target_config.songs[name] = song
+
+    # The setlist IS the gig (order, triggers, pause looks): a target
+    # without one adopts the source's, filtered to the morphed songs
+    # (2026-07-16). A target that HAS a setlist keeps it - venue-local
+    # running order wins over the master's.
+    target_setlist = getattr(target_config, "setlist", None)
+    if result.source_setlist is not None and target_setlist is not None \
+            and not target_setlist.entries:
+        target_config.setlist = copy.deepcopy(result.source_setlist)
+        result.report.add(
+            "note", "-",
+            f"setlist adopted from the source "
+            f"({len(target_config.setlist.entries)} entries, triggers "
+            f"and pause looks included)")
+
     for entry in destroyed:
         result.report.add("destroyed", "-", entry)
     return destroyed

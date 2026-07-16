@@ -151,6 +151,12 @@ verbatim as the GitHub Release notes (see [docs/releasing.md](docs/releasing.md)
   row height - the lane name and the mute/solo chips were clipped
   beyond reach. Grid rows now reserve the header's minimum control
   height; the sublane band keeps its geometry at the top of the row.
+- **The setlist morphs with the show.** A venue target without its own
+  setlist ended up with all the morphed songs but no running order -
+  no triggers, nothing for the LTC chase to fire. The morph now adopts
+  the source setlist (order, triggers, pause looks) filtered to the
+  morphed songs; a target that already has a setlist keeps it, since
+  venue-local running order wins over the master's.
 - **Spot-anchored movement survives the morph.** Movement blocks that
   aim at a NAMED spot (marks, drum riser, solo positions) carried the
   spot name onto the venue rig, where no such spot exists - and a
