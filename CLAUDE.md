@@ -540,3 +540,31 @@ manual-authored house fixture .qxfs in custom_fixtures (Cameo
 HydraBeam 4000 RGBW is modelled PER HEAD, 4x14ch per bar). PERF RULE
 learned: anything on a timer that walks the whole config must be
 measured against a ~1 MB project, not the demos.
+
+**Testing round, second half (2026-07-16 evening, same branch):**
+playback perf (the 30 FPS visual tick demanded 4.1 s of paint per
+second: dirty-rect playhead strips bypassing the sublane-label update
+hook, clip-culled grid painters with time-ordered early-break, the
+audio waveform renders once into a cached pixmap, and the waveform
+peak cache is atomic npz now - the old JSON cache was non-atomic and
+a torn write forced re-analysis on every song load forever); GDTF
+AUTO-PULL on project load (utils.gdtf_share.pull_missing_gdtf, worker
+in gui._start_gdtf_autopull, gated on stored credentials +
+gdtf_share/auto_pull; keep gates: exact internal identity + channel
+footprint + geometry, because a GDTF shadow swaps the whole
+definition); morph spot baking (a movement block aiming a NAMED spot
+the target rig lacks bakes the SOURCE spot's position into
+target_point; dmx_manager's resolution now falls through a dangling
+spot name to the world point per the documented plane > spot > point
+> manual chain); the morph adopts the SOURCE SETLIST when the target
+has none (order, triggers, pause looks - the setlist IS the gig).
+GIG KIT (all machine-local, gitignored, must be copied by hand):
+shoo_bee_doom/ = SBD master (world-targeted, SMPTE triggers) +
+stellwerk_hinten rig/morphed configs (venue-true geometry: hall
+16x5m, 4m ceiling, 5x5m stage at 0.5m; builder + morph scripts with
+TARGET_COMPRESS look-squeeze option) + ltc/ per-song 25fps WAVs
+(song N = hour N, trigger at NN:00:02:00) + audio + rider PDF;
+gdtf_fixtures/ = the Hero Spot 60 Share GDTF; dist/Lichtmaschine/ =
+the rehearsal .exe (rebuild: pyinstaller lichtmaschine.spec).
+Share credentials live in the per-machine Windows vault - re-enter
+via Settings > GDTF Share Account on any new PC.
