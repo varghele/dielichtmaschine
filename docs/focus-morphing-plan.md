@@ -203,12 +203,46 @@ assume one active config.
 - [x] Checklist generation from plan + setlist (MODEL done 2026-07-16, utils/morph/preflight.py: flash for dimmer/colour-routed groups -> spot verify + focus capture per mover group x used spot -> colour sanity -> specials -> scrub; drive_state recorded per item for the future pre-flight screen) (flash tests ->
       orientation/spot verify -> focus capture -> colour sanity ->
       busiest-section scrub).
-- [ ] Verify items (app drives predicted state; incorrect -> remediation
-      incl. orientation calibration -> re-test same item).
-- [ ] Capture items via the Live surface; captured values land in config
-      B ONLY (design doc 7.1 - never in show blocks).
+- [x] Verify items (DONE 2026-07-16, the pre-flight SCREEN:
+      gui/dialogs/preflight_dialog.py, opened from Tools > Venue
+      Pre-Flight... (plan derived from the config's own lanes via
+      preflight.derive_plan_from_config) and from the morph wizard's
+      commit page (the real plan against config B). DRIVE arms
+      utils/artnet/preflight_layer.py on the shared arbiter's
+      EXCLUSIVE playback slot (owner "preflight": a playing show
+      refuses the attach; detach never stops a loop another producer
+      streams through). Drive states: flash_full = group at full
+      white, aim_spot = movers on the named spot (busk-layer aim
+      math, definition ranges, 16-bit + fines) plus full white,
+      rgb_steps = stepped pure R/G/B with claim-to-zero on unused
+      colour channels, special_steps = gobo wheel positions at index
+      steps (v1: evenly spaced DMX values). CORRECT auto-advances
+      with the drive state following; INCORRECT opens the orientation
+      dialog for aim items (values written to the CONFIG fixtures) or
+      a guidance box naming the fixing tab, then re-arms the SAME
+      item. Tests: test_preflight_layer.py, test_preflight_dialog.py).
+- [x] Capture items (DONE 2026-07-16: hold_aim_for_capture holds the
+      aim + full while focus/zoom sliders trim live - driven on the
+      wire only where the definition maps BeamFocusNearFar /
+      BeamZoomSmallBig channels, otherwise the sliders drive nothing
+      extra; CAPTURE writes {'focus': v, 'zoom': v} into each group
+      fixture's Fixture.calibration in the CONFIG and marks the item
+      done(result='fixed') - never into show blocks (7.1, pinned by
+      test). Playback/export CONSUMPTION of the captured focus/zoom
+      values is deliberately future work: today they are recorded
+      venue truth, nothing reads them back yet).
 - [x] Checklist persistence (DONE 2026-07-16: *.preflight.yaml next to the config, per-item done/result/timestamp, fix-and-re-test reopen; lineage attachment rides the UI wiring).
+      Screen wiring same day: the dialog saves on every completion,
+      resumes when plan_fingerprint + config_hash still match, offers
+      regenerate on a mismatch, and stamps completed_at +
+      completed_target_hash (the config hashed AS COMPLETED, captures
+      included) when the last item lands.
 - [x] Export ordering guard PREDICATE (DONE 2026-07-16: export_guard_message covers incomplete AND completed-then-config-changed; the create_workspace hook lands with the UI integration to avoid three-way gui.py conflicts with the running agents).
+      Hooks DONE 2026-07-16: gui.py create_workspace shows the hard
+      warning (Continue Anyway / Cancel) BEFORE the options dialog;
+      utils/export_cli.py prints it as "warning:" on stderr without
+      blocking (scripts decide); both guarded so a missing or corrupt
+      checklist file never breaks an export.
 
 ## Status log
 
@@ -239,3 +273,13 @@ assume one active config.
   colour-role picker (phase 0 leftover: ROLE combo + EDIT PALETTE
   dialog on the colour block editor; song reached by block identity).
   Tests: test_morph_preview_ui.py, test_colour_role_picker.py.
+- 2026-07-16 (late): phase 5 complete - the pre-flight screen +
+  rig-driving layer + both export guard hooks shipped (see the ticked
+  items above for the full shape). New surfaces: Tools > Venue
+  Pre-Flight..., the wizard commit page's Run Pre-Flight Now..., and
+  the hard export warning in create_workspace / the headless export's
+  stderr warning. Deliberate leftovers: focus/zoom calibration values
+  are recorded, not yet consumed by playback/export; special_steps
+  uses evenly spaced gobo DMX values until routed capability values
+  ride the GDTF work; the scrub item is operator-driven (no transport
+  automation from the dialog).

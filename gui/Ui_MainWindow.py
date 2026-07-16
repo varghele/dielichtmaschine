@@ -252,6 +252,13 @@ class Ui_MainWindow(object):
         self.actionConvertMovementTargets = QAction(
             "Convert Movement to World Targets...", MainWindow)
         self.menuTools.addAction(self.actionConvertMovementTargets)
+        # Venue pre-flight: the generated on-site checklist that drives
+        # the rig into testable states (design doc 7, v1.5b phase 5).
+        # gui.py wires the handler; the same dialog also opens from the
+        # morph wizard's commit page.
+        self.actionVenuePreflight = QAction("Venue Pre-Flight...",
+                                            MainWindow)
+        self.menuTools.addAction(self.actionVenuePreflight)
 
         # Settings menu
         self.menuSettings = QtWidgets.QMenu("Settings", parent=MainWindow)

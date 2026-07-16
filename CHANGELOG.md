@@ -52,6 +52,22 @@ verbatim as the GitHub Release notes (see [docs/releasing.md](docs/releasing.md)
   pickers. Changing a role's colour re-skins every block tagged with it
   across the song immediately - the indirection that also lets the
   venue morph route colour as intent instead of copying literal values.
+- **Venue pre-flight: a checklist that drives the rig.** Tools > Venue
+  Pre-Flight... (also offered right after a morph commit) generates the
+  on-site checklist from the show itself - flash tests per patched
+  group, aim checks per mover group and spot, focus capture, RGB colour
+  sanity, gobo steps, a final scrub-through - and DRIVE puts the rig
+  into each test state over ArtNet (full-white flash, movers aimed at
+  the real spot, stepped pure colours) while a playing show keeps the
+  output for itself. CORRECT ticks and advances; INCORRECT opens the
+  fix (the orientation editor for aim problems, pointers to the right
+  tab for patch/colour problems) and re-tests the same item; CAPTURE
+  stores trimmed focus/zoom into the fixtures' calibration in the
+  project - never into the show. The checklist saves next to the
+  project and resumes after interruptions, and exporting a `.qxw`
+  while it is incomplete (or completed before the last config change)
+  now warns hard - in the app with Continue Anyway / Cancel, on the
+  headless export CLI as a stderr warning.
 
 ## [1.4.0] - 2026-07-15
 

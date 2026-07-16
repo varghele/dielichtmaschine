@@ -103,6 +103,23 @@ def run_export_cli(argv) -> int:
               file=sys.stderr)
         return 1
 
+    # Pre-flight export guard (docs/design-show-morphing.md 7.5): a
+    # .qxw export materializes pan/tilt, so an incomplete or stale
+    # venue checklist is worth a loud warning - but headless exports
+    # are never blocked (scripts decide), and a missing or corrupt
+    # checklist file must never break the export.
+    try:
+        from utils.morph.plan import config_hash
+        from utils.morph.preflight import (PreflightChecklist,
+                                           export_guard_message)
+        guard = export_guard_message(
+            PreflightChecklist.default_path(os.path.abspath(config_path)),
+            config_hash(config))
+        if guard:
+            print(f"warning: {guard}", file=sys.stderr)
+    except Exception:
+        pass
+
     vc_options = dict(DEFAULT_VC_OPTIONS)
     vc_options["qlc_target_version"] = args.qlc_version
     if args.no_vc:

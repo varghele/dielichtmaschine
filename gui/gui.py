@@ -917,6 +917,8 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         # Tools menu actions
         self.actionConvertMovementTargets.triggered.connect(
             self.convert_movement_targets)
+        self.actionVenuePreflight.triggered.connect(
+            self.open_venue_preflight)
 
         # Settings menu actions
         self.actionAudioSettings.triggered.connect(self.open_audio_settings)
@@ -1477,6 +1479,19 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             source_path=getattr(self, 'config_path', '') or '',
             parent=self)
         wizard.exec()
+
+    def open_venue_preflight(self):
+        """Tools > Venue Pre-Flight: run (or resume) the on-site
+        checklist for the CURRENT config - the standalone path, plan
+        derived from the config's own lanes. The morph wizard opens the
+        same dialog with the real plan for config B."""
+        from gui.dialogs.preflight_dialog import PreflightDialog
+        dialog = PreflightDialog(
+            self.config,
+            config_path=getattr(self, 'config_path', '') or '',
+            arbiter_provider=self.output_arbiter,
+            parent=self)
+        dialog.exec()
 
     def import_legacy_csv_songs(self):
         """File > Import Legacy CSV Songs: pick a folder of pre-v1.0
@@ -2066,9 +2081,48 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             f"Exported {len(self.config.fixtures)} fixture(s) to {fmt.upper()}:\n{file_path}"
         )
 
+    def _preflight_export_warning(self):
+        """The pre-flight export guard (design doc 7.5): the hard
+        warning text when the config's checklist exists and is
+        incomplete or stale, else None. A missing or corrupt checklist
+        file must never break an export - everything is guarded."""
+        config_path = getattr(self, 'config_path', '') or ''
+        if not config_path:
+            return None
+        try:
+            from utils.morph.plan import config_hash
+            from utils.morph.preflight import (PreflightChecklist,
+                                               export_guard_message)
+            return export_guard_message(
+                PreflightChecklist.default_path(config_path),
+                config_hash(self.config))
+        except Exception:
+            return None
+
+    def _confirm_preflight_export(self, message) -> bool:
+        """Hard warning, not a footnote: Continue anyway / Cancel.
+        Split out so tests drive create_workspace without a modal."""
+        box = QMessageBox(self)
+        box.setIcon(QMessageBox.Icon.Warning)
+        box.setWindowTitle("Venue pre-flight incomplete")
+        box.setText(message)
+        continue_btn = box.addButton(
+            "Continue Anyway", QMessageBox.ButtonRole.AcceptRole)
+        box.addButton(QMessageBox.StandardButton.Cancel)
+        box.exec()
+        return box.clickedButton() is continue_btn
+
     def create_workspace(self):
         """Create QLC+ workspace file from configuration"""
         try:
+            # Pre-flight export guard (design doc 7.5): a .qxw export
+            # MATERIALIZES pan/tilt, so exporting past an incomplete or
+            # stale checklist bakes unverified geometry into the file.
+            guard_message = self._preflight_export_warning()
+            if guard_message is not None \
+                    and not self._confirm_preflight_export(guard_message):
+                return
+
             # Show workspace options dialog
             options_dialog = WorkspaceOptionsDialog(self, config=self.config)
             if options_dialog.exec() != options_dialog.DialogCode.Accepted:

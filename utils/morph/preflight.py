@@ -16,6 +16,7 @@ generating items, never in judging correctness (7.2).
 
 from __future__ import annotations
 
+import hashlib
 import os
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional
@@ -23,7 +24,7 @@ from typing import Dict, List, Optional
 import yaml
 
 from utils.morph.compile import SUBLANE_ATTRS
-from utils.morph.plan import MorphPlan
+from utils.morph.plan import MorphEdge, MorphPlan
 
 #: generated order (design doc 7.3): cheapest and grossest-error first
 ITEM_ORDER = ("flash", "spot_verify", "focus_capture", "colour_sanity",
@@ -239,6 +240,65 @@ def generate_checklist(source_config, plan: MorphPlan, target_config,
 
     checklist = PreflightChecklist(items=items)
     return checklist
+
+
+# ---------------------------------------------------------------------------
+# standalone pre-flight (Tools > Venue Pre-Flight, no morph involved)
+# ---------------------------------------------------------------------------
+
+def derive_plan_from_config(config) -> MorphPlan:
+    """A synthetic identity plan mirroring the config's OWN lane
+    routing, so ``generate_checklist(config, plan, config)`` produces
+    the same flash/aim/colour items for a rig that was never morphed -
+    the Tools menu path. Edge ids are content-derived (not random) so
+    :func:`plan_fingerprint` is stable across sessions and the saved
+    checklist resumes."""
+    plan = MorphPlan(name="preflight")
+    groups = set(getattr(config, "groups", {}) or {})
+    seen = set()
+    for song in (getattr(config, "songs", {}) or {}).values():
+        if not song.timeline_data:
+            continue
+        for lane in song.timeline_data.lanes:
+            sublanes = set()
+            for block in lane.light_blocks:
+                for sublane, attr in SUBLANE_ATTRS.items():
+                    if getattr(block, attr, None):
+                        sublanes.add(sublane)
+            targets = list(getattr(lane, "fixture_targets", []) or [])
+            if not targets and getattr(lane, "fixture_group", ""):
+                targets = [lane.fixture_group]
+            for raw in targets:
+                # Indexed targets ("Group:N") test the whole group.
+                group = raw if raw in groups else raw.split(":")[0]
+                if group not in groups:
+                    continue
+                for sublane in sorted(sublanes):
+                    key = (lane.lane_id, sublane, group)
+                    if key in seen:
+                        continue
+                    seen.add(key)
+                    edge_id = hashlib.sha256(
+                        "|".join(key).encode("utf-8")).hexdigest()[:12]
+                    plan.edges.append(MorphEdge(
+                        source_lane_id=lane.lane_id,
+                        source_lane_name=lane.name,
+                        sublane=sublane, target_group=group,
+                        edge_id=edge_id))
+    return plan
+
+
+def plan_fingerprint(plan: MorphPlan) -> str:
+    """Stable content hash of a plan's WIRING. Metadata (name, notes,
+    author, created date) and the config identity hashes are excluded:
+    renaming or re-stamping a plan must not invalidate a half-finished
+    checklist - only rewiring should trigger the regenerate offer."""
+    data = plan.to_dict()
+    for key in ("source_hash", "target_hash", "name", "notes",
+                "author", "created"):
+        data.pop(key, None)
+    canonical = yaml.safe_dump(data, sort_keys=True, allow_unicode=True)
+    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 
 
 # ---------------------------------------------------------------------------

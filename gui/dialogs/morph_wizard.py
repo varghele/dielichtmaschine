@@ -585,6 +585,16 @@ class MorphWizard(QtWidgets.QDialog):
         save_row.addWidget(self.save_plan_btn)
         save_row.addStretch(1)
         layout.addLayout(save_row)
+
+        # Phase 2 hand-off (design doc 7): the on-site checklist for
+        # the morphed target, generated from THIS plan. Enabled once
+        # the morph is committed - before that there is nothing to
+        # verify on the venue rig.
+        self.preflight_btn = QtWidgets.QPushButton("Run Pre-Flight Now...")
+        self.preflight_btn.setEnabled(False)
+        self.preflight_btn.clicked.connect(self.open_preflight)
+        layout.addWidget(self.preflight_btn)
+
         layout.addStretch(1)
         return page
 
@@ -634,11 +644,28 @@ class MorphWizard(QtWidgets.QDialog):
         self.committed = True
         self.commit_btn.setEnabled(False)
         self.save_target_btn.setEnabled(True)
+        self.preflight_btn.setEnabled(True)
         self.commit_status.setText(
             f"Morph applied: {len(result.songs)} song(s) written. "
             f"Save the target and the plan to keep them.")
         self._sync_buttons()
         return True
+
+    def open_preflight(self):
+        """Run the venue pre-flight on the committed target (design doc
+        7.2-7.4): the checklist generates from THIS plan against config
+        B, drives through the shared arbiter when the main window is
+        the parent, and persists next to the target file."""
+        from gui.dialogs.preflight_dialog import PreflightDialog
+        arbiter_provider = getattr(self.parent(), "output_arbiter", None)
+        dialog = PreflightDialog(
+            self.target_config,
+            config_path=self.target_path,
+            plan=self.plan,
+            source_config=self.source_config,
+            arbiter_provider=arbiter_provider,
+            parent=self)
+        dialog.exec()
 
     def _lineage_stamp(self) -> dict:
         from utils.app_identity import APP_VERSION

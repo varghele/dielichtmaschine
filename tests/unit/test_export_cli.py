@@ -86,3 +86,46 @@ class TestExport:
         bad.write_text("{ not valid yaml: [", encoding="utf-8")
         assert run_export_cli([str(bad)]) == 1
         assert "could not load" in capsys.readouterr().err
+
+
+class TestPreflightGuard:
+    """The pre-flight export guard (design doc 7.5) on the headless
+    path: warn on stderr, never block, never break on a corrupt
+    checklist file."""
+
+    def _config_copy(self, tmp_path):
+        config_copy = tmp_path / "venue.yaml"
+        shutil.copyfile(CLUB_BAND, config_copy)
+        return str(config_copy)
+
+    def test_incomplete_checklist_warns_but_exports(self, tmp_path,
+                                                    capsys):
+        from utils.morph.preflight import (PreflightChecklist,
+                                           PreflightItem)
+        config_path = self._config_copy(tmp_path)
+        checklist = PreflightChecklist(items=[PreflightItem(
+            item_id="flash:X:000", kind="flash", group="X",
+            title="Flash test", instruction="")])
+        checklist.save(PreflightChecklist.default_path(config_path))
+        out = str(tmp_path / "venue.qxw")
+        assert run_export_cli([config_path, "--out", out]) == 0
+        err = capsys.readouterr().err
+        assert "warning:" in err and "INCOMPLETE" in err
+        assert os.path.isfile(out)
+
+    def test_no_checklist_no_warning(self, tmp_path, capsys):
+        config_path = self._config_copy(tmp_path)
+        out = str(tmp_path / "venue.qxw")
+        assert run_export_cli([config_path, "--out", out]) == 0
+        assert "INCOMPLETE" not in capsys.readouterr().err
+
+    def test_corrupt_checklist_never_breaks_the_export(self, tmp_path,
+                                                       capsys):
+        from utils.morph.preflight import PreflightChecklist
+        config_path = self._config_copy(tmp_path)
+        with open(PreflightChecklist.default_path(config_path), "w",
+                  encoding="utf-8") as f:
+            f.write("{ not valid yaml: [")
+        out = str(tmp_path / "venue.qxw")
+        assert run_export_cli([config_path, "--out", out]) == 0
+        assert os.path.isfile(out)
