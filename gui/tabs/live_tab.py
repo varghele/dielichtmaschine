@@ -64,7 +64,7 @@ from PyQt6.QtGui import QColor, QFont, QPainter, QPolygon
 from PyQt6.QtCore import QPoint
 from PyQt6.QtWidgets import (
     QApplication, QWidget, QVBoxLayout, QHBoxLayout, QGridLayout, QScrollArea,
-    QFrame, QPushButton, QLabel, QButtonGroup,
+    QFrame, QPushButton, QLabel, QButtonGroup, QComboBox,
 )
 
 from auto.bpm_detector import TapBPM
@@ -1089,6 +1089,7 @@ class LiveTab(BaseTab):
         # OUT chip source: the shared OutputArbiter, injected by gui.py
         # when output is first enabled (None = nothing streams).
         self._status_arbiter = None
+        self._show_transport = None
         self._last_frames_sent = None
 
         super().__init__(config, parent)
@@ -1102,6 +1103,7 @@ class LiveTab(BaseTab):
         self._status_timer = QTimer(self)
         self._status_timer.setInterval(500)
         self._status_timer.timeout.connect(self._refresh_output_status)
+        self._status_timer.timeout.connect(self._refresh_show_transport)
         self._status_timer.start()
 
     # -- BaseTab ---------------------------------------------------------
@@ -1139,6 +1141,7 @@ class LiveTab(BaseTab):
         layout.setSpacing(0)
 
         layout.addWidget(self._build_select_row())
+        layout.addWidget(self._build_show_row())
         layout.addWidget(self._build_fade_row())
         layout.addWidget(self._build_pools(), 1)
         layout.addWidget(self._build_programmer_bar())
@@ -1217,6 +1220,137 @@ class LiveTab(BaseTab):
         self._mode_group.addButton(btn)
         btn.clicked.connect(lambda _checked=False, m=mode: self.state.set_mode(m))
         return btn
+
+    def _build_show_row(self) -> QWidget:
+        """The show transport strip: pick a song, start/stop it, and
+        see where it is - the thing you busk OVER. Display + control
+        ride the shell-injected transport (set_show_transport); with
+        none injected the strip reads as disabled. The slot rules are
+        untouched: PLAY acquires the playback slot exactly like the
+        Shows tab's own Play (busk-on-top keeps working), STOP is the
+        operator's STOP (it also disarms an armed LTC chase)."""
+        row = QWidget()
+        row.setProperty("role", "section-caption")
+        row.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
+        hbox = QHBoxLayout(row)
+        hbox.setContentsMargins(16, 6, 16, 6)
+        hbox.setSpacing(6)
+
+        hbox.addWidget(MicroLabel("Show", point_size=8, tracking_em=0.12))
+        self._show_combo = QComboBox()
+        self._show_combo.setMinimumWidth(180)
+        self._show_combo.setProperty("role", "lane-chip")
+        self._show_combo.setToolTip(
+            "The song the busk rides over (setlist order, then extras)")
+        self._show_combo.activated.connect(self._on_show_song_activated)
+        hbox.addWidget(self._show_combo)
+
+        self._show_play_btn = QPushButton("PLAY")
+        self._show_play_btn.setCheckable(True)
+        self._show_play_btn.setProperty("role", "output-select")
+        self._show_play_btn.setFont(mono_font(8, QFont.Weight.DemiBold))
+        self._show_play_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._show_play_btn.setToolTip(
+            "Start / stop the selected show under the busk surface")
+        self._show_play_btn.clicked.connect(self._on_show_play_clicked)
+        hbox.addWidget(self._show_play_btn)
+
+        # Same LED-readout voice as the BPM: what is playing, where.
+        self._show_time = QLabel("--:-- / --:--")
+        self._show_time.setObjectName("TimeReadout")
+        self._show_time.setToolTip("Show position / total")
+        hbox.addWidget(self._show_time)
+
+        self._show_hint = MicroLabel(
+            "No show transport - open a project with songs",
+            point_size=7, tracking_em=0.08)
+        self._show_hint.setMinimumWidth(1)
+        hbox.addSpacing(6)
+        hbox.addWidget(self._show_hint)
+        hbox.addStretch(1)
+        self._refresh_show_transport()
+        return row
+
+    def set_show_transport(self, transport) -> None:
+        """Wire the Shows tab's transport adapter (gui.py injects it;
+        None reads as no transport). The tab polls it at glance rate -
+        display truth comes from the Shows tab, never local state."""
+        self._show_transport = transport
+        self._refresh_show_transport()
+
+    @staticmethod
+    def _format_show_time(seconds: float) -> str:
+        seconds = max(0, int(seconds))
+        return f"{seconds // 60:02d}:{seconds % 60:02d}"
+
+    def _on_show_song_activated(self, index: int) -> None:
+        transport = getattr(self, "_show_transport", None)
+        if transport is None:
+            return
+        name = self._show_combo.itemData(index)
+        if name:
+            transport.select(name)
+
+    def _on_show_play_clicked(self) -> None:
+        transport = getattr(self, "_show_transport", None)
+        if transport is None:
+            return
+        if transport.is_playing():
+            transport.stop()
+        else:
+            name = self._show_combo.currentData()
+            if name:
+                transport.select(name)
+            transport.play()
+        self._refresh_show_transport()
+
+    def _refresh_show_transport(self) -> None:
+        """Glance-rate poll (same 500 ms timer as the OUT chip): sync
+        the song list, follow the Shows tab's current song while the
+        combo is closed, and restyle PLAY/readout from wire truth."""
+        transport = getattr(self, "_show_transport", None)
+        combo = getattr(self, "_show_combo", None)
+        if combo is None:
+            return
+        if transport is None:
+            for widget in (combo, self._show_play_btn):
+                widget.setEnabled(False)
+            self._show_time.setText("--:-- / --:--")
+            self._show_hint.setVisible(True)
+            return
+
+        songs = transport.songs()
+        known = [(combo.itemData(i), combo.itemText(i))
+                 for i in range(combo.count())]
+        if songs != known:
+            combo.blockSignals(True)
+            combo.clear()
+            for name, label in songs:
+                combo.addItem(label, name)
+            combo.blockSignals(False)
+        current = transport.current()
+        if current and combo.currentData() != current \
+                and not combo.view().isVisible():
+            index = combo.findData(current)
+            if index >= 0:
+                combo.blockSignals(True)
+                combo.setCurrentIndex(index)
+                combo.blockSignals(False)
+
+        playing = transport.is_playing()
+        combo.setEnabled(bool(songs))
+        self._show_play_btn.setEnabled(bool(songs))
+        self._show_play_btn.setChecked(playing)
+        self._show_play_btn.setText("STOP" if playing else "PLAY")
+        self._show_hint.setVisible(not songs)
+        self._show_hint.setText("No songs in this project"
+                                if songs == [] else self._show_hint.text())
+        if songs:
+            self._show_time.setText(
+                f"{self._format_show_time(transport.position())} / "
+                f"{self._format_show_time(transport.duration())}")
+        else:
+            self._show_time.setText("--:-- / --:--")
 
     def _build_fade_row(self) -> QWidget:
         row = QWidget()

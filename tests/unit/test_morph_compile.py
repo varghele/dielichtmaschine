@@ -443,3 +443,20 @@ class TestPerSongLanes:
         result = compile_setlist(a, plan, b)
         errors = result.report.of_kind("error")
         assert errors and "not in the source config" in errors[0].format()
+
+
+class TestAudioCarryOver:
+    def test_morphed_song_keeps_the_source_audio(self):
+        """Fresh lanes, same music: the morph must not silence the
+        timeline (regression 2026-07-16 - TimelineData was rebuilt
+        empty and the audio reference vanished)."""
+        lane = _lane("Pars", ["PARS"],
+                     dimmer=[DimmerBlock(0.0, 16.0, intensity=200.0)])
+        song = _song(lanes=[lane])
+        song.timeline_data.audio_file_path = "light_track.mp3"
+        a = _config({"PARS": [_fixture("p1")]}, songs={"S": song})
+        b = _config({"WASH": [_fixture("w1", group="WASH")]})
+        plan = MorphPlan(edges=[_edge(lane, "dimmer", "WASH")])
+        result = compile_setlist(a, plan, b)
+        assert result.songs["S"].timeline_data.audio_file_path == \
+            "light_track.mp3"

@@ -103,6 +103,57 @@ class TimelineChaseTransport:
         return self._tab._get_current_position()
 
 
+class LiveShowTransport:
+    """The LIVE tab's view of the timeline transport: the busk surface
+    starts/stops the show it busks over and reads where it is. All
+    calls run on the UI thread (the Live tab's 500 ms glance timer).
+
+    Unlike TimelineChaseTransport this is the OPERATOR: stop() goes
+    through _on_stop_clicked, so it disarms an armed LTC chase exactly
+    like the Shows tab's own STOP button."""
+
+    def __init__(self, tab: "ShowsTab"):
+        self._tab = tab
+
+    def songs(self):
+        """(name, display label) pairs in the Shows combo's order -
+        setlist first, extras after the separator."""
+        combo = self._tab.show_combo
+        result = []
+        for i in range(combo.count()):
+            name = combo.itemData(i)
+            if name:                      # separators carry no data
+                result.append((name, combo.itemText(i)))
+        return result
+
+    def current(self) -> str:
+        return self._tab.current_song_name or ""
+
+    def select(self, name: str) -> None:
+        combo = self._tab.show_combo
+        index = combo.findData(name)
+        if index >= 0 and combo.currentIndex() != index:
+            combo.setCurrentIndex(index)   # fires the tab's song load
+
+    def is_playing(self) -> bool:
+        return bool(self._tab.is_playing)
+
+    def play(self) -> None:
+        if not self._tab.is_playing:
+            self._tab._start_playback()
+
+    def stop(self) -> None:
+        if self._tab.is_playing:
+            self._tab._on_stop_clicked()
+
+    def position(self) -> float:
+        return self._tab._get_current_position()
+
+    def duration(self) -> float:
+        structure = self._tab.song_structure
+        return structure.get_total_duration() if structure else 0.0
+
+
 class ShowsTab(BaseTab):
     """Timeline-based show management tab.
 
@@ -1843,6 +1894,14 @@ class ShowsTab(BaseTab):
         Programmatic control only - it bypasses the operator's STOP
         hook, so a window exit never disarms the chase."""
         return TimelineChaseTransport(self)
+
+    def live_transport(self):
+        """The LIVE tab's show-transport adapter over this tab (the
+        busk surface starts/stops the show it busks over and shows
+        where it is). OPERATOR semantics, unlike chase_transport:
+        stop() goes through the STOP hook, so it also disarms an armed
+        chase - from the busk surface the human is always the master."""
+        return LiveShowTransport(self)
 
     def set_chase_armed(self, armed: bool, disarm=None) -> None:
         """While the LTC chase is armed the desk is the master: Play is

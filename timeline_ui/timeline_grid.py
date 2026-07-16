@@ -206,11 +206,20 @@ class TimelineGrid(QWidget):
     def add_light_lane(self, lane_widget) -> None:
         """Embed a light lane as a new row below the existing ones."""
         header, stripe = lane_widget.detach_pieces()
-        row_height = stripe.minimumHeight() or 80
+        # The row must fit the header's control rows even when the lane
+        # renders a single sublane: a dimmer-only lane's stripe is
+        # 1 x 50 px, which crushed the name row and put mute/solo out
+        # of reach (2026-07-16, the SBD Sunstrips lane). Mirror the
+        # standalone widget's min_lane_height; headers and stripes sit
+        # in SEPARATE columns, so both take the same row height - the
+        # sublane band keeps its own geometry at the top of the taller
+        # stripe.
+        row_height = max(stripe.minimumHeight() or 80,
+                         getattr(lane_widget, "min_lane_height", 105))
         header.setMinimumHeight(row_height)
         header.setMaximumHeight(row_height)
-        # Stripes already self-size from LightLaneWidget's setMinimum/Maximum
-        # height pair; mirror it so headers stay aligned.
+        stripe.setMinimumHeight(row_height)
+        stripe.setMaximumHeight(row_height)
         self._insert_row(header, stripe)
         # The lane_widget shell is now empty — its header + stripe live in the
         # grid rows above. It's kept alive only for signal wiring, so hide it;

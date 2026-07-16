@@ -554,6 +554,10 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.structure_tab.chase_arm_requested.connect(
             self._on_chase_arm_requested)
 
+        # The Live tab's show strip drives the Shows tab's transport
+        # (operator semantics: its STOP disarms an armed chase too).
+        self.live_tab.set_show_transport(self.shows_tab.live_transport())
+
         # Replace placeholder tabs with actual tab widgets
         # The tab widget structure is created in Ui_MainWindow
         # We need to replace the placeholder widgets

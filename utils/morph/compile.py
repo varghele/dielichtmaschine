@@ -570,7 +570,11 @@ def compile_song(song: Song, plan: MorphPlan, source_config,
         name=song.name,
         parts=copy.deepcopy(song.parts),
         effects=[],
-        timeline_data=type(song.timeline_data)(),
+        # Fresh lanes, SAME music: the morphed song keeps the source
+        # song's audio reference (dropped until 2026-07-16 - a morphed
+        # show arrived at the venue with silent timelines).
+        timeline_data=type(song.timeline_data)(
+            audio_file_path=song.timeline_data.audio_file_path),
         palette=dict(song.palette),
         trigger_device=song.trigger_device,
         trigger_channel=song.trigger_channel,

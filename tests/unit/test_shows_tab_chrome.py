@@ -865,3 +865,50 @@ class TestChaseTransport:
         assert disarms == []
         shows_tab.set_chase_armed(False)
         assert shows_tab.play_btn.isEnabled()
+
+
+class TestLiveShowTransport:
+    """LiveShowTransport (2026-07-16): the Live tab's operator view of
+    the timeline transport - same combo-driven song switching as the
+    chase transport, but stop() goes through the operator STOP hook
+    (it must disarm an armed chase like the real button)."""
+
+    def test_songs_lists_combo_entries_without_separators(self, shows_tab):
+        _add_show(shows_tab.config, "Zweite Nummer")
+        shows_tab.update_from_config()
+        transport = shows_tab.live_transport()
+        names = [name for name, _label in transport.songs()]
+        assert set(names) >= {"Zweite Nummer"}
+        assert all(names), "separators must never leak into songs()"
+
+    def test_play_stop_and_state(self, shows_tab):
+        shows_tab.update_from_config()
+        transport = shows_tab.live_transport()
+        assert not transport.is_playing()
+        transport.play()
+        assert shows_tab.is_playing and transport.is_playing()
+        transport.play()                       # idempotent while playing
+        assert shows_tab.is_playing
+        transport.stop()
+        assert not shows_tab.is_playing
+
+    def test_stop_disarms_an_armed_chase(self, shows_tab):
+        """Operator semantics: unlike the chase transport, this stop
+        runs the disarm hook."""
+        shows_tab.update_from_config()
+        transport = shows_tab.live_transport()
+        transport.play()
+        disarmed = []
+        shows_tab.set_chase_armed(True, disarm=lambda: disarmed.append(1))
+        transport.stop()
+        assert disarmed == [1]
+        assert not shows_tab.is_playing
+
+    def test_select_and_duration(self, shows_tab):
+        _add_show(shows_tab.config, "Zweite Nummer")
+        shows_tab.update_from_config()
+        transport = shows_tab.live_transport()
+        transport.select("Zweite Nummer")
+        assert transport.current() == "Zweite Nummer"
+        assert transport.duration() > 0.0
+        assert transport.position() == pytest.approx(0.0)

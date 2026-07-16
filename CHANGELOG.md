@@ -95,8 +95,28 @@ verbatim as the GitHub Release notes (see [docs/releasing.md](docs/releasing.md)
   everywhere - a legacy-format copy of the mid-size demo is preserved
   as the loader's regression fixture.
 
+- **The Live surface can start the show it busks over.** A SHOW strip
+  on the busk screen: pick a song (setlist order, same list as the
+  Shows tab), PLAY/STOP, and a position readout showing where the
+  show is - so busking over a running timeline no longer needs a trip
+  to the Shows tab. The strip is a remote for the Shows tab's own
+  transport: PLAY contends for the playback slot exactly like the
+  Shows tab's Play button, and STOP is the operator's STOP (it also
+  disarms an armed LTC chase).
+
 ### Fixed
 
+- **Dimmer-only lanes no longer crush their controls.** A lane whose
+  fixtures render only intensity (e.g. Sunstrips) draws a single
+  50 px sublane band, and the timeline grid took that as the whole
+  row height - the lane name and the mute/solo chips were clipped
+  beyond reach. Grid rows now reserve the header's minimum control
+  height; the sublane band keeps its geometry at the top of the row.
+- **Morphed songs keep their audio.** The morph rebuilt each song's
+  timeline with fresh lanes and silently dropped the audio file
+  reference - a morphed show arrived at the venue with silent
+  timelines. The reference now carries over (fresh lanes, same
+  music).
 - **The morph patchbay's capability gating now works on real
   projects.** Group capabilities were only honoured when a config
   carried them pre-stored - which no loaded project does - so every

@@ -1507,3 +1507,103 @@ class TestSyncChipSources:
         live_tab.set_sync_status("int")
         assert chip.text() == "SYNC INT"
         assert chip.property("state") == "on"
+
+
+class FakeShowTransport:
+    """Duck-typed stand-in for ShowsTab.live_transport()."""
+
+    def __init__(self, songs=None):
+        self._songs = songs if songs is not None else [
+            ("Alpha", "01 · Alpha"), ("Zebra", "02 · Zebra")]
+        self._current = self._songs[0][0] if self._songs else ""
+        self._playing = False
+        self._position = 42.0
+        self._duration = 185.0
+        self.calls = []
+
+    def songs(self):
+        return list(self._songs)
+
+    def current(self):
+        return self._current
+
+    def select(self, name):
+        self.calls.append(("select", name))
+        self._current = name
+
+    def is_playing(self):
+        return self._playing
+
+    def play(self):
+        self.calls.append(("play",))
+        self._playing = True
+
+    def stop(self):
+        self.calls.append(("stop",))
+        self._playing = False
+
+    def position(self):
+        return self._position
+
+    def duration(self):
+        return self._duration
+
+
+class TestShowTransportStrip:
+    """The Live tab's show strip (2026-07-16): the busk surface can
+    start/stop the show it busks over and see what plays where. All
+    display truth is polled from the injected transport."""
+
+    def test_no_transport_reads_disabled(self, live_tab):
+        live_tab.set_show_transport(None)
+        assert not live_tab._show_combo.isEnabled()
+        assert not live_tab._show_play_btn.isEnabled()
+        assert live_tab._show_time.text() == "--:-- / --:--"
+
+    def test_transport_populates_songs_and_time(self, live_tab):
+        transport = FakeShowTransport()
+        live_tab.set_show_transport(transport)
+        combo = live_tab._show_combo
+        assert [combo.itemData(i) for i in range(combo.count())] == \
+            ["Alpha", "Zebra"]
+        assert combo.currentData() == "Alpha"     # follows the Shows tab
+        assert live_tab._show_time.text() == "00:42 / 03:05"
+        assert live_tab._show_play_btn.text() == "PLAY"
+        assert not live_tab._show_play_btn.isChecked()
+
+    def test_play_selects_then_plays_and_reflects(self, live_tab):
+        transport = FakeShowTransport()
+        live_tab.set_show_transport(transport)
+        index = live_tab._show_combo.findData("Zebra")
+        live_tab._show_combo.setCurrentIndex(index)
+        live_tab._on_show_play_clicked()
+        assert ("select", "Zebra") in transport.calls
+        assert ("play",) in transport.calls
+        assert live_tab._show_play_btn.text() == "STOP"
+        assert live_tab._show_play_btn.isChecked()
+
+    def test_stop_goes_through_the_transport(self, live_tab):
+        transport = FakeShowTransport()
+        transport._playing = True
+        live_tab.set_show_transport(transport)
+        live_tab._on_show_play_clicked()
+        assert transport.calls[-1] == ("stop",)
+        assert live_tab._show_play_btn.text() == "PLAY"
+
+    def test_combo_activation_selects_song(self, live_tab):
+        transport = FakeShowTransport()
+        live_tab.set_show_transport(transport)
+        index = live_tab._show_combo.findData("Zebra")
+        live_tab._on_show_song_activated(index)
+        assert ("select", "Zebra") in transport.calls
+
+    def test_poll_follows_the_shows_tab(self, live_tab):
+        """A song loaded IN the Shows tab shows up here on the next
+        glance tick without touching the combo."""
+        transport = FakeShowTransport()
+        live_tab.set_show_transport(transport)
+        transport._current = "Zebra"
+        transport._playing = True
+        live_tab._refresh_show_transport()
+        assert live_tab._show_combo.currentData() == "Zebra"
+        assert live_tab._show_play_btn.text() == "STOP"
