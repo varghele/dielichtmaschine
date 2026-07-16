@@ -1,0 +1,91 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE FixtureDefinition>
+<!-- ONE head of the Cameo HYDRABEAM 4000 RGBW 4-head moving bar
+     (CLHB4000RGBW), authored from the official manual's 56-channel
+     mode: each head owns 14 consecutive channels, so a bar patches as
+     4 of these at base, base+14, base+28, base+42. Patching per head
+     (instead of one 56ch fixture) lets the aiming solver treat every
+     head as its own mover with its own stage position. -->
+<FixtureDefinition xmlns="http://www.qlcplus.org/FixtureDefinition">
+ <Creator>
+  <Name>Die Lichtmaschine</Name>
+  <Version>1.4.0</Version>
+  <Author>varghele</Author>
+ </Creator>
+ <Manufacturer>Cameo</Manufacturer>
+ <Model>HydraBeam 4000 RGBW Head</Model>
+ <Type>Moving Head</Type>
+ <Channel Name="Pan" Preset="PositionPan"/>
+ <Channel Name="Pan Fine" Preset="PositionPanFine"/>
+ <Channel Name="Tilt" Preset="PositionTilt"/>
+ <Channel Name="Tilt Fine" Preset="PositionTiltFine"/>
+ <Channel Name="Head Speed" Preset="SpeedPanTiltFastSlow"/>
+ <Channel Name="Dimmer" Preset="IntensityMasterDimmer"/>
+ <Channel Name="Strobe">
+  <Group Byte="0">Shutter</Group>
+  <Capability Min="0" Max="10" Preset="ShutterOpen">Open (no strobe)</Capability>
+  <Capability Min="11" Max="255" Preset="StrobeSlowToFast">Strobe slow to fast</Capability>
+ </Channel>
+ <Channel Name="Colour Macro">
+  <Group Byte="0">Colour</Group>
+  <Capability Min="0" Max="30">Use RGBW channels</Capability>
+  <Capability Min="31" Max="45" Preset="ColorMacro" Res1="#ff0000">Red</Capability>
+  <Capability Min="46" Max="60" Preset="ColorMacro" Res1="#00ff00">Green</Capability>
+  <Capability Min="61" Max="75" Preset="ColorMacro" Res1="#0000ff">Blue</Capability>
+  <Capability Min="76" Max="90" Preset="ColorMacro" Res1="#ffffff">White</Capability>
+  <Capability Min="91" Max="105" Preset="ColorMacro" Res1="#ffff00">Red + Green</Capability>
+  <Capability Min="106" Max="120" Preset="ColorMacro" Res1="#ff00ff">Red + Blue</Capability>
+  <Capability Min="121" Max="135" Preset="ColorMacro" Res1="#ff8080">Red + White</Capability>
+  <Capability Min="136" Max="150" Preset="ColorMacro" Res1="#00ffff">Green + Blue</Capability>
+  <Capability Min="151" Max="165" Preset="ColorMacro" Res1="#80ff80">Green + White</Capability>
+  <Capability Min="166" Max="180" Preset="ColorMacro" Res1="#8080ff">Blue + White</Capability>
+  <Capability Min="181" Max="195" Preset="ColorMacro" Res1="#aaaaaa">RGB</Capability>
+  <Capability Min="196" Max="210" Preset="ColorMacro" Res1="#ffffaa">RGW</Capability>
+  <Capability Min="211" Max="225" Preset="ColorMacro" Res1="#ffaaff">RBW</Capability>
+  <Capability Min="226" Max="240" Preset="ColorMacro" Res1="#aaffff">GBW</Capability>
+  <Capability Min="241" Max="255" Preset="ColorMacro" Res1="#ffffff">RGBW</Capability>
+ </Channel>
+ <Channel Name="Auto / Sound / Reset">
+  <Group Byte="0">Effect</Group>
+  <Capability Min="0" Max="7">No function</Capability>
+  <Capability Min="8" Max="30">Show mode 1</Capability>
+  <Capability Min="31" Max="53">Show mode 2</Capability>
+  <Capability Min="54" Max="76">Show mode 3</Capability>
+  <Capability Min="77" Max="99">Show mode 4</Capability>
+  <Capability Min="100" Max="122">Sound control mode</Capability>
+  <Capability Min="123" Max="199">No function</Capability>
+  <Capability Min="200" Max="224" Preset="ResetAll">Reset</Capability>
+  <Capability Min="225" Max="255">No function</Capability>
+ </Channel>
+ <Channel Name="Sound Sensitivity">
+  <Group Byte="0">Effect</Group>
+  <Capability Min="0" Max="255">Sound sensitivity / auto mode speed</Capability>
+ </Channel>
+ <Channel Name="Red" Preset="IntensityRed"/>
+ <Channel Name="Green" Preset="IntensityGreen"/>
+ <Channel Name="Blue" Preset="IntensityBlue"/>
+ <Channel Name="White" Preset="IntensityWhite"/>
+ <Mode Name="Head (56Ch bar)">
+  <Channel Number="0">Pan</Channel>
+  <Channel Number="1">Pan Fine</Channel>
+  <Channel Number="2">Tilt</Channel>
+  <Channel Number="3">Tilt Fine</Channel>
+  <Channel Number="4">Head Speed</Channel>
+  <Channel Number="5">Dimmer</Channel>
+  <Channel Number="6">Strobe</Channel>
+  <Channel Number="7">Colour Macro</Channel>
+  <Channel Number="8">Auto / Sound / Reset</Channel>
+  <Channel Number="9">Sound Sensitivity</Channel>
+  <Channel Number="10">Red</Channel>
+  <Channel Number="11">Green</Channel>
+  <Channel Number="12">Blue</Channel>
+  <Channel Number="13">White</Channel>
+ </Mode>
+ <Physical>
+  <Bulb Type="LED" Lumens="6720" ColourTemperature="0"/>
+  <Dimensions Weight="3.0" Width="250" Height="270" Depth="90"/>
+  <Lens Name="Other" DegreesMin="3" DegreesMax="3"/>
+  <Focus Type="Head" PanMax="540" TiltMax="270"/>
+  <Technical PowerConsumption="55" DmxConnector="3-pin"/>
+ </Physical>
+</FixtureDefinition>

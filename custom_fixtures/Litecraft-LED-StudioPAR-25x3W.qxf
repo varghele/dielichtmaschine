@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE FixtureDefinition>
+<FixtureDefinition xmlns="http://www.qlcplus.org/FixtureDefinition">
+ <Creator>
+  <Name>Die Lichtmaschine</Name>
+  <Version>1.4.0</Version>
+  <Author>varghele</Author>
+ </Creator>
+ <Manufacturer>Litecraft</Manufacturer>
+ <Model>LED StudioPAR 25x3W</Model>
+ <Type>Color Changer</Type>
+ <Channel Name="Red" Preset="IntensityRed"/>
+ <Channel Name="Green" Preset="IntensityGreen"/>
+ <Channel Name="Blue" Preset="IntensityBlue"/>
+ <Mode Name="DMX-3CH">
+  <Channel Number="0">Red</Channel>
+  <Channel Number="1">Green</Channel>
+  <Channel Number="2">Blue</Channel>
+ </Mode>
+ <Physical>
+  <Bulb Type="LED" Lumens="2500" ColourTemperature="0"/>
+  <Dimensions Weight="3.0" Width="250" Height="280" Depth="180"/>
+  <Lens Name="Other" DegreesMin="30" DegreesMax="30"/>
+  <Focus Type="Fixed" PanMax="0" TiltMax="0"/>
+  <Technical PowerConsumption="80" DmxConnector="3-pin"/>
+ </Physical>
+</FixtureDefinition>

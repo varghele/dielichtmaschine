@@ -75,6 +75,16 @@ verbatim as the GitHub Release notes (see [docs/releasing.md](docs/releasing.md)
   now warns hard - in the app with Continue Anyway / Cancel, on the
   headless export CLI as a stderr warning.
 
+- **Six house-rig fixture definitions joined the bundled library**,
+  hand-authored from the official manufacturer manuals (committable
+  and portable, unlike GDTF Share downloads): Expolite TourLED 42CM
+  (Ar1.S), Litecraft LED StudioPAR 25x3W (3ch), Cameo Q-Spot 15 RGBW
+  (9CH), Cameo ROOT PAR 6 (D12CH), Cameo ROOT PAR 4 (D10CH), and the
+  Cameo HydraBeam 4000 RGBW as a per-head definition - one 56-channel
+  bar patches as four independent 14-channel moving heads, so each
+  head aims from its own stage position (PAN 540 / TILT 270 from the
+  manual drive the solver and the export).
+
 ### Changed
 
 - **The bundled demo rigs and shows now ship in the native `.lms`
