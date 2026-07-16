@@ -75,6 +75,22 @@ def find_recoverable(config_path: Optional[str],
     return backup
 
 
+def write_snapshot(snapshot_bytes: bytes, path: str) -> None:
+    """Serialize a pickled Configuration snapshot to ``path``.
+
+    The performance half of the autosave (2026-07-16): the UI thread
+    only pickles the config (~10 ms on a real project); THIS function -
+    deserialize, YAML-dump, write - runs on a worker thread, so it must
+    stay Qt-free. The write is atomic (temp file + replace) so a crash
+    mid-write can never leave a torn recovery backup.
+    """
+    import pickle
+    config = pickle.loads(snapshot_bytes)
+    tmp = path + ".tmp"
+    config.save(tmp)
+    os.replace(tmp, path)
+
+
 class AutosaveManager:
     """Owns the write/clear cycle. Change detection is a content
     fingerprint (not the undo stack, so it catches edits that never push

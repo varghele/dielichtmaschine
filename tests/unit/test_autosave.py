@@ -229,3 +229,50 @@ def test_launch_recovery_skips_when_a_project_is_already_open(
     fake.config_path = "/some/open/project.yaml"  # already working on a file
     MainWindow._offer_launch_recovery(fake)
     fake._rebind_tabs_to_config.assert_not_called()
+
+
+def test_write_snapshot_round_trips_and_is_atomic(tmp_path):
+    """The worker half of the async autosave (2026-07-16 performance
+    pass): a pickled Configuration snapshot deserializes, saves, and
+    replaces atomically - no .tmp file survives a successful write."""
+    import pickle
+    from config.models import Configuration, Universe
+    from utils.autosave import write_snapshot
+
+    cfg = Configuration(universes={0: Universe(id=0, name="U0",
+                                               output={})})
+    cfg.songs = {}
+    cfg.stage_width = 7.5
+    path = str(tmp_path / "snap.yaml.autosave")
+    write_snapshot(pickle.dumps(cfg, 5), path)
+    assert os.path.exists(path)
+    assert not os.path.exists(path + ".tmp")
+    back = Configuration.load(path)
+    assert back.stage_width == 7.5
+    assert 0 in back.universes
+
+
+def test_manager_retries_after_a_busy_writer(tmp_path):
+    """A save_fn that raises OSError (the async writer's backpressure)
+    must leave the manager dirty so the next tick retries."""
+    from utils.autosave import AutosaveManager
+
+    content = {"v": 1}
+    written = []
+    busy = {"now": True}
+
+    def save_fn(path):
+        if busy["now"]:
+            raise OSError("writer busy")
+        written.append(path)
+
+    manager = AutosaveManager(save_fn=save_fn,
+                              fingerprint_fn=lambda: content["v"],
+                              current_path=lambda: None,
+                              fallback_dir=str(tmp_path))
+    manager.prime()
+    content["v"] = 2                     # dirty
+    assert manager.maybe_backup() is None    # busy -> treated as failed
+    busy["now"] = False
+    assert manager.maybe_backup() is not None  # retried and written
+    assert written

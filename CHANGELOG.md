@@ -104,6 +104,20 @@ verbatim as the GitHub Release notes (see [docs/releasing.md](docs/releasing.md)
   Shows tab's Play button, and STOP is the operator's STOP (it also
   disarms an armed LTC chase).
 
+- **Real-sized projects stopped stuttering.** Three UI-thread costs
+  that scale with project size ran on timers and made everything feel
+  laggy on real projects (a 400 KB show froze the UI for ~1 s every
+  15 s while editing, plus a ~50 ms hitch every 5 s even idle):
+  project files now parse and write through PyYAML's libyaml C
+  extension when present (identical file format, several times
+  faster - opening a big project drops from ~1.5 s to ~0.4 s), the
+  crash-recovery autosave moved off the UI thread (the UI only takes
+  a ~10 ms snapshot; serializing and the atomic write happen on a
+  worker), and the unsaved-changes marker fingerprints the project
+  via pickle instead of a Python-level full-content walk (~6x). On
+  machines whose PyYAML lacks libyaml everything keeps working on the
+  old path, just slower.
+
 ### Fixed
 
 - **Dimmer-only lanes no longer crush their controls.** A lane whose

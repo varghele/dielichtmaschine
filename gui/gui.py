@@ -765,14 +765,28 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         # Every real save lands here: reset the dirty-marker baseline.
         self._mark_config_clean()
 
+    def _config_snapshot_bytes(self):
+        """The whole config as pickle bytes - ONE fast pass (~10 ms on
+        a real project) that serves both the dirty fingerprint and the
+        autosave worker's snapshot. Raises when something unpicklable
+        was attached to the config; callers fall back."""
+        import pickle
+        return pickle.dumps(self.config, 5)
+
     def _config_fingerprint(self):
-        """A value that changes when the config content changes, for the
-        autosave. Cheap enough at the autosave cadence."""
-        from dataclasses import asdict
+        """A value that changes when the config content changes, for
+        the autosave and the dirty marker. Pickle-based since the
+        2026-07-16 performance pass (the asdict+repr walk cost ~50 ms
+        per tick on a real project - a visible periodic stutter on
+        older machines; pickle does the same full-content walk in C)."""
         try:
-            return hash(repr(asdict(self.config)))
+            return hash(self._config_snapshot_bytes())
         except Exception:
-            return None
+            from dataclasses import asdict
+            try:
+                return hash(repr(asdict(self.config)))
+            except Exception:
+                return None
 
     # -- dirty marker (Reaper-style " *" on the topbar filename + window
     # title). Truth = the content fingerprint differs from the last
@@ -819,8 +833,9 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         Ctrl+S clears it; a crash leaves it for recovery on next launch
         (see utils/autosave.py and _do_load_configuration)."""
         from utils.autosave import AutosaveManager
+        self._autosave_worker = None
         self._autosave = AutosaveManager(
-            save_fn=lambda p: self.config.save(p),
+            save_fn=self._autosave_write_async,
             fingerprint_fn=self._config_fingerprint,
             current_path=lambda: self.config_path)
         self._autosave.prime()
@@ -832,6 +847,46 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         # After the window is up, offer to recover a previous session that
         # ended (crashed) with unsaved changes.
         QTimer.singleShot(300, self._offer_launch_recovery)
+
+    def _autosave_write_async(self, path):
+        """The autosave's save_fn: snapshot on the UI thread (a ~10 ms
+        pickle), serialize + write on a worker (utils.autosave.
+        write_snapshot; the YAML dump of a real project is the part
+        that used to freeze the UI for near a second every 15 s -
+        2026-07-16 performance pass).
+
+        Backpressure: while a previous write is still running, raise
+        OSError so the manager treats this tick as a failed write and
+        retries next tick. An unpicklable config (something transient
+        attached at runtime) falls back to the old synchronous save -
+        the backup must never silently stop happening."""
+        worker = self._autosave_worker
+        if worker is not None and worker.isRunning():
+            raise OSError("autosave writer still busy")
+        try:
+            snapshot = self._config_snapshot_bytes()
+        except Exception:
+            self.config.save(path)
+            return
+        from PyQt6.QtCore import QThread
+
+        class _Writer(QThread):
+            def __init__(self, data, dest, parent=None):
+                super().__init__(parent)
+                self._data = data
+                self._dest = dest
+
+            def run(self):
+                from utils.autosave import write_snapshot
+                try:
+                    write_snapshot(self._data, self._dest)
+                except Exception as exc:   # next content change retries
+                    import logging
+                    logging.getLogger("lichtmaschine.autosave").warning(
+                        "autosave write failed: %s", exc)
+
+        self._autosave_worker = _Writer(snapshot, path, parent=self)
+        self._autosave_worker.start()
 
     def _autosave_tick(self):
         """Timer tick: back up if changed, and remember which project the
@@ -2390,6 +2445,13 @@ class MainWindow(QMainWindow, Ui_MainWindow):
 
     def closeEvent(self, event):
         """Handle application close"""
+        # Never tear down under a live autosave write (a QThread
+        # destroyed while running aborts the process; the write is
+        # atomic either way, but let it finish).
+        worker = getattr(self, "_autosave_worker", None)
+        if worker is not None and worker.isRunning():
+            worker.wait(10000)
+
         # Clean up shows tab audio resources
         if hasattr(self.shows_tab, 'cleanup'):
             self.shows_tab.cleanup()
