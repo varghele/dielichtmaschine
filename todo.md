@@ -86,6 +86,18 @@ the desk can judge:
 - [ ] Orientation panel: the two INVERT DMX checkboxes on a mover,
       confirm the head mirrors on the wire and in a fresh .qxw.
 
+## Performance follow-ups (parked 2026-07-16, after the big three)
+
+The 2026-07-16 perf pass fixed the timer-driven UI freezes (libyaml
+fast path, async autosave, pickle fingerprint). Two smaller hitches
+remain, both one-off rather than periodic:
+
+- [ ] Song switching blocks ~90 ms on the audio-waveform worker
+      (audio/audio_waveform_widget.py run/wait during _load_show) -
+      let the waveform arrive late instead of waiting.
+- [ ] Structure tab full rebuild costs ~265 ms (setlist rail re-style:
+      82 setStyleSheet calls per pass) - cache or diff the rail.
+
 ## Post-release verification (user, needs hardware/desktop)
 
 Originally the v1.4.0 release gate; the bench session was postponed

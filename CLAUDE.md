@@ -522,3 +522,21 @@ test_dmx_invert.py). Remaining for v1.5.0: the user's desktop/bench
 checks (todo.md) + release ritual. Bench artifacts (tester.lms,
 bench_kit.*, scenes/bench/) are untracked ON PURPOSE and live only on
 the desk PC.
+
+**Testing round on the recovered SBD project (2026-07-16, same
+branch):** the user's real project (shoo_bee_doom/, untracked;
+recovered from archive/conf_v7.yaml) exposed what demo-sized data
+never could. Fixed: patchbay capability gating was a no-op on loaded
+configs (now detected from definitions), the compile errored per
+edge x song on per-song lanes (now skips silently), morphed songs
+lost their audio reference, dimmer-only lanes were crushed in the
+timeline grid (mute/solo unreachable), and three timer-driven
+UI-thread costs made real projects stutter (libyaml C dumper/loader -
+output text-identical, pinned; autosave snapshot-then-worker via
+utils/autosave.write_snapshot; pickle-based dirty fingerprint).
+Added: the Live tab's SHOW transport strip (LiveShowTransport adapter,
+operator semantics - its STOP disarms an armed chase) and six
+manual-authored house fixture .qxfs in custom_fixtures (Cameo
+HydraBeam 4000 RGBW is modelled PER HEAD, 4x14ch per bar). PERF RULE
+learned: anything on a timer that walks the whole config must be
+measured against a ~1 MB project, not the demos.
