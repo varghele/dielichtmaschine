@@ -2505,6 +2505,13 @@ class StageTab(BaseTab):
                     config_fixture.z = values['z_height']
                     config_fixture.orientation_uses_group_default = False
                     config_fixture.z_uses_group_default = False
+                    # Per-fixture DMX inversion (v1.5a): only written
+                    # when the panel provided the keys, so older
+                    # values dicts stay valid.
+                    if 'invert_pan' in values:
+                        config_fixture.invert_pan = values['invert_pan']
+                    if 'invert_tilt' in values:
+                        config_fixture.invert_tilt = values['invert_tilt']
 
         if values.get('apply_to_group') and self.config:
             groups = set(f.group for f in fixture_items if hasattr(f, 'group') and f.group)

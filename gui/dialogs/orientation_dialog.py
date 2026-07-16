@@ -2122,7 +2122,39 @@ class OrientationPanel(QWidget):
         gd_layout.addWidget(self.apply_to_group_checkbox)
         self._refresh_apply_to_group(self.fixtures)
 
+        # Per-fixture DMX direction inversion (v1.5a, the last yoke
+        # sliver): for a head whose physical pan/tilt runs opposite to
+        # its definition. Wire + export boundaries only; the 3D preview
+        # above deliberately ignores it (it shows solver convention).
+        self.invert_pan_checkbox = QCheckBox("Invert pan DMX output")
+        self.invert_tilt_checkbox = QCheckBox("Invert tilt DMX output")
+        for box in (self.invert_pan_checkbox, self.invert_tilt_checkbox):
+            box.setToolTip(
+                "Flips this fixture's channel direction on the wire and "
+                "in the QLC+ export - use when the physical head runs "
+                "opposite to every calculated aim. The 3D preview is "
+                "unaffected.")
+            gd_layout.addWidget(box)
+        first = self._first_config_fixture()
+        if first is not None:
+            self.invert_pan_checkbox.setChecked(
+                getattr(first, "invert_pan", False))
+            self.invert_tilt_checkbox.setChecked(
+                getattr(first, "invert_tilt", False))
+
         layout.addWidget(group_defaults_group)
+
+    def _first_config_fixture(self):
+        """The config Fixture behind the first selected item, for
+        initializing per-fixture flags."""
+        if not self.fixtures or self.config is None:
+            return None
+        name = getattr(self.fixtures[0], "fixture_name",
+                       getattr(self.fixtures[0], "name", None))
+        for fixture in getattr(self.config, "fixtures", []):
+            if fixture.name == name:
+                return fixture
+        return None
 
     @staticmethod
     def _format_info_text(fixtures: list) -> str:
@@ -2413,7 +2445,9 @@ class OrientationPanel(QWidget):
             'pitch': self.pitch_spin.value(),
             'roll': self.roll_spin.value(),
             'z_height': self.z_spin.value(),
-            'apply_to_group': self.apply_to_group_checkbox.isChecked()
+            'apply_to_group': self.apply_to_group_checkbox.isChecked(),
+            'invert_pan': self.invert_pan_checkbox.isChecked(),
+            'invert_tilt': self.invert_tilt_checkbox.isChecked(),
         }
 
     def cleanup(self) -> None:

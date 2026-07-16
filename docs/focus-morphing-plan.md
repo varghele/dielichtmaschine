@@ -78,7 +78,21 @@ assume one active config.
       `target_plane` (StagePlane ref), keeping `target_spot_name` as the
       spot key. Pan/tilt fields remain as authored-fallback + migration
       source. YAML schema bump, old configs load unchanged.
-- [ ] **Per-fixture IK resolution at export**, range-aware (the
+- [x] **Per-fixture IK resolution at export** - CLOSED BY VERIFICATION
+      2026-07-16: every export aim already flows through utils/yoke.py
+      at the definition's real Focus ranges (the 2026-07-13/14 yoke
+      work closed this; the 540/270 claim in older notes was stale).
+      Pinned by TestRangeAwareExportPin in tests/unit/test_dmx_invert.py -
+      no code change, NO byte-identity break needed (demo-show hashes
+      unchanged). The same commit shipped the LAST v1.5a sliver:
+      per-fixture DMX invert flags (Fixture.invert_pan/invert_tilt,
+      applied at the wire in the arbiter hardware pass - including
+      invert-only fixtures without a yoke chain - and at export in
+      convert_solver_dmx/export_aim_dmx; UI placement decided: the
+      orientation panel's Group Defaults box, initialized from the
+      fixture, written by the stage tab apply; solver/visualizer
+      deliberately untouched).
+      Original scope: range-aware (the
       definition's real pan/tilt ranges instead of 540/270), through the
       yoke conversion that playback already uses. THIS INTENTIONALLY
       BREAKS byte-identical export for mover rigs: hash demos/shows/

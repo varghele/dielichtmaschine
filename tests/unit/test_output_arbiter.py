@@ -544,7 +544,8 @@ class TestHardwareYokeConversion:
         # frame it touched, independent of the real math.
         monkeypatch.setattr(yoke, "fixture_yoke", lambda *a: (True, True))
 
-        def fake_convert(buf, fmap, flipped):
+        def fake_convert(buf, fmap, flipped, convert=True,
+                         invert_pan=False, invert_tilt=False):
             _, ch = fmap.get_absolute_address(fmap.pan_channels[0])
             buf[ch] = 222
         monkeypatch.setattr(yoke, "apply_yoke_to_universe", fake_convert)

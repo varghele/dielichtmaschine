@@ -547,7 +547,11 @@ class OutputArbiter:
                 continue
             uses_chain, flipped = fixture_yoke(
                 fx.manufacturer, fx.model, getattr(fmap, "mode_name", ""))
-            if not uses_chain:
+            invert_pan = getattr(fx, "invert_pan", False)
+            invert_tilt = getattr(fx, "invert_tilt", False)
+            # No yoke chain AND no inversion = nothing to rewrite; an
+            # inverted head converts (invert-only) even without a chain.
+            if not uses_chain and not (invert_pan or invert_tilt):
                 continue
             universe = fmap.universe
             buf = merged.get(universe)
@@ -555,7 +559,10 @@ class OutputArbiter:
                 continue
             if universe not in converted:
                 converted[universe] = bytearray(buf)
-            apply_yoke_to_universe(converted[universe], fmap, flipped)
+            apply_yoke_to_universe(converted[universe], fmap, flipped,
+                                   convert=uses_chain,
+                                   invert_pan=invert_pan,
+                                   invert_tilt=invert_tilt)
         if not converted:
             return merged
         return {u: converted.get(u, merged[u]) for u in merged}
