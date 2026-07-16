@@ -283,3 +283,14 @@ assume one active config.
   uses evenly spaced gobo DMX values until routed capability values
   ride the GDTF work; the scrub item is operator-driven (no transport
   automation from the dialog).
+- 2026-07-16 (later): EVERY plan item is closed. Inline: DMX invert
+  flags (wire + export, orientation panel UI) and the range-aware
+  export closed by verification (already real since the yoke work -
+  pinned, no byte break). Agents: the pre-flight SCREEN (preflight
+  layer on the arbiter's exclusive slot, Tools > Venue Pre-Flight +
+  wizard hook, capture -> Fixture.calibration, export guard in
+  create_workspace + CLI) and the wizard preview scrub + colour
+  palette-role picker. Final: 2861 unit + 111 e2e/visual green; stage
+  inspector golden regenerated (invert checkboxes, reviewed). v1.5
+  code scope is COMPLETE pending the user's desktop/bench checks and
+  the v1.5.0 release ritual (not tagged - user said no release).
