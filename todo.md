@@ -55,6 +55,33 @@ checks below pass; v1.4 work continues on `v1.4-standalone-switch`.
       audio host APIs, arbiter output state, project + log paths) and
       a COPY TO CLIPBOARD dialog. 11 probe-injected tests.
 
+## v1.5 desktop checks (user; any PC with a GPU except the bench item)
+
+The whole v1.5 scope is code-complete on `v1.5-focus-morphing`
+(2026-07-16; status log in docs/focus-morphing-plan.md). Everything is
+unit-tested offscreen; these verify the parts only a real screen or
+the desk can judge:
+
+- [ ] Morph to Venue end to end on demo data: open demos/shows/
+      club_band.yaml, File > Morph to Venue, target
+      demos/rigs/band_midsize.yaml, AUTO-SUGGEST, eyeball the patchbay
+      (wire curves, chip gating, checker strip), review page: coverage
+      table + RENDER PREVIEW side-by-side under real GL, commit, open
+      the morphed show in the timeline.
+- [ ] Click-to-aim live: select a movement block in the Shows tab,
+      Stage tab AIM toggle, click the plan - the block's target and
+      the 3D beam should follow.
+- [ ] Tools > Convert Movement to World Targets on a real project -
+      read the report table, apply, confirm beams land where they did.
+- [ ] Colour palette roles: tag two blocks with a role, EDIT PALETTE,
+      change the colour - both blocks re-skin.
+- [ ] Pre-flight against the bench rig (desk PC): Tools > Venue
+      Pre-Flight with the Hero Spots patched - flash, aim at Spot1,
+      capture focus, complete; then export and see the guard stay
+      quiet (and warn after touching an orientation).
+- [ ] Orientation panel: the two INVERT DMX checkboxes on a mover,
+      confirm the head mirrors on the wire and in a fresh .qxw.
+
 ## Post-release verification (user, needs hardware/desktop)
 
 Originally the v1.4.0 release gate; the bench session was postponed

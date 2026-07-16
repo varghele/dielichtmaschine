@@ -482,3 +482,34 @@ env name, doc links all swept). Work continues on
 **v1.5-focus-morphing** (v1.5a focus geometry + v1.5b morphing =
 v1.5.0); the user is supplying a morphing-theory md to reconcile
 against the ROADMAP v1.5a/b sections before planning.
+
+**v1.5 code-complete (2026-07-16, branch `v1.5-focus-morphing`, ~19
+commits, 2861 unit + 111 e2e/visual green):** the user's design doc
+`docs/design-show-morphing.md` is the morphing authority;
+`docs/focus-morphing-plan.md` is the task derivation with a CLOSED
+status log recording every decision - read both before touching v1.5
+code. Shipped: deterministic group topology (fixture_order/order_mode;
+legacy configs snapshot, new groups spatial), stable lane ids, colour
+palette roles (ColourBlock.palette_role + Song.palette/apply_palette +
+editor role picker/EDIT PALETTE in the colour block dialog),
+world-space movement targets (target_point everywhere; export gained
+the world-plane path; Tools > Convert Movement to World Targets; AIM
+click-to-aim on the Stage tab; spot/plane/point combo in the movement
+editor), the WHOLE morph engine (utils/morph/: plan, compile, checker,
+analysis_cache, preview, preflight + morph_cli; `python main.py morph`),
+the patchbay + Morph to Venue wizard (gui/dialogs/morph_patchbay.py /
+morph_wizard.py, per mockup 15-morph-patch-flow-6d), the pre-flight
+screen (gui/dialogs/preflight_dialog.py + utils/artnet/preflight_layer
+on the arbiter's exclusive slot; capture -> Fixture.calibration ONLY;
+export guard live in create_workspace + export CLI), per-fixture DMX
+invert flags (orientation panel; wire+export boundaries only), and
+Fixture.calibration. KEY TRAPS: morphed lane ids are DERIVED for
+determinism; the morph compile MUTATES config B in two reported cases
+(subset groups, default spots) - deepcopy B for dry runs; two live
+standalone moderngl contexts on one thread are unsafe (preview renders
+sequentially); the range-aware-export roadmap claim was STALE - the
+export has aimed at real Focus ranges since the yoke work (pinned in
+test_dmx_invert.py). Remaining for v1.5.0: the user's desktop/bench
+checks (todo.md) + release ritual. Bench artifacts (tester.lms,
+bench_kit.*, scenes/bench/) are untracked ON PURPOSE and live only on
+the desk PC.
