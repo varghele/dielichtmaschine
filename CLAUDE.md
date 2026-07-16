@@ -564,7 +564,29 @@ stellwerk_hinten rig/morphed configs (venue-true geometry: hall
 16x5m, 4m ceiling, 5x5m stage at 0.5m; builder + morph scripts with
 TARGET_COMPRESS look-squeeze option) + ltc/ per-song 25fps WAVs
 (song N = hour N, trigger at NN:00:02:00) + audio + rider PDF;
-gdtf_fixtures/ = the Hero Spot 60 Share GDTF; dist/Lichtmaschine/ =
+gdtf_fixtures/ = auto-pulled Share GDTFs (Hero Spot 60 + TourLED +
+ROOT PARs and more - TourLED/ROOT PAR 4 shadow the manual .qxfs,
+verified wire-compatible 2026-07-17); dist/Lichtmaschine/ =
 the rehearsal .exe (rebuild: pyinstaller lichtmaschine.spec).
 Share credentials live in the per-machine Windows vault - re-enter
 via Settings > GDTF Share Account on any new PC.
+
+**Gig-prep night pass (2026-07-17, gig-data only, no app code):**
+both .lms setlists are sync_mode smpte (make_ltc.py set triggers but
+never sync_mode - ARM CHASE is hidden without it); all 12 ltc/ WAVs
+decoder-verified (hour N, 25 fps, trigger inside file); every audio
+ref is a basename resolving in shoo_bee_doom/audiofiles/ (three
+C:/LICHT absolutes copied in, two empty refs filled). Head aims obey
+the user's floor-or-stage rule via named venue spots (drag on site,
+show follows): SpotLeft + Spot2 replace the two baked out-of-room
+points (shoo_bee_doom/retarget_heads.py), FloorCentre/StageCentre
+rescue geometry-impossible far throws and amplitudes are scaled into
+the room per block (shoo_bee_doom/tame_head_envelopes.py; both
+scripts MUST RE-RUN after any re-morph, in that order). Verified by
+replaying playback math: 0 aim misses, 0 dominant side/ceiling
+blocks, per-song 75-95% of sampled beams land on stage/floor/
+backdrop. scenes/stellwerk/ = 12-scene busk cluster for the support
+band (smoke-tested through LiveBuskLayer). Two v1.5 bugs exposed and
+parked in todo.md: shows playback never gets stage planes;
+LightBlock.provenance is dropped by the compact serializer.
+Pre-pass backups: shoo_bee_doom/backup_20260717/.
