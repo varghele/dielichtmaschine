@@ -71,6 +71,21 @@ class Fixture:
     definition_source: str = "qxf"
     gdtf_fixture_type_id: Optional[str] = None
 
+    # Per-fixture DMX direction inversion (the last v1.5a yoke sliver):
+    # a head whose physical pan/tilt runs opposite to its definition's
+    # convention. Applied at the WIRE and EXPORT boundaries only (the
+    # same places the yoke conversion lives) - solver/visualizer math
+    # never sees it. Defaults keep every existing config identical.
+    invert_pan: bool = False
+    invert_tilt: bool = False
+
+    # Venue calibration captured by the pre-flight (design doc 7.1):
+    # physical-truth values the operator captured on site, e.g.
+    # {"focus": 132, "zoom": 90}. Recorded per fixture in the CONFIG,
+    # never in show blocks. Consumers arrive with the pre-flight
+    # screen; empty dict = never calibrated.
+    calibration: Dict = field(default_factory=dict)
+
     def __post_init__(self, group: Optional[str]):
         # Defensive: a YAML `groups:` key that is present but null.
         if self.groups is None:
