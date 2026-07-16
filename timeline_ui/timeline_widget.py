@@ -308,9 +308,28 @@ class TimelineWidget(QWidget):
         self.update()
 
     def set_playhead_position(self, position: float):
-        """Set playhead position and update display."""
+        """Set playhead position and repaint ONLY the playhead strips.
+
+        Playback drives this at ~30 FPS on every stripe; a full
+        update() repainted each stripe's whole visible canvas -
+        ~137 ms per tick on a real project, which saturated the UI
+        thread (the 2026-07-16 playback-lag finding). Between ticks
+        nothing but the 2 px line moves, so invalidate a few pixels
+        around the old and new positions instead. Every other
+        invalidation path (zoom, scroll, edits) still full-updates.
+        """
+        old = self.playhead_position
         self.playhead_position = position
-        self.update()
+        if old == position:
+            return
+        height = self.height()
+        for pos in (old, position):
+            x = round(self.time_to_pixel(pos))
+            # QWidget.update directly: this class's update() override
+            # runs the sublane-label settings hook, which is for the
+            # Settings-toggle path and costs real milliseconds - not
+            # for 30 FPS playhead ticks.
+            QWidget.update(self, x - 4, 0, 9, height)
 
     def get_current_bpm(self) -> float:
         """Get BPM at current playhead position."""
@@ -450,18 +469,19 @@ class TimelineWidget(QWidget):
         seconds_per_beat = 60.0 / self.bpm
         return _snap_in_frame(target_time, 0.0, seconds_per_beat, subdivision, swing)
 
-    def draw_grid(self, painter, width, height):
-        """Draw grid with song structure awareness."""
+    def draw_grid(self, painter, width, height, clip=None):
+        """Draw grid with song structure awareness. ``clip`` bounds the
+        x-range actually drawn (None = everything)."""
         if self.song_structure and hasattr(self.song_structure, 'parts') and self.song_structure.parts:
             try:
-                self.draw_song_structure_grid(painter, width, height)
+                self.draw_song_structure_grid(painter, width, height, clip)
             except Exception as e:
                 print(f"Error drawing song structure grid: {e}")
-                self.draw_basic_grid(painter, width, height)
+                self.draw_basic_grid(painter, width, height, clip)
         else:
-            self.draw_basic_grid(painter, width, height)
+            self.draw_basic_grid(painter, width, height, clip)
 
-    def draw_song_structure_grid(self, painter, width, height):
+    def draw_song_structure_grid(self, painter, width, height, clip=None):
         """Draw grid based on song structure, with optional sub-beat lines."""
         # Semi-transparent neutral gray reads on both dark and light themes
         # without needing explicit theme detection.
@@ -473,6 +493,11 @@ class TimelineWidget(QWidget):
         subdivision = getattr(self, "grid_subdivision", 1.0)
         swing = getattr(self, "swing_amount", 0.0)
         min_px = getattr(self, "min_subdivision_pixels", 12)
+        # Exposed x-range (a 9 px playhead strip during playback):
+        # parts and steps are time-ordered, so anything left of it is
+        # skipped and the loops break past its right edge.
+        clip_left = clip.left() - 2 if clip is not None else 0
+        clip_right = clip.right() + 2 if clip is not None else width
 
         num_parts = len(self.song_structure.parts)
         for part_idx, part in enumerate(self.song_structure.parts):
@@ -480,9 +505,16 @@ class TimelineWidget(QWidget):
             total_beats_in_part = int(part.num_bars * beats_per_bar)
             seconds_per_beat = 60.0 / part.bpm
 
-            # Draw part boundary
             start_x = round(self.time_to_pixel(part.start_time))
-            if 0 <= start_x <= width:
+            if start_x > clip_right:
+                break                    # parts are ordered: all done
+            end_x = round(self.time_to_pixel(
+                part.start_time + total_beats_in_part * seconds_per_beat))
+            if end_x < clip_left:
+                continue                 # entirely left of the clip
+
+            # Draw part boundary
+            if clip_left <= start_x <= clip_right and 0 <= start_x <= width:
                 painter.setPen(part_pen)
                 painter.drawLine(start_x, 0, start_x, height)
 
@@ -492,7 +524,9 @@ class TimelineWidget(QWidget):
                     total_beats_in_part, subdivision, swing, is_last_part,
                     self.pixels_per_second, min_px):
                 step_x = round(self.time_to_pixel(step_time))
-                if not (0 <= step_x <= width):
+                if step_x > clip_right:
+                    break                # steps are ordered too
+                if step_x < clip_left or not (0 <= step_x <= width):
                     continue
                 if kind == "bar":
                     painter.setPen(bar_pen)
@@ -502,7 +536,7 @@ class TimelineWidget(QWidget):
                     painter.setPen(sub_pen)
                 painter.drawLine(step_x, 0, step_x, height)
 
-    def draw_basic_grid(self, painter, width, height):
+    def draw_basic_grid(self, painter, width, height, clip=None):
         """Draw basic grid without song structure (time-based)."""
         sub_pen = QPen(QColor(127, 127, 127, 40), 1, Qt.PenStyle.DotLine)
         beat_pen = QPen(QColor(127, 127, 127, 80), 1)
@@ -512,6 +546,8 @@ class TimelineWidget(QWidget):
         swing = getattr(self, "swing_amount", 0.0)
         min_px = getattr(self, "min_subdivision_pixels", 12)
         seconds_per_beat = 60.0 / self.bpm
+        clip_left = clip.left() - 2 if clip is not None else 0
+        clip_right = clip.right() + 2 if clip is not None else width
 
         # Cover the visible width; treat it as one 4/4 "part".
         max_time = width / self.pixels_per_second
@@ -520,7 +556,9 @@ class TimelineWidget(QWidget):
                 0.0, seconds_per_beat, 4.0, total_beats, subdivision, swing,
                 True, self.pixels_per_second, min_px):
             x = round(self.time_to_pixel(step_time))
-            if not (0 <= x <= width):
+            if x > clip_right:
+                break                    # steps are time-ordered
+            if x < clip_left or not (0 <= x <= width):
                 continue
             if kind == "bar":
                 painter.setPen(bar_pen)
@@ -617,20 +655,30 @@ class TimelineWidget(QWidget):
         super().update(*args)
 
     def paintEvent(self, event):
-        """Draw the timeline."""
+        """Draw the timeline (culled to the exposed region).
+
+        The exposed rect matters: playback invalidates only narrow
+        playhead strips at ~30 FPS (the 2026-07-16 lag fix), and the
+        canvas is the FULL song wide - iterating every gridline for a
+        9 px strip cost more than the strip itself. The draw helpers
+        take the clip and skip work outside it; full repaints pass the
+        whole widget rect and behave exactly as before.
+        """
         super().paintEvent(event)
 
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        painter.setClipRect(event.rect())
 
         width = self.width()
         height = self.height()
+        clip = event.rect()
 
         # Draw song structure backgrounds first (subtle colors)
         self.draw_song_structure_background(painter, width, height)
 
         # Draw grid
-        self.draw_grid(painter, width, height)
+        self.draw_grid(painter, width, height, clip)
 
         # Draw sublane separators. (Sub-lane purpose labels are no longer
         # painted on the canvas - timeline v3 lists DIM/COL/MOV/SPC in the

@@ -8,6 +8,7 @@ session and a fake keyring module - no network, no OS vault.
 """
 
 import json
+import os
 import sys
 import types
 
@@ -504,3 +505,153 @@ class TestAccountDialog:
         assert dialog.account.user_edit.text() == "u"
         assert dialog.account.password_edit.text() == "p"
         assert dialog.account.remember_check.isChecked()
+
+
+class TestAutoPull:
+    """The project-load GDTF auto-pull (2026-07-16): exact-identity
+    matching only, and three keep gates - internal identity, channel
+    footprint, geometry presence. Everything drives fakes; nothing
+    touches the network or the real library."""
+
+    def _identity_entries(self):
+        return [
+            {"rid": 1, "manufacturer": "Varytec", "fixture": "Hero Spot 60",
+             "uploader": "Manufacturer", "rating": "5.0"},
+            {"rid": 2, "manufacturer": "Varytec", "fixture": "Hero_Spot_60",
+             "uploader": "User", "rating": "1.0"},
+            {"rid": 3, "manufacturer": "Cameo", "fixture": "Other Thing",
+             "uploader": "User", "rating": "5.0"},
+        ]
+
+    def test_candidates_match_exact_identity_only(self):
+        from utils.gdtf_share import autopull_candidates
+        result = autopull_candidates(
+            self._identity_entries(),
+            [("Varytec", "Hero Spot 60"), ("Stairville", "Wild Wash")])
+        assert list(result) == [("Varytec", "Hero Spot 60")]
+        # Underscored variant normalizes onto the same identity; the
+        # manufacturer upload outranks it.
+        assert result[("Varytec", "Hero Spot 60")]["rid"] == 1
+
+    def test_missing_identities_are_the_non_gdtf_ones(self, monkeypatch):
+        from types import SimpleNamespace
+        import utils.fixture_library as fl
+        from utils.gdtf_share import missing_gdtf_identities
+
+        def fake_get_definition(m, mo):
+            if mo == "HasGdtf":
+                return SimpleNamespace(gdtf=object())
+            if mo == "QxfOnly":
+                return SimpleNamespace(gdtf=None)
+            return None
+        monkeypatch.setattr(fl, "get_definition", fake_get_definition)
+
+        from config.models import Configuration, Fixture, FixtureMode, \
+            Universe
+
+        def fx(model):
+            return Fixture(universe=1, address=1, manufacturer="M",
+                           model=model, current_mode="Std",
+                           available_modes=[FixtureMode(name="Std",
+                                                        channels=5)],
+                           name=model, group="G")
+        cfg = Configuration(
+            fixtures=[fx("HasGdtf"), fx("QxfOnly"), fx("Unknown")],
+            groups={}, universes={1: Universe(id=1, name="U", output={})})
+        cfg.songs = {}
+        assert missing_gdtf_identities(cfg) == [
+            ("M", "QxfOnly"), ("M", "Unknown")]
+
+    def _pull_setup(self, tmp_path, monkeypatch, internal_model,
+                    mode_channels, has_geometry=True):
+        from types import SimpleNamespace
+        import utils.gdtf_share as gs
+        import utils.fixture_library as fl
+
+        monkeypatch.setattr(gs, "stored_username", lambda: "user")
+        monkeypatch.setattr(gs, "stored_password", lambda u: "pw")
+        monkeypatch.setattr(fl, "get_definition", lambda m, mo: None)
+
+        class FakeClient:
+            def login(self, user, password):
+                pass
+
+            def catalog(self, refresh=False):
+                return [{"rid": 9, "manufacturer": "Varytec",
+                         "fixture": "Hero Spot 60",
+                         "uploader": "Manufacturer", "rating": "5.0"}]
+
+            def download(self, entry, dest_dir):
+                path = os.path.join(dest_dir, "Varytec@Hero Spot 60.gdtf")
+                with open(path, "wb") as f:
+                    f.write(b"fake")
+                return path
+
+        fake_defn = SimpleNamespace(
+            manufacturer="Varytec", model=internal_model,
+            modes=[SimpleNamespace(name="14ch",
+                                   channels=[object()] * mode_channels)],
+            gdtf=object() if has_geometry else None)
+        import utils.gdtf_loader as gl
+        monkeypatch.setattr(gl, "parse_gdtf_file", lambda p: fake_defn)
+
+        from config.models import Configuration, Fixture, FixtureMode, \
+            Universe
+        fixture = Fixture(universe=1, address=1, manufacturer="Varytec",
+                          model="Hero Spot 60", current_mode="14 Channel",
+                          available_modes=[FixtureMode(name="14 Channel",
+                                                       channels=14)],
+                          name="MH1", group="MH")
+        cfg = Configuration(fixtures=[fixture], groups={},
+                            universes={1: Universe(id=1, name="U",
+                                                   output={})})
+        cfg.songs = {}
+        return gs, cfg, FakeClient()
+
+    def test_pull_keeps_a_compatible_gdtf(self, tmp_path, monkeypatch):
+        gs, cfg, client = self._pull_setup(tmp_path, monkeypatch,
+                                           "Hero Spot 60", 14)
+        kept = gs.pull_missing_gdtf(cfg, str(tmp_path), client=client)
+        assert len(kept) == 1 and os.path.exists(kept[0])
+
+    def test_pull_deletes_identity_mismatch(self, tmp_path, monkeypatch):
+        gs, cfg, client = self._pull_setup(tmp_path, monkeypatch,
+                                           "Hero Spot 90", 14)
+        kept = gs.pull_missing_gdtf(cfg, str(tmp_path), client=client)
+        assert kept == []
+        assert os.listdir(str(tmp_path)) == []
+
+    def test_pull_deletes_footprint_mismatch(self, tmp_path, monkeypatch):
+        """The shadow swaps the whole definition: a GDTF without a mode
+        matching the patched channel count would re-map the wire."""
+        gs, cfg, client = self._pull_setup(tmp_path, monkeypatch,
+                                           "Hero Spot 60", 12)
+        kept = gs.pull_missing_gdtf(cfg, str(tmp_path), client=client)
+        assert kept == []
+        assert os.listdir(str(tmp_path)) == []
+
+    def test_pull_deletes_geometryless_gdtf(self, tmp_path, monkeypatch):
+        gs, cfg, client = self._pull_setup(tmp_path, monkeypatch,
+                                           "Hero Spot 60", 14,
+                                           has_geometry=False)
+        kept = gs.pull_missing_gdtf(cfg, str(tmp_path), client=client)
+        assert kept == []
+
+    def test_pull_without_credentials_is_quiet(self, tmp_path,
+                                               monkeypatch):
+        import utils.gdtf_share as gs
+        import utils.fixture_library as fl
+        monkeypatch.setattr(gs, "stored_username", lambda: "")
+        monkeypatch.setattr(fl, "get_definition", lambda m, mo: None)
+        from config.models import Configuration, Fixture, FixtureMode, \
+            Universe
+        fixture = Fixture(universe=1, address=1, manufacturer="V",
+                          model="X", current_mode="Std",
+                          available_modes=[FixtureMode(name="Std",
+                                                       channels=1)],
+                          name="f", group="G")
+        cfg = Configuration(fixtures=[fixture], groups={},
+                            universes={1: Universe(id=1, name="U",
+                                                   output={})})
+        cfg.songs = {}
+        assert gs.pull_missing_gdtf(cfg, str(tmp_path)) == []

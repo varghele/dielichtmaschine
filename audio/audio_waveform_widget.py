@@ -4,7 +4,7 @@ Displays waveform envelope as semi-transparent overlay on timeline.
 """
 
 from PyQt6.QtWidgets import QWidget
-from PyQt6.QtGui import QPainter, QColor, QPen, QPolygonF
+from PyQt6.QtGui import QPainter, QColor, QPen, QPixmap, QPolygonF
 from PyQt6.QtCore import Qt, QPointF, QThread, pyqtSignal
 from typing import Optional
 import numpy as np
@@ -165,8 +165,26 @@ class AudioWaveformWidget(QWidget):
             self.draw_no_audio_state(painter, width, height)
             return
 
-        # Draw waveform
-        self.draw_waveform(painter, width, height)
+        # Draw the waveform from the render cache: the widget spans the
+        # FULL song canvas and sits under the playhead overlay, so
+        # playback's ~30 FPS strip invalidations repaint slices of it -
+        # rebuilding the peak polygon in Python cost ~60 ms per tick on
+        # a real project (2026-07-16 lag fix). The polygon renders once
+        # per (size, zoom, scroll, data) into a pixmap; ticks just blit
+        # the exposed slice.
+        key = (width, height, self.zoom_factor, self.scroll_offset,
+               id(self.waveform_data))
+        cached = getattr(self, "_render_cache", None)
+        if cached is None or cached[0] != key:
+            pixmap = QPixmap(width, height)
+            pixmap.fill(Qt.GlobalColor.transparent)
+            cache_painter = QPainter(pixmap)
+            cache_painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+            self.draw_waveform(cache_painter, width, height)
+            cache_painter.end()
+            cached = (key, pixmap)
+            self._render_cache = cached
+        painter.drawPixmap(event.rect(), cached[1], event.rect())
 
     def draw_waveform(self, painter: QPainter, width: int, height: int):
         """Draw the actual waveform"""

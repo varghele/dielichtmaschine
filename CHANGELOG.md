@@ -85,6 +85,17 @@ verbatim as the GitHub Release notes (see [docs/releasing.md](docs/releasing.md)
   head aims from its own stage position (PAN 540 / TILT 270 from the
   manual drive the solver and the export).
 
+- **GDTF definitions fetch themselves.** After a project loads, the
+  app quietly pulls GDTF files from GDTF Share for the fixtures the
+  project uses (so the visualizer renders native 3D models instead of
+  procedural chassis) - when the machine is online and a Share account
+  is stored, and never otherwise: an offline venue laptop behaves
+  exactly as before. Only exact-identity matches are taken, and a
+  downloaded file is kept only when its internal identity matches and
+  it offers the channel footprint the fixtures are patched with - a
+  GDTF swap changes the fixture's whole definition, so anything less
+  strict could silently re-map the DMX wire.
+
 ### Changed
 
 - **The bundled demo rigs and shows now ship in the native `.lms`
@@ -104,6 +115,20 @@ verbatim as the GitHub Release notes (see [docs/releasing.md](docs/releasing.md)
   Shows tab's Play button, and STOP is the operator's STOP (it also
   disarms an armed LTC chase).
 
+- **Playback no longer saturates the UI thread.** During playback the
+  ~30 FPS visual tick fully repainted every timeline stripe's canvas -
+  measured at 4.1 seconds of paint work demanded per second on a real
+  project. Four fixes: moving the playhead now invalidates only narrow
+  strips around the old and new line; the grid painters cull to the
+  exposed region (parts and steps are time-ordered, so a 9 px strip
+  costs a handful of lines); the audio waveform renders its peak
+  polygon once into a cached pixmap and ticks just blit the exposed
+  slice; and the waveform peak cache moved from a multi-second,
+  non-atomic JSON blob (an interrupted write corrupted it forever,
+  forcing re-analysis on every song load) to an atomic binary format
+  that round-trips in milliseconds. Net: the per-tick paint cost
+  dropped about 6.5x, and song loads with a warm cache skip analysis
+  entirely.
 - **Real-sized projects stopped stuttering.** Three UI-thread costs
   that scale with project size ran on timers and made everything feel
   laggy on real projects (a 400 KB show froze the UI for ~1 s every

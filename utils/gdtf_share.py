@@ -267,3 +267,136 @@ def clear_password(user: str) -> None:
         keyring.delete_password(KEYRING_SERVICE, user)
     except Exception:
         pass
+
+
+# ---------------------------------------------------------------------------
+# Auto-pull (2026-07-16): fetch GDTF definitions for the fixtures a
+# project actually uses, so the visualizer renders native models
+# without a manual browser trip. gui.py runs pull_missing_gdtf on a
+# worker thread after a project load, gated on stored credentials and
+# the gdtf_share/auto_pull setting; every failure path is quiet - a
+# venue laptop without internet must behave exactly as before.
+# ---------------------------------------------------------------------------
+
+AUTO_PULL_KEY = "gdtf_share/auto_pull"
+
+
+def auto_pull_enabled() -> bool:
+    from utils.app_settings import app_settings
+    return app_settings().value(AUTO_PULL_KEY, True, type=bool)
+
+
+def set_auto_pull_enabled(enabled: bool) -> None:
+    from utils.app_settings import app_settings
+    settings = app_settings()
+    settings.setValue(AUTO_PULL_KEY, bool(enabled))
+    settings.sync()
+
+
+def _norm_identity(text: str) -> str:
+    return " ".join((text or "").lower().replace("_", " ").split())
+
+
+def missing_gdtf_identities(config) -> list:
+    """(manufacturer, model) pairs used by the config whose resolved
+    definition carries no GDTF geometry (i.e. would render as a
+    procedural chassis)."""
+    from utils.fixture_library import get_definition
+    missing = []
+    for manufacturer, model in sorted({(f.manufacturer, f.model)
+                                       for f in config.fixtures}):
+        if not manufacturer or not model:
+            continue
+        defn = get_definition(manufacturer, model)
+        if defn is None or defn.gdtf is None:
+            missing.append((manufacturer, model))
+    return missing
+
+
+def autopull_candidates(catalog: list, identities: list) -> dict:
+    """{identity: best catalog entry} for entries whose manufacturer +
+    fixture name match an identity exactly (case / underscore / extra
+    whitespace insensitive - anything looser risks shadowing a fixture
+    with a DIFFERENT product, which would silently change its channel
+    map)."""
+    wanted = {(_norm_identity(m), _norm_identity(mo)): (m, mo)
+              for m, mo in identities}
+    hits = {}
+    for entry in catalog:
+        key = (_norm_identity(entry.get("manufacturer")),
+               _norm_identity(entry.get("fixture")))
+        identity = wanted.get(key)
+        if identity is not None:
+            hits.setdefault(identity, []).append(entry)
+    return {identity: sorted(entries, key=rank_key, reverse=True)[0]
+            for identity, entries in hits.items()}
+
+
+def _footprints_for_identity(config, manufacturer: str, model: str) -> set:
+    """The channel footprints the config's fixtures of this identity
+    are patched with (from their stored available_modes)."""
+    footprints = set()
+    for fixture in config.fixtures:
+        if fixture.manufacturer != manufacturer or fixture.model != model:
+            continue
+        for mode in fixture.available_modes or []:
+            if mode.name == fixture.current_mode:
+                footprints.add(int(mode.channels))
+    return footprints
+
+
+def pull_missing_gdtf(config, dest_dir: str, client=None) -> list:
+    """Download exact-identity GDTFs for the config's non-GDTF
+    fixtures. Returns the file paths KEPT.
+
+    Safety gates, in order: stored credentials must exist; the
+    downloaded file's INTERNAL identity must match (that is what the
+    library keys on - a catalog name match alone does not shadow);
+    and the GDTF must offer a mode matching every affected fixture's
+    patched channel footprint (a shadow swaps the whole definition,
+    so a footprint mismatch would silently re-map the wire). Files
+    failing a gate are deleted. All network/parse failures return
+    what was kept so far, quietly."""
+    import os as _os
+
+    identities = missing_gdtf_identities(config)
+    if not identities:
+        return []
+    user = stored_username()
+    password = stored_password(user)
+    if not user or not password:
+        return []
+
+    kept = []
+    try:
+        if client is None:
+            client = GDTFShareClient()
+        client.login(user, password)
+        candidates = autopull_candidates(client.catalog(), identities)
+    except Exception:
+        return []
+
+    from utils.gdtf_loader import parse_gdtf_file
+    _os.makedirs(dest_dir, exist_ok=True)
+    for (manufacturer, model), entry in sorted(candidates.items()):
+        try:
+            path = client.download(entry, dest_dir)
+            defn = parse_gdtf_file(path)
+        except Exception:
+            continue
+        internal = (_norm_identity(defn.manufacturer),
+                    _norm_identity(defn.model))
+        if internal != (_norm_identity(manufacturer),
+                        _norm_identity(model)):
+            _os.remove(path)
+            continue
+        gdtf_footprints = {len(m.channels) for m in defn.modes}
+        needed = _footprints_for_identity(config, manufacturer, model)
+        if needed and not needed <= gdtf_footprints:
+            _os.remove(path)
+            continue
+        if defn.gdtf is None:
+            _os.remove(path)          # no geometry: nothing gained
+            continue
+        kept.append(path)
+    return kept

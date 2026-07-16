@@ -1508,6 +1508,12 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             # persist.
             self._offer_legacy_csv_merge()
 
+            # Fetch GDTF definitions for this project's fixtures in the
+            # background so the visualizer renders native models
+            # (stored Share credentials + internet permitting - quiet
+            # otherwise).
+            self._start_gdtf_autopull()
+
         except Exception as e:
             self.progress_manager.finish_modal()
             print(f"Error loading configuration: {e}")
@@ -1520,6 +1526,64 @@ class MainWindow(QMainWindow, Ui_MainWindow):
                 f"Failed to load "
                 f"{getattr(self, '_pending_config_path', 'project')}:"
                 f"\n{e}")
+
+    def _start_gdtf_autopull(self):
+        """After a project load: pull GDTF definitions for the loaded
+        fixtures from GDTF Share on a worker thread (2026-07-16).
+
+        Everything is gated inside utils.gdtf_share.pull_missing_gdtf:
+        no stored credentials, no internet, no exact-identity match,
+        or a channel-footprint mismatch all mean nothing happens - the
+        offline venue laptop behaves exactly as before. Kept downloads
+        land in the project gdtf_fixtures/ dir (machine-local, never
+        committed - Share terms); the definition cache invalidates so
+        the next visualizer open renders the native models."""
+        from utils.gdtf_share import auto_pull_enabled, stored_password, \
+            stored_username
+        if not auto_pull_enabled():
+            return
+        user = stored_username()
+        if not user or not stored_password(user):
+            return
+        worker = getattr(self, "_gdtf_autopull_worker", None)
+        if worker is not None and worker.isRunning():
+            return
+
+        from PyQt6.QtCore import QThread, pyqtSignal
+
+        class _Puller(QThread):
+            pulled = pyqtSignal(list)
+
+            def __init__(self, config, parent=None):
+                super().__init__(parent)
+                self._config = config
+
+            def run(self):
+                try:
+                    from utils.fixture_library import \
+                        project_gdtf_fixtures_dir
+                    from utils.gdtf_share import pull_missing_gdtf
+                    self.pulled.emit(pull_missing_gdtf(
+                        self._config, project_gdtf_fixtures_dir()))
+                except Exception:
+                    self.pulled.emit([])
+
+        worker = _Puller(self.config, parent=self)
+        worker.pulled.connect(self._on_gdtf_autopull_done)
+        self._gdtf_autopull_worker = worker
+        worker.start()
+
+    def _on_gdtf_autopull_done(self, kept):
+        if not kept:
+            return
+        from utils.fixture_library import clear_library_cache
+        clear_library_cache()
+        names = ", ".join(os.path.splitext(os.path.basename(p))[0]
+                          .split("@")[1] if "@" in os.path.basename(p)
+                          else os.path.basename(p) for p in kept)
+        self.statusbar.showMessage(
+            f"GDTF Share: fetched {len(kept)} fixture definition(s) "
+            f"({names}) - the visualizer uses them on next open", 10000)
 
     def open_morph_screen(self):
         """Tools > Morph to Venue: the full-window morph flow
