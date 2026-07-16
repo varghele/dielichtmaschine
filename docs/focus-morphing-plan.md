@@ -54,7 +54,7 @@ assume one active config.
 - [x] **Stable lane ids.** DONE 2026-07-16: `LightLane.lane_id` (uuid4 hex), assigned on
       creation and on load where missing; serialized; never surfaced in
       UI. Plans key edges by lane_id + display name for diffability.
-- [x] **Colour palette roles (decision 1).** DONE 2026-07-16 (model + apply_palette; editor role picker rides the later UI phase): `ShowPalette` on
+- [x] **Colour palette roles (decision 1).** DONE 2026-07-16 (model + apply_palette; the editor role picker landed with the wizard-preview pass the same day: ROLE combo + free-text new role on the colour block dialog writing ColourBlock.palette_role, EDIT PALETTE... dialog writing Song.palette and calling apply_palette so tagged blocks re-skin immediately; the block dialog reaches its Song by block identity over config.songs - no tab plumbing; tests in test_colour_role_picker.py): `ShowPalette` on
       Configuration (role -> RGB), `ColourBlock.palette_role: str = ""`;
       realization resolves role -> literal at the same places literals
       are consumed today (playback DMX, export steps, visualizer
@@ -160,7 +160,7 @@ assume one active config.
 - [ ] Morph report (every edge / transform / fan-in loss / drop /
       regeneration + seed / destroyed hand-edit), same spirit as
       GenerationReport; rendered in-app + writable as markdown.
-- [x] Side-by-side preview HELPER (DONE 2026-07-16, utils/morph/preview.py: render_pair produces src/dst stills at one show time via two STRICTLY SEQUENTIAL OfflineRenderer passes per the audit constraint, either side degrading to None; real-GL test passes on the dev box). The wizard's scrub UI consumes it when the patchbay lands.
+- [x] Side-by-side preview HELPER (DONE 2026-07-16, utils/morph/preview.py: render_pair produces src/dst stills at one show time via two STRICTLY SEQUENTIAL OfflineRenderer passes per the audit constraint, either side degrading to None; real-GL test passes on the dev box). CONSUMED 2026-07-16: the wizard's REVIEW page grew the scrub (song selector over the dry-run songs, time slider bounded by _song_duration, RENDER PREVIEW button only - never per slider tick, a QThread worker keeps the dialog live, the morphed side renders against the dry-run DEEP COPY, None sides show PREVIEW UNAVAILABLE); tests in test_morph_preview_ui.py, render_pair stubbed - construction never renders.
 
 ## Phase 4 - patchbay UI + CLI (design doc 8; mockup 15-morph-patch-flow-6d)
 
@@ -233,3 +233,9 @@ assume one active config.
   wizard's review page renders the morph report in-app (dry run).
   Still open in phase 3: wiring utils/morph/preview.render_pair into a
   scrubbable side-by-side view inside the wizard.
+- 2026-07-16 (late): two small closures - the wizard REVIEW page's
+  side-by-side preview scrub (phase 3 consumption of render_pair;
+  renders on click only, worker-threaded, headless-safe) and the
+  colour-role picker (phase 0 leftover: ROLE combo + EDIT PALETTE
+  dialog on the colour block editor; song reached by block identity).
+  Tests: test_morph_preview_ui.py, test_colour_role_picker.py.

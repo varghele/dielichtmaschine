@@ -2145,7 +2145,11 @@ class LightBlockWidget(QWidget):
             from .colour_block_dialog import ColourBlockDialog
             # Get color wheel options from fixture if available
             color_wheel_options = self._get_color_wheel_options()
-            dialog = ColourBlockDialog(sublane_block, color_wheel_options=color_wheel_options, parent=self)
+            # The owning Song enables the palette-role picker (v1.5).
+            dialog = ColourBlockDialog(sublane_block,
+                                       color_wheel_options=color_wheel_options,
+                                       parent=self,
+                                       song=self._find_owning_song())
         elif sublane_type == "movement":
             from .movement_block_dialog import MovementBlockDialog
             # Pass config for spot selection
@@ -2160,6 +2164,24 @@ class LightBlockWidget(QWidget):
             self._mark_hand_edit()
             self.update_display()
             self.block_edited.emit()  # Trigger auto-save
+
+    def _find_owning_song(self):
+        """The Song whose timeline contains this envelope block, or None.
+
+        Identity lookup: the runtime lane shares its LightBlock objects
+        with the data model (timeline.light_lane copies the LIST, not
+        the blocks), so the block sitting in a song's timeline_data IS
+        self.block. Data-driven, so it works from any host tab.
+        """
+        config = self.lane_widget.config if self.lane_widget else None
+        for song in (getattr(config, "songs", None) or {}).values():
+            timeline = getattr(song, "timeline_data", None)
+            if timeline is None:
+                continue
+            for lane in timeline.lanes:
+                if any(b is self.block for b in lane.light_blocks):
+                    return song
+        return None
 
     def _get_color_wheel_options(self):
         """Get color wheel options from fixture group if available.

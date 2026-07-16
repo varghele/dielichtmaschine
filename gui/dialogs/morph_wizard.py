@@ -29,14 +29,17 @@ from __future__ import annotations
 import copy
 import datetime
 import os
+import shutil
+import tempfile
 
-from PyQt6 import QtWidgets
+from PyQt6 import QtCore, QtGui, QtWidgets
 from PyQt6.QtCore import Qt
 
 from utils import app_identity
+from utils.morph import preview as morph_preview
 from utils.morph.checker import group_capabilities
-from utils.morph.compile import (apply_morph, compile_setlist,
-                                 pending_destruction)
+from utils.morph.compile import (_song_duration, apply_morph,
+                                 compile_setlist, pending_destruction)
 from utils.morph.plan import MorphPlan, PlanError, config_hash
 
 from gui.dialogs.morph_patchbay import SUBLANE_LABELS, MorphPatchbay
@@ -44,6 +47,29 @@ from gui.dialogs.morph_patchbay import SUBLANE_LABELS, MorphPatchbay
 PLAN_FILTER = "Morph plans (*.morphplan.yaml);;All files (*)"
 
 PAGE_TARGET, PAGE_PATCHBAY, PAGE_REVIEW, PAGE_COMMIT = range(4)
+
+#: shown on a preview side whose render came back None
+PREVIEW_UNAVAILABLE = "PREVIEW UNAVAILABLE (no GL / empty song)"
+
+#: slider resolution: one tick = 0.1 s of show time
+PREVIEW_TICKS_PER_SECOND = 10
+
+
+class _PreviewWorker(QtCore.QThread):
+    """Run one render_pair call off the GUI thread (each render is a
+    full GL pass; the review page must never freeze on it)."""
+    ok = QtCore.pyqtSignal(object)
+    fail = QtCore.pyqtSignal(str)
+
+    def __init__(self, fn, parent=None):
+        super().__init__(parent)
+        self._fn = fn
+
+    def run(self):
+        try:
+            self.ok.emit(self._fn())
+        except Exception as exc:   # a failed render must never kill the wizard
+            self.fail.emit(f"Preview render failed: {exc}")
 
 
 def _config_summary(config, path: str = "") -> str:
@@ -77,8 +103,11 @@ class MorphWizard(QtWidgets.QDialog):
         self.patchbay: MorphPatchbay | None = None
         self.committed = False
         self._dry_result = None
+        self._dry_target = None        # the deep copy the dry run compiled into
         self._source_hash = None       # config_hash cache (modal dialog)
         self._target_hash = None
+        self._preview_worker = None
+        self._preview_dir = None       # scratch dir, created on first render
 
         layout = QtWidgets.QVBoxLayout(self)
         layout.setSpacing(10)
@@ -295,7 +324,64 @@ class MorphWizard(QtWidgets.QDialog):
         self.report_view = QtWidgets.QPlainTextEdit()
         self.report_view.setReadOnly(True)
         layout.addWidget(self.report_view, 3)
+
+        layout.addWidget(self._build_preview_group(), 3)
         return page
+
+    def _build_preview_group(self) -> QtWidgets.QWidget:
+        """Side-by-side preview scrub (design doc 6): source song on
+        rig A next to the morphed song on rig B at one show time.
+        Renders ON CLICK ONLY - every render is a full GL pass, so the
+        slider never triggers one, and constructing the wizard never
+        renders (the whole dialog stays headless-safe)."""
+        group = QtWidgets.QGroupBox("Side-by-side preview")
+        layout = QtWidgets.QVBoxLayout(group)
+        layout.setSpacing(6)
+
+        controls = QtWidgets.QHBoxLayout()
+        self.preview_song_combo = QtWidgets.QComboBox()
+        self.preview_song_combo.currentIndexChanged.connect(
+            self._on_preview_song_changed)
+        controls.addWidget(self.preview_song_combo)
+        self.preview_slider = QtWidgets.QSlider(Qt.Orientation.Horizontal)
+        self.preview_slider.setRange(0, 0)
+        self.preview_slider.valueChanged.connect(
+            self._on_preview_time_changed)
+        controls.addWidget(self.preview_slider, 1)
+        self.preview_time_label = QtWidgets.QLabel("0.0 s")
+        controls.addWidget(self.preview_time_label)
+        self.preview_btn = QtWidgets.QPushButton("RENDER PREVIEW")
+        self.preview_btn.setEnabled(False)
+        self.preview_btn.clicked.connect(self._render_preview)
+        controls.addWidget(self.preview_btn)
+        layout.addLayout(controls)
+
+        stills = QtWidgets.QHBoxLayout()
+        self.preview_src_caption = QtWidgets.QLabel("SOURCE")
+        self.preview_dst_caption = QtWidgets.QLabel("MORPHED")
+        self.preview_src_image = QtWidgets.QLabel(
+            "No preview rendered yet.")
+        self.preview_dst_image = QtWidgets.QLabel(
+            "No preview rendered yet.")
+        for caption, image in ((self.preview_src_caption,
+                                self.preview_src_image),
+                               (self.preview_dst_caption,
+                                self.preview_dst_image)):
+            column = QtWidgets.QVBoxLayout()
+            column.setSpacing(4)
+            caption.setWordWrap(True)
+            column.addWidget(caption)
+            image.setMinimumSize(320, 180)
+            image.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            image.setWordWrap(True)
+            column.addWidget(image, 1)
+            stills.addLayout(column, 1)
+        layout.addLayout(stills, 1)
+
+        self.preview_status = QtWidgets.QLabel("")
+        self.preview_status.setWordWrap(True)
+        layout.addWidget(self.preview_status)
+        return group
 
     def _enter_review(self) -> None:
         """Dry-run compile into a DEEP COPY - the real target config is
@@ -303,6 +389,10 @@ class MorphWizard(QtWidgets.QDialog):
         target_copy = copy.deepcopy(self.target_config)
         self._dry_result = compile_setlist(
             self.source_config, self.plan, target_copy)
+        # Kept for the preview: the morphed songs are realized against
+        # THIS rig copy, never against the real (uncommitted) target.
+        self._dry_target = target_copy
+        self._reset_preview()
         report = self._dry_result.report
 
         result = self.patchbay.checker()
@@ -349,6 +439,122 @@ class MorphWizard(QtWidgets.QDialog):
         self.destroyed_label.setVisible(bool(manifest))
 
         self.report_view.setPlainText(report.to_markdown())
+
+    # ── review page: side-by-side preview ─────────────────────────────────
+
+    def _rig_name(self, path: str, fallback: str) -> str:
+        return os.path.basename(path) or fallback
+
+    def _reset_preview(self) -> None:
+        """Refill the song selector from the dry run; never renders."""
+        songs = self._dry_result.songs if self._dry_result else {}
+        self.preview_song_combo.blockSignals(True)
+        self.preview_song_combo.clear()
+        for name in songs:
+            # itemData carries the raw song name (repo rule: never read
+            # currentText for the key).
+            self.preview_song_combo.addItem(name, name)
+        self.preview_song_combo.blockSignals(False)
+        self.preview_src_caption.setText(
+            "SOURCE - " + self._rig_name(self.source_path, "source rig"))
+        self.preview_dst_caption.setText(
+            "MORPHED - " + self._rig_name(self.target_path, "target rig"))
+        self.preview_src_image.setText("No preview rendered yet.")
+        self.preview_dst_image.setText("No preview rendered yet.")
+        self.preview_status.setText("")
+        self.preview_btn.setEnabled(bool(songs))
+        self._on_preview_song_changed()
+
+    def _preview_song_name(self) -> str:
+        return self.preview_song_combo.currentData() or ""
+
+    def _on_preview_song_changed(self) -> None:
+        """Slider bounds follow the selected song's duration."""
+        name = self._preview_song_name()
+        song = (self.source_config.songs or {}).get(name)
+        duration = _song_duration(song) if song is not None else 0.0
+        self.preview_slider.setRange(
+            0, max(0, int(duration * PREVIEW_TICKS_PER_SECOND)))
+        self.preview_slider.setValue(0)
+        self._on_preview_time_changed(0)
+
+    def _on_preview_time_changed(self, value: int) -> None:
+        # Label only - a render is a full GL pass and happens on the
+        # button, never per slider tick.
+        self.preview_time_label.setText(
+            f"{value / PREVIEW_TICKS_PER_SECOND:.1f} s")
+
+    def preview_time_s(self) -> float:
+        return self.preview_slider.value() / PREVIEW_TICKS_PER_SECOND
+
+    def _render_preview(self) -> None:
+        """RENDER PREVIEW: one render_pair call on a worker thread."""
+        if self._preview_worker is not None \
+                and self._preview_worker.isRunning():
+            return
+        name = self._preview_song_name()
+        source_song = (self.source_config.songs or {}).get(name)
+        morphed_song = (self._dry_result.songs if self._dry_result
+                        else {}).get(name)
+        if morphed_song is None or self._dry_target is None:
+            return
+        if self._preview_dir is None:
+            self._preview_dir = tempfile.mkdtemp(prefix="lm-morph-preview-")
+        # A fresh subdir per render: QPixmap caches by path, so reusing
+        # file names would show the previous still.
+        out_dir = tempfile.mkdtemp(dir=self._preview_dir)
+        time_s = self.preview_time_s()
+        source_config, dry_target = self.source_config, self._dry_target
+
+        def work():
+            return morph_preview.render_pair(
+                source_config, source_song, dry_target, morphed_song,
+                time_s, out_dir)
+
+        worker = _PreviewWorker(work, parent=self)
+        worker.ok.connect(self._on_preview_rendered)
+        worker.fail.connect(self._on_preview_failed)
+        worker.finished.connect(self._on_preview_finished)
+        self._preview_worker = worker
+        self.preview_btn.setEnabled(False)
+        self.preview_status.setText(
+            f"Rendering both rigs at {time_s:.1f} s...")
+        worker.start()
+
+    def _on_preview_rendered(self, paths) -> None:
+        src, dst = paths
+        for path, label in ((src, self.preview_src_image),
+                            (dst, self.preview_dst_image)):
+            pixmap = QtGui.QPixmap(path) if path else QtGui.QPixmap()
+            if pixmap.isNull():
+                label.setPixmap(QtGui.QPixmap())
+                label.setText(PREVIEW_UNAVAILABLE)
+            else:
+                label.setPixmap(pixmap.scaled(
+                    label.size(), Qt.AspectRatioMode.KeepAspectRatio,
+                    Qt.TransformationMode.SmoothTransformation))
+        self.preview_status.setText(
+            f"Rendered at {self.preview_time_s():.1f} s.")
+
+    def _on_preview_failed(self, message: str) -> None:
+        self.preview_src_image.setText(PREVIEW_UNAVAILABLE)
+        self.preview_dst_image.setText(PREVIEW_UNAVAILABLE)
+        self.preview_status.setText(message)
+
+    def _on_preview_finished(self) -> None:
+        self.preview_btn.setEnabled(
+            self.preview_song_combo.count() > 0)
+
+    def done(self, result: int) -> None:
+        """Never tear the dialog down under a live render; drop the
+        scratch stills afterwards."""
+        worker = self._preview_worker
+        if worker is not None and worker.isRunning():
+            worker.wait(30000)
+        if self._preview_dir:
+            shutil.rmtree(self._preview_dir, ignore_errors=True)
+            self._preview_dir = None
+        super().done(result)
 
     # ── page 4: commit ────────────────────────────────────────────────────
 

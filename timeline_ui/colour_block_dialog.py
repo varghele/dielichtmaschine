@@ -5,11 +5,16 @@
 from PyQt6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QFormLayout,
                              QGroupBox, QSlider, QSpinBox, QLabel,
                              QDialogButtonBox, QWidget, QPushButton,
-                             QComboBox, QFrame, QGridLayout, QScrollArea)
+                             QComboBox, QFrame, QGridLayout, QLineEdit,
+                             QScrollArea)
 from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QColor
 from config.models import ColourBlock
 from gui.typography import mono_font
+
+#: role combo sentinel labels (v1.5 palette roles)
+LITERAL_LABEL = "Literal colour (no role)"
+NEW_ROLE_LABEL = "New role..."
 
 
 def _active_tokens() -> dict:
@@ -88,6 +93,128 @@ class ColorPresetButton(QPushButton):
         """)
 
 
+class PaletteEditorDialog(QDialog):
+    """Edit the song's colour palette (role -> RGB).
+
+    Small role list with a swatch button per row (QColorDialog) plus
+    add/remove. On accept it writes ``Song.palette`` and calls
+    ``song.apply_palette()`` so every role-tagged block in the song
+    re-resolves immediately - changing "primary" re-skins the whole
+    song, which is the point of the indirection (v1.5 design doc 4.4).
+    """
+
+    def __init__(self, song, parent=None):
+        super().__init__(parent)
+        self.song = song
+        self.setWindowTitle("Edit Palette")
+        self.setMinimumWidth(380)
+        self._rows = []   # (name_edit, swatch_btn, remove_btn, container)
+
+        layout = QVBoxLayout(self)
+        hint = QLabel(
+            "Roles resolve to colours per song. Blocks tagged with a "
+            "role re-resolve when the palette changes; literal blocks "
+            "are never touched.")
+        hint.setWordWrap(True)
+        layout.addWidget(hint)
+
+        self._rows_layout = QVBoxLayout()
+        self._rows_layout.setSpacing(4)
+        layout.addLayout(self._rows_layout)
+
+        add_btn = QPushButton("Add Role")
+        add_btn.clicked.connect(lambda: self.add_role("", (255, 255, 255)))
+        layout.addWidget(add_btn)
+        layout.addStretch()
+
+        buttons = QDialogButtonBox(
+            QDialogButtonBox.StandardButton.Ok
+            | QDialogButtonBox.StandardButton.Cancel)
+        buttons.accepted.connect(self.accept)
+        buttons.rejected.connect(self.reject)
+        layout.addWidget(buttons)
+
+        for role, rgb in (song.palette or {}).items():
+            self.add_role(role, tuple(rgb))
+
+    # -- rows (plain methods so tests drive them without mouse events) --
+
+    def add_role(self, name: str, rgb: tuple) -> int:
+        """Append a role row; returns its index."""
+        container = QWidget()
+        row = QHBoxLayout(container)
+        row.setContentsMargins(0, 0, 0, 0)
+        row.setSpacing(6)
+
+        name_edit = QLineEdit(name)
+        name_edit.setPlaceholderText("role name (e.g. primary)")
+        row.addWidget(name_edit, 1)
+
+        swatch = QPushButton()
+        swatch.setFixedSize(48, 24)
+        swatch.clicked.connect(lambda _=False, c=container:
+                               self._pick_colour(c))
+        row.addWidget(swatch)
+
+        remove = QPushButton("Remove")
+        remove.clicked.connect(lambda _=False, c=container:
+                               self._remove_row(c))
+        row.addWidget(remove)
+
+        self._rows_layout.addWidget(container)
+        self._rows.append((name_edit, swatch, remove, container))
+        self._set_swatch(swatch, rgb)
+        return len(self._rows) - 1
+
+    def _set_swatch(self, swatch: QPushButton, rgb: tuple) -> None:
+        swatch.rgb = (int(rgb[0]), int(rgb[1]), int(rgb[2]))
+        border = _active_tokens()["border"]
+        swatch.setStyleSheet(
+            f"QPushButton {{ background-color: "
+            f"rgb({swatch.rgb[0]}, {swatch.rgb[1]}, {swatch.rgb[2]}); "
+            f"border: 1px solid {border}; border-radius: 0px; }}")
+
+    def set_role_color(self, index: int, rgb: tuple) -> None:
+        self._set_swatch(self._rows[index][1], rgb)
+
+    def remove_role(self, index: int) -> None:
+        self._remove_row(self._rows[index][3])
+
+    def _remove_row(self, container) -> None:
+        for i, (_, _, _, c) in enumerate(self._rows):
+            if c is container:
+                self._rows.pop(i)
+                self._rows_layout.removeWidget(container)
+                container.deleteLater()
+                return
+
+    def _pick_colour(self, container) -> None:
+        from PyQt6.QtWidgets import QColorDialog
+        for name_edit, swatch, _, c in self._rows:
+            if c is container:
+                current = QColor(*swatch.rgb)
+                color = QColorDialog.getColor(initial=current, parent=self)
+                if color.isValid():
+                    self._set_swatch(
+                        swatch, (color.red(), color.green(), color.blue()))
+                return
+
+    def palette(self) -> dict:
+        """Role -> [r, g, b] from the current rows (blank names skipped)."""
+        result = {}
+        for name_edit, swatch, _, _ in self._rows:
+            role = name_edit.text().strip()
+            if role:
+                result[role] = list(swatch.rgb)
+        return result
+
+    def accept(self):
+        """Write the palette to the song and re-resolve tagged blocks."""
+        self.song.palette = self.palette()
+        self.song.apply_palette()
+        super().accept()
+
+
 class ColourBlockDialog(QDialog):
     """Dialog for editing colour sublane block parameters.
 
@@ -114,7 +241,8 @@ class ColourBlockDialog(QDialog):
         ("Pink", 255, 105, 180, 0),
     ]
 
-    def __init__(self, block: ColourBlock, color_wheel_options: list = None, parent=None):
+    def __init__(self, block: ColourBlock, color_wheel_options: list = None,
+                 parent=None, song=None):
         """Create the colour block dialog.
 
         Args:
@@ -122,9 +250,13 @@ class ColourBlockDialog(QDialog):
             color_wheel_options: Optional list of (name, dmx_value, hex_color) tuples
                                  from fixture definition. If provided, shows color wheel selector.
             parent: Parent widget
+            song: Optional Song owning this block (v1.5 palette roles).
+                  Provides the role list and enables EDIT PALETTE...;
+                  without it, only literal + free-text roles work.
         """
         super().__init__(parent)
         self.block = block
+        self.song = song
         self.color_wheel_options = color_wheel_options or []
 
         self.setWindowTitle("Edit Colour Block")
@@ -179,6 +311,35 @@ class ColourBlockDialog(QDialog):
 
         preview_group.setLayout(preview_layout)
         layout.addWidget(preview_group)
+
+        # Palette role (v1.5): the block can carry a role instead of
+        # being a pure literal; Song.apply_palette() re-resolves tagged
+        # blocks when the palette changes.
+        role_group = QGroupBox("Palette Role")
+        role_layout = QHBoxLayout()
+
+        self.role_combo = QComboBox()
+        self._rebuild_role_combo()
+        self.role_combo.currentIndexChanged.connect(self._on_role_changed)
+        role_layout.addWidget(self.role_combo, 1)
+
+        self.new_role_edit = QLineEdit()
+        self.new_role_edit.setPlaceholderText("new role name")
+        self.new_role_edit.setVisible(False)
+        role_layout.addWidget(self.new_role_edit, 1)
+
+        self.edit_palette_btn = QPushButton("Edit Palette...")
+        self.edit_palette_btn.clicked.connect(self._edit_palette)
+        if self.song is None:
+            self.edit_palette_btn.setEnabled(False)
+            self.edit_palette_btn.setToolTip(
+                "The song owning this block could not be resolved; "
+                "roles can still be typed, the palette is edited from "
+                "the song's timeline.")
+        role_layout.addWidget(self.edit_palette_btn)
+
+        role_group.setLayout(role_layout)
+        layout.addWidget(role_group)
 
         # Quick preset buttons
         preset_group = QGroupBox("Quick Presets")
@@ -261,6 +422,52 @@ class ColourBlockDialog(QDialog):
         buttons.accepted.connect(self.accept)
         buttons.rejected.connect(self.reject)
         main_layout.addWidget(buttons)
+
+    # -- palette role (v1.5) ------------------------------------------------
+
+    def _rebuild_role_combo(self, keep: str = None):
+        """Literal + one entry per Song.palette key + New role...
+        The block's own role is always listed (a role can outlive its
+        palette entry). itemData carries the raw role; the New role
+        sentinel carries None."""
+        current = keep if keep is not None else self.block.palette_role
+        roles = list((self.song.palette or {}).keys()) if self.song else []
+        if current and current not in roles:
+            roles.append(current)
+        self.role_combo.blockSignals(True)
+        self.role_combo.clear()
+        self.role_combo.addItem(LITERAL_LABEL, "")
+        for role in roles:
+            self.role_combo.addItem(role, role)
+        self.role_combo.addItem(NEW_ROLE_LABEL, None)
+        index = self.role_combo.findData(current) if current else 0
+        self.role_combo.setCurrentIndex(max(0, index))
+        self.role_combo.blockSignals(False)
+
+    def _on_role_changed(self):
+        self.new_role_edit.setVisible(
+            self.role_combo.currentData() is None)
+
+    def selected_role(self) -> str:
+        """The role the dialog will write on accept ("" = literal)."""
+        data = self.role_combo.currentData()
+        if data is None:                       # New role... free text
+            return self.new_role_edit.text().strip()
+        return data
+
+    def _edit_palette(self):
+        """Open the song palette editor; on accept the song's palette
+        is written and every role-tagged block re-resolved, so reload
+        this block's (possibly rewritten) literals into the sliders."""
+        if self.song is None:
+            return
+        dialog = PaletteEditorDialog(self.song, parent=self)
+        if dialog.exec():
+            self._rebuild_role_combo(keep=self.selected_role())
+            self._on_role_changed()
+            self.sliders["red"][0].setValue(int(self.block.red))
+            self.sliders["green"][0].setValue(int(self.block.green))
+            self.sliders["blue"][0].setValue(int(self.block.blue))
 
     def _apply_preset(self, r, g, b, w):
         """Apply a preset color to the sliders and update wheel position."""
@@ -414,6 +621,10 @@ class ColourBlockDialog(QDialog):
         self.block.green = float(self.sliders["green"][1].value())
         self.block.blue = float(self.sliders["blue"][1].value())
         self.block.white = float(self.sliders["white"][1].value())
+
+        # Palette role: intent metadata only - the literals above stand
+        # until the next Song.apply_palette() (palette editor / morph).
+        self.block.palette_role = self.selected_role()
 
         # Determine color mode
         if self.color_wheel_options and hasattr(self, 'wheel_combo'):

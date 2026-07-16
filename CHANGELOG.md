@@ -39,7 +39,19 @@ verbatim as the GitHub Release notes (see [docs/releasing.md](docs/releasing.md)
   after fixing the master show, with locked target lanes left untouched
   and any hand-edited blocks listed before they are replaced. An
   auto-suggest button prefills the wiring by lighting role; nothing
-  routes without confirmation, and cancelling changes nothing.
+  routes without confirmation, and cancelling changes nothing. The
+  review step also carries a side-by-side preview: pick a song, scrub
+  to any moment, and RENDER PREVIEW shows the original show on the
+  source rig next to the morphed show on the venue rig as two stills
+  (rendered on demand in the background; a side without a usable GL
+  context or an empty song shows a placeholder instead of failing).
+- **Colour palette roles are editable.** The colour block editor gained
+  a ROLE picker: tag a block with a palette role ("primary", "accent",
+  or any name you type) instead of leaving it a hard-coded literal, and
+  EDIT PALETTE... manages the song's role-to-colour table with swatch
+  pickers. Changing a role's colour re-skins every block tagged with it
+  across the song immediately - the indirection that also lets the
+  venue morph route colour as intent instead of copying literal values.
 
 ## [1.4.0] - 2026-07-15
 
