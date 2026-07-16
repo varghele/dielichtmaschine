@@ -1,7 +1,7 @@
 # Demo rigs and shows
 
 Reproducible, standard stage-lighting rigs for testing and as starter
-projects. Each is a `Configuration` YAML under `rigs/`, generated
+projects. Each is a `Configuration` project file (`.lms`, YAML content) under `rigs/`, generated
 deterministically by [`generate_rigs.py`](generate_rigs.py). Ready-to-play
 [demo *shows*](#demo-shows) are layered on top of them.
 
@@ -19,11 +19,11 @@ layouts at all.)
 
 | File | Fixtures | Shape | Exercises |
 |------|---------:|-------|-----------|
-| `club_band.yaml` | 9 | 4 front PARs, 2 rear washes, 2 movers, 1 blinder | Smallest viable rig; fast load path |
-| `band_midsize.yaml` | 21 | Front/back PARs, spots, moving wash, LED bars, blinders, matrix | Every `lighting_role`; all four sublane types |
-| `festival_mainstage.yaml` | 60 | Front-wash / mid-spot / back-beam truss rows, floor beams, blinders, matrix, side towers | Rows-of-movers look; multi-universe (3) export scale; visualizer archetype breadth |
-| `dj_edm.yaml` | 20 | Beam array, moving wash, pixel bars, matrix, strobes | Movement-centric; matrix/beam chassis paths |
-| `theatre_static.yaml` | 16 | Front PAR wash, rear cyc wash, side booms | Zero-movement export + capability detection |
+| `club_band.lms` | 9 | 4 front PARs, 2 rear washes, 2 movers, 1 blinder | Smallest viable rig; fast load path |
+| `band_midsize.lms` | 21 | Front/back PARs, spots, moving wash, LED bars, blinders, matrix | Every `lighting_role`; all four sublane types |
+| `festival_mainstage.lms` | 60 | Front-wash / mid-spot / back-beam truss rows, floor beams, blinders, matrix, side towers | Rows-of-movers look; multi-universe (3) export scale; visualizer archetype breadth |
+| `dj_edm.lms` | 20 | Beam array, moving wash, pixel bars, matrix, strobes | Movement-centric; matrix/beam chassis paths |
+| `theatre_static.lms` | 16 | Front PAR wash, rear cyc wash, side booms | Zero-movement export + capability detection |
 
 ## Coordinate convention
 

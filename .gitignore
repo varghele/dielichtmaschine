@@ -97,6 +97,8 @@ archive/shows/renders/
 archive/shows/audiofiles/voll_mit_vox_*
 archive/shows/audiofiles/backingtrack_*
 /tester.yaml
+# Personal band project recovered from archive/ (kept local, like tester)
+/shoo_bee_doom/
 /workspace_generated.qxw
 /workspace_saved.qxw
 

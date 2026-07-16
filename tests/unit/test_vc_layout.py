@@ -82,7 +82,7 @@ def _collect_overlaps(container, path, out):
 def _export_and_parse(rig_name, tmp_path):
     """Export into tmp_path: a per-test path, so parallel (xdist) workers
     never fight over one repo-root workspace.qxw (WinError 32)."""
-    config = Configuration.load(os.path.join(RIGS_DIR, f"{rig_name}.yaml"))
+    config = Configuration.load(os.path.join(RIGS_DIR, f"{rig_name}.lms"))
     out = str(tmp_path / "workspace.qxw")
     create_qlc_workspace(config, VC_OPTIONS, output_path=out)
     tree = ET.parse(out)

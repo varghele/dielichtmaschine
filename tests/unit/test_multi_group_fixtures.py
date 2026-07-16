@@ -765,7 +765,7 @@ class TestWorkspaceExportMultiGroup:
         repo_root = os.path.abspath(
             os.path.join(os.path.dirname(__file__), "..", ".."))
         config = Configuration.load(
-            os.path.join(repo_root, "demos", "rigs", "club_band.yaml"))
+            os.path.join(repo_root, "demos", "rigs", "club_band.lms"))
         shared = next(f for f in config.fixtures if f.name == "Front PARs 1")
         assert shared.groups == ["Front PARs"]
         shared.groups.append("Back Wash")

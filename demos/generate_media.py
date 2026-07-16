@@ -16,8 +16,8 @@ By default the debug orientation-axis triads on moving heads are hidden (clean
 README media); pass ``--show-gizmos`` to keep them.
 
 Run (from the project root):
-    python -m demos.generate_media dj_edm                 # rig name -> demos/shows/dj_edm.yaml
-    python -m demos.generate_media demos/shows/dj_edm.yaml
+    python -m demos.generate_media dj_edm                 # rig name -> demos/shows/dj_edm.lms
+    python -m demos.generate_media demos/shows/dj_edm.lms
     python -m demos.generate_media dj_edm --stills --cameras "Front,Wide,Top-Down"
     python -m demos.generate_media dj_edm --gif --gif-width 720 --gif-fps 15
     python -m demos.generate_media dj_edm --mp4               # full-res video w/ audio
@@ -54,7 +54,7 @@ def resolve_config_path(target: str) -> str:
     """Accept either a path to a config YAML or a bare rig name."""
     if os.path.exists(target):
         return os.path.abspath(target)
-    candidate = os.path.join(SHOWS_DIR, f"{target}.yaml")
+    candidate = os.path.join(SHOWS_DIR, f"{target}.lms")
     if os.path.exists(candidate):
         return candidate
     raise SystemExit(f"error: no config at '{target}' or '{candidate}'")
@@ -96,7 +96,7 @@ def _validate_cameras(cameras):
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description="Render README media (stills + GIF/MP4) from a demo show.")
-    parser.add_argument("target", help="A demo rig name (demos/shows/<name>.yaml) or a path to a config YAML.")
+    parser.add_argument("target", help="A demo rig name (demos/shows/<name>.lms) or a path to a config file.")
     parser.add_argument("--show", default=None, help="Name of the show to render (default: 'Demo' or first).")
     parser.add_argument("--stills", action="store_true", help="Render PNG stills.")
     parser.add_argument("--gif", action="store_true", help="Render an animated GIF walkthrough.")

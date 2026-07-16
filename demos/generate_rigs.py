@@ -25,7 +25,7 @@ Run:
     python -m demos.generate_rigs       # from the project root
     python demos/generate_rigs.py
 Output:
-    demos/rigs/<name>.yaml
+    demos/rigs/<name>.lms
 """
 
 from __future__ import annotations
@@ -290,7 +290,7 @@ def main():
     os.makedirs(OUT_DIR, exist_ok=True)
     for name, spec in RIGS.items():
         cfg = build_rig(name, spec["width"], spec["depth"], spec["groups"])
-        out = os.path.join(OUT_DIR, f"{name}.yaml")
+        out = os.path.join(OUT_DIR, f"{name}.lms")
         cfg.save(out)
         n_fix = len(cfg.fixtures)
         n_grp = len(cfg.groups)

@@ -127,6 +127,7 @@ block_defs:
       phase_offset_enabled: false
       speed: 255.0
       target_plane_name: null
+      target_point: null
       target_spot_name: Stage
       tilt: 127.5
       tilt_amplitude: 41.597360283982965
@@ -147,6 +148,7 @@ block_defs:
       phase_offset_enabled: false
       speed: 255.0
       target_plane_name: null
+      target_point: null
       target_spot_name: Crowd
       tilt: 127.5
       tilt_amplitude: 80.0
@@ -167,6 +169,7 @@ block_defs:
       phase_offset_enabled: false
       speed: 255.0
       target_plane_name: null
+      target_point: null
       target_spot_name: Stage
       tilt: 127.5
       tilt_amplitude: 49.91683234077956
@@ -187,6 +190,7 @@ block_defs:
       phase_offset_enabled: false
       speed: 255.0
       target_plane_name: null
+      target_point: null
       target_spot_name: Crowd
       tilt: 127.5
       tilt_amplitude: 80.0
@@ -202,14 +206,23 @@ fixtures:
     name: Ba (18ch)
   - channels: 44
     name: Ex (44ch)
+  calibration: {}
   current_mode: St (20ch)
+  definition_source: qxf
+  docked_to: ''
+  gdtf_fixture_type_id: null
   group: Beam Array
+  groups:
+  - Beam Array
+  invert_pan: false
+  invert_tilt: false
+  layer: ''
   manufacturer: Ayrton
   model: MagicBlade R
   mounting: hanging
   name: Beam Array 1
   orientation_uses_group_default: true
-  pitch: 0.0
+  pitch: 90.0
   roll: 0.0
   type: MH
   universe: 1
@@ -226,14 +239,23 @@ fixtures:
     name: Ba (18ch)
   - channels: 44
     name: Ex (44ch)
+  calibration: {}
   current_mode: St (20ch)
+  definition_source: qxf
+  docked_to: ''
+  gdtf_fixture_type_id: null
   group: Beam Array
+  groups:
+  - Beam Array
+  invert_pan: false
+  invert_tilt: false
+  layer: ''
   manufacturer: Ayrton
   model: MagicBlade R
   mounting: hanging
   name: Beam Array 2
   orientation_uses_group_default: true
-  pitch: 0.0
+  pitch: 90.0
   roll: 0.0
   type: MH
   universe: 1
@@ -250,14 +272,23 @@ fixtures:
     name: Ba (18ch)
   - channels: 44
     name: Ex (44ch)
+  calibration: {}
   current_mode: St (20ch)
+  definition_source: qxf
+  docked_to: ''
+  gdtf_fixture_type_id: null
   group: Beam Array
+  groups:
+  - Beam Array
+  invert_pan: false
+  invert_tilt: false
+  layer: ''
   manufacturer: Ayrton
   model: MagicBlade R
   mounting: hanging
   name: Beam Array 3
   orientation_uses_group_default: true
-  pitch: 0.0
+  pitch: 90.0
   roll: 0.0
   type: MH
   universe: 1
@@ -274,14 +305,23 @@ fixtures:
     name: Ba (18ch)
   - channels: 44
     name: Ex (44ch)
+  calibration: {}
   current_mode: St (20ch)
+  definition_source: qxf
+  docked_to: ''
+  gdtf_fixture_type_id: null
   group: Beam Array
+  groups:
+  - Beam Array
+  invert_pan: false
+  invert_tilt: false
+  layer: ''
   manufacturer: Ayrton
   model: MagicBlade R
   mounting: hanging
   name: Beam Array 4
   orientation_uses_group_default: true
-  pitch: 0.0
+  pitch: 90.0
   roll: 0.0
   type: MH
   universe: 1
@@ -298,14 +338,23 @@ fixtures:
     name: Ba (18ch)
   - channels: 44
     name: Ex (44ch)
+  calibration: {}
   current_mode: St (20ch)
+  definition_source: qxf
+  docked_to: ''
+  gdtf_fixture_type_id: null
   group: Beam Array
+  groups:
+  - Beam Array
+  invert_pan: false
+  invert_tilt: false
+  layer: ''
   manufacturer: Ayrton
   model: MagicBlade R
   mounting: hanging
   name: Beam Array 5
   orientation_uses_group_default: true
-  pitch: 0.0
+  pitch: 90.0
   roll: 0.0
   type: MH
   universe: 1
@@ -322,14 +371,23 @@ fixtures:
     name: Ba (18ch)
   - channels: 44
     name: Ex (44ch)
+  calibration: {}
   current_mode: St (20ch)
+  definition_source: qxf
+  docked_to: ''
+  gdtf_fixture_type_id: null
   group: Beam Array
+  groups:
+  - Beam Array
+  invert_pan: false
+  invert_tilt: false
+  layer: ''
   manufacturer: Ayrton
   model: MagicBlade R
   mounting: hanging
   name: Beam Array 6
   orientation_uses_group_default: true
-  pitch: 0.0
+  pitch: 90.0
   roll: 0.0
   type: MH
   universe: 1
@@ -346,14 +404,23 @@ fixtures:
     name: Ba (18ch)
   - channels: 44
     name: Ex (44ch)
+  calibration: {}
   current_mode: St (20ch)
+  definition_source: qxf
+  docked_to: ''
+  gdtf_fixture_type_id: null
   group: Beam Array
+  groups:
+  - Beam Array
+  invert_pan: false
+  invert_tilt: false
+  layer: ''
   manufacturer: Ayrton
   model: MagicBlade R
   mounting: hanging
   name: Beam Array 7
   orientation_uses_group_default: true
-  pitch: 0.0
+  pitch: 90.0
   roll: 0.0
   type: MH
   universe: 1
@@ -370,14 +437,23 @@ fixtures:
     name: Ba (18ch)
   - channels: 44
     name: Ex (44ch)
+  calibration: {}
   current_mode: St (20ch)
+  definition_source: qxf
+  docked_to: ''
+  gdtf_fixture_type_id: null
   group: Beam Array
+  groups:
+  - Beam Array
+  invert_pan: false
+  invert_tilt: false
+  layer: ''
   manufacturer: Ayrton
   model: MagicBlade R
   mounting: hanging
   name: Beam Array 8
   orientation_uses_group_default: true
-  pitch: 0.0
+  pitch: 90.0
   roll: 0.0
   type: MH
   universe: 1
@@ -392,14 +468,23 @@ fixtures:
     name: Extended
   - channels: 14
     name: Standard
+  calibration: {}
   current_mode: Standard
+  definition_source: qxf
+  docked_to: ''
+  gdtf_fixture_type_id: null
   group: Moving Wash
+  groups:
+  - Moving Wash
+  invert_pan: false
+  invert_tilt: false
+  layer: ''
   manufacturer: Martin
   model: MAC Aura
   mounting: hanging
   name: Moving Wash 1
   orientation_uses_group_default: true
-  pitch: 0.0
+  pitch: 90.0
   roll: 0.0
   type: MH
   universe: 1
@@ -414,14 +499,23 @@ fixtures:
     name: Extended
   - channels: 14
     name: Standard
+  calibration: {}
   current_mode: Standard
+  definition_source: qxf
+  docked_to: ''
+  gdtf_fixture_type_id: null
   group: Moving Wash
+  groups:
+  - Moving Wash
+  invert_pan: false
+  invert_tilt: false
+  layer: ''
   manufacturer: Martin
   model: MAC Aura
   mounting: hanging
   name: Moving Wash 2
   orientation_uses_group_default: true
-  pitch: 0.0
+  pitch: 90.0
   roll: 0.0
   type: MH
   universe: 1
@@ -436,14 +530,23 @@ fixtures:
     name: Extended
   - channels: 14
     name: Standard
+  calibration: {}
   current_mode: Standard
+  definition_source: qxf
+  docked_to: ''
+  gdtf_fixture_type_id: null
   group: Moving Wash
+  groups:
+  - Moving Wash
+  invert_pan: false
+  invert_tilt: false
+  layer: ''
   manufacturer: Martin
   model: MAC Aura
   mounting: hanging
   name: Moving Wash 3
   orientation_uses_group_default: true
-  pitch: 0.0
+  pitch: 90.0
   roll: 0.0
   type: MH
   universe: 1
@@ -458,14 +561,23 @@ fixtures:
     name: Extended
   - channels: 14
     name: Standard
+  calibration: {}
   current_mode: Standard
+  definition_source: qxf
+  docked_to: ''
+  gdtf_fixture_type_id: null
   group: Moving Wash
+  groups:
+  - Moving Wash
+  invert_pan: false
+  invert_tilt: false
+  layer: ''
   manufacturer: Martin
   model: MAC Aura
   mounting: hanging
   name: Moving Wash 4
   orientation_uses_group_default: true
-  pitch: 0.0
+  pitch: 90.0
   roll: 0.0
   type: MH
   universe: 1
@@ -478,14 +590,23 @@ fixtures:
   available_modes:
   - channels: 40
     name: 40 Channels Mode
+  calibration: {}
   current_mode: 40 Channels Mode
+  definition_source: qxf
+  docked_to: ''
+  gdtf_fixture_type_id: null
   group: Pixel Bars
+  groups:
+  - Pixel Bars
+  invert_pan: false
+  invert_tilt: false
+  layer: ''
   manufacturer: Varghele
   model: LED BAR
   mounting: standing
   name: Pixel Bars 1
   orientation_uses_group_default: true
-  pitch: 0.0
+  pitch: -90.0
   roll: 0.0
   type: PIXELBAR
   universe: 1
@@ -498,14 +619,23 @@ fixtures:
   available_modes:
   - channels: 40
     name: 40 Channels Mode
+  calibration: {}
   current_mode: 40 Channels Mode
+  definition_source: qxf
+  docked_to: ''
+  gdtf_fixture_type_id: null
   group: Pixel Bars
+  groups:
+  - Pixel Bars
+  invert_pan: false
+  invert_tilt: false
+  layer: ''
   manufacturer: Varghele
   model: LED BAR
   mounting: standing
   name: Pixel Bars 2
   orientation_uses_group_default: true
-  pitch: 0.0
+  pitch: -90.0
   roll: 0.0
   type: PIXELBAR
   universe: 1
@@ -518,14 +648,23 @@ fixtures:
   available_modes:
   - channels: 40
     name: 40 Channels Mode
+  calibration: {}
   current_mode: 40 Channels Mode
+  definition_source: qxf
+  docked_to: ''
+  gdtf_fixture_type_id: null
   group: Pixel Bars
+  groups:
+  - Pixel Bars
+  invert_pan: false
+  invert_tilt: false
+  layer: ''
   manufacturer: Varghele
   model: LED BAR
   mounting: standing
   name: Pixel Bars 3
   orientation_uses_group_default: true
-  pitch: 0.0
+  pitch: -90.0
   roll: 0.0
   type: PIXELBAR
   universe: 1
@@ -538,14 +677,23 @@ fixtures:
   available_modes:
   - channels: 40
     name: 40 Channels Mode
+  calibration: {}
   current_mode: 40 Channels Mode
+  definition_source: qxf
+  docked_to: ''
+  gdtf_fixture_type_id: null
   group: Pixel Bars
+  groups:
+  - Pixel Bars
+  invert_pan: false
+  invert_tilt: false
+  layer: ''
   manufacturer: Varghele
   model: LED BAR
   mounting: standing
   name: Pixel Bars 4
   orientation_uses_group_default: true
-  pitch: 0.0
+  pitch: -90.0
   roll: 0.0
   type: PIXELBAR
   universe: 1
@@ -564,14 +712,23 @@ fixtures:
     name: 28-Channel
   - channels: 4
     name: 4-Channel
+  calibration: {}
   current_mode: 26-Channel
+  definition_source: qxf
+  docked_to: ''
+  gdtf_fixture_type_id: null
   group: Matrix
+  groups:
+  - Matrix
+  invert_pan: false
+  invert_tilt: false
+  layer: ''
   manufacturer: Stairville
   model: LED Matrix Blinder 5x5
   mounting: hanging
   name: Matrix 1
   orientation_uses_group_default: true
-  pitch: 0.0
+  pitch: 90.0
   roll: 0.0
   type: SUNSTRIP
   universe: 1
@@ -590,14 +747,23 @@ fixtures:
     name: 28-Channel
   - channels: 4
     name: 4-Channel
+  calibration: {}
   current_mode: 26-Channel
+  definition_source: qxf
+  docked_to: ''
+  gdtf_fixture_type_id: null
   group: Matrix
+  groups:
+  - Matrix
+  invert_pan: false
+  invert_tilt: false
+  layer: ''
   manufacturer: Stairville
   model: LED Matrix Blinder 5x5
   mounting: hanging
   name: Matrix 2
   orientation_uses_group_default: true
-  pitch: 0.0
+  pitch: 90.0
   roll: 0.0
   type: SUNSTRIP
   universe: 1
@@ -616,14 +782,23 @@ fixtures:
     name: 5 Channels Mode
   - channels: 10
     name: 10 Channels Mode
+  calibration: {}
   current_mode: 10 Channels Mode
+  definition_source: qxf
+  docked_to: ''
+  gdtf_fixture_type_id: null
   group: Strobes
+  groups:
+  - Strobes
+  invert_pan: false
+  invert_tilt: false
+  layer: ''
   manufacturer: Showtec
   model: Sunstrip Active
   mounting: hanging
   name: Strobes 1
   orientation_uses_group_default: true
-  pitch: 0.0
+  pitch: 90.0
   roll: 0.0
   type: SUNSTRIP
   universe: 1
@@ -642,14 +817,23 @@ fixtures:
     name: 5 Channels Mode
   - channels: 10
     name: 10 Channels Mode
+  calibration: {}
   current_mode: 10 Channels Mode
+  definition_source: qxf
+  docked_to: ''
+  gdtf_fixture_type_id: null
   group: Strobes
+  groups:
+  - Strobes
+  invert_pan: false
+  invert_tilt: false
+  layer: ''
   manufacturer: Showtec
   model: Sunstrip Active
   mounting: hanging
   name: Strobes 2
   orientation_uses_group_default: true
-  pitch: 0.0
+  pitch: 90.0
   roll: 0.0
   type: SUNSTRIP
   universe: 1
@@ -663,11 +847,20 @@ groups:
   Beam Array:
     color: '#3366bb'
     default_mounting: hanging
-    default_pitch: 0.0
+    default_pitch: 90.0
     default_roll: 0.0
     default_yaw: 0.0
     default_z_height: 4.0
     export_intensity: 255
+    fixture_order:
+    - Beam Array 1
+    - Beam Array 2
+    - Beam Array 3
+    - Beam Array 4
+    - Beam Array 5
+    - Beam Array 6
+    - Beam Array 7
+    - Beam Array 8
     fixtures:
     - address: 1
       available_modes:
@@ -677,14 +870,23 @@ groups:
         name: Ba (18ch)
       - channels: 44
         name: Ex (44ch)
+      calibration: {}
       current_mode: St (20ch)
+      definition_source: qxf
+      docked_to: ''
+      gdtf_fixture_type_id: null
       group: Beam Array
+      groups:
+      - Beam Array
+      invert_pan: false
+      invert_tilt: false
+      layer: ''
       manufacturer: Ayrton
       model: MagicBlade R
       mounting: hanging
       name: Beam Array 1
       orientation_uses_group_default: true
-      pitch: 0.0
+      pitch: 90.0
       roll: 0.0
       type: MH
       universe: 1
@@ -701,14 +903,23 @@ groups:
         name: Ba (18ch)
       - channels: 44
         name: Ex (44ch)
+      calibration: {}
       current_mode: St (20ch)
+      definition_source: qxf
+      docked_to: ''
+      gdtf_fixture_type_id: null
       group: Beam Array
+      groups:
+      - Beam Array
+      invert_pan: false
+      invert_tilt: false
+      layer: ''
       manufacturer: Ayrton
       model: MagicBlade R
       mounting: hanging
       name: Beam Array 2
       orientation_uses_group_default: true
-      pitch: 0.0
+      pitch: 90.0
       roll: 0.0
       type: MH
       universe: 1
@@ -725,14 +936,23 @@ groups:
         name: Ba (18ch)
       - channels: 44
         name: Ex (44ch)
+      calibration: {}
       current_mode: St (20ch)
+      definition_source: qxf
+      docked_to: ''
+      gdtf_fixture_type_id: null
       group: Beam Array
+      groups:
+      - Beam Array
+      invert_pan: false
+      invert_tilt: false
+      layer: ''
       manufacturer: Ayrton
       model: MagicBlade R
       mounting: hanging
       name: Beam Array 3
       orientation_uses_group_default: true
-      pitch: 0.0
+      pitch: 90.0
       roll: 0.0
       type: MH
       universe: 1
@@ -749,14 +969,23 @@ groups:
         name: Ba (18ch)
       - channels: 44
         name: Ex (44ch)
+      calibration: {}
       current_mode: St (20ch)
+      definition_source: qxf
+      docked_to: ''
+      gdtf_fixture_type_id: null
       group: Beam Array
+      groups:
+      - Beam Array
+      invert_pan: false
+      invert_tilt: false
+      layer: ''
       manufacturer: Ayrton
       model: MagicBlade R
       mounting: hanging
       name: Beam Array 4
       orientation_uses_group_default: true
-      pitch: 0.0
+      pitch: 90.0
       roll: 0.0
       type: MH
       universe: 1
@@ -773,14 +1002,23 @@ groups:
         name: Ba (18ch)
       - channels: 44
         name: Ex (44ch)
+      calibration: {}
       current_mode: St (20ch)
+      definition_source: qxf
+      docked_to: ''
+      gdtf_fixture_type_id: null
       group: Beam Array
+      groups:
+      - Beam Array
+      invert_pan: false
+      invert_tilt: false
+      layer: ''
       manufacturer: Ayrton
       model: MagicBlade R
       mounting: hanging
       name: Beam Array 5
       orientation_uses_group_default: true
-      pitch: 0.0
+      pitch: 90.0
       roll: 0.0
       type: MH
       universe: 1
@@ -797,14 +1035,23 @@ groups:
         name: Ba (18ch)
       - channels: 44
         name: Ex (44ch)
+      calibration: {}
       current_mode: St (20ch)
+      definition_source: qxf
+      docked_to: ''
+      gdtf_fixture_type_id: null
       group: Beam Array
+      groups:
+      - Beam Array
+      invert_pan: false
+      invert_tilt: false
+      layer: ''
       manufacturer: Ayrton
       model: MagicBlade R
       mounting: hanging
       name: Beam Array 6
       orientation_uses_group_default: true
-      pitch: 0.0
+      pitch: 90.0
       roll: 0.0
       type: MH
       universe: 1
@@ -821,14 +1068,23 @@ groups:
         name: Ba (18ch)
       - channels: 44
         name: Ex (44ch)
+      calibration: {}
       current_mode: St (20ch)
+      definition_source: qxf
+      docked_to: ''
+      gdtf_fixture_type_id: null
       group: Beam Array
+      groups:
+      - Beam Array
+      invert_pan: false
+      invert_tilt: false
+      layer: ''
       manufacturer: Ayrton
       model: MagicBlade R
       mounting: hanging
       name: Beam Array 7
       orientation_uses_group_default: true
-      pitch: 0.0
+      pitch: 90.0
       roll: 0.0
       type: MH
       universe: 1
@@ -845,14 +1101,23 @@ groups:
         name: Ba (18ch)
       - channels: 44
         name: Ex (44ch)
+      calibration: {}
       current_mode: St (20ch)
+      definition_source: qxf
+      docked_to: ''
+      gdtf_fixture_type_id: null
       group: Beam Array
+      groups:
+      - Beam Array
+      invert_pan: false
+      invert_tilt: false
+      layer: ''
       manufacturer: Ayrton
       model: MagicBlade R
       mounting: hanging
       name: Beam Array 8
       orientation_uses_group_default: true
-      pitch: 0.0
+      pitch: 90.0
       roll: 0.0
       type: MH
       universe: 1
@@ -863,14 +1128,18 @@ groups:
       z_uses_group_default: false
     lighting_role: movement
     name: Beam Array
+    order_mode: manual
   Matrix:
     color: '#cc4444'
     default_mounting: hanging
-    default_pitch: 0.0
+    default_pitch: 90.0
     default_roll: 0.0
     default_yaw: 0.0
     default_z_height: 3.0
     export_intensity: 255
+    fixture_order:
+    - Matrix 1
+    - Matrix 2
     fixtures:
     - address: 377
       available_modes:
@@ -882,14 +1151,23 @@ groups:
         name: 28-Channel
       - channels: 4
         name: 4-Channel
+      calibration: {}
       current_mode: 26-Channel
+      definition_source: qxf
+      docked_to: ''
+      gdtf_fixture_type_id: null
       group: Matrix
+      groups:
+      - Matrix
+      invert_pan: false
+      invert_tilt: false
+      layer: ''
       manufacturer: Stairville
       model: LED Matrix Blinder 5x5
       mounting: hanging
       name: Matrix 1
       orientation_uses_group_default: true
-      pitch: 0.0
+      pitch: 90.0
       roll: 0.0
       type: SUNSTRIP
       universe: 1
@@ -908,14 +1186,23 @@ groups:
         name: 28-Channel
       - channels: 4
         name: 4-Channel
+      calibration: {}
       current_mode: 26-Channel
+      definition_source: qxf
+      docked_to: ''
+      gdtf_fixture_type_id: null
       group: Matrix
+      groups:
+      - Matrix
+      invert_pan: false
+      invert_tilt: false
+      layer: ''
       manufacturer: Stairville
       model: LED Matrix Blinder 5x5
       mounting: hanging
       name: Matrix 2
       orientation_uses_group_default: true
-      pitch: 0.0
+      pitch: 90.0
       roll: 0.0
       type: SUNSTRIP
       universe: 1
@@ -926,14 +1213,20 @@ groups:
       z_uses_group_default: false
     lighting_role: effect
     name: Matrix
+    order_mode: manual
   Moving Wash:
     color: '#cc44aa'
     default_mounting: hanging
-    default_pitch: 0.0
+    default_pitch: 90.0
     default_roll: 0.0
     default_yaw: 0.0
     default_z_height: 4.0
     export_intensity: 255
+    fixture_order:
+    - Moving Wash 1
+    - Moving Wash 2
+    - Moving Wash 3
+    - Moving Wash 4
     fixtures:
     - address: 161
       available_modes:
@@ -941,14 +1234,23 @@ groups:
         name: Extended
       - channels: 14
         name: Standard
+      calibration: {}
       current_mode: Standard
+      definition_source: qxf
+      docked_to: ''
+      gdtf_fixture_type_id: null
       group: Moving Wash
+      groups:
+      - Moving Wash
+      invert_pan: false
+      invert_tilt: false
+      layer: ''
       manufacturer: Martin
       model: MAC Aura
       mounting: hanging
       name: Moving Wash 1
       orientation_uses_group_default: true
-      pitch: 0.0
+      pitch: 90.0
       roll: 0.0
       type: MH
       universe: 1
@@ -963,14 +1265,23 @@ groups:
         name: Extended
       - channels: 14
         name: Standard
+      calibration: {}
       current_mode: Standard
+      definition_source: qxf
+      docked_to: ''
+      gdtf_fixture_type_id: null
       group: Moving Wash
+      groups:
+      - Moving Wash
+      invert_pan: false
+      invert_tilt: false
+      layer: ''
       manufacturer: Martin
       model: MAC Aura
       mounting: hanging
       name: Moving Wash 2
       orientation_uses_group_default: true
-      pitch: 0.0
+      pitch: 90.0
       roll: 0.0
       type: MH
       universe: 1
@@ -985,14 +1296,23 @@ groups:
         name: Extended
       - channels: 14
         name: Standard
+      calibration: {}
       current_mode: Standard
+      definition_source: qxf
+      docked_to: ''
+      gdtf_fixture_type_id: null
       group: Moving Wash
+      groups:
+      - Moving Wash
+      invert_pan: false
+      invert_tilt: false
+      layer: ''
       manufacturer: Martin
       model: MAC Aura
       mounting: hanging
       name: Moving Wash 3
       orientation_uses_group_default: true
-      pitch: 0.0
+      pitch: 90.0
       roll: 0.0
       type: MH
       universe: 1
@@ -1007,14 +1327,23 @@ groups:
         name: Extended
       - channels: 14
         name: Standard
+      calibration: {}
       current_mode: Standard
+      definition_source: qxf
+      docked_to: ''
+      gdtf_fixture_type_id: null
       group: Moving Wash
+      groups:
+      - Moving Wash
+      invert_pan: false
+      invert_tilt: false
+      layer: ''
       manufacturer: Martin
       model: MAC Aura
       mounting: hanging
       name: Moving Wash 4
       orientation_uses_group_default: true
-      pitch: 0.0
+      pitch: 90.0
       roll: 0.0
       type: MH
       universe: 1
@@ -1025,27 +1354,42 @@ groups:
       z_uses_group_default: false
     lighting_role: movement
     name: Moving Wash
+    order_mode: manual
   Pixel Bars:
     color: '#44cccc'
     default_mounting: standing
-    default_pitch: 0.0
+    default_pitch: -90.0
     default_roll: 0.0
     default_yaw: 0.0
     default_z_height: 0.2
     export_intensity: 255
+    fixture_order:
+    - Pixel Bars 1
+    - Pixel Bars 2
+    - Pixel Bars 3
+    - Pixel Bars 4
     fixtures:
     - address: 217
       available_modes:
       - channels: 40
         name: 40 Channels Mode
+      calibration: {}
       current_mode: 40 Channels Mode
+      definition_source: qxf
+      docked_to: ''
+      gdtf_fixture_type_id: null
       group: Pixel Bars
+      groups:
+      - Pixel Bars
+      invert_pan: false
+      invert_tilt: false
+      layer: ''
       manufacturer: Varghele
       model: LED BAR
       mounting: standing
       name: Pixel Bars 1
       orientation_uses_group_default: true
-      pitch: 0.0
+      pitch: -90.0
       roll: 0.0
       type: PIXELBAR
       universe: 1
@@ -1058,14 +1402,23 @@ groups:
       available_modes:
       - channels: 40
         name: 40 Channels Mode
+      calibration: {}
       current_mode: 40 Channels Mode
+      definition_source: qxf
+      docked_to: ''
+      gdtf_fixture_type_id: null
       group: Pixel Bars
+      groups:
+      - Pixel Bars
+      invert_pan: false
+      invert_tilt: false
+      layer: ''
       manufacturer: Varghele
       model: LED BAR
       mounting: standing
       name: Pixel Bars 2
       orientation_uses_group_default: true
-      pitch: 0.0
+      pitch: -90.0
       roll: 0.0
       type: PIXELBAR
       universe: 1
@@ -1078,14 +1431,23 @@ groups:
       available_modes:
       - channels: 40
         name: 40 Channels Mode
+      calibration: {}
       current_mode: 40 Channels Mode
+      definition_source: qxf
+      docked_to: ''
+      gdtf_fixture_type_id: null
       group: Pixel Bars
+      groups:
+      - Pixel Bars
+      invert_pan: false
+      invert_tilt: false
+      layer: ''
       manufacturer: Varghele
       model: LED BAR
       mounting: standing
       name: Pixel Bars 3
       orientation_uses_group_default: true
-      pitch: 0.0
+      pitch: -90.0
       roll: 0.0
       type: PIXELBAR
       universe: 1
@@ -1098,14 +1460,23 @@ groups:
       available_modes:
       - channels: 40
         name: 40 Channels Mode
+      calibration: {}
       current_mode: 40 Channels Mode
+      definition_source: qxf
+      docked_to: ''
+      gdtf_fixture_type_id: null
       group: Pixel Bars
+      groups:
+      - Pixel Bars
+      invert_pan: false
+      invert_tilt: false
+      layer: ''
       manufacturer: Varghele
       model: LED BAR
       mounting: standing
       name: Pixel Bars 4
       orientation_uses_group_default: true
-      pitch: 0.0
+      pitch: -90.0
       roll: 0.0
       type: PIXELBAR
       universe: 1
@@ -1116,14 +1487,18 @@ groups:
       z_uses_group_default: false
     lighting_role: accent
     name: Pixel Bars
+    order_mode: manual
   Strobes:
     color: '#ccaa33'
     default_mounting: hanging
-    default_pitch: 0.0
+    default_pitch: 90.0
     default_roll: 0.0
     default_yaw: 0.0
     default_z_height: 2.5
     export_intensity: 255
+    fixture_order:
+    - Strobes 1
+    - Strobes 2
     fixtures:
     - address: 429
       available_modes:
@@ -1135,14 +1510,23 @@ groups:
         name: 5 Channels Mode
       - channels: 10
         name: 10 Channels Mode
+      calibration: {}
       current_mode: 10 Channels Mode
+      definition_source: qxf
+      docked_to: ''
+      gdtf_fixture_type_id: null
       group: Strobes
+      groups:
+      - Strobes
+      invert_pan: false
+      invert_tilt: false
+      layer: ''
       manufacturer: Showtec
       model: Sunstrip Active
       mounting: hanging
       name: Strobes 1
       orientation_uses_group_default: true
-      pitch: 0.0
+      pitch: 90.0
       roll: 0.0
       type: SUNSTRIP
       universe: 1
@@ -1161,14 +1545,23 @@ groups:
         name: 5 Channels Mode
       - channels: 10
         name: 10 Channels Mode
+      calibration: {}
       current_mode: 10 Channels Mode
+      definition_source: qxf
+      docked_to: ''
+      gdtf_fixture_type_id: null
       group: Strobes
+      groups:
+      - Strobes
+      invert_pan: false
+      invert_tilt: false
+      layer: ''
       manufacturer: Showtec
       model: Sunstrip Active
       mounting: hanging
       name: Strobes 2
       orientation_uses_group_default: true
-      pitch: 0.0
+      pitch: 90.0
       roll: 0.0
       type: SUNSTRIP
       universe: 1
@@ -1179,6 +1572,7 @@ groups:
       z_uses_group_default: false
     lighting_role: effect
     name: Strobes
+    order_mode: manual
 light_block_defs:
   lb0:
     colour_blocks:
@@ -1395,7 +1789,24 @@ light_block_defs:
     special_blocks: []
 midi_input_devices: null
 pause_show: null
-shows:
+setlist:
+  entries:
+  - pause_after:
+      duration_s: 0.0
+      level: 20
+      mode: hold_last
+      until: trigger
+    song: Demo
+    trigger:
+      channel: 1
+      mode: manual
+      timecode: ''
+      value: 0
+  name: ''
+  sync_device: ''
+  sync_mode: manual
+shows_directory: null
+songs:
   Demo:
     effects: []
     parts:
@@ -1416,6 +1827,7 @@ shows:
       lanes:
       - fixture_targets:
         - Beam Array
+        lane_id: 835912926663443a99caa83ceab71374
         light_blocks:
         - end: 3.75
           ref: lb0
@@ -1443,6 +1855,7 @@ shows:
         solo: false
       - fixture_targets:
         - Matrix
+        lane_id: a7a3fe6717c3493eacaec1f9027f0a5a
         light_blocks:
         - end: 3.75
           ref: lb3
@@ -1470,6 +1883,7 @@ shows:
         solo: false
       - fixture_targets:
         - Moving Wash
+        lane_id: 51cf79a7d85045eeb8f56f452deebabb
         light_blocks:
         - end: 5.0
           ref: lb6
@@ -1497,6 +1911,7 @@ shows:
         solo: false
       - fixture_targets:
         - Pixel Bars
+        lane_id: 6d182021951740848aca5f8b2c18c3da
         light_blocks:
         - end: 13.75
           ref: lb9
@@ -1518,6 +1933,7 @@ shows:
         solo: false
       - fixture_targets:
         - Strobes
+        lane_id: 64f0930a044b4755b55afd86e61619a0
         light_blocks:
         - end: 5.0
           ref: lb11
@@ -1545,7 +1961,6 @@ shows:
         solo: false
     trigger_channel: null
     trigger_device: null
-shows_directory: null
 spots:
   Crowd:
     name: Crowd
@@ -1557,7 +1972,9 @@ spots:
     x: 0.0
     y: 4.0
     z: 0.0
+stage_elements: []
 stage_height: 8.0
+stage_layers: []
 stage_width: 10.0
 universes:
   '1':

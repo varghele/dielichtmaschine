@@ -162,3 +162,50 @@ class TestMorphCli:
                               str(tmp_path / "t.lms"), "--out",
                               str(tmp_path / "o.lms")])
         assert code == 1
+
+
+class TestGroupCapabilityDetection:
+    """group_capabilities without STORED capabilities (every real
+    loaded config - nothing persists them): detect from the fixture
+    definitions; assume-everything survives only for fixtures whose
+    definitions cannot be found (2026-07-16, the fix that turned the
+    patchbay gating on for real projects)."""
+
+    def _bare_group_config(self, manufacturer, model):
+        fixture = Fixture(universe=1, address=1, manufacturer=manufacturer,
+                          model=model, current_mode="Std",
+                          available_modes=[FixtureMode(name="Std",
+                                                       channels=6)],
+                          name="f1", group="G")
+        cfg = Configuration(
+            fixtures=[fixture],
+            groups={"G": FixtureGroup("G", [fixture])},   # caps = None
+            universes={1: Universe(id=1, name="U1", output={})})
+        cfg.songs = {}
+        return cfg
+
+    def test_real_definition_gates(self):
+        # A static RGB wash must NOT offer POSITION (the bundled
+        # Stairville definition has no pan/tilt channels).
+        cfg = self._bare_group_config("Stairville",
+                                      "Wild Wash Pro 648 RGB LED")
+        caps = group_capabilities(cfg)["G"]
+        assert "dimmer" in caps and "colour" in caps
+        assert "movement" not in caps
+
+    def test_mover_definition_keeps_movement(self):
+        cfg = self._bare_group_config("Varytec", "Hero Spot 60")
+        caps = group_capabilities(cfg)["G"]
+        assert "movement" in caps
+
+    def test_unknown_definition_stays_conservative(self):
+        cfg = self._bare_group_config("M", "X")
+        assert group_capabilities(cfg)["G"] == \
+            {"dimmer", "colour", "movement", "special"}
+
+    def test_stored_capabilities_still_win(self):
+        cfg = self._bare_group_config("Stairville",
+                                      "Wild Wash Pro 648 RGB LED")
+        cfg.groups["G"].capabilities = FixtureGroupCapabilities(
+            has_dimmer=True)
+        assert group_capabilities(cfg)["G"] == {"dimmer"}

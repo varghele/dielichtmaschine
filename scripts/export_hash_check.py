@@ -50,7 +50,7 @@ def main(out_path):
     lines = []
     for rig in RIGS:
         config = Configuration.load(
-            os.path.join(REPO_ROOT, "demos", "rigs", f"{rig}.yaml"))
+            os.path.join(REPO_ROOT, "demos", "rigs", f"{rig}.lms"))
         try:
             random.seed(0)
             create_qlc_workspace(config, VC_OPTIONS)

@@ -208,8 +208,9 @@ design pass against screens 05b/06b):** the data model is
 SHOW(SETLIST) -> SONGS -> PARTS. `Show` was renamed `Song`
 (config.songs); `Setlist`/`SetlistEntry`/`SongTrigger`/`PauseLook` are
 new in config/models.py; YAML writes `songs:` + `setlist:` and loads
-legacy `shows:` forever (synthesized setlist; demo YAMLs deliberately
-stay legacy as fixtures). Export is byte-identical (hash-checked).
+legacy `shows:` forever (synthesized setlist; the legacy-load fixture
+is tests/fixtures/legacy_band_midsize.yaml - the demos themselves
+converted to .lms 2026-07-16). Export is byte-identical (hash-checked).
 Structure tab = setlist rail (numbered cards, triggers, pause rows,
 sync segment, drag reorder) + song editor centre + trigger/pause-look
 inspector (LEARN disabled until the v1.7 engine; analysis bars read

@@ -15,7 +15,7 @@ from utils.export_cli import (
 
 REPO_ROOT = os.path.abspath(
     os.path.join(os.path.dirname(__file__), "..", ".."))
-CLUB_BAND = os.path.join(REPO_ROOT, "demos", "rigs", "club_band.yaml")
+CLUB_BAND = os.path.join(REPO_ROOT, "demos", "rigs", "club_band.lms")
 
 
 def _read(path):

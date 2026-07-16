@@ -396,3 +396,50 @@ class TestReMorph:
         apply_morph(result, b, plan)
         (kept,) = b.songs["S"].timeline_data.lanes
         assert kept.light_blocks[0].provenance == "hand_edited"
+
+
+class TestPerSongLanes:
+    """Lanes are per song: a setlist-wide plan carries edges for every
+    song's lanes, and compiling song S must silently skip the other
+    songs' edges (fixed 2026-07-16 - the single-song demos never
+    exercised this and real multi-song projects drowned in
+    'not in this song' errors). A lane id in NO source song still
+    errors: that edge is genuinely broken."""
+
+    def _two_song_source(self):
+        lane1 = _lane("Pars", ["PARS"],
+                      dimmer=[DimmerBlock(0.0, 16.0, intensity=200.0)])
+        lane2 = _lane("Pars", ["PARS"],
+                      dimmer=[DimmerBlock(0.0, 8.0, intensity=120.0)])
+        a = _config({"PARS": [_fixture("p1")]},
+                    songs={"One": _song("One", lanes=[lane1]),
+                           "Two": _song("Two", lanes=[lane2])})
+        return a, lane1, lane2
+
+    def test_cross_song_edges_skip_silently(self):
+        a, lane1, lane2 = self._two_song_source()
+        b = _config({"WASH": [_fixture("w1", group="WASH")]})
+        plan = MorphPlan(edges=[_edge(lane1, "dimmer", "WASH"),
+                                _edge(lane2, "dimmer", "WASH")])
+        result = compile_setlist(a, plan, b)
+        assert not result.report.has_errors
+        for name, lane in (("One", lane1), ("Two", lane2)):
+            (out,) = result.songs[name].timeline_data.lanes
+            blocks = [d for lb in out.light_blocks
+                      for d in lb.dimmer_blocks]
+            src = [d for lb in lane.light_blocks
+                   for d in lb.dimmer_blocks]
+            assert len(blocks) == len(src), name
+
+    def test_lane_in_no_song_still_errors(self):
+        # Caught by plan validation before any song compiles - the
+        # per-song skip must never swallow a genuinely dangling edge.
+        a, lane1, _lane2 = self._two_song_source()
+        b = _config({"WASH": [_fixture("w1", group="WASH")]})
+        ghost = _lane("Gone", ["PARS"],
+                      dimmer=[DimmerBlock(0.0, 4.0)])
+        plan = MorphPlan(edges=[_edge(lane1, "dimmer", "WASH"),
+                                _edge(ghost, "dimmer", "WASH")])
+        result = compile_setlist(a, plan, b)
+        errors = result.report.of_kind("error")
+        assert errors and "not in the source config" in errors[0].format()

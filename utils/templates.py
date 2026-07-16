@@ -83,7 +83,9 @@ def list_templates() -> List[ProjectTemplate]:
 
     templates = []
     for filename in sorted(os.listdir(rigs_dir)):
-        if not filename.endswith('.yaml'):
+        # Bundled templates ship as .lms since 2026-07-16; .yaml stays
+        # accepted so a user-provided legacy rig dropped in still lists.
+        if not filename.endswith(('.lms', '.yaml')):
             continue
         key = os.path.splitext(filename)[0]
         rig_path = os.path.join(rigs_dir, filename)

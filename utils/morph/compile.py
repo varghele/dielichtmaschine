@@ -478,6 +478,16 @@ def compile_song(song: Song, plan: MorphPlan, source_config,
     lanes_by_id = {lane.lane_id: lane
                    for lane in song.timeline_data.lanes}
     edges = plan.edges_for_song(song.name)
+    # Lanes are PER SONG: a plan wired across the whole setlist (the
+    # patchbay catalogs every song's lanes) routinely carries edges
+    # for other songs' lanes. Those are not this song's business and
+    # must skip silently - only a lane id found in NO source song is a
+    # broken edge (fixed 2026-07-16: the single-song demo shows never
+    # exercised this, and a real 12-song project drowned in errors).
+    all_lane_ids = {lane.lane_id
+                    for s in source_config.songs.values()
+                    if s.timeline_data
+                    for lane in s.timeline_data.lanes}
 
     # target group -> sublane -> [(edge, blocks)]
     buckets: Dict[str, Dict[str, List[Tuple[MorphEdge, list]]]] = {}
@@ -485,6 +495,8 @@ def compile_song(song: Song, plan: MorphPlan, source_config,
 
     for edge in edges:
         lane = lanes_by_id.get(edge.source_lane_id)
+        if lane is None and edge.source_lane_id in all_lane_ids:
+            continue                       # another song's lane
         target_group = edge.target_group
         selector = _subset_selector(edge)
         if selector:

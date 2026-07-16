@@ -75,6 +75,35 @@ verbatim as the GitHub Release notes (see [docs/releasing.md](docs/releasing.md)
   now warns hard - in the app with Continue Anyway / Cancel, on the
   headless export CLI as a stderr warning.
 
+### Changed
+
+- **The bundled demo rigs and shows now ship in the native `.lms`
+  format** (the content stays YAML; the files carry the current
+  schema: `songs:` + `setlist:`, compact block tables, stable lane
+  ids, group fixture order). Exports from the converted demos are
+  byte-identical to before, and legacy `.yaml` projects keep loading
+  everywhere - a legacy-format copy of the mid-size demo is preserved
+  as the loader's regression fixture.
+
+### Fixed
+
+- **The morph patchbay's capability gating now works on real
+  projects.** Group capabilities were only honoured when a config
+  carried them pre-stored - which no loaded project does - so every
+  target group offered all four capabilities (a static PAR group
+  happily accepted POSITION wires). Capabilities are now detected from
+  the fixture definitions; fixtures whose definitions cannot be found
+  keep the conservative assume-everything fallback.
+- **Morphing a multi-song project no longer drowns in errors.**
+  Timeline lanes belong to one song each, but the morph compile
+  treated every edge as applying to every song and reported "source
+  lane not in this song" for each cross-song combination - a 12-song
+  project produced over a thousand bogus errors and the commit stayed
+  disabled. Edges for another song's lanes now skip that song
+  silently; an edge whose lane exists in no song at all still fails
+  plan validation loudly. (The bundled demo shows have a single song
+  each, which is why this never surfaced before.)
+
 ## [1.4.0] - 2026-07-15
 
 ### Fixed

@@ -121,6 +121,7 @@ block_defs:
       phase_offset_enabled: false
       speed: 255.0
       target_plane_name: null
+      target_point: null
       target_spot_name: Stage
       tilt: 127.5
       tilt_amplitude: 41.597360283982965
@@ -141,6 +142,7 @@ block_defs:
       phase_offset_enabled: false
       speed: 255.0
       target_plane_name: null
+      target_point: null
       target_spot_name: Crowd
       tilt: 127.5
       tilt_amplitude: 80.0
@@ -161,6 +163,7 @@ block_defs:
       phase_offset_enabled: false
       speed: 255.0
       target_plane_name: null
+      target_point: null
       target_spot_name: Stage
       tilt: 127.5
       tilt_amplitude: 49.91683234077956
@@ -181,6 +184,7 @@ block_defs:
       phase_offset_enabled: false
       speed: 255.0
       target_plane_name: null
+      target_point: null
       target_spot_name: Crowd
       tilt: 127.5
       tilt_amplitude: 80.0
@@ -201,6 +205,7 @@ block_defs:
       phase_offset_enabled: false
       speed: 255.0
       target_plane_name: null
+      target_point: null
       target_spot_name: Stage
       tilt: 127.5
       tilt_amplitude: 49.91683234077956
@@ -216,14 +221,23 @@ fixtures:
     name: 6 Channel
   - channels: 8
     name: 8 Channel
+  calibration: {}
   current_mode: 8 Channel
+  definition_source: qxf
+  docked_to: ''
+  gdtf_fixture_type_id: null
   group: Front PARs
+  groups:
+  - Front PARs
+  invert_pan: false
+  invert_tilt: false
+  layer: ''
   manufacturer: Stairville
   model: 'Retro Flat Par 18x12W RGBW '
   mounting: hanging
   name: Front PARs 1
   orientation_uses_group_default: true
-  pitch: 0.0
+  pitch: 90.0
   roll: 0.0
   type: WASH
   universe: 1
@@ -240,14 +254,23 @@ fixtures:
     name: 6 Channel
   - channels: 8
     name: 8 Channel
+  calibration: {}
   current_mode: 8 Channel
+  definition_source: qxf
+  docked_to: ''
+  gdtf_fixture_type_id: null
   group: Front PARs
+  groups:
+  - Front PARs
+  invert_pan: false
+  invert_tilt: false
+  layer: ''
   manufacturer: Stairville
   model: 'Retro Flat Par 18x12W RGBW '
   mounting: hanging
   name: Front PARs 2
   orientation_uses_group_default: true
-  pitch: 0.0
+  pitch: 90.0
   roll: 0.0
   type: WASH
   universe: 1
@@ -264,14 +287,23 @@ fixtures:
     name: 6 Channel
   - channels: 8
     name: 8 Channel
+  calibration: {}
   current_mode: 8 Channel
+  definition_source: qxf
+  docked_to: ''
+  gdtf_fixture_type_id: null
   group: Front PARs
+  groups:
+  - Front PARs
+  invert_pan: false
+  invert_tilt: false
+  layer: ''
   manufacturer: Stairville
   model: 'Retro Flat Par 18x12W RGBW '
   mounting: hanging
   name: Front PARs 3
   orientation_uses_group_default: true
-  pitch: 0.0
+  pitch: 90.0
   roll: 0.0
   type: WASH
   universe: 1
@@ -288,14 +320,23 @@ fixtures:
     name: 6 Channel
   - channels: 8
     name: 8 Channel
+  calibration: {}
   current_mode: 8 Channel
+  definition_source: qxf
+  docked_to: ''
+  gdtf_fixture_type_id: null
   group: Front PARs
+  groups:
+  - Front PARs
+  invert_pan: false
+  invert_tilt: false
+  layer: ''
   manufacturer: Stairville
   model: 'Retro Flat Par 18x12W RGBW '
   mounting: hanging
   name: Front PARs 4
   orientation_uses_group_default: true
-  pitch: 0.0
+  pitch: 90.0
   roll: 0.0
   type: WASH
   universe: 1
@@ -320,14 +361,23 @@ fixtures:
     name: 4 Channel
   - channels: 1
     name: 1 Channel
+  calibration: {}
   current_mode: 6 Channel
+  definition_source: qxf
+  docked_to: ''
+  gdtf_fixture_type_id: null
   group: Back Wash
+  groups:
+  - Back Wash
+  invert_pan: false
+  invert_tilt: false
+  layer: ''
   manufacturer: Stairville
   model: Wild Wash Pro 648 RGB LED
   mounting: hanging
   name: Back Wash 1
   orientation_uses_group_default: true
-  pitch: 0.0
+  pitch: 90.0
   roll: 0.0
   type: WASH
   universe: 1
@@ -352,14 +402,23 @@ fixtures:
     name: 4 Channel
   - channels: 1
     name: 1 Channel
+  calibration: {}
   current_mode: 6 Channel
+  definition_source: qxf
+  docked_to: ''
+  gdtf_fixture_type_id: null
   group: Back Wash
+  groups:
+  - Back Wash
+  invert_pan: false
+  invert_tilt: false
+  layer: ''
   manufacturer: Stairville
   model: Wild Wash Pro 648 RGB LED
   mounting: hanging
   name: Back Wash 2
   orientation_uses_group_default: true
-  pitch: 0.0
+  pitch: 90.0
   roll: 0.0
   type: WASH
   universe: 1
@@ -374,14 +433,23 @@ fixtures:
     name: 8 Channel
   - channels: 14
     name: 14 Channel
+  calibration: {}
   current_mode: 14 Channel
+  definition_source: qxf
+  docked_to: ''
+  gdtf_fixture_type_id: null
   group: Movers
+  groups:
+  - Movers
+  invert_pan: false
+  invert_tilt: false
+  layer: ''
   manufacturer: Varytec
   model: Hero Spot 60
   mounting: hanging
   name: Movers 1
   orientation_uses_group_default: true
-  pitch: 0.0
+  pitch: 90.0
   roll: 0.0
   type: MH
   universe: 1
@@ -396,14 +464,23 @@ fixtures:
     name: 8 Channel
   - channels: 14
     name: 14 Channel
+  calibration: {}
   current_mode: 14 Channel
+  definition_source: qxf
+  docked_to: ''
+  gdtf_fixture_type_id: null
   group: Movers
+  groups:
+  - Movers
+  invert_pan: false
+  invert_tilt: false
+  layer: ''
   manufacturer: Varytec
   model: Hero Spot 60
   mounting: hanging
   name: Movers 2
   orientation_uses_group_default: true
-  pitch: 0.0
+  pitch: 90.0
   roll: 0.0
   type: MH
   universe: 1
@@ -422,14 +499,23 @@ fixtures:
     name: 5 Channels Mode
   - channels: 10
     name: 10 Channels Mode
+  calibration: {}
   current_mode: 10 Channels Mode
+  definition_source: qxf
+  docked_to: ''
+  gdtf_fixture_type_id: null
   group: Blinder
+  groups:
+  - Blinder
+  invert_pan: false
+  invert_tilt: false
+  layer: ''
   manufacturer: Showtec
   model: Sunstrip Active
   mounting: standing
   name: Blinder 1
   orientation_uses_group_default: true
-  pitch: 0.0
+  pitch: -90.0
   roll: 0.0
   type: SUNSTRIP
   universe: 1
@@ -443,11 +529,14 @@ groups:
   Back Wash:
     color: '#cc7744'
     default_mounting: hanging
-    default_pitch: 0.0
+    default_pitch: 90.0
     default_roll: 0.0
     default_yaw: 0.0
     default_z_height: 2.6
     export_intensity: 255
+    fixture_order:
+    - Back Wash 1
+    - Back Wash 2
     fixtures:
     - address: 33
       available_modes:
@@ -465,14 +554,23 @@ groups:
         name: 4 Channel
       - channels: 1
         name: 1 Channel
+      calibration: {}
       current_mode: 6 Channel
+      definition_source: qxf
+      docked_to: ''
+      gdtf_fixture_type_id: null
       group: Back Wash
+      groups:
+      - Back Wash
+      invert_pan: false
+      invert_tilt: false
+      layer: ''
       manufacturer: Stairville
       model: Wild Wash Pro 648 RGB LED
       mounting: hanging
       name: Back Wash 1
       orientation_uses_group_default: true
-      pitch: 0.0
+      pitch: 90.0
       roll: 0.0
       type: WASH
       universe: 1
@@ -497,14 +595,23 @@ groups:
         name: 4 Channel
       - channels: 1
         name: 1 Channel
+      calibration: {}
       current_mode: 6 Channel
+      definition_source: qxf
+      docked_to: ''
+      gdtf_fixture_type_id: null
       group: Back Wash
+      groups:
+      - Back Wash
+      invert_pan: false
+      invert_tilt: false
+      layer: ''
       manufacturer: Stairville
       model: Wild Wash Pro 648 RGB LED
       mounting: hanging
       name: Back Wash 2
       orientation_uses_group_default: true
-      pitch: 0.0
+      pitch: 90.0
       roll: 0.0
       type: WASH
       universe: 1
@@ -515,14 +622,17 @@ groups:
       z_uses_group_default: false
     lighting_role: ambient
     name: Back Wash
+    order_mode: manual
   Blinder:
     color: '#ccaa33'
     default_mounting: standing
-    default_pitch: 0.0
+    default_pitch: -90.0
     default_roll: 0.0
     default_yaw: 0.0
     default_z_height: 0.5
     export_intensity: 255
+    fixture_order:
+    - Blinder 1
     fixtures:
     - address: 73
       available_modes:
@@ -534,14 +644,23 @@ groups:
         name: 5 Channels Mode
       - channels: 10
         name: 10 Channels Mode
+      calibration: {}
       current_mode: 10 Channels Mode
+      definition_source: qxf
+      docked_to: ''
+      gdtf_fixture_type_id: null
       group: Blinder
+      groups:
+      - Blinder
+      invert_pan: false
+      invert_tilt: false
+      layer: ''
       manufacturer: Showtec
       model: Sunstrip Active
       mounting: standing
       name: Blinder 1
       orientation_uses_group_default: true
-      pitch: 0.0
+      pitch: -90.0
       roll: 0.0
       type: SUNSTRIP
       universe: 1
@@ -552,14 +671,20 @@ groups:
       z_uses_group_default: false
     lighting_role: effect
     name: Blinder
+    order_mode: manual
   Front PARs:
     color: '#4477cc'
     default_mounting: hanging
-    default_pitch: 0.0
+    default_pitch: 90.0
     default_roll: 0.0
     default_yaw: 0.0
     default_z_height: 2.6
     export_intensity: 255
+    fixture_order:
+    - Front PARs 1
+    - Front PARs 2
+    - Front PARs 3
+    - Front PARs 4
     fixtures:
     - address: 1
       available_modes:
@@ -569,14 +694,23 @@ groups:
         name: 6 Channel
       - channels: 8
         name: 8 Channel
+      calibration: {}
       current_mode: 8 Channel
+      definition_source: qxf
+      docked_to: ''
+      gdtf_fixture_type_id: null
       group: Front PARs
+      groups:
+      - Front PARs
+      invert_pan: false
+      invert_tilt: false
+      layer: ''
       manufacturer: Stairville
       model: 'Retro Flat Par 18x12W RGBW '
       mounting: hanging
       name: Front PARs 1
       orientation_uses_group_default: true
-      pitch: 0.0
+      pitch: 90.0
       roll: 0.0
       type: WASH
       universe: 1
@@ -593,14 +727,23 @@ groups:
         name: 6 Channel
       - channels: 8
         name: 8 Channel
+      calibration: {}
       current_mode: 8 Channel
+      definition_source: qxf
+      docked_to: ''
+      gdtf_fixture_type_id: null
       group: Front PARs
+      groups:
+      - Front PARs
+      invert_pan: false
+      invert_tilt: false
+      layer: ''
       manufacturer: Stairville
       model: 'Retro Flat Par 18x12W RGBW '
       mounting: hanging
       name: Front PARs 2
       orientation_uses_group_default: true
-      pitch: 0.0
+      pitch: 90.0
       roll: 0.0
       type: WASH
       universe: 1
@@ -617,14 +760,23 @@ groups:
         name: 6 Channel
       - channels: 8
         name: 8 Channel
+      calibration: {}
       current_mode: 8 Channel
+      definition_source: qxf
+      docked_to: ''
+      gdtf_fixture_type_id: null
       group: Front PARs
+      groups:
+      - Front PARs
+      invert_pan: false
+      invert_tilt: false
+      layer: ''
       manufacturer: Stairville
       model: 'Retro Flat Par 18x12W RGBW '
       mounting: hanging
       name: Front PARs 3
       orientation_uses_group_default: true
-      pitch: 0.0
+      pitch: 90.0
       roll: 0.0
       type: WASH
       universe: 1
@@ -641,14 +793,23 @@ groups:
         name: 6 Channel
       - channels: 8
         name: 8 Channel
+      calibration: {}
       current_mode: 8 Channel
+      definition_source: qxf
+      docked_to: ''
+      gdtf_fixture_type_id: null
       group: Front PARs
+      groups:
+      - Front PARs
+      invert_pan: false
+      invert_tilt: false
+      layer: ''
       manufacturer: Stairville
       model: 'Retro Flat Par 18x12W RGBW '
       mounting: hanging
       name: Front PARs 4
       orientation_uses_group_default: true
-      pitch: 0.0
+      pitch: 90.0
       roll: 0.0
       type: WASH
       universe: 1
@@ -659,14 +820,18 @@ groups:
       z_uses_group_default: false
     lighting_role: backbone
     name: Front PARs
+    order_mode: manual
   Movers:
     color: '#44cc77'
     default_mounting: hanging
-    default_pitch: 0.0
+    default_pitch: 90.0
     default_roll: 0.0
     default_yaw: 0.0
     default_z_height: 2.8
     export_intensity: 255
+    fixture_order:
+    - Movers 1
+    - Movers 2
     fixtures:
     - address: 45
       available_modes:
@@ -674,14 +839,23 @@ groups:
         name: 8 Channel
       - channels: 14
         name: 14 Channel
+      calibration: {}
       current_mode: 14 Channel
+      definition_source: qxf
+      docked_to: ''
+      gdtf_fixture_type_id: null
       group: Movers
+      groups:
+      - Movers
+      invert_pan: false
+      invert_tilt: false
+      layer: ''
       manufacturer: Varytec
       model: Hero Spot 60
       mounting: hanging
       name: Movers 1
       orientation_uses_group_default: true
-      pitch: 0.0
+      pitch: 90.0
       roll: 0.0
       type: MH
       universe: 1
@@ -696,14 +870,23 @@ groups:
         name: 8 Channel
       - channels: 14
         name: 14 Channel
+      calibration: {}
       current_mode: 14 Channel
+      definition_source: qxf
+      docked_to: ''
+      gdtf_fixture_type_id: null
       group: Movers
+      groups:
+      - Movers
+      invert_pan: false
+      invert_tilt: false
+      layer: ''
       manufacturer: Varytec
       model: Hero Spot 60
       mounting: hanging
       name: Movers 2
       orientation_uses_group_default: true
-      pitch: 0.0
+      pitch: 90.0
       roll: 0.0
       type: MH
       universe: 1
@@ -714,6 +897,7 @@ groups:
       z_uses_group_default: false
     lighting_role: movement
     name: Movers
+    order_mode: manual
 light_block_defs:
   lb0:
     colour_blocks:
@@ -924,7 +1108,24 @@ light_block_defs:
     special_blocks: []
 midi_input_devices: null
 pause_show: null
-shows:
+setlist:
+  entries:
+  - pause_after:
+      duration_s: 0.0
+      level: 20
+      mode: hold_last
+      until: trigger
+    song: Demo
+    trigger:
+      channel: 1
+      mode: manual
+      timecode: ''
+      value: 0
+  name: ''
+  sync_device: ''
+  sync_mode: manual
+shows_directory: null
+songs:
   Demo:
     effects: []
     parts:
@@ -945,6 +1146,7 @@ shows:
       lanes:
       - fixture_targets:
         - Back Wash
+        lane_id: d4f070d1fe544762a9ffec42332d9904
         light_blocks:
         - end: 3.75
           ref: lb0
@@ -972,6 +1174,7 @@ shows:
         solo: false
       - fixture_targets:
         - Blinder
+        lane_id: 8803c27b3f9e4cbd9f9e0a575a666efe
         light_blocks:
         - end: 3.75
           ref: lb3
@@ -999,6 +1202,7 @@ shows:
         solo: false
       - fixture_targets:
         - Front PARs
+        lane_id: c1ac7250b28340e489d19e4a07842080
         light_blocks:
         - end: 5.0
           ref: lb6
@@ -1026,6 +1230,7 @@ shows:
         solo: false
       - fixture_targets:
         - Movers
+        lane_id: 333560b5ee364260ad5732e00e8fea80
         light_blocks:
         - end: 5.0
           ref: lb9
@@ -1053,7 +1258,6 @@ shows:
         solo: false
     trigger_channel: null
     trigger_device: null
-shows_directory: null
 spots:
   Crowd:
     name: Crowd
@@ -1065,7 +1269,9 @@ spots:
     x: 0.0
     y: 3.0
     z: 0.0
+stage_elements: []
 stage_height: 6.0
+stage_layers: []
 stage_width: 8.0
 universes:
   '1':

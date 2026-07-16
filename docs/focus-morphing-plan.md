@@ -319,3 +319,23 @@ assume one active config.
   that golden's docstring: grab the themed WINDOW (a bare QWidget
   composites no styled background) and flush DeferredDelete before
   grabbing (_rebuild_rows ghost-stacks row generations otherwise).
+- 2026-07-16 (SBD recovery round): the user's real Shoo Bee Doom
+  project (archive/conf_v7.yaml, the latest full-rig save - v8 only
+  trims the rig and adds empty conflict stubs) was converted to
+  shoo_bee_doom/shoo_bee_doom.lms (untracked, gitignored; archive
+  audio bundled beside it, 7 of 10 audio refs rewritten to the bundled
+  mp3s, 3 left absolute for the desk PC). Its first trip through the
+  morph pipeline exposed two real bugs the single-song demos never
+  could: (1) group_capabilities assumed all four sublanes for every
+  loaded config (nothing persists FixtureGroupCapabilities), so
+  patchbay gating was a no-op on real projects - now detected from
+  fixture definitions with assume-everything kept only for unknown
+  models; (2) the compile errored on every edge x song where the
+  edge's lane lived in ANOTHER song - per-song lanes are the norm in
+  multi-song projects, so a 12-song morph produced 1452 bogus errors
+  and commit stayed disabled - cross-song edges now skip silently,
+  dangling lane ids still fail plan validation. Also this round: the
+  bundled demos converted to .lms (generators + templates + tests
+  swept; legacy-load fixture preserved as
+  tests/fixtures/legacy_band_midsize.yaml; export hashes verified
+  byte-identical before/after).

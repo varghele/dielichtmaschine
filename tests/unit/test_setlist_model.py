@@ -264,11 +264,13 @@ shows:
 
 
 class TestDemoLegacyLoad:
-    """The bundled demo configs still carry the legacy `shows:` key and
-    must load through the legacy path forever."""
+    """Legacy `shows:` configs must load through the legacy path
+    forever. The bundled demos converted to the current .lms format
+    2026-07-16, so the legacy fixture is a preserved copy of the old
+    band_midsize demo under tests/fixtures/."""
 
-    DEMO = os.path.join(os.path.dirname(__file__), "..", "..",
-                        "demos", "shows", "band_midsize.yaml")
+    DEMO = os.path.join(os.path.dirname(__file__), "..",
+                        "fixtures", "legacy_band_midsize.yaml")
 
     def test_band_midsize_loads_songs_and_setlist(self):
         config = Configuration.load(os.path.abspath(self.DEMO))

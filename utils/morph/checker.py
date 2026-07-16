@@ -66,15 +66,28 @@ def _union_length(intervals: List[Tuple[float, float]]) -> float:
 
 
 def group_capabilities(config) -> Dict[str, set]:
-    """group -> the sublanes its fixtures can render, from the stored
-    FixtureGroupCapabilities (absent = assume everything, so gaps stay
-    conservative rather than silent)."""
+    """group -> the sublanes its fixtures can render.
+
+    The stored FixtureGroupCapabilities wins when a group carries one,
+    but NO production path persists it on a loaded Configuration (the
+    timeline widgets detect their own copies) - so real projects used
+    to fall through to "assume everything" and the patchbay gating was
+    a no-op for them. Detect from the fixture definitions instead
+    (2026-07-16); assume-everything remains only for fixtures whose
+    definitions cannot be found, so gaps stay conservative rather than
+    silent."""
     result = {}
     for name, group in config.groups.items():
         caps = getattr(group, "capabilities", None)
         if caps is None:
-            result[name] = set(SUBLANE_ATTRS)
-            continue
+            from utils.fixture_utils import \
+                detect_fixture_group_capabilities
+            caps = detect_fixture_group_capabilities(group.fixtures)
+            if not (caps.has_dimmer or caps.has_colour
+                    or caps.has_movement or caps.has_special):
+                # Unknown definitions: stay conservative.
+                result[name] = set(SUBLANE_ATTRS)
+                continue
         have = set()
         if caps.has_dimmer:
             have.add("dimmer")

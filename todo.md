@@ -65,8 +65,8 @@ the desk can judge:
 - [ ] Morph to Venue end to end on demo data (REWORKED 2026-07-16
       after the first pass failed this check: now a full-window screen
       under Tools, drag-and-drop wiring, patchbay layout fixed): open
-      demos/shows/club_band.yaml, Tools > Morph to Venue, target
-      demos/rigs/band_midsize.yaml, AUTO-SUGGEST, eyeball the patchbay
+      demos/shows/club_band.lms, Tools > Morph to Venue, target
+      demos/rigs/band_midsize.lms, AUTO-SUGGEST, eyeball the patchbay
       (wire curves, chip gating, checker strip), DRAG a source chip
       onto a target, navigate to the Stage tab mid-morph and resume
       via the menu, review page: coverage table + RENDER PREVIEW

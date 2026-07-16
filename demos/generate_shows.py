@@ -19,7 +19,7 @@ Run:
     python -m demos.generate_shows clip.wav --bpm 128
     python -m demos.generate_shows clip.wav --rig dj_edm     # single rig
 Output:
-    demos/shows/<rig>.yaml
+    demos/shows/<rig>.lms
     demos/shows/audiofiles/<clip basename>
 """
 
@@ -181,7 +181,7 @@ def calm_movement(lanes, speed_factor: float = 0.5):
 def generate_for_rig(rig_name: str, audio_path: str, parts, audio_basename: str,
                      calm: bool = False) -> Configuration:
     """Load a rig, autogenerate a show against the clip using ``parts``, return the config."""
-    cfg = Configuration.load(os.path.join(RIGS_DIR, f"{rig_name}.yaml"))
+    cfg = Configuration.load(os.path.join(RIGS_DIR, f"{rig_name}.lms"))
 
     # Fresh copy per rig: load_from_show_parts stamps start_time/duration in place.
     rig_parts = copy.deepcopy(parts)
@@ -248,7 +248,7 @@ def main(argv=None):
     print(f"Clip: {os.path.basename(audio_path)}  ({duration:.1f}s, {bpm:g} BPM)")
     for rig_name in rigs:
         cfg = generate_for_rig(rig_name, audio_path, parts, os.path.basename(audio_path), calm=args.calm_movement)
-        out = os.path.join(args.out, f"{rig_name}.yaml")
+        out = os.path.join(args.out, f"{rig_name}.lms")
         cfg.save(out)
         show = cfg.songs["Demo"]
         n_lanes = len(show.timeline_data.lanes)

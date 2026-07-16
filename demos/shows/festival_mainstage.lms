@@ -194,6 +194,7 @@ block_defs:
       phase_offset_enabled: false
       speed: 255.0
       target_plane_name: null
+      target_point: null
       target_spot_name: Stage
       tilt: 127.5
       tilt_amplitude: 49.91683234077956
@@ -214,6 +215,7 @@ block_defs:
       phase_offset_enabled: false
       speed: 255.0
       target_plane_name: null
+      target_point: null
       target_spot_name: Crowd
       tilt: 127.5
       tilt_amplitude: 80.0
@@ -234,6 +236,7 @@ block_defs:
       phase_offset_enabled: false
       speed: 255.0
       target_plane_name: null
+      target_point: null
       target_spot_name: Stage
       tilt: 127.5
       tilt_amplitude: 49.91683234077956
@@ -254,6 +257,7 @@ block_defs:
       phase_offset_enabled: false
       speed: 255.0
       target_plane_name: null
+      target_point: null
       target_spot_name: Crowd
       tilt: 127.5
       tilt_amplitude: 80.0
@@ -274,6 +278,7 @@ block_defs:
       phase_offset_enabled: false
       speed: 255.0
       target_plane_name: null
+      target_point: null
       target_spot_name: Stage
       tilt: 127.5
       tilt_amplitude: 49.91683234077956
@@ -294,6 +299,7 @@ block_defs:
       phase_offset_enabled: false
       speed: 255.0
       target_plane_name: null
+      target_point: null
       target_spot_name: Crowd
       tilt: 127.5
       tilt_amplitude: 80.0
@@ -314,6 +320,7 @@ block_defs:
       phase_offset_enabled: false
       speed: 255.0
       target_plane_name: null
+      target_point: null
       target_spot_name: Stage
       tilt: 127.5
       tilt_amplitude: 41.597360283982965
@@ -334,6 +341,7 @@ block_defs:
       phase_offset_enabled: false
       speed: 255.0
       target_plane_name: null
+      target_point: null
       target_spot_name: Stage
       tilt: 127.5
       tilt_amplitude: 41.597360283982965
@@ -354,6 +362,7 @@ block_defs:
       phase_offset_enabled: false
       speed: 255.0
       target_plane_name: null
+      target_point: null
       target_spot_name: Stage
       tilt: 127.5
       tilt_amplitude: 41.597360283982965
@@ -367,14 +376,23 @@ fixtures:
     name: Extended
   - channels: 14
     name: Standard
+  calibration: {}
   current_mode: Standard
+  definition_source: qxf
+  docked_to: ''
+  gdtf_fixture_type_id: null
   group: Front Wash Truss
+  groups:
+  - Front Wash Truss
+  invert_pan: false
+  invert_tilt: false
+  layer: ''
   manufacturer: Martin
   model: MAC Aura
   mounting: hanging
   name: Front Wash Truss 1
   orientation_uses_group_default: true
-  pitch: 0.0
+  pitch: 90.0
   roll: 0.0
   type: MH
   universe: 1
@@ -389,14 +407,23 @@ fixtures:
     name: Extended
   - channels: 14
     name: Standard
+  calibration: {}
   current_mode: Standard
+  definition_source: qxf
+  docked_to: ''
+  gdtf_fixture_type_id: null
   group: Front Wash Truss
+  groups:
+  - Front Wash Truss
+  invert_pan: false
+  invert_tilt: false
+  layer: ''
   manufacturer: Martin
   model: MAC Aura
   mounting: hanging
   name: Front Wash Truss 2
   orientation_uses_group_default: true
-  pitch: 0.0
+  pitch: 90.0
   roll: 0.0
   type: MH
   universe: 1
@@ -411,14 +438,23 @@ fixtures:
     name: Extended
   - channels: 14
     name: Standard
+  calibration: {}
   current_mode: Standard
+  definition_source: qxf
+  docked_to: ''
+  gdtf_fixture_type_id: null
   group: Front Wash Truss
+  groups:
+  - Front Wash Truss
+  invert_pan: false
+  invert_tilt: false
+  layer: ''
   manufacturer: Martin
   model: MAC Aura
   mounting: hanging
   name: Front Wash Truss 3
   orientation_uses_group_default: true
-  pitch: 0.0
+  pitch: 90.0
   roll: 0.0
   type: MH
   universe: 1
@@ -433,14 +469,23 @@ fixtures:
     name: Extended
   - channels: 14
     name: Standard
+  calibration: {}
   current_mode: Standard
+  definition_source: qxf
+  docked_to: ''
+  gdtf_fixture_type_id: null
   group: Front Wash Truss
+  groups:
+  - Front Wash Truss
+  invert_pan: false
+  invert_tilt: false
+  layer: ''
   manufacturer: Martin
   model: MAC Aura
   mounting: hanging
   name: Front Wash Truss 4
   orientation_uses_group_default: true
-  pitch: 0.0
+  pitch: 90.0
   roll: 0.0
   type: MH
   universe: 1
@@ -455,14 +500,23 @@ fixtures:
     name: Extended
   - channels: 14
     name: Standard
+  calibration: {}
   current_mode: Standard
+  definition_source: qxf
+  docked_to: ''
+  gdtf_fixture_type_id: null
   group: Front Wash Truss
+  groups:
+  - Front Wash Truss
+  invert_pan: false
+  invert_tilt: false
+  layer: ''
   manufacturer: Martin
   model: MAC Aura
   mounting: hanging
   name: Front Wash Truss 5
   orientation_uses_group_default: true
-  pitch: 0.0
+  pitch: 90.0
   roll: 0.0
   type: MH
   universe: 1
@@ -477,14 +531,23 @@ fixtures:
     name: Extended
   - channels: 14
     name: Standard
+  calibration: {}
   current_mode: Standard
+  definition_source: qxf
+  docked_to: ''
+  gdtf_fixture_type_id: null
   group: Front Wash Truss
+  groups:
+  - Front Wash Truss
+  invert_pan: false
+  invert_tilt: false
+  layer: ''
   manufacturer: Martin
   model: MAC Aura
   mounting: hanging
   name: Front Wash Truss 6
   orientation_uses_group_default: true
-  pitch: 0.0
+  pitch: 90.0
   roll: 0.0
   type: MH
   universe: 1
@@ -499,14 +562,23 @@ fixtures:
     name: Extended
   - channels: 14
     name: Standard
+  calibration: {}
   current_mode: Standard
+  definition_source: qxf
+  docked_to: ''
+  gdtf_fixture_type_id: null
   group: Front Wash Truss
+  groups:
+  - Front Wash Truss
+  invert_pan: false
+  invert_tilt: false
+  layer: ''
   manufacturer: Martin
   model: MAC Aura
   mounting: hanging
   name: Front Wash Truss 7
   orientation_uses_group_default: true
-  pitch: 0.0
+  pitch: 90.0
   roll: 0.0
   type: MH
   universe: 1
@@ -521,14 +593,23 @@ fixtures:
     name: Extended
   - channels: 14
     name: Standard
+  calibration: {}
   current_mode: Standard
+  definition_source: qxf
+  docked_to: ''
+  gdtf_fixture_type_id: null
   group: Front Wash Truss
+  groups:
+  - Front Wash Truss
+  invert_pan: false
+  invert_tilt: false
+  layer: ''
   manufacturer: Martin
   model: MAC Aura
   mounting: hanging
   name: Front Wash Truss 8
   orientation_uses_group_default: true
-  pitch: 0.0
+  pitch: 90.0
   roll: 0.0
   type: MH
   universe: 1
@@ -543,14 +624,23 @@ fixtures:
     name: 8 Channel
   - channels: 14
     name: 14 Channel
+  calibration: {}
   current_mode: 14 Channel
+  definition_source: qxf
+  docked_to: ''
+  gdtf_fixture_type_id: null
   group: Mid Spot Truss
+  groups:
+  - Mid Spot Truss
+  invert_pan: false
+  invert_tilt: false
+  layer: ''
   manufacturer: Varytec
   model: Hero Spot 60
   mounting: hanging
   name: Mid Spot Truss 1
   orientation_uses_group_default: true
-  pitch: 0.0
+  pitch: 90.0
   roll: 0.0
   type: MH
   universe: 1
@@ -565,14 +655,23 @@ fixtures:
     name: 8 Channel
   - channels: 14
     name: 14 Channel
+  calibration: {}
   current_mode: 14 Channel
+  definition_source: qxf
+  docked_to: ''
+  gdtf_fixture_type_id: null
   group: Mid Spot Truss
+  groups:
+  - Mid Spot Truss
+  invert_pan: false
+  invert_tilt: false
+  layer: ''
   manufacturer: Varytec
   model: Hero Spot 60
   mounting: hanging
   name: Mid Spot Truss 2
   orientation_uses_group_default: true
-  pitch: 0.0
+  pitch: 90.0
   roll: 0.0
   type: MH
   universe: 1
@@ -587,14 +686,23 @@ fixtures:
     name: 8 Channel
   - channels: 14
     name: 14 Channel
+  calibration: {}
   current_mode: 14 Channel
+  definition_source: qxf
+  docked_to: ''
+  gdtf_fixture_type_id: null
   group: Mid Spot Truss
+  groups:
+  - Mid Spot Truss
+  invert_pan: false
+  invert_tilt: false
+  layer: ''
   manufacturer: Varytec
   model: Hero Spot 60
   mounting: hanging
   name: Mid Spot Truss 3
   orientation_uses_group_default: true
-  pitch: 0.0
+  pitch: 90.0
   roll: 0.0
   type: MH
   universe: 1
@@ -609,14 +717,23 @@ fixtures:
     name: 8 Channel
   - channels: 14
     name: 14 Channel
+  calibration: {}
   current_mode: 14 Channel
+  definition_source: qxf
+  docked_to: ''
+  gdtf_fixture_type_id: null
   group: Mid Spot Truss
+  groups:
+  - Mid Spot Truss
+  invert_pan: false
+  invert_tilt: false
+  layer: ''
   manufacturer: Varytec
   model: Hero Spot 60
   mounting: hanging
   name: Mid Spot Truss 4
   orientation_uses_group_default: true
-  pitch: 0.0
+  pitch: 90.0
   roll: 0.0
   type: MH
   universe: 1
@@ -631,14 +748,23 @@ fixtures:
     name: 8 Channel
   - channels: 14
     name: 14 Channel
+  calibration: {}
   current_mode: 14 Channel
+  definition_source: qxf
+  docked_to: ''
+  gdtf_fixture_type_id: null
   group: Mid Spot Truss
+  groups:
+  - Mid Spot Truss
+  invert_pan: false
+  invert_tilt: false
+  layer: ''
   manufacturer: Varytec
   model: Hero Spot 60
   mounting: hanging
   name: Mid Spot Truss 5
   orientation_uses_group_default: true
-  pitch: 0.0
+  pitch: 90.0
   roll: 0.0
   type: MH
   universe: 1
@@ -653,14 +779,23 @@ fixtures:
     name: 8 Channel
   - channels: 14
     name: 14 Channel
+  calibration: {}
   current_mode: 14 Channel
+  definition_source: qxf
+  docked_to: ''
+  gdtf_fixture_type_id: null
   group: Mid Spot Truss
+  groups:
+  - Mid Spot Truss
+  invert_pan: false
+  invert_tilt: false
+  layer: ''
   manufacturer: Varytec
   model: Hero Spot 60
   mounting: hanging
   name: Mid Spot Truss 6
   orientation_uses_group_default: true
-  pitch: 0.0
+  pitch: 90.0
   roll: 0.0
   type: MH
   universe: 1
@@ -675,14 +810,23 @@ fixtures:
     name: 8 Channel
   - channels: 14
     name: 14 Channel
+  calibration: {}
   current_mode: 14 Channel
+  definition_source: qxf
+  docked_to: ''
+  gdtf_fixture_type_id: null
   group: Mid Spot Truss
+  groups:
+  - Mid Spot Truss
+  invert_pan: false
+  invert_tilt: false
+  layer: ''
   manufacturer: Varytec
   model: Hero Spot 60
   mounting: hanging
   name: Mid Spot Truss 7
   orientation_uses_group_default: true
-  pitch: 0.0
+  pitch: 90.0
   roll: 0.0
   type: MH
   universe: 1
@@ -697,14 +841,23 @@ fixtures:
     name: 8 Channel
   - channels: 14
     name: 14 Channel
+  calibration: {}
   current_mode: 14 Channel
+  definition_source: qxf
+  docked_to: ''
+  gdtf_fixture_type_id: null
   group: Mid Spot Truss
+  groups:
+  - Mid Spot Truss
+  invert_pan: false
+  invert_tilt: false
+  layer: ''
   manufacturer: Varytec
   model: Hero Spot 60
   mounting: hanging
   name: Mid Spot Truss 8
   orientation_uses_group_default: true
-  pitch: 0.0
+  pitch: 90.0
   roll: 0.0
   type: MH
   universe: 1
@@ -721,14 +874,23 @@ fixtures:
     name: Ba (18ch)
   - channels: 44
     name: Ex (44ch)
+  calibration: {}
   current_mode: St (20ch)
+  definition_source: qxf
+  docked_to: ''
+  gdtf_fixture_type_id: null
   group: Back Beam Truss
+  groups:
+  - Back Beam Truss
+  invert_pan: false
+  invert_tilt: false
+  layer: ''
   manufacturer: Ayrton
   model: MagicBlade R
   mounting: hanging
   name: Back Beam Truss 1
   orientation_uses_group_default: true
-  pitch: 0.0
+  pitch: 90.0
   roll: 0.0
   type: MH
   universe: 1
@@ -745,14 +907,23 @@ fixtures:
     name: Ba (18ch)
   - channels: 44
     name: Ex (44ch)
+  calibration: {}
   current_mode: St (20ch)
+  definition_source: qxf
+  docked_to: ''
+  gdtf_fixture_type_id: null
   group: Back Beam Truss
+  groups:
+  - Back Beam Truss
+  invert_pan: false
+  invert_tilt: false
+  layer: ''
   manufacturer: Ayrton
   model: MagicBlade R
   mounting: hanging
   name: Back Beam Truss 2
   orientation_uses_group_default: true
-  pitch: 0.0
+  pitch: 90.0
   roll: 0.0
   type: MH
   universe: 1
@@ -769,14 +940,23 @@ fixtures:
     name: Ba (18ch)
   - channels: 44
     name: Ex (44ch)
+  calibration: {}
   current_mode: St (20ch)
+  definition_source: qxf
+  docked_to: ''
+  gdtf_fixture_type_id: null
   group: Back Beam Truss
+  groups:
+  - Back Beam Truss
+  invert_pan: false
+  invert_tilt: false
+  layer: ''
   manufacturer: Ayrton
   model: MagicBlade R
   mounting: hanging
   name: Back Beam Truss 3
   orientation_uses_group_default: true
-  pitch: 0.0
+  pitch: 90.0
   roll: 0.0
   type: MH
   universe: 1
@@ -793,14 +973,23 @@ fixtures:
     name: Ba (18ch)
   - channels: 44
     name: Ex (44ch)
+  calibration: {}
   current_mode: St (20ch)
+  definition_source: qxf
+  docked_to: ''
+  gdtf_fixture_type_id: null
   group: Back Beam Truss
+  groups:
+  - Back Beam Truss
+  invert_pan: false
+  invert_tilt: false
+  layer: ''
   manufacturer: Ayrton
   model: MagicBlade R
   mounting: hanging
   name: Back Beam Truss 4
   orientation_uses_group_default: true
-  pitch: 0.0
+  pitch: 90.0
   roll: 0.0
   type: MH
   universe: 1
@@ -817,14 +1006,23 @@ fixtures:
     name: Ba (18ch)
   - channels: 44
     name: Ex (44ch)
+  calibration: {}
   current_mode: St (20ch)
+  definition_source: qxf
+  docked_to: ''
+  gdtf_fixture_type_id: null
   group: Back Beam Truss
+  groups:
+  - Back Beam Truss
+  invert_pan: false
+  invert_tilt: false
+  layer: ''
   manufacturer: Ayrton
   model: MagicBlade R
   mounting: hanging
   name: Back Beam Truss 5
   orientation_uses_group_default: true
-  pitch: 0.0
+  pitch: 90.0
   roll: 0.0
   type: MH
   universe: 1
@@ -841,14 +1039,23 @@ fixtures:
     name: Ba (18ch)
   - channels: 44
     name: Ex (44ch)
+  calibration: {}
   current_mode: St (20ch)
+  definition_source: qxf
+  docked_to: ''
+  gdtf_fixture_type_id: null
   group: Back Beam Truss
+  groups:
+  - Back Beam Truss
+  invert_pan: false
+  invert_tilt: false
+  layer: ''
   manufacturer: Ayrton
   model: MagicBlade R
   mounting: hanging
   name: Back Beam Truss 6
   orientation_uses_group_default: true
-  pitch: 0.0
+  pitch: 90.0
   roll: 0.0
   type: MH
   universe: 1
@@ -865,14 +1072,23 @@ fixtures:
     name: Ba (18ch)
   - channels: 44
     name: Ex (44ch)
+  calibration: {}
   current_mode: St (20ch)
+  definition_source: qxf
+  docked_to: ''
+  gdtf_fixture_type_id: null
   group: Back Beam Truss
+  groups:
+  - Back Beam Truss
+  invert_pan: false
+  invert_tilt: false
+  layer: ''
   manufacturer: Ayrton
   model: MagicBlade R
   mounting: hanging
   name: Back Beam Truss 7
   orientation_uses_group_default: true
-  pitch: 0.0
+  pitch: 90.0
   roll: 0.0
   type: MH
   universe: 1
@@ -889,14 +1105,23 @@ fixtures:
     name: Ba (18ch)
   - channels: 44
     name: Ex (44ch)
+  calibration: {}
   current_mode: St (20ch)
+  definition_source: qxf
+  docked_to: ''
+  gdtf_fixture_type_id: null
   group: Back Beam Truss
+  groups:
+  - Back Beam Truss
+  invert_pan: false
+  invert_tilt: false
+  layer: ''
   manufacturer: Ayrton
   model: MagicBlade R
   mounting: hanging
   name: Back Beam Truss 8
   orientation_uses_group_default: true
-  pitch: 0.0
+  pitch: 90.0
   roll: 0.0
   type: MH
   universe: 1
@@ -913,14 +1138,23 @@ fixtures:
     name: Ba (18ch)
   - channels: 44
     name: Ex (44ch)
+  calibration: {}
   current_mode: St (20ch)
+  definition_source: qxf
+  docked_to: ''
+  gdtf_fixture_type_id: null
   group: Back Beam Truss
+  groups:
+  - Back Beam Truss
+  invert_pan: false
+  invert_tilt: false
+  layer: ''
   manufacturer: Ayrton
   model: MagicBlade R
   mounting: hanging
   name: Back Beam Truss 9
   orientation_uses_group_default: true
-  pitch: 0.0
+  pitch: 90.0
   roll: 0.0
   type: MH
   universe: 1
@@ -937,14 +1171,23 @@ fixtures:
     name: Ba (18ch)
   - channels: 44
     name: Ex (44ch)
+  calibration: {}
   current_mode: St (20ch)
+  definition_source: qxf
+  docked_to: ''
+  gdtf_fixture_type_id: null
   group: Back Beam Truss
+  groups:
+  - Back Beam Truss
+  invert_pan: false
+  invert_tilt: false
+  layer: ''
   manufacturer: Ayrton
   model: MagicBlade R
   mounting: hanging
   name: Back Beam Truss 10
   orientation_uses_group_default: true
-  pitch: 0.0
+  pitch: 90.0
   roll: 0.0
   type: MH
   universe: 1
@@ -961,14 +1204,23 @@ fixtures:
     name: Ba (18ch)
   - channels: 44
     name: Ex (44ch)
+  calibration: {}
   current_mode: St (20ch)
+  definition_source: qxf
+  docked_to: ''
+  gdtf_fixture_type_id: null
   group: Back Beam Truss
+  groups:
+  - Back Beam Truss
+  invert_pan: false
+  invert_tilt: false
+  layer: ''
   manufacturer: Ayrton
   model: MagicBlade R
   mounting: hanging
   name: Back Beam Truss 11
   orientation_uses_group_default: true
-  pitch: 0.0
+  pitch: 90.0
   roll: 0.0
   type: MH
   universe: 1
@@ -985,14 +1237,23 @@ fixtures:
     name: Ba (18ch)
   - channels: 44
     name: Ex (44ch)
+  calibration: {}
   current_mode: St (20ch)
+  definition_source: qxf
+  docked_to: ''
+  gdtf_fixture_type_id: null
   group: Back Beam Truss
+  groups:
+  - Back Beam Truss
+  invert_pan: false
+  invert_tilt: false
+  layer: ''
   manufacturer: Ayrton
   model: MagicBlade R
   mounting: hanging
   name: Back Beam Truss 12
   orientation_uses_group_default: true
-  pitch: 0.0
+  pitch: 90.0
   roll: 0.0
   type: MH
   universe: 1
@@ -1009,14 +1270,23 @@ fixtures:
     name: Ba (18ch)
   - channels: 44
     name: Ex (44ch)
+  calibration: {}
   current_mode: St (20ch)
+  definition_source: qxf
+  docked_to: ''
+  gdtf_fixture_type_id: null
   group: Floor Beams
+  groups:
+  - Floor Beams
+  invert_pan: false
+  invert_tilt: false
+  layer: ''
   manufacturer: Ayrton
   model: MagicBlade R
   mounting: standing
   name: Floor Beams 1
   orientation_uses_group_default: true
-  pitch: 0.0
+  pitch: -90.0
   roll: 0.0
   type: MH
   universe: 1
@@ -1033,14 +1303,23 @@ fixtures:
     name: Ba (18ch)
   - channels: 44
     name: Ex (44ch)
+  calibration: {}
   current_mode: St (20ch)
+  definition_source: qxf
+  docked_to: ''
+  gdtf_fixture_type_id: null
   group: Floor Beams
+  groups:
+  - Floor Beams
+  invert_pan: false
+  invert_tilt: false
+  layer: ''
   manufacturer: Ayrton
   model: MagicBlade R
   mounting: standing
   name: Floor Beams 2
   orientation_uses_group_default: true
-  pitch: 0.0
+  pitch: -90.0
   roll: 0.0
   type: MH
   universe: 1
@@ -1057,14 +1336,23 @@ fixtures:
     name: Ba (18ch)
   - channels: 44
     name: Ex (44ch)
+  calibration: {}
   current_mode: St (20ch)
+  definition_source: qxf
+  docked_to: ''
+  gdtf_fixture_type_id: null
   group: Floor Beams
+  groups:
+  - Floor Beams
+  invert_pan: false
+  invert_tilt: false
+  layer: ''
   manufacturer: Ayrton
   model: MagicBlade R
   mounting: standing
   name: Floor Beams 3
   orientation_uses_group_default: true
-  pitch: 0.0
+  pitch: -90.0
   roll: 0.0
   type: MH
   universe: 2
@@ -1081,14 +1369,23 @@ fixtures:
     name: Ba (18ch)
   - channels: 44
     name: Ex (44ch)
+  calibration: {}
   current_mode: St (20ch)
+  definition_source: qxf
+  docked_to: ''
+  gdtf_fixture_type_id: null
   group: Floor Beams
+  groups:
+  - Floor Beams
+  invert_pan: false
+  invert_tilt: false
+  layer: ''
   manufacturer: Ayrton
   model: MagicBlade R
   mounting: standing
   name: Floor Beams 4
   orientation_uses_group_default: true
-  pitch: 0.0
+  pitch: -90.0
   roll: 0.0
   type: MH
   universe: 2
@@ -1105,14 +1402,23 @@ fixtures:
     name: Ba (18ch)
   - channels: 44
     name: Ex (44ch)
+  calibration: {}
   current_mode: St (20ch)
+  definition_source: qxf
+  docked_to: ''
+  gdtf_fixture_type_id: null
   group: Floor Beams
+  groups:
+  - Floor Beams
+  invert_pan: false
+  invert_tilt: false
+  layer: ''
   manufacturer: Ayrton
   model: MagicBlade R
   mounting: standing
   name: Floor Beams 5
   orientation_uses_group_default: true
-  pitch: 0.0
+  pitch: -90.0
   roll: 0.0
   type: MH
   universe: 2
@@ -1129,14 +1435,23 @@ fixtures:
     name: Ba (18ch)
   - channels: 44
     name: Ex (44ch)
+  calibration: {}
   current_mode: St (20ch)
+  definition_source: qxf
+  docked_to: ''
+  gdtf_fixture_type_id: null
   group: Floor Beams
+  groups:
+  - Floor Beams
+  invert_pan: false
+  invert_tilt: false
+  layer: ''
   manufacturer: Ayrton
   model: MagicBlade R
   mounting: standing
   name: Floor Beams 6
   orientation_uses_group_default: true
-  pitch: 0.0
+  pitch: -90.0
   roll: 0.0
   type: MH
   universe: 2
@@ -1153,14 +1468,23 @@ fixtures:
     name: Ba (18ch)
   - channels: 44
     name: Ex (44ch)
+  calibration: {}
   current_mode: St (20ch)
+  definition_source: qxf
+  docked_to: ''
+  gdtf_fixture_type_id: null
   group: Floor Beams
+  groups:
+  - Floor Beams
+  invert_pan: false
+  invert_tilt: false
+  layer: ''
   manufacturer: Ayrton
   model: MagicBlade R
   mounting: standing
   name: Floor Beams 7
   orientation_uses_group_default: true
-  pitch: 0.0
+  pitch: -90.0
   roll: 0.0
   type: MH
   universe: 2
@@ -1177,14 +1501,23 @@ fixtures:
     name: Ba (18ch)
   - channels: 44
     name: Ex (44ch)
+  calibration: {}
   current_mode: St (20ch)
+  definition_source: qxf
+  docked_to: ''
+  gdtf_fixture_type_id: null
   group: Floor Beams
+  groups:
+  - Floor Beams
+  invert_pan: false
+  invert_tilt: false
+  layer: ''
   manufacturer: Ayrton
   model: MagicBlade R
   mounting: standing
   name: Floor Beams 8
   orientation_uses_group_default: true
-  pitch: 0.0
+  pitch: -90.0
   roll: 0.0
   type: MH
   universe: 2
@@ -1203,14 +1536,23 @@ fixtures:
     name: 5 Channels Mode
   - channels: 10
     name: 10 Channels Mode
+  calibration: {}
   current_mode: 10 Channels Mode
+  definition_source: qxf
+  docked_to: ''
+  gdtf_fixture_type_id: null
   group: Blinders
+  groups:
+  - Blinders
+  invert_pan: false
+  invert_tilt: false
+  layer: ''
   manufacturer: Showtec
   model: Sunstrip Active
   mounting: hanging
   name: Blinders 1
   orientation_uses_group_default: true
-  pitch: 0.0
+  pitch: 90.0
   roll: 0.0
   type: SUNSTRIP
   universe: 2
@@ -1229,14 +1571,23 @@ fixtures:
     name: 5 Channels Mode
   - channels: 10
     name: 10 Channels Mode
+  calibration: {}
   current_mode: 10 Channels Mode
+  definition_source: qxf
+  docked_to: ''
+  gdtf_fixture_type_id: null
   group: Blinders
+  groups:
+  - Blinders
+  invert_pan: false
+  invert_tilt: false
+  layer: ''
   manufacturer: Showtec
   model: Sunstrip Active
   mounting: hanging
   name: Blinders 2
   orientation_uses_group_default: true
-  pitch: 0.0
+  pitch: 90.0
   roll: 0.0
   type: SUNSTRIP
   universe: 2
@@ -1255,14 +1606,23 @@ fixtures:
     name: 5 Channels Mode
   - channels: 10
     name: 10 Channels Mode
+  calibration: {}
   current_mode: 10 Channels Mode
+  definition_source: qxf
+  docked_to: ''
+  gdtf_fixture_type_id: null
   group: Blinders
+  groups:
+  - Blinders
+  invert_pan: false
+  invert_tilt: false
+  layer: ''
   manufacturer: Showtec
   model: Sunstrip Active
   mounting: hanging
   name: Blinders 3
   orientation_uses_group_default: true
-  pitch: 0.0
+  pitch: 90.0
   roll: 0.0
   type: SUNSTRIP
   universe: 2
@@ -1281,14 +1641,23 @@ fixtures:
     name: 5 Channels Mode
   - channels: 10
     name: 10 Channels Mode
+  calibration: {}
   current_mode: 10 Channels Mode
+  definition_source: qxf
+  docked_to: ''
+  gdtf_fixture_type_id: null
   group: Blinders
+  groups:
+  - Blinders
+  invert_pan: false
+  invert_tilt: false
+  layer: ''
   manufacturer: Showtec
   model: Sunstrip Active
   mounting: hanging
   name: Blinders 4
   orientation_uses_group_default: true
-  pitch: 0.0
+  pitch: 90.0
   roll: 0.0
   type: SUNSTRIP
   universe: 2
@@ -1307,14 +1676,23 @@ fixtures:
     name: 5 Channels Mode
   - channels: 10
     name: 10 Channels Mode
+  calibration: {}
   current_mode: 10 Channels Mode
+  definition_source: qxf
+  docked_to: ''
+  gdtf_fixture_type_id: null
   group: Blinders
+  groups:
+  - Blinders
+  invert_pan: false
+  invert_tilt: false
+  layer: ''
   manufacturer: Showtec
   model: Sunstrip Active
   mounting: hanging
   name: Blinders 5
   orientation_uses_group_default: true
-  pitch: 0.0
+  pitch: 90.0
   roll: 0.0
   type: SUNSTRIP
   universe: 2
@@ -1333,14 +1711,23 @@ fixtures:
     name: 5 Channels Mode
   - channels: 10
     name: 10 Channels Mode
+  calibration: {}
   current_mode: 10 Channels Mode
+  definition_source: qxf
+  docked_to: ''
+  gdtf_fixture_type_id: null
   group: Blinders
+  groups:
+  - Blinders
+  invert_pan: false
+  invert_tilt: false
+  layer: ''
   manufacturer: Showtec
   model: Sunstrip Active
   mounting: hanging
   name: Blinders 6
   orientation_uses_group_default: true
-  pitch: 0.0
+  pitch: 90.0
   roll: 0.0
   type: SUNSTRIP
   universe: 2
@@ -1359,14 +1746,23 @@ fixtures:
     name: 5 Channels Mode
   - channels: 10
     name: 10 Channels Mode
+  calibration: {}
   current_mode: 10 Channels Mode
+  definition_source: qxf
+  docked_to: ''
+  gdtf_fixture_type_id: null
   group: Blinders
+  groups:
+  - Blinders
+  invert_pan: false
+  invert_tilt: false
+  layer: ''
   manufacturer: Showtec
   model: Sunstrip Active
   mounting: hanging
   name: Blinders 7
   orientation_uses_group_default: true
-  pitch: 0.0
+  pitch: 90.0
   roll: 0.0
   type: SUNSTRIP
   universe: 2
@@ -1385,14 +1781,23 @@ fixtures:
     name: 5 Channels Mode
   - channels: 10
     name: 10 Channels Mode
+  calibration: {}
   current_mode: 10 Channels Mode
+  definition_source: qxf
+  docked_to: ''
+  gdtf_fixture_type_id: null
   group: Blinders
+  groups:
+  - Blinders
+  invert_pan: false
+  invert_tilt: false
+  layer: ''
   manufacturer: Showtec
   model: Sunstrip Active
   mounting: hanging
   name: Blinders 8
   orientation_uses_group_default: true
-  pitch: 0.0
+  pitch: 90.0
   roll: 0.0
   type: SUNSTRIP
   universe: 2
@@ -1411,14 +1816,23 @@ fixtures:
     name: 28-Channel
   - channels: 4
     name: 4-Channel
+  calibration: {}
   current_mode: 26-Channel
+  definition_source: qxf
+  docked_to: ''
+  gdtf_fixture_type_id: null
   group: Matrix Panels
+  groups:
+  - Matrix Panels
+  invert_pan: false
+  invert_tilt: false
+  layer: ''
   manufacturer: Stairville
   model: LED Matrix Blinder 5x5
   mounting: hanging
   name: Matrix Panels 1
   orientation_uses_group_default: true
-  pitch: 0.0
+  pitch: 90.0
   roll: 0.0
   type: SUNSTRIP
   universe: 2
@@ -1437,14 +1851,23 @@ fixtures:
     name: 28-Channel
   - channels: 4
     name: 4-Channel
+  calibration: {}
   current_mode: 26-Channel
+  definition_source: qxf
+  docked_to: ''
+  gdtf_fixture_type_id: null
   group: Matrix Panels
+  groups:
+  - Matrix Panels
+  invert_pan: false
+  invert_tilt: false
+  layer: ''
   manufacturer: Stairville
   model: LED Matrix Blinder 5x5
   mounting: hanging
   name: Matrix Panels 2
   orientation_uses_group_default: true
-  pitch: 0.0
+  pitch: 90.0
   roll: 0.0
   type: SUNSTRIP
   universe: 2
@@ -1463,14 +1886,23 @@ fixtures:
     name: 28-Channel
   - channels: 4
     name: 4-Channel
+  calibration: {}
   current_mode: 26-Channel
+  definition_source: qxf
+  docked_to: ''
+  gdtf_fixture_type_id: null
   group: Matrix Panels
+  groups:
+  - Matrix Panels
+  invert_pan: false
+  invert_tilt: false
+  layer: ''
   manufacturer: Stairville
   model: LED Matrix Blinder 5x5
   mounting: hanging
   name: Matrix Panels 3
   orientation_uses_group_default: true
-  pitch: 0.0
+  pitch: 90.0
   roll: 0.0
   type: SUNSTRIP
   universe: 2
@@ -1489,14 +1921,23 @@ fixtures:
     name: 28-Channel
   - channels: 4
     name: 4-Channel
+  calibration: {}
   current_mode: 26-Channel
+  definition_source: qxf
+  docked_to: ''
+  gdtf_fixture_type_id: null
   group: Matrix Panels
+  groups:
+  - Matrix Panels
+  invert_pan: false
+  invert_tilt: false
+  layer: ''
   manufacturer: Stairville
   model: LED Matrix Blinder 5x5
   mounting: hanging
   name: Matrix Panels 4
   orientation_uses_group_default: true
-  pitch: 0.0
+  pitch: 90.0
   roll: 0.0
   type: SUNSTRIP
   universe: 2
@@ -1509,14 +1950,23 @@ fixtures:
   available_modes:
   - channels: 40
     name: 40 Channels Mode
+  calibration: {}
   current_mode: 40 Channels Mode
+  definition_source: qxf
+  docked_to: ''
+  gdtf_fixture_type_id: null
   group: Front Pixel Bars
+  groups:
+  - Front Pixel Bars
+  invert_pan: false
+  invert_tilt: false
+  layer: ''
   manufacturer: Varghele
   model: LED BAR
   mounting: standing
   name: Front Pixel Bars 1
   orientation_uses_group_default: true
-  pitch: 0.0
+  pitch: -90.0
   roll: 0.0
   type: PIXELBAR
   universe: 2
@@ -1529,14 +1979,23 @@ fixtures:
   available_modes:
   - channels: 40
     name: 40 Channels Mode
+  calibration: {}
   current_mode: 40 Channels Mode
+  definition_source: qxf
+  docked_to: ''
+  gdtf_fixture_type_id: null
   group: Front Pixel Bars
+  groups:
+  - Front Pixel Bars
+  invert_pan: false
+  invert_tilt: false
+  layer: ''
   manufacturer: Varghele
   model: LED BAR
   mounting: standing
   name: Front Pixel Bars 2
   orientation_uses_group_default: true
-  pitch: 0.0
+  pitch: -90.0
   roll: 0.0
   type: PIXELBAR
   universe: 2
@@ -1549,14 +2008,23 @@ fixtures:
   available_modes:
   - channels: 40
     name: 40 Channels Mode
+  calibration: {}
   current_mode: 40 Channels Mode
+  definition_source: qxf
+  docked_to: ''
+  gdtf_fixture_type_id: null
   group: Front Pixel Bars
+  groups:
+  - Front Pixel Bars
+  invert_pan: false
+  invert_tilt: false
+  layer: ''
   manufacturer: Varghele
   model: LED BAR
   mounting: standing
   name: Front Pixel Bars 3
   orientation_uses_group_default: true
-  pitch: 0.0
+  pitch: -90.0
   roll: 0.0
   type: PIXELBAR
   universe: 2
@@ -1569,14 +2037,23 @@ fixtures:
   available_modes:
   - channels: 40
     name: 40 Channels Mode
+  calibration: {}
   current_mode: 40 Channels Mode
+  definition_source: qxf
+  docked_to: ''
+  gdtf_fixture_type_id: null
   group: Front Pixel Bars
+  groups:
+  - Front Pixel Bars
+  invert_pan: false
+  invert_tilt: false
+  layer: ''
   manufacturer: Varghele
   model: LED BAR
   mounting: standing
   name: Front Pixel Bars 4
   orientation_uses_group_default: true
-  pitch: 0.0
+  pitch: -90.0
   roll: 0.0
   type: PIXELBAR
   universe: 2
@@ -1591,8 +2068,17 @@ fixtures:
     name: 8 Channel
   - channels: 14
     name: 14 Channel
+  calibration: {}
   current_mode: 14 Channel
+  definition_source: qxf
+  docked_to: ''
+  gdtf_fixture_type_id: null
   group: Side Tower L
+  groups:
+  - Side Tower L
+  invert_pan: false
+  invert_tilt: false
+  layer: ''
   manufacturer: Varytec
   model: Hero Spot 60
   mounting: wall_left
@@ -1604,7 +2090,7 @@ fixtures:
   universe: 2
   x: -7.5
   y: 0.0
-  yaw: 0.0
+  yaw: 90.0
   z: 2.0
   z_uses_group_default: false
 - address: 479
@@ -1613,8 +2099,17 @@ fixtures:
     name: 8 Channel
   - channels: 14
     name: 14 Channel
+  calibration: {}
   current_mode: 14 Channel
+  definition_source: qxf
+  docked_to: ''
+  gdtf_fixture_type_id: null
   group: Side Tower L
+  groups:
+  - Side Tower L
+  invert_pan: false
+  invert_tilt: false
+  layer: ''
   manufacturer: Varytec
   model: Hero Spot 60
   mounting: wall_left
@@ -1626,7 +2121,7 @@ fixtures:
   universe: 2
   x: -7.5
   y: 0.0
-  yaw: 0.0
+  yaw: 90.0
   z: 4.0
   z_uses_group_default: false
 - address: 493
@@ -1635,8 +2130,17 @@ fixtures:
     name: 8 Channel
   - channels: 14
     name: 14 Channel
+  calibration: {}
   current_mode: 14 Channel
+  definition_source: qxf
+  docked_to: ''
+  gdtf_fixture_type_id: null
   group: Side Tower L
+  groups:
+  - Side Tower L
+  invert_pan: false
+  invert_tilt: false
+  layer: ''
   manufacturer: Varytec
   model: Hero Spot 60
   mounting: wall_left
@@ -1648,7 +2152,7 @@ fixtures:
   universe: 2
   x: -7.5
   y: 0.0
-  yaw: 0.0
+  yaw: 90.0
   z: 6.0
   z_uses_group_default: false
 - address: 1
@@ -1657,8 +2161,17 @@ fixtures:
     name: 8 Channel
   - channels: 14
     name: 14 Channel
+  calibration: {}
   current_mode: 14 Channel
+  definition_source: qxf
+  docked_to: ''
+  gdtf_fixture_type_id: null
   group: Side Tower L
+  groups:
+  - Side Tower L
+  invert_pan: false
+  invert_tilt: false
+  layer: ''
   manufacturer: Varytec
   model: Hero Spot 60
   mounting: wall_left
@@ -1670,7 +2183,7 @@ fixtures:
   universe: 3
   x: -7.5
   y: 0.0
-  yaw: 0.0
+  yaw: 90.0
   z: 8.0
   z_uses_group_default: false
 - address: 15
@@ -1679,8 +2192,17 @@ fixtures:
     name: 8 Channel
   - channels: 14
     name: 14 Channel
+  calibration: {}
   current_mode: 14 Channel
+  definition_source: qxf
+  docked_to: ''
+  gdtf_fixture_type_id: null
   group: Side Tower R
+  groups:
+  - Side Tower R
+  invert_pan: false
+  invert_tilt: false
+  layer: ''
   manufacturer: Varytec
   model: Hero Spot 60
   mounting: wall_right
@@ -1692,7 +2214,7 @@ fixtures:
   universe: 3
   x: 7.5
   y: 0.0
-  yaw: 0.0
+  yaw: -90.0
   z: 2.0
   z_uses_group_default: false
 - address: 29
@@ -1701,8 +2223,17 @@ fixtures:
     name: 8 Channel
   - channels: 14
     name: 14 Channel
+  calibration: {}
   current_mode: 14 Channel
+  definition_source: qxf
+  docked_to: ''
+  gdtf_fixture_type_id: null
   group: Side Tower R
+  groups:
+  - Side Tower R
+  invert_pan: false
+  invert_tilt: false
+  layer: ''
   manufacturer: Varytec
   model: Hero Spot 60
   mounting: wall_right
@@ -1714,7 +2245,7 @@ fixtures:
   universe: 3
   x: 7.5
   y: 0.0
-  yaw: 0.0
+  yaw: -90.0
   z: 4.0
   z_uses_group_default: false
 - address: 43
@@ -1723,8 +2254,17 @@ fixtures:
     name: 8 Channel
   - channels: 14
     name: 14 Channel
+  calibration: {}
   current_mode: 14 Channel
+  definition_source: qxf
+  docked_to: ''
+  gdtf_fixture_type_id: null
   group: Side Tower R
+  groups:
+  - Side Tower R
+  invert_pan: false
+  invert_tilt: false
+  layer: ''
   manufacturer: Varytec
   model: Hero Spot 60
   mounting: wall_right
@@ -1736,7 +2276,7 @@ fixtures:
   universe: 3
   x: 7.5
   y: 0.0
-  yaw: 0.0
+  yaw: -90.0
   z: 6.0
   z_uses_group_default: false
 - address: 57
@@ -1745,8 +2285,17 @@ fixtures:
     name: 8 Channel
   - channels: 14
     name: 14 Channel
+  calibration: {}
   current_mode: 14 Channel
+  definition_source: qxf
+  docked_to: ''
+  gdtf_fixture_type_id: null
   group: Side Tower R
+  groups:
+  - Side Tower R
+  invert_pan: false
+  invert_tilt: false
+  layer: ''
   manufacturer: Varytec
   model: Hero Spot 60
   mounting: wall_right
@@ -1758,7 +2307,7 @@ fixtures:
   universe: 3
   x: 7.5
   y: 0.0
-  yaw: 0.0
+  yaw: -90.0
   z: 8.0
   z_uses_group_default: false
 grid_size: 0.5
@@ -1766,11 +2315,24 @@ groups:
   Back Beam Truss:
     color: '#3366bb'
     default_mounting: hanging
-    default_pitch: 0.0
+    default_pitch: 90.0
     default_roll: 0.0
     default_yaw: 0.0
     default_z_height: 7.0
     export_intensity: 255
+    fixture_order:
+    - Back Beam Truss 1
+    - Back Beam Truss 2
+    - Back Beam Truss 3
+    - Back Beam Truss 4
+    - Back Beam Truss 5
+    - Back Beam Truss 6
+    - Back Beam Truss 7
+    - Back Beam Truss 8
+    - Back Beam Truss 9
+    - Back Beam Truss 10
+    - Back Beam Truss 11
+    - Back Beam Truss 12
     fixtures:
     - address: 225
       available_modes:
@@ -1780,14 +2342,23 @@ groups:
         name: Ba (18ch)
       - channels: 44
         name: Ex (44ch)
+      calibration: {}
       current_mode: St (20ch)
+      definition_source: qxf
+      docked_to: ''
+      gdtf_fixture_type_id: null
       group: Back Beam Truss
+      groups:
+      - Back Beam Truss
+      invert_pan: false
+      invert_tilt: false
+      layer: ''
       manufacturer: Ayrton
       model: MagicBlade R
       mounting: hanging
       name: Back Beam Truss 1
       orientation_uses_group_default: true
-      pitch: 0.0
+      pitch: 90.0
       roll: 0.0
       type: MH
       universe: 1
@@ -1804,14 +2375,23 @@ groups:
         name: Ba (18ch)
       - channels: 44
         name: Ex (44ch)
+      calibration: {}
       current_mode: St (20ch)
+      definition_source: qxf
+      docked_to: ''
+      gdtf_fixture_type_id: null
       group: Back Beam Truss
+      groups:
+      - Back Beam Truss
+      invert_pan: false
+      invert_tilt: false
+      layer: ''
       manufacturer: Ayrton
       model: MagicBlade R
       mounting: hanging
       name: Back Beam Truss 2
       orientation_uses_group_default: true
-      pitch: 0.0
+      pitch: 90.0
       roll: 0.0
       type: MH
       universe: 1
@@ -1828,14 +2408,23 @@ groups:
         name: Ba (18ch)
       - channels: 44
         name: Ex (44ch)
+      calibration: {}
       current_mode: St (20ch)
+      definition_source: qxf
+      docked_to: ''
+      gdtf_fixture_type_id: null
       group: Back Beam Truss
+      groups:
+      - Back Beam Truss
+      invert_pan: false
+      invert_tilt: false
+      layer: ''
       manufacturer: Ayrton
       model: MagicBlade R
       mounting: hanging
       name: Back Beam Truss 3
       orientation_uses_group_default: true
-      pitch: 0.0
+      pitch: 90.0
       roll: 0.0
       type: MH
       universe: 1
@@ -1852,14 +2441,23 @@ groups:
         name: Ba (18ch)
       - channels: 44
         name: Ex (44ch)
+      calibration: {}
       current_mode: St (20ch)
+      definition_source: qxf
+      docked_to: ''
+      gdtf_fixture_type_id: null
       group: Back Beam Truss
+      groups:
+      - Back Beam Truss
+      invert_pan: false
+      invert_tilt: false
+      layer: ''
       manufacturer: Ayrton
       model: MagicBlade R
       mounting: hanging
       name: Back Beam Truss 4
       orientation_uses_group_default: true
-      pitch: 0.0
+      pitch: 90.0
       roll: 0.0
       type: MH
       universe: 1
@@ -1876,14 +2474,23 @@ groups:
         name: Ba (18ch)
       - channels: 44
         name: Ex (44ch)
+      calibration: {}
       current_mode: St (20ch)
+      definition_source: qxf
+      docked_to: ''
+      gdtf_fixture_type_id: null
       group: Back Beam Truss
+      groups:
+      - Back Beam Truss
+      invert_pan: false
+      invert_tilt: false
+      layer: ''
       manufacturer: Ayrton
       model: MagicBlade R
       mounting: hanging
       name: Back Beam Truss 5
       orientation_uses_group_default: true
-      pitch: 0.0
+      pitch: 90.0
       roll: 0.0
       type: MH
       universe: 1
@@ -1900,14 +2507,23 @@ groups:
         name: Ba (18ch)
       - channels: 44
         name: Ex (44ch)
+      calibration: {}
       current_mode: St (20ch)
+      definition_source: qxf
+      docked_to: ''
+      gdtf_fixture_type_id: null
       group: Back Beam Truss
+      groups:
+      - Back Beam Truss
+      invert_pan: false
+      invert_tilt: false
+      layer: ''
       manufacturer: Ayrton
       model: MagicBlade R
       mounting: hanging
       name: Back Beam Truss 6
       orientation_uses_group_default: true
-      pitch: 0.0
+      pitch: 90.0
       roll: 0.0
       type: MH
       universe: 1
@@ -1924,14 +2540,23 @@ groups:
         name: Ba (18ch)
       - channels: 44
         name: Ex (44ch)
+      calibration: {}
       current_mode: St (20ch)
+      definition_source: qxf
+      docked_to: ''
+      gdtf_fixture_type_id: null
       group: Back Beam Truss
+      groups:
+      - Back Beam Truss
+      invert_pan: false
+      invert_tilt: false
+      layer: ''
       manufacturer: Ayrton
       model: MagicBlade R
       mounting: hanging
       name: Back Beam Truss 7
       orientation_uses_group_default: true
-      pitch: 0.0
+      pitch: 90.0
       roll: 0.0
       type: MH
       universe: 1
@@ -1948,14 +2573,23 @@ groups:
         name: Ba (18ch)
       - channels: 44
         name: Ex (44ch)
+      calibration: {}
       current_mode: St (20ch)
+      definition_source: qxf
+      docked_to: ''
+      gdtf_fixture_type_id: null
       group: Back Beam Truss
+      groups:
+      - Back Beam Truss
+      invert_pan: false
+      invert_tilt: false
+      layer: ''
       manufacturer: Ayrton
       model: MagicBlade R
       mounting: hanging
       name: Back Beam Truss 8
       orientation_uses_group_default: true
-      pitch: 0.0
+      pitch: 90.0
       roll: 0.0
       type: MH
       universe: 1
@@ -1972,14 +2606,23 @@ groups:
         name: Ba (18ch)
       - channels: 44
         name: Ex (44ch)
+      calibration: {}
       current_mode: St (20ch)
+      definition_source: qxf
+      docked_to: ''
+      gdtf_fixture_type_id: null
       group: Back Beam Truss
+      groups:
+      - Back Beam Truss
+      invert_pan: false
+      invert_tilt: false
+      layer: ''
       manufacturer: Ayrton
       model: MagicBlade R
       mounting: hanging
       name: Back Beam Truss 9
       orientation_uses_group_default: true
-      pitch: 0.0
+      pitch: 90.0
       roll: 0.0
       type: MH
       universe: 1
@@ -1996,14 +2639,23 @@ groups:
         name: Ba (18ch)
       - channels: 44
         name: Ex (44ch)
+      calibration: {}
       current_mode: St (20ch)
+      definition_source: qxf
+      docked_to: ''
+      gdtf_fixture_type_id: null
       group: Back Beam Truss
+      groups:
+      - Back Beam Truss
+      invert_pan: false
+      invert_tilt: false
+      layer: ''
       manufacturer: Ayrton
       model: MagicBlade R
       mounting: hanging
       name: Back Beam Truss 10
       orientation_uses_group_default: true
-      pitch: 0.0
+      pitch: 90.0
       roll: 0.0
       type: MH
       universe: 1
@@ -2020,14 +2672,23 @@ groups:
         name: Ba (18ch)
       - channels: 44
         name: Ex (44ch)
+      calibration: {}
       current_mode: St (20ch)
+      definition_source: qxf
+      docked_to: ''
+      gdtf_fixture_type_id: null
       group: Back Beam Truss
+      groups:
+      - Back Beam Truss
+      invert_pan: false
+      invert_tilt: false
+      layer: ''
       manufacturer: Ayrton
       model: MagicBlade R
       mounting: hanging
       name: Back Beam Truss 11
       orientation_uses_group_default: true
-      pitch: 0.0
+      pitch: 90.0
       roll: 0.0
       type: MH
       universe: 1
@@ -2044,14 +2705,23 @@ groups:
         name: Ba (18ch)
       - channels: 44
         name: Ex (44ch)
+      calibration: {}
       current_mode: St (20ch)
+      definition_source: qxf
+      docked_to: ''
+      gdtf_fixture_type_id: null
       group: Back Beam Truss
+      groups:
+      - Back Beam Truss
+      invert_pan: false
+      invert_tilt: false
+      layer: ''
       manufacturer: Ayrton
       model: MagicBlade R
       mounting: hanging
       name: Back Beam Truss 12
       orientation_uses_group_default: true
-      pitch: 0.0
+      pitch: 90.0
       roll: 0.0
       type: MH
       universe: 1
@@ -2062,14 +2732,24 @@ groups:
       z_uses_group_default: false
     lighting_role: movement
     name: Back Beam Truss
+    order_mode: manual
   Blinders:
     color: '#ccaa33'
     default_mounting: hanging
-    default_pitch: 0.0
+    default_pitch: 90.0
     default_roll: 0.0
     default_yaw: 0.0
     default_z_height: 5.0
     export_intensity: 255
+    fixture_order:
+    - Blinders 1
+    - Blinders 2
+    - Blinders 3
+    - Blinders 4
+    - Blinders 5
+    - Blinders 6
+    - Blinders 7
+    - Blinders 8
     fixtures:
     - address: 121
       available_modes:
@@ -2081,14 +2761,23 @@ groups:
         name: 5 Channels Mode
       - channels: 10
         name: 10 Channels Mode
+      calibration: {}
       current_mode: 10 Channels Mode
+      definition_source: qxf
+      docked_to: ''
+      gdtf_fixture_type_id: null
       group: Blinders
+      groups:
+      - Blinders
+      invert_pan: false
+      invert_tilt: false
+      layer: ''
       manufacturer: Showtec
       model: Sunstrip Active
       mounting: hanging
       name: Blinders 1
       orientation_uses_group_default: true
-      pitch: 0.0
+      pitch: 90.0
       roll: 0.0
       type: SUNSTRIP
       universe: 2
@@ -2107,14 +2796,23 @@ groups:
         name: 5 Channels Mode
       - channels: 10
         name: 10 Channels Mode
+      calibration: {}
       current_mode: 10 Channels Mode
+      definition_source: qxf
+      docked_to: ''
+      gdtf_fixture_type_id: null
       group: Blinders
+      groups:
+      - Blinders
+      invert_pan: false
+      invert_tilt: false
+      layer: ''
       manufacturer: Showtec
       model: Sunstrip Active
       mounting: hanging
       name: Blinders 2
       orientation_uses_group_default: true
-      pitch: 0.0
+      pitch: 90.0
       roll: 0.0
       type: SUNSTRIP
       universe: 2
@@ -2133,14 +2831,23 @@ groups:
         name: 5 Channels Mode
       - channels: 10
         name: 10 Channels Mode
+      calibration: {}
       current_mode: 10 Channels Mode
+      definition_source: qxf
+      docked_to: ''
+      gdtf_fixture_type_id: null
       group: Blinders
+      groups:
+      - Blinders
+      invert_pan: false
+      invert_tilt: false
+      layer: ''
       manufacturer: Showtec
       model: Sunstrip Active
       mounting: hanging
       name: Blinders 3
       orientation_uses_group_default: true
-      pitch: 0.0
+      pitch: 90.0
       roll: 0.0
       type: SUNSTRIP
       universe: 2
@@ -2159,14 +2866,23 @@ groups:
         name: 5 Channels Mode
       - channels: 10
         name: 10 Channels Mode
+      calibration: {}
       current_mode: 10 Channels Mode
+      definition_source: qxf
+      docked_to: ''
+      gdtf_fixture_type_id: null
       group: Blinders
+      groups:
+      - Blinders
+      invert_pan: false
+      invert_tilt: false
+      layer: ''
       manufacturer: Showtec
       model: Sunstrip Active
       mounting: hanging
       name: Blinders 4
       orientation_uses_group_default: true
-      pitch: 0.0
+      pitch: 90.0
       roll: 0.0
       type: SUNSTRIP
       universe: 2
@@ -2185,14 +2901,23 @@ groups:
         name: 5 Channels Mode
       - channels: 10
         name: 10 Channels Mode
+      calibration: {}
       current_mode: 10 Channels Mode
+      definition_source: qxf
+      docked_to: ''
+      gdtf_fixture_type_id: null
       group: Blinders
+      groups:
+      - Blinders
+      invert_pan: false
+      invert_tilt: false
+      layer: ''
       manufacturer: Showtec
       model: Sunstrip Active
       mounting: hanging
       name: Blinders 5
       orientation_uses_group_default: true
-      pitch: 0.0
+      pitch: 90.0
       roll: 0.0
       type: SUNSTRIP
       universe: 2
@@ -2211,14 +2936,23 @@ groups:
         name: 5 Channels Mode
       - channels: 10
         name: 10 Channels Mode
+      calibration: {}
       current_mode: 10 Channels Mode
+      definition_source: qxf
+      docked_to: ''
+      gdtf_fixture_type_id: null
       group: Blinders
+      groups:
+      - Blinders
+      invert_pan: false
+      invert_tilt: false
+      layer: ''
       manufacturer: Showtec
       model: Sunstrip Active
       mounting: hanging
       name: Blinders 6
       orientation_uses_group_default: true
-      pitch: 0.0
+      pitch: 90.0
       roll: 0.0
       type: SUNSTRIP
       universe: 2
@@ -2237,14 +2971,23 @@ groups:
         name: 5 Channels Mode
       - channels: 10
         name: 10 Channels Mode
+      calibration: {}
       current_mode: 10 Channels Mode
+      definition_source: qxf
+      docked_to: ''
+      gdtf_fixture_type_id: null
       group: Blinders
+      groups:
+      - Blinders
+      invert_pan: false
+      invert_tilt: false
+      layer: ''
       manufacturer: Showtec
       model: Sunstrip Active
       mounting: hanging
       name: Blinders 7
       orientation_uses_group_default: true
-      pitch: 0.0
+      pitch: 90.0
       roll: 0.0
       type: SUNSTRIP
       universe: 2
@@ -2263,14 +3006,23 @@ groups:
         name: 5 Channels Mode
       - channels: 10
         name: 10 Channels Mode
+      calibration: {}
       current_mode: 10 Channels Mode
+      definition_source: qxf
+      docked_to: ''
+      gdtf_fixture_type_id: null
       group: Blinders
+      groups:
+      - Blinders
+      invert_pan: false
+      invert_tilt: false
+      layer: ''
       manufacturer: Showtec
       model: Sunstrip Active
       mounting: hanging
       name: Blinders 8
       orientation_uses_group_default: true
-      pitch: 0.0
+      pitch: 90.0
       roll: 0.0
       type: SUNSTRIP
       universe: 2
@@ -2281,14 +3033,24 @@ groups:
       z_uses_group_default: false
     lighting_role: effect
     name: Blinders
+    order_mode: manual
   Floor Beams:
     color: '#5599ee'
     default_mounting: standing
-    default_pitch: 0.0
+    default_pitch: -90.0
     default_roll: 0.0
     default_yaw: 0.0
     default_z_height: 0.3
     export_intensity: 255
+    fixture_order:
+    - Floor Beams 1
+    - Floor Beams 2
+    - Floor Beams 3
+    - Floor Beams 4
+    - Floor Beams 5
+    - Floor Beams 6
+    - Floor Beams 7
+    - Floor Beams 8
     fixtures:
     - address: 465
       available_modes:
@@ -2298,14 +3060,23 @@ groups:
         name: Ba (18ch)
       - channels: 44
         name: Ex (44ch)
+      calibration: {}
       current_mode: St (20ch)
+      definition_source: qxf
+      docked_to: ''
+      gdtf_fixture_type_id: null
       group: Floor Beams
+      groups:
+      - Floor Beams
+      invert_pan: false
+      invert_tilt: false
+      layer: ''
       manufacturer: Ayrton
       model: MagicBlade R
       mounting: standing
       name: Floor Beams 1
       orientation_uses_group_default: true
-      pitch: 0.0
+      pitch: -90.0
       roll: 0.0
       type: MH
       universe: 1
@@ -2322,14 +3093,23 @@ groups:
         name: Ba (18ch)
       - channels: 44
         name: Ex (44ch)
+      calibration: {}
       current_mode: St (20ch)
+      definition_source: qxf
+      docked_to: ''
+      gdtf_fixture_type_id: null
       group: Floor Beams
+      groups:
+      - Floor Beams
+      invert_pan: false
+      invert_tilt: false
+      layer: ''
       manufacturer: Ayrton
       model: MagicBlade R
       mounting: standing
       name: Floor Beams 2
       orientation_uses_group_default: true
-      pitch: 0.0
+      pitch: -90.0
       roll: 0.0
       type: MH
       universe: 1
@@ -2346,14 +3126,23 @@ groups:
         name: Ba (18ch)
       - channels: 44
         name: Ex (44ch)
+      calibration: {}
       current_mode: St (20ch)
+      definition_source: qxf
+      docked_to: ''
+      gdtf_fixture_type_id: null
       group: Floor Beams
+      groups:
+      - Floor Beams
+      invert_pan: false
+      invert_tilt: false
+      layer: ''
       manufacturer: Ayrton
       model: MagicBlade R
       mounting: standing
       name: Floor Beams 3
       orientation_uses_group_default: true
-      pitch: 0.0
+      pitch: -90.0
       roll: 0.0
       type: MH
       universe: 2
@@ -2370,14 +3159,23 @@ groups:
         name: Ba (18ch)
       - channels: 44
         name: Ex (44ch)
+      calibration: {}
       current_mode: St (20ch)
+      definition_source: qxf
+      docked_to: ''
+      gdtf_fixture_type_id: null
       group: Floor Beams
+      groups:
+      - Floor Beams
+      invert_pan: false
+      invert_tilt: false
+      layer: ''
       manufacturer: Ayrton
       model: MagicBlade R
       mounting: standing
       name: Floor Beams 4
       orientation_uses_group_default: true
-      pitch: 0.0
+      pitch: -90.0
       roll: 0.0
       type: MH
       universe: 2
@@ -2394,14 +3192,23 @@ groups:
         name: Ba (18ch)
       - channels: 44
         name: Ex (44ch)
+      calibration: {}
       current_mode: St (20ch)
+      definition_source: qxf
+      docked_to: ''
+      gdtf_fixture_type_id: null
       group: Floor Beams
+      groups:
+      - Floor Beams
+      invert_pan: false
+      invert_tilt: false
+      layer: ''
       manufacturer: Ayrton
       model: MagicBlade R
       mounting: standing
       name: Floor Beams 5
       orientation_uses_group_default: true
-      pitch: 0.0
+      pitch: -90.0
       roll: 0.0
       type: MH
       universe: 2
@@ -2418,14 +3225,23 @@ groups:
         name: Ba (18ch)
       - channels: 44
         name: Ex (44ch)
+      calibration: {}
       current_mode: St (20ch)
+      definition_source: qxf
+      docked_to: ''
+      gdtf_fixture_type_id: null
       group: Floor Beams
+      groups:
+      - Floor Beams
+      invert_pan: false
+      invert_tilt: false
+      layer: ''
       manufacturer: Ayrton
       model: MagicBlade R
       mounting: standing
       name: Floor Beams 6
       orientation_uses_group_default: true
-      pitch: 0.0
+      pitch: -90.0
       roll: 0.0
       type: MH
       universe: 2
@@ -2442,14 +3258,23 @@ groups:
         name: Ba (18ch)
       - channels: 44
         name: Ex (44ch)
+      calibration: {}
       current_mode: St (20ch)
+      definition_source: qxf
+      docked_to: ''
+      gdtf_fixture_type_id: null
       group: Floor Beams
+      groups:
+      - Floor Beams
+      invert_pan: false
+      invert_tilt: false
+      layer: ''
       manufacturer: Ayrton
       model: MagicBlade R
       mounting: standing
       name: Floor Beams 7
       orientation_uses_group_default: true
-      pitch: 0.0
+      pitch: -90.0
       roll: 0.0
       type: MH
       universe: 2
@@ -2466,14 +3291,23 @@ groups:
         name: Ba (18ch)
       - channels: 44
         name: Ex (44ch)
+      calibration: {}
       current_mode: St (20ch)
+      definition_source: qxf
+      docked_to: ''
+      gdtf_fixture_type_id: null
       group: Floor Beams
+      groups:
+      - Floor Beams
+      invert_pan: false
+      invert_tilt: false
+      layer: ''
       manufacturer: Ayrton
       model: MagicBlade R
       mounting: standing
       name: Floor Beams 8
       orientation_uses_group_default: true
-      pitch: 0.0
+      pitch: -90.0
       roll: 0.0
       type: MH
       universe: 2
@@ -2484,27 +3318,42 @@ groups:
       z_uses_group_default: false
     lighting_role: movement
     name: Floor Beams
+    order_mode: manual
   Front Pixel Bars:
     color: '#44cccc'
     default_mounting: standing
-    default_pitch: 0.0
+    default_pitch: -90.0
     default_roll: 0.0
     default_yaw: 0.0
     default_z_height: 0.2
     export_intensity: 255
+    fixture_order:
+    - Front Pixel Bars 1
+    - Front Pixel Bars 2
+    - Front Pixel Bars 3
+    - Front Pixel Bars 4
     fixtures:
     - address: 305
       available_modes:
       - channels: 40
         name: 40 Channels Mode
+      calibration: {}
       current_mode: 40 Channels Mode
+      definition_source: qxf
+      docked_to: ''
+      gdtf_fixture_type_id: null
       group: Front Pixel Bars
+      groups:
+      - Front Pixel Bars
+      invert_pan: false
+      invert_tilt: false
+      layer: ''
       manufacturer: Varghele
       model: LED BAR
       mounting: standing
       name: Front Pixel Bars 1
       orientation_uses_group_default: true
-      pitch: 0.0
+      pitch: -90.0
       roll: 0.0
       type: PIXELBAR
       universe: 2
@@ -2517,14 +3366,23 @@ groups:
       available_modes:
       - channels: 40
         name: 40 Channels Mode
+      calibration: {}
       current_mode: 40 Channels Mode
+      definition_source: qxf
+      docked_to: ''
+      gdtf_fixture_type_id: null
       group: Front Pixel Bars
+      groups:
+      - Front Pixel Bars
+      invert_pan: false
+      invert_tilt: false
+      layer: ''
       manufacturer: Varghele
       model: LED BAR
       mounting: standing
       name: Front Pixel Bars 2
       orientation_uses_group_default: true
-      pitch: 0.0
+      pitch: -90.0
       roll: 0.0
       type: PIXELBAR
       universe: 2
@@ -2537,14 +3395,23 @@ groups:
       available_modes:
       - channels: 40
         name: 40 Channels Mode
+      calibration: {}
       current_mode: 40 Channels Mode
+      definition_source: qxf
+      docked_to: ''
+      gdtf_fixture_type_id: null
       group: Front Pixel Bars
+      groups:
+      - Front Pixel Bars
+      invert_pan: false
+      invert_tilt: false
+      layer: ''
       manufacturer: Varghele
       model: LED BAR
       mounting: standing
       name: Front Pixel Bars 3
       orientation_uses_group_default: true
-      pitch: 0.0
+      pitch: -90.0
       roll: 0.0
       type: PIXELBAR
       universe: 2
@@ -2557,14 +3424,23 @@ groups:
       available_modes:
       - channels: 40
         name: 40 Channels Mode
+      calibration: {}
       current_mode: 40 Channels Mode
+      definition_source: qxf
+      docked_to: ''
+      gdtf_fixture_type_id: null
       group: Front Pixel Bars
+      groups:
+      - Front Pixel Bars
+      invert_pan: false
+      invert_tilt: false
+      layer: ''
       manufacturer: Varghele
       model: LED BAR
       mounting: standing
       name: Front Pixel Bars 4
       orientation_uses_group_default: true
-      pitch: 0.0
+      pitch: -90.0
       roll: 0.0
       type: PIXELBAR
       universe: 2
@@ -2575,14 +3451,24 @@ groups:
       z_uses_group_default: false
     lighting_role: accent
     name: Front Pixel Bars
+    order_mode: manual
   Front Wash Truss:
     color: '#cc44aa'
     default_mounting: hanging
-    default_pitch: 0.0
+    default_pitch: 90.0
     default_roll: 0.0
     default_yaw: 0.0
     default_z_height: 7.0
     export_intensity: 255
+    fixture_order:
+    - Front Wash Truss 1
+    - Front Wash Truss 2
+    - Front Wash Truss 3
+    - Front Wash Truss 4
+    - Front Wash Truss 5
+    - Front Wash Truss 6
+    - Front Wash Truss 7
+    - Front Wash Truss 8
     fixtures:
     - address: 1
       available_modes:
@@ -2590,14 +3476,23 @@ groups:
         name: Extended
       - channels: 14
         name: Standard
+      calibration: {}
       current_mode: Standard
+      definition_source: qxf
+      docked_to: ''
+      gdtf_fixture_type_id: null
       group: Front Wash Truss
+      groups:
+      - Front Wash Truss
+      invert_pan: false
+      invert_tilt: false
+      layer: ''
       manufacturer: Martin
       model: MAC Aura
       mounting: hanging
       name: Front Wash Truss 1
       orientation_uses_group_default: true
-      pitch: 0.0
+      pitch: 90.0
       roll: 0.0
       type: MH
       universe: 1
@@ -2612,14 +3507,23 @@ groups:
         name: Extended
       - channels: 14
         name: Standard
+      calibration: {}
       current_mode: Standard
+      definition_source: qxf
+      docked_to: ''
+      gdtf_fixture_type_id: null
       group: Front Wash Truss
+      groups:
+      - Front Wash Truss
+      invert_pan: false
+      invert_tilt: false
+      layer: ''
       manufacturer: Martin
       model: MAC Aura
       mounting: hanging
       name: Front Wash Truss 2
       orientation_uses_group_default: true
-      pitch: 0.0
+      pitch: 90.0
       roll: 0.0
       type: MH
       universe: 1
@@ -2634,14 +3538,23 @@ groups:
         name: Extended
       - channels: 14
         name: Standard
+      calibration: {}
       current_mode: Standard
+      definition_source: qxf
+      docked_to: ''
+      gdtf_fixture_type_id: null
       group: Front Wash Truss
+      groups:
+      - Front Wash Truss
+      invert_pan: false
+      invert_tilt: false
+      layer: ''
       manufacturer: Martin
       model: MAC Aura
       mounting: hanging
       name: Front Wash Truss 3
       orientation_uses_group_default: true
-      pitch: 0.0
+      pitch: 90.0
       roll: 0.0
       type: MH
       universe: 1
@@ -2656,14 +3569,23 @@ groups:
         name: Extended
       - channels: 14
         name: Standard
+      calibration: {}
       current_mode: Standard
+      definition_source: qxf
+      docked_to: ''
+      gdtf_fixture_type_id: null
       group: Front Wash Truss
+      groups:
+      - Front Wash Truss
+      invert_pan: false
+      invert_tilt: false
+      layer: ''
       manufacturer: Martin
       model: MAC Aura
       mounting: hanging
       name: Front Wash Truss 4
       orientation_uses_group_default: true
-      pitch: 0.0
+      pitch: 90.0
       roll: 0.0
       type: MH
       universe: 1
@@ -2678,14 +3600,23 @@ groups:
         name: Extended
       - channels: 14
         name: Standard
+      calibration: {}
       current_mode: Standard
+      definition_source: qxf
+      docked_to: ''
+      gdtf_fixture_type_id: null
       group: Front Wash Truss
+      groups:
+      - Front Wash Truss
+      invert_pan: false
+      invert_tilt: false
+      layer: ''
       manufacturer: Martin
       model: MAC Aura
       mounting: hanging
       name: Front Wash Truss 5
       orientation_uses_group_default: true
-      pitch: 0.0
+      pitch: 90.0
       roll: 0.0
       type: MH
       universe: 1
@@ -2700,14 +3631,23 @@ groups:
         name: Extended
       - channels: 14
         name: Standard
+      calibration: {}
       current_mode: Standard
+      definition_source: qxf
+      docked_to: ''
+      gdtf_fixture_type_id: null
       group: Front Wash Truss
+      groups:
+      - Front Wash Truss
+      invert_pan: false
+      invert_tilt: false
+      layer: ''
       manufacturer: Martin
       model: MAC Aura
       mounting: hanging
       name: Front Wash Truss 6
       orientation_uses_group_default: true
-      pitch: 0.0
+      pitch: 90.0
       roll: 0.0
       type: MH
       universe: 1
@@ -2722,14 +3662,23 @@ groups:
         name: Extended
       - channels: 14
         name: Standard
+      calibration: {}
       current_mode: Standard
+      definition_source: qxf
+      docked_to: ''
+      gdtf_fixture_type_id: null
       group: Front Wash Truss
+      groups:
+      - Front Wash Truss
+      invert_pan: false
+      invert_tilt: false
+      layer: ''
       manufacturer: Martin
       model: MAC Aura
       mounting: hanging
       name: Front Wash Truss 7
       orientation_uses_group_default: true
-      pitch: 0.0
+      pitch: 90.0
       roll: 0.0
       type: MH
       universe: 1
@@ -2744,14 +3693,23 @@ groups:
         name: Extended
       - channels: 14
         name: Standard
+      calibration: {}
       current_mode: Standard
+      definition_source: qxf
+      docked_to: ''
+      gdtf_fixture_type_id: null
       group: Front Wash Truss
+      groups:
+      - Front Wash Truss
+      invert_pan: false
+      invert_tilt: false
+      layer: ''
       manufacturer: Martin
       model: MAC Aura
       mounting: hanging
       name: Front Wash Truss 8
       orientation_uses_group_default: true
-      pitch: 0.0
+      pitch: 90.0
       roll: 0.0
       type: MH
       universe: 1
@@ -2762,14 +3720,20 @@ groups:
       z_uses_group_default: false
     lighting_role: movement
     name: Front Wash Truss
+    order_mode: manual
   Matrix Panels:
     color: '#cc4444'
     default_mounting: hanging
-    default_pitch: 0.0
+    default_pitch: 90.0
     default_roll: 0.0
     default_yaw: 0.0
     default_z_height: 4.0
     export_intensity: 255
+    fixture_order:
+    - Matrix Panels 1
+    - Matrix Panels 2
+    - Matrix Panels 3
+    - Matrix Panels 4
     fixtures:
     - address: 201
       available_modes:
@@ -2781,14 +3745,23 @@ groups:
         name: 28-Channel
       - channels: 4
         name: 4-Channel
+      calibration: {}
       current_mode: 26-Channel
+      definition_source: qxf
+      docked_to: ''
+      gdtf_fixture_type_id: null
       group: Matrix Panels
+      groups:
+      - Matrix Panels
+      invert_pan: false
+      invert_tilt: false
+      layer: ''
       manufacturer: Stairville
       model: LED Matrix Blinder 5x5
       mounting: hanging
       name: Matrix Panels 1
       orientation_uses_group_default: true
-      pitch: 0.0
+      pitch: 90.0
       roll: 0.0
       type: SUNSTRIP
       universe: 2
@@ -2807,14 +3780,23 @@ groups:
         name: 28-Channel
       - channels: 4
         name: 4-Channel
+      calibration: {}
       current_mode: 26-Channel
+      definition_source: qxf
+      docked_to: ''
+      gdtf_fixture_type_id: null
       group: Matrix Panels
+      groups:
+      - Matrix Panels
+      invert_pan: false
+      invert_tilt: false
+      layer: ''
       manufacturer: Stairville
       model: LED Matrix Blinder 5x5
       mounting: hanging
       name: Matrix Panels 2
       orientation_uses_group_default: true
-      pitch: 0.0
+      pitch: 90.0
       roll: 0.0
       type: SUNSTRIP
       universe: 2
@@ -2833,14 +3815,23 @@ groups:
         name: 28-Channel
       - channels: 4
         name: 4-Channel
+      calibration: {}
       current_mode: 26-Channel
+      definition_source: qxf
+      docked_to: ''
+      gdtf_fixture_type_id: null
       group: Matrix Panels
+      groups:
+      - Matrix Panels
+      invert_pan: false
+      invert_tilt: false
+      layer: ''
       manufacturer: Stairville
       model: LED Matrix Blinder 5x5
       mounting: hanging
       name: Matrix Panels 3
       orientation_uses_group_default: true
-      pitch: 0.0
+      pitch: 90.0
       roll: 0.0
       type: SUNSTRIP
       universe: 2
@@ -2859,14 +3850,23 @@ groups:
         name: 28-Channel
       - channels: 4
         name: 4-Channel
+      calibration: {}
       current_mode: 26-Channel
+      definition_source: qxf
+      docked_to: ''
+      gdtf_fixture_type_id: null
       group: Matrix Panels
+      groups:
+      - Matrix Panels
+      invert_pan: false
+      invert_tilt: false
+      layer: ''
       manufacturer: Stairville
       model: LED Matrix Blinder 5x5
       mounting: hanging
       name: Matrix Panels 4
       orientation_uses_group_default: true
-      pitch: 0.0
+      pitch: 90.0
       roll: 0.0
       type: SUNSTRIP
       universe: 2
@@ -2877,14 +3877,24 @@ groups:
       z_uses_group_default: false
     lighting_role: effect
     name: Matrix Panels
+    order_mode: manual
   Mid Spot Truss:
     color: '#44cc77'
     default_mounting: hanging
-    default_pitch: 0.0
+    default_pitch: 90.0
     default_roll: 0.0
     default_yaw: 0.0
     default_z_height: 7.5
     export_intensity: 255
+    fixture_order:
+    - Mid Spot Truss 1
+    - Mid Spot Truss 2
+    - Mid Spot Truss 3
+    - Mid Spot Truss 4
+    - Mid Spot Truss 5
+    - Mid Spot Truss 6
+    - Mid Spot Truss 7
+    - Mid Spot Truss 8
     fixtures:
     - address: 113
       available_modes:
@@ -2892,14 +3902,23 @@ groups:
         name: 8 Channel
       - channels: 14
         name: 14 Channel
+      calibration: {}
       current_mode: 14 Channel
+      definition_source: qxf
+      docked_to: ''
+      gdtf_fixture_type_id: null
       group: Mid Spot Truss
+      groups:
+      - Mid Spot Truss
+      invert_pan: false
+      invert_tilt: false
+      layer: ''
       manufacturer: Varytec
       model: Hero Spot 60
       mounting: hanging
       name: Mid Spot Truss 1
       orientation_uses_group_default: true
-      pitch: 0.0
+      pitch: 90.0
       roll: 0.0
       type: MH
       universe: 1
@@ -2914,14 +3933,23 @@ groups:
         name: 8 Channel
       - channels: 14
         name: 14 Channel
+      calibration: {}
       current_mode: 14 Channel
+      definition_source: qxf
+      docked_to: ''
+      gdtf_fixture_type_id: null
       group: Mid Spot Truss
+      groups:
+      - Mid Spot Truss
+      invert_pan: false
+      invert_tilt: false
+      layer: ''
       manufacturer: Varytec
       model: Hero Spot 60
       mounting: hanging
       name: Mid Spot Truss 2
       orientation_uses_group_default: true
-      pitch: 0.0
+      pitch: 90.0
       roll: 0.0
       type: MH
       universe: 1
@@ -2936,14 +3964,23 @@ groups:
         name: 8 Channel
       - channels: 14
         name: 14 Channel
+      calibration: {}
       current_mode: 14 Channel
+      definition_source: qxf
+      docked_to: ''
+      gdtf_fixture_type_id: null
       group: Mid Spot Truss
+      groups:
+      - Mid Spot Truss
+      invert_pan: false
+      invert_tilt: false
+      layer: ''
       manufacturer: Varytec
       model: Hero Spot 60
       mounting: hanging
       name: Mid Spot Truss 3
       orientation_uses_group_default: true
-      pitch: 0.0
+      pitch: 90.0
       roll: 0.0
       type: MH
       universe: 1
@@ -2958,14 +3995,23 @@ groups:
         name: 8 Channel
       - channels: 14
         name: 14 Channel
+      calibration: {}
       current_mode: 14 Channel
+      definition_source: qxf
+      docked_to: ''
+      gdtf_fixture_type_id: null
       group: Mid Spot Truss
+      groups:
+      - Mid Spot Truss
+      invert_pan: false
+      invert_tilt: false
+      layer: ''
       manufacturer: Varytec
       model: Hero Spot 60
       mounting: hanging
       name: Mid Spot Truss 4
       orientation_uses_group_default: true
-      pitch: 0.0
+      pitch: 90.0
       roll: 0.0
       type: MH
       universe: 1
@@ -2980,14 +4026,23 @@ groups:
         name: 8 Channel
       - channels: 14
         name: 14 Channel
+      calibration: {}
       current_mode: 14 Channel
+      definition_source: qxf
+      docked_to: ''
+      gdtf_fixture_type_id: null
       group: Mid Spot Truss
+      groups:
+      - Mid Spot Truss
+      invert_pan: false
+      invert_tilt: false
+      layer: ''
       manufacturer: Varytec
       model: Hero Spot 60
       mounting: hanging
       name: Mid Spot Truss 5
       orientation_uses_group_default: true
-      pitch: 0.0
+      pitch: 90.0
       roll: 0.0
       type: MH
       universe: 1
@@ -3002,14 +4057,23 @@ groups:
         name: 8 Channel
       - channels: 14
         name: 14 Channel
+      calibration: {}
       current_mode: 14 Channel
+      definition_source: qxf
+      docked_to: ''
+      gdtf_fixture_type_id: null
       group: Mid Spot Truss
+      groups:
+      - Mid Spot Truss
+      invert_pan: false
+      invert_tilt: false
+      layer: ''
       manufacturer: Varytec
       model: Hero Spot 60
       mounting: hanging
       name: Mid Spot Truss 6
       orientation_uses_group_default: true
-      pitch: 0.0
+      pitch: 90.0
       roll: 0.0
       type: MH
       universe: 1
@@ -3024,14 +4088,23 @@ groups:
         name: 8 Channel
       - channels: 14
         name: 14 Channel
+      calibration: {}
       current_mode: 14 Channel
+      definition_source: qxf
+      docked_to: ''
+      gdtf_fixture_type_id: null
       group: Mid Spot Truss
+      groups:
+      - Mid Spot Truss
+      invert_pan: false
+      invert_tilt: false
+      layer: ''
       manufacturer: Varytec
       model: Hero Spot 60
       mounting: hanging
       name: Mid Spot Truss 7
       orientation_uses_group_default: true
-      pitch: 0.0
+      pitch: 90.0
       roll: 0.0
       type: MH
       universe: 1
@@ -3046,14 +4119,23 @@ groups:
         name: 8 Channel
       - channels: 14
         name: 14 Channel
+      calibration: {}
       current_mode: 14 Channel
+      definition_source: qxf
+      docked_to: ''
+      gdtf_fixture_type_id: null
       group: Mid Spot Truss
+      groups:
+      - Mid Spot Truss
+      invert_pan: false
+      invert_tilt: false
+      layer: ''
       manufacturer: Varytec
       model: Hero Spot 60
       mounting: hanging
       name: Mid Spot Truss 8
       orientation_uses_group_default: true
-      pitch: 0.0
+      pitch: 90.0
       roll: 0.0
       type: MH
       universe: 1
@@ -3064,14 +4146,20 @@ groups:
       z_uses_group_default: false
     lighting_role: movement
     name: Mid Spot Truss
+    order_mode: manual
   Side Tower L:
     color: '#44cc77'
     default_mounting: wall_left
     default_pitch: 0.0
     default_roll: 0.0
-    default_yaw: 0.0
+    default_yaw: 90.0
     default_z_height: 2.0
     export_intensity: 255
+    fixture_order:
+    - Side Tower L 1
+    - Side Tower L 2
+    - Side Tower L 3
+    - Side Tower L 4
     fixtures:
     - address: 465
       available_modes:
@@ -3079,8 +4167,17 @@ groups:
         name: 8 Channel
       - channels: 14
         name: 14 Channel
+      calibration: {}
       current_mode: 14 Channel
+      definition_source: qxf
+      docked_to: ''
+      gdtf_fixture_type_id: null
       group: Side Tower L
+      groups:
+      - Side Tower L
+      invert_pan: false
+      invert_tilt: false
+      layer: ''
       manufacturer: Varytec
       model: Hero Spot 60
       mounting: wall_left
@@ -3092,7 +4189,7 @@ groups:
       universe: 2
       x: -7.5
       y: 0.0
-      yaw: 0.0
+      yaw: 90.0
       z: 2.0
       z_uses_group_default: false
     - address: 479
@@ -3101,8 +4198,17 @@ groups:
         name: 8 Channel
       - channels: 14
         name: 14 Channel
+      calibration: {}
       current_mode: 14 Channel
+      definition_source: qxf
+      docked_to: ''
+      gdtf_fixture_type_id: null
       group: Side Tower L
+      groups:
+      - Side Tower L
+      invert_pan: false
+      invert_tilt: false
+      layer: ''
       manufacturer: Varytec
       model: Hero Spot 60
       mounting: wall_left
@@ -3114,7 +4220,7 @@ groups:
       universe: 2
       x: -7.5
       y: 0.0
-      yaw: 0.0
+      yaw: 90.0
       z: 4.0
       z_uses_group_default: false
     - address: 493
@@ -3123,8 +4229,17 @@ groups:
         name: 8 Channel
       - channels: 14
         name: 14 Channel
+      calibration: {}
       current_mode: 14 Channel
+      definition_source: qxf
+      docked_to: ''
+      gdtf_fixture_type_id: null
       group: Side Tower L
+      groups:
+      - Side Tower L
+      invert_pan: false
+      invert_tilt: false
+      layer: ''
       manufacturer: Varytec
       model: Hero Spot 60
       mounting: wall_left
@@ -3136,7 +4251,7 @@ groups:
       universe: 2
       x: -7.5
       y: 0.0
-      yaw: 0.0
+      yaw: 90.0
       z: 6.0
       z_uses_group_default: false
     - address: 1
@@ -3145,8 +4260,17 @@ groups:
         name: 8 Channel
       - channels: 14
         name: 14 Channel
+      calibration: {}
       current_mode: 14 Channel
+      definition_source: qxf
+      docked_to: ''
+      gdtf_fixture_type_id: null
       group: Side Tower L
+      groups:
+      - Side Tower L
+      invert_pan: false
+      invert_tilt: false
+      layer: ''
       manufacturer: Varytec
       model: Hero Spot 60
       mounting: wall_left
@@ -3158,19 +4282,25 @@ groups:
       universe: 3
       x: -7.5
       y: 0.0
-      yaw: 0.0
+      yaw: 90.0
       z: 8.0
       z_uses_group_default: false
     lighting_role: movement
     name: Side Tower L
+    order_mode: manual
   Side Tower R:
     color: '#44cc77'
     default_mounting: wall_right
     default_pitch: 0.0
     default_roll: 0.0
-    default_yaw: 0.0
+    default_yaw: -90.0
     default_z_height: 2.0
     export_intensity: 255
+    fixture_order:
+    - Side Tower R 1
+    - Side Tower R 2
+    - Side Tower R 3
+    - Side Tower R 4
     fixtures:
     - address: 15
       available_modes:
@@ -3178,8 +4308,17 @@ groups:
         name: 8 Channel
       - channels: 14
         name: 14 Channel
+      calibration: {}
       current_mode: 14 Channel
+      definition_source: qxf
+      docked_to: ''
+      gdtf_fixture_type_id: null
       group: Side Tower R
+      groups:
+      - Side Tower R
+      invert_pan: false
+      invert_tilt: false
+      layer: ''
       manufacturer: Varytec
       model: Hero Spot 60
       mounting: wall_right
@@ -3191,7 +4330,7 @@ groups:
       universe: 3
       x: 7.5
       y: 0.0
-      yaw: 0.0
+      yaw: -90.0
       z: 2.0
       z_uses_group_default: false
     - address: 29
@@ -3200,8 +4339,17 @@ groups:
         name: 8 Channel
       - channels: 14
         name: 14 Channel
+      calibration: {}
       current_mode: 14 Channel
+      definition_source: qxf
+      docked_to: ''
+      gdtf_fixture_type_id: null
       group: Side Tower R
+      groups:
+      - Side Tower R
+      invert_pan: false
+      invert_tilt: false
+      layer: ''
       manufacturer: Varytec
       model: Hero Spot 60
       mounting: wall_right
@@ -3213,7 +4361,7 @@ groups:
       universe: 3
       x: 7.5
       y: 0.0
-      yaw: 0.0
+      yaw: -90.0
       z: 4.0
       z_uses_group_default: false
     - address: 43
@@ -3222,8 +4370,17 @@ groups:
         name: 8 Channel
       - channels: 14
         name: 14 Channel
+      calibration: {}
       current_mode: 14 Channel
+      definition_source: qxf
+      docked_to: ''
+      gdtf_fixture_type_id: null
       group: Side Tower R
+      groups:
+      - Side Tower R
+      invert_pan: false
+      invert_tilt: false
+      layer: ''
       manufacturer: Varytec
       model: Hero Spot 60
       mounting: wall_right
@@ -3235,7 +4392,7 @@ groups:
       universe: 3
       x: 7.5
       y: 0.0
-      yaw: 0.0
+      yaw: -90.0
       z: 6.0
       z_uses_group_default: false
     - address: 57
@@ -3244,8 +4401,17 @@ groups:
         name: 8 Channel
       - channels: 14
         name: 14 Channel
+      calibration: {}
       current_mode: 14 Channel
+      definition_source: qxf
+      docked_to: ''
+      gdtf_fixture_type_id: null
       group: Side Tower R
+      groups:
+      - Side Tower R
+      invert_pan: false
+      invert_tilt: false
+      layer: ''
       manufacturer: Varytec
       model: Hero Spot 60
       mounting: wall_right
@@ -3257,11 +4423,12 @@ groups:
       universe: 3
       x: 7.5
       y: 0.0
-      yaw: 0.0
+      yaw: -90.0
       z: 8.0
       z_uses_group_default: false
     lighting_role: movement
     name: Side Tower R
+    order_mode: manual
 light_block_defs:
   lb0:
     colour_blocks:
@@ -3691,7 +4858,24 @@ light_block_defs:
     special_blocks: []
 midi_input_devices: null
 pause_show: null
-shows:
+setlist:
+  entries:
+  - pause_after:
+      duration_s: 0.0
+      level: 20
+      mode: hold_last
+      until: trigger
+    song: Demo
+    trigger:
+      channel: 1
+      mode: manual
+      timecode: ''
+      value: 0
+  name: ''
+  sync_device: ''
+  sync_mode: manual
+shows_directory: null
+songs:
   Demo:
     effects: []
     parts:
@@ -3712,6 +4896,7 @@ shows:
       lanes:
       - fixture_targets:
         - Back Beam Truss
+        lane_id: 121beddebea641a7b3196035e86b8e99
         light_blocks:
         - end: 5.0
           ref: lb0
@@ -3739,6 +4924,7 @@ shows:
         solo: false
       - fixture_targets:
         - Blinders
+        lane_id: 24f5f67bfc0947c586c7b210330c3f4d
         light_blocks:
         - end: 3.75
           ref: lb3
@@ -3766,6 +4952,7 @@ shows:
         solo: false
       - fixture_targets:
         - Floor Beams
+        lane_id: f41817fba0ea47c8926b34e2d9649344
         light_blocks:
         - end: 5.0
           ref: lb6
@@ -3793,6 +4980,7 @@ shows:
         solo: false
       - fixture_targets:
         - Front Pixel Bars
+        lane_id: 7793110284c84fdbb19d0c20deb3ce3d
         light_blocks:
         - end: 13.75
           ref: lb9
@@ -3814,6 +5002,7 @@ shows:
         solo: false
       - fixture_targets:
         - Front Wash Truss
+        lane_id: e79254b0276744faac3e8e9729a858f6
         light_blocks:
         - end: 5.0
           ref: lb11
@@ -3841,6 +5030,7 @@ shows:
         solo: false
       - fixture_targets:
         - Matrix Panels
+        lane_id: 65702861b49e4bf5aa15c6c34684559a
         light_blocks:
         - end: 5.0
           ref: lb14
@@ -3868,6 +5058,7 @@ shows:
         solo: false
       - fixture_targets:
         - Mid Spot Truss
+        lane_id: eab68971aaf84572ac8457c2c1fade05
         light_blocks:
         - end: 3.75
           ref: lb17
@@ -3895,6 +5086,7 @@ shows:
         solo: false
       - fixture_targets:
         - Side Tower L
+        lane_id: 9b9980a6c18248b697fc8a271ef139f1
         light_blocks:
         - end: 3.75
           ref: lb20
@@ -3922,6 +5114,7 @@ shows:
         solo: false
       - fixture_targets:
         - Side Tower R
+        lane_id: 72e210e3b98c4a39aa1670ee358344c9
         light_blocks:
         - end: 3.75
           ref: lb22
@@ -3949,7 +5142,6 @@ shows:
         solo: false
     trigger_channel: null
     trigger_device: null
-shows_directory: null
 spots:
   Crowd:
     name: Crowd
@@ -3961,7 +5153,9 @@ spots:
     x: 0.0
     y: 6.0
     z: 0.0
+stage_elements: []
 stage_height: 12.0
+stage_layers: []
 stage_width: 16.0
 universes:
   '1':
