@@ -182,20 +182,24 @@ assume one active config.
       without movement wires a regenerate edge. All mutations are plain
       widget methods; tests/unit/test_morph_patchbay.py drives them
       without mouse events.
-- [x] Wizard flow around it: DONE 2026-07-16 (gui/dialogs/morph_wizard.py,
-      File > Morph to Venue... wired through Ui_MainWindow overflow
-      menu + gui.py): target picker (.lms/legacy .yaml) -> patchbay ->
-      review (coverage table with highlighted gap rows, dry-run morph
-      report compiled into a DEEP COPY of the target, destroyed-hand-
-      edits manifest on re-morph) -> commit (apply_morph force flow with
-      explicit manifest confirm) + Save Target As / Save Plan As
-      (*.morphplan.yaml, source/target config_hash + date stamped on
-      save). Load Plan... adopts an existing plan for re-morph; a hash
-      mismatch shows a non-blocking rig-changed banner. Cancel anywhere
-      changes nothing - only the commit button mutates the wizard-held
-      target object, and only the save buttons write disk. Tests in
-      tests/unit/test_morph_wizard.py (isolation, force flow, plan
-      round-trip, banner).
+- [x] Wizard flow around it: DONE 2026-07-16, REHOSTED same day as the
+      full-window MORPH SCREEN (gui/screens/morph_screen.py, Tools >
+      Morph to Venue... - the 2026-07-16 desktop check found the modal
+      dialog starved the patchbay and fought the consult-other-tabs
+      workflow; see the status log): target picker (.lms/legacy .yaml)
+      -> patchbay -> review (coverage table with highlighted gap rows,
+      dry-run morph report compiled into a DEEP COPY of the target,
+      destroyed-hand-edits manifest on re-morph) -> commit (apply_morph
+      force flow with explicit manifest confirm) + Save Target As /
+      Save Plan As (*.morphplan.yaml, source/target config_hash + date
+      stamped on save). Load Plan... adopts an existing plan for
+      re-morph; a hash mismatch shows a non-blocking rig-changed
+      banner. Discarding the screen changes nothing - only the commit
+      button mutates the screen-held target object, and only the save
+      buttons write disk. Tests in tests/unit/test_morph_screen.py
+      (isolation, force flow, plan round-trip, banner, exit gate) +
+      tests/e2e/test_morph_screen_shell.py (page_stack hosting, resume,
+      stale-config discard).
 - [x] Headless CLI DONE 2026-07-16 (`main.py morph` -> utils/morph_cli.py above the Qt imports; exit 0/1/2/3 = ok/bad-input/compile-errors/needs-force; --report writes markdown).
 
 ## Phase 5 - pre-flight (design doc 7)
@@ -294,3 +298,24 @@ assume one active config.
   inspector golden regenerated (invert checkboxes, reviewed). v1.5
   code scope is COMPLETE pending the user's desktop/bench checks and
   the v1.5.0 release ritual (not tagged - user said no release).
+- 2026-07-16 (desktop check round): the user's first real-screen pass
+  rejected the morph wizard's ergonomics - clipped group names, elided
+  capability chips ("I..Y"), an anonymous blank expand button, no drag
+  wiring (the 6d mockup says ZIEHEN: QUELLE -> ZIEL), and the modal
+  dialog fighting the consult-the-stage-tab workflow. Rework shipped
+  the same day: the flow is now a page-stack SCREEN
+  (gui/screens/morph_screen.py, Tools > Morph to Venue - moved from
+  File by user call, it is a venue workflow like Pre-Flight; leaving
+  keeps the in-progress plan, the menu resumes it, a project load
+  discards stale screens; keep/discard exit gate) and the patchbay
+  got its layout pass (names lead rows, chips size to their text,
+  arrow-glyph expanders, visible LOCK, edge chips in a wrapping
+  FlowLayout - promoted to gui/widgets/flow_layout.py - proportional
+  columns) plus DRAG-AND-DROP wiring through the same can_dock gate as
+  click-click (encode/decode_wire_mime + handle_wire_drop, tests drive
+  drops without mouse events). gui/dialogs/morph_wizard.py is GONE
+  (tests moved to test_morph_screen.py). New golden pins the PATCH
+  page (test_morph_screen_golden.py). Two harness lessons pinned in
+  that golden's docstring: grab the themed WINDOW (a bare QWidget
+  composites no styled background) and flush DeferredDelete before
+  grabbing (_rebuild_rows ghost-stacks row generations otherwise).

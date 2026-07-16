@@ -75,13 +75,13 @@ def sync_start(worker):
 
 @pytest.fixture
 def synchronous_workers(monkeypatch):
-    from gui.dialogs import morph_wizard as mod
+    from gui.screens import morph_screen as mod
     monkeypatch.setattr(mod._PreviewWorker, "start", sync_start)
 
 
 def _wizard(source, target):
-    from gui.dialogs.morph_wizard import MorphWizard
-    wizard = MorphWizard(source, source_path="master.lms")
+    from gui.screens.morph_screen import MorphScreen
+    wizard = MorphScreen(source, source_path="master.lms")
     wizard.set_target_config(target, "venue.lms")
     lane = source.songs["S"].timeline_data.lanes[0]
     wizard.patchbay.add_edge(lane.lane_id, "dimmer", "WASH")
@@ -217,7 +217,7 @@ class TestRenderOnClick:
     def test_none_side_shows_unavailable_placeholder(
             self, qapp, source_and_target, synchronous_workers,
             monkeypatch):
-        from gui.dialogs.morph_wizard import PREVIEW_UNAVAILABLE
+        from gui.screens.morph_screen import PREVIEW_UNAVAILABLE
         calls = []
         _stub_render_pair(monkeypatch, calls, sides=("src",))
         source, target = source_and_target
@@ -230,7 +230,7 @@ class TestRenderOnClick:
     def test_render_failure_degrades_to_placeholders(
             self, qapp, source_and_target, synchronous_workers,
             monkeypatch):
-        from gui.dialogs.morph_wizard import PREVIEW_UNAVAILABLE
+        from gui.screens.morph_screen import PREVIEW_UNAVAILABLE
 
         def boom(*args, **kwargs):
             raise RuntimeError("no GL")

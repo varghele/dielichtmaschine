@@ -380,11 +380,11 @@ class TestWizardHandoff:
             self, qapp, tmp_path):
         """The wizard's Run Pre-Flight Now... unlocks with the commit
         (nothing to verify on the venue rig before it)."""
-        from gui.dialogs.morph_wizard import MorphWizard
+        from gui.screens.morph_screen import MorphScreen
         source = _config()
         target = _config()
         target.songs = {}
-        wizard = MorphWizard(source, source_path="master.lms")
+        wizard = MorphScreen(source, source_path="master.lms")
         wizard.set_target_config(target, str(tmp_path / "venue.lms"))
         assert not wizard.preflight_btn.isEnabled()
         lane = source.songs["S"].timeline_data.lanes[0]

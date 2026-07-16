@@ -26,12 +26,17 @@ verbatim as the GitHub Release notes (see [docs/releasing.md](docs/releasing.md)
   full per-block report (skipped blocks - e.g. beams pointing at the
   sky - and groups whose fixtures land far apart are called out).
   Pan/tilt values stay as fallback in all three paths.
-- **Morph to Venue: take a show to another rig.** File > Morph to
-  Venue... opens a wizard that adapts the open show to a different
-  venue's rig: pick the venue project, wire the patchbay (each source
-  lane stream docks onto target groups of the same capability -
-  INTENSITY, COLOUR, POSITION, BEAM - with per-wire transforms like
-  mirror, phase offset, intensity scale and stage-half subsets, plus
+- **Morph to Venue: take a show to another rig.** Tools > Morph to
+  Venue... opens a full-window screen (not a dialog: the shell nav
+  stays usable, so you can check the Stage tab or the timeline
+  mid-morph and come back - leaving keeps the in-progress plan, and
+  the menu resumes it) that adapts the open show to a different
+  venue's rig: pick the venue project, wire the patchbay by dragging a
+  source chip onto a target capability or by click-then-click (each
+  source lane stream docks onto target groups of the same capability -
+  INTENSITY, COLOUR, POSITION, BEAM - incompatible targets grey out
+  while a wire is pending - with per-wire transforms like mirror,
+  phase offset, intensity scale and stage-half subsets, plus
   regenerated movement for rigs that gained movers), review the
   coverage table and the full morph report from a dry run, then commit
   and save the morphed show as a new project. Patch plans save as
@@ -39,12 +44,13 @@ verbatim as the GitHub Release notes (see [docs/releasing.md](docs/releasing.md)
   after fixing the master show, with locked target lanes left untouched
   and any hand-edited blocks listed before they are replaced. An
   auto-suggest button prefills the wiring by lighting role; nothing
-  routes without confirmation, and cancelling changes nothing. The
-  review step also carries a side-by-side preview: pick a song, scrub
-  to any moment, and RENDER PREVIEW shows the original show on the
-  source rig next to the morphed show on the venue rig as two stills
-  (rendered on demand in the background; a side without a usable GL
-  context or an empty song shows a placeholder instead of failing).
+  routes without confirmation, and discarding the screen changes
+  nothing. The review step also carries a side-by-side preview: pick a
+  song, scrub to any moment, and RENDER PREVIEW shows the original
+  show on the source rig next to the morphed show on the venue rig as
+  two stills (rendered on demand in the background; a side without a
+  usable GL context or an empty song shows a placeholder instead of
+  failing).
 - **Colour palette roles are editable.** The colour block editor gained
   a ROLE picker: tag a block with a palette role ("primary", "accent",
   or any name you type) instead of leaving it a hard-coded literal, and

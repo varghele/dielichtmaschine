@@ -1,15 +1,24 @@
-# gui/dialogs/morph_wizard.py
-"""File > Morph to Venue: the wizard around the morph patchbay
-(v1.5b phase 4, frame per docs/design/screens/11-morph-wizard.html).
+# gui/screens/morph_screen.py
+"""Tools > Morph to Venue: the full-window morph flow, hosted in the
+main window's page_stack next to Home (v1.5b phase 4 rehosted
+2026-07-16; frame per docs/design/screens/11-morph-wizard.html, board
+per 15-morph-patch-flow-6d).
 
-Four steps over the tested engine in utils/morph - the dialog holds no
+Formerly a modal QDialog (gui/dialogs/morph_wizard.py). A morph is an
+iterative session - while patching you consult the Stage tab, the
+timeline and the coverage checker - so the flow now lives on a screen:
+the shell nav stays usable, navigating away KEEPS the in-progress
+morph (Tools > Morph to Venue returns to it), and the patchbay gets
+the whole window instead of a starved dialog.
+
+Four steps over the tested engine in utils/morph - the screen holds no
 compile logic of its own:
 
 1. TARGET - pick the venue config (.lms / legacy .yaml). The source is
    the currently open project, passed in. LOAD PLAN... adopts an
    existing *.morphplan.yaml (the re-morph workflow); a hash mismatch
    against either config shows a non-blocking warning banner.
-2. PATCHBAY - wire the plan (gui/dialogs/morph_patchbay.py).
+2. PATCH - wire the plan (gui/dialogs/morph_patchbay.py).
 3. REVIEW - the completeness checker per song x target group x
    capability (gap rows highlighted as blocking warnings), the morph
    report from a DRY-RUN compile into a deep copy of the target, and
@@ -19,9 +28,17 @@ compile logic of its own:
    and "Save plan as...".
 
 Isolation contract: the real target config object is mutated ONLY by
-the commit button. Review compiles into a deep copy; Cancel anywhere
-changes nothing. Saving stamps plan.source_hash / target_hash via
-utils/morph/plan.config_hash so a changed rig invalidates visibly.
+the commit button. Review compiles into a deep copy; discarding the
+screen changes nothing. Saving stamps plan.source_hash / target_hash
+via utils/morph/plan.config_hash so a changed rig invalidates visibly.
+
+Exit contract (the modeless part): EXIT with a wired, uncommitted plan
+asks KEEP (leave the screen alive in the stack; ``leave_requested``) or
+DISCARD (``closed``); committed or empty flows close without asking.
+The host owns teardown - it calls ``shutdown()`` before dropping the
+widget. The host also owns staleness: a screen built for a config the
+window no longer has must be discarded, not resumed (gui.py checks
+``source_config is self.config`` on open).
 """
 
 from __future__ import annotations
@@ -33,7 +50,7 @@ import shutil
 import tempfile
 
 from PyQt6 import QtCore, QtGui, QtWidgets
-from PyQt6.QtCore import Qt
+from PyQt6.QtCore import Qt, pyqtSignal
 
 from utils import app_identity
 from utils.morph import preview as morph_preview
@@ -43,10 +60,13 @@ from utils.morph.compile import (_song_duration, apply_morph,
 from utils.morph.plan import MorphPlan, PlanError, config_hash
 
 from gui.dialogs.morph_patchbay import SUBLANE_LABELS, MorphPatchbay
+from gui.typography import DisplayLabel
 
 PLAN_FILTER = "Morph plans (*.morphplan.yaml);;All files (*)"
 
 PAGE_TARGET, PAGE_PATCHBAY, PAGE_REVIEW, PAGE_COMMIT = range(4)
+
+STEP_TITLES = ("1 · TARGET", "2 · PATCH", "3 · REVIEW", "4 · COMMIT")
 
 #: shown on a preview side whose render came back None
 PREVIEW_UNAVAILABLE = "PREVIEW UNAVAILABLE (no GL / empty song)"
@@ -68,7 +88,7 @@ class _PreviewWorker(QtCore.QThread):
     def run(self):
         try:
             self.ok.emit(self._fn())
-        except Exception as exc:   # a failed render must never kill the wizard
+        except Exception as exc:   # a failed render must never kill the flow
             self.fail.emit(f"Preview render failed: {exc}")
 
 
@@ -83,17 +103,19 @@ def _config_summary(config, path: str = "") -> str:
     return " · ".join(parts)
 
 
-class MorphWizard(QtWidgets.QDialog):
-    """Modal morph flow. ``source_config`` is the open project (read
-    only); the target config is loaded here and mutated only on
-    commit - the caller decides nothing, the save buttons write to
-    disk."""
+class MorphScreen(QtWidgets.QWidget):
+    """The morph flow as a page-stack screen. ``source_config`` is the
+    open project (read only); the target config is loaded here and
+    mutated only on commit - the host decides nothing, the save buttons
+    write to disk."""
+
+    #: navigate away, KEEP this screen's state (resume via Tools menu)
+    leave_requested = pyqtSignal()
+    #: the flow is over (committed-close or discard) - host tears down
+    closed = pyqtSignal()
 
     def __init__(self, source_config, source_path: str = "", parent=None):
         super().__init__(parent)
-        self.setWindowTitle("Morph to Venue")
-        self.setModal(True)
-        self.setMinimumSize(980, 640)
 
         self.source_config = source_config
         self.source_path = source_path
@@ -104,13 +126,34 @@ class MorphWizard(QtWidgets.QDialog):
         self.committed = False
         self._dry_result = None
         self._dry_target = None        # the deep copy the dry run compiled into
-        self._source_hash = None       # config_hash cache (modal dialog)
+        self._source_hash = None       # config_hash cache (stable per screen)
         self._target_hash = None
         self._preview_worker = None
         self._preview_dir = None       # scratch dir, created on first render
 
         layout = QtWidgets.QVBoxLayout(self)
+        layout.setContentsMargins(16, 12, 16, 12)
         layout.setSpacing(10)
+
+        # Screen header: title, step rail, EXIT (replaces the dialog's
+        # window chrome + Cancel button).
+        header = QtWidgets.QHBoxLayout()
+        header.setSpacing(16)
+        header.addWidget(DisplayLabel("MORPH TO VENUE", point_size=14))
+        self._step_labels = []
+        for title in STEP_TITLES:
+            label = QtWidgets.QLabel(title)
+            label.setStyleSheet("QLabel { padding: 2px 8px; }")
+            self._step_labels.append(label)
+            header.addWidget(label)
+        header.addStretch(1)
+        self.exit_btn = QtWidgets.QPushButton("Exit")
+        self.exit_btn.setToolTip(
+            "Leave the morph screen. A wired, uncommitted plan asks "
+            "whether to keep it for later or discard it.")
+        self.exit_btn.clicked.connect(self.request_exit)
+        header.addWidget(self.exit_btn)
+        layout.addLayout(header)
 
         # Non-blocking plan-vs-config warning (design: warn, never block).
         self.banner = QtWidgets.QLabel("")
@@ -133,9 +176,6 @@ class MorphWizard(QtWidgets.QDialog):
         self.back_btn.clicked.connect(self._go_back)
         row.addWidget(self.back_btn)
         row.addStretch(1)
-        self.cancel_btn = QtWidgets.QPushButton("Cancel")
-        self.cancel_btn.clicked.connect(self.reject)
-        row.addWidget(self.cancel_btn)
         self.next_btn = QtWidgets.QPushButton("Next")
         self.next_btn.setDefault(True)
         self.next_btn.clicked.connect(self._go_next)
@@ -256,7 +296,7 @@ class MorphWizard(QtWidgets.QDialog):
             f"Plan: {os.path.basename(path)} ({len(plan.edges)} edge(s))")
 
     def set_plan(self, plan: MorphPlan) -> None:
-        """ONE plan object is shared by wizard and patchbay - both
+        """ONE plan object is shared by screen and patchbay - both
         mutate it, commit and save read it."""
         self.plan = plan
         if self.patchbay is not None:
@@ -332,8 +372,8 @@ class MorphWizard(QtWidgets.QDialog):
         """Side-by-side preview scrub (design doc 6): source song on
         rig A next to the morphed song on rig B at one show time.
         Renders ON CLICK ONLY - every render is a full GL pass, so the
-        slider never triggers one, and constructing the wizard never
-        renders (the whole dialog stays headless-safe)."""
+        slider never triggers one, and constructing the screen never
+        renders (the whole flow stays headless-safe)."""
         group = QtWidgets.QGroupBox("Side-by-side preview")
         layout = QtWidgets.QVBoxLayout(group)
         layout.setSpacing(6)
@@ -545,16 +585,53 @@ class MorphWizard(QtWidgets.QDialog):
         self.preview_btn.setEnabled(
             self.preview_song_combo.count() > 0)
 
-    def done(self, result: int) -> None:
-        """Never tear the dialog down under a live render; drop the
-        scratch stills afterwards."""
+    # ── exit + teardown ───────────────────────────────────────────────────
+
+    def in_progress(self) -> bool:
+        """A wired, uncommitted plan is worth asking about; anything
+        else exits silently."""
+        return not self.committed and bool(self.plan.edges)
+
+    def request_exit(self) -> None:
+        """The EXIT button (and the host's programmatic close path)."""
+        if not self.in_progress():
+            self.closed.emit()
+            return
+        choice = self._confirm_exit()
+        if choice == "keep":
+            self.leave_requested.emit()
+        elif choice == "discard":
+            self.closed.emit()
+
+    def _confirm_exit(self) -> str:
+        """'keep' | 'discard' | 'cancel'. Split out so tests drive
+        request_exit without a modal dialog."""
+        box = QtWidgets.QMessageBox(self)
+        box.setWindowTitle("Leave morph?")
+        box.setText("The morph plan is wired but not committed.")
+        keep = box.addButton("Keep for Later",
+                             QtWidgets.QMessageBox.ButtonRole.AcceptRole)
+        discard = box.addButton("Discard Morph",
+                                QtWidgets.QMessageBox.ButtonRole
+                                .DestructiveRole)
+        box.addButton(QtWidgets.QMessageBox.StandardButton.Cancel)
+        box.setDefaultButton(keep)
+        box.exec()
+        if box.clickedButton() is keep:
+            return "keep"
+        if box.clickedButton() is discard:
+            return "discard"
+        return "cancel"
+
+    def shutdown(self) -> None:
+        """Host-driven teardown: never under a live render; drop the
+        scratch stills afterwards. Idempotent."""
         worker = self._preview_worker
         if worker is not None and worker.isRunning():
             worker.wait(30000)
         if self._preview_dir:
             shutil.rmtree(self._preview_dir, ignore_errors=True)
             self._preview_dir = None
-        super().done(result)
 
     # ── page 4: commit ────────────────────────────────────────────────────
 
@@ -654,10 +731,10 @@ class MorphWizard(QtWidgets.QDialog):
     def open_preflight(self):
         """Run the venue pre-flight on the committed target (design doc
         7.2-7.4): the checklist generates from THIS plan against config
-        B, drives through the shared arbiter when the main window is
-        the parent, and persists next to the target file."""
+        B, drives through the shared arbiter when the main window hosts
+        the screen, and persists next to the target file."""
         from gui.dialogs.preflight_dialog import PreflightDialog
-        arbiter_provider = getattr(self.parent(), "output_arbiter", None)
+        arbiter_provider = getattr(self.window(), "output_arbiter", None)
         dialog = PreflightDialog(
             self.target_config,
             config_path=self.target_path,
@@ -718,7 +795,9 @@ class MorphWizard(QtWidgets.QDialog):
             self._enter_commit()
             self._stack.setCurrentIndex(PAGE_COMMIT)
         else:
-            self.accept()
+            # Committed: plain close. Uncommitted "Done" on the commit
+            # page falls into the same keep/discard gate as EXIT.
+            self.request_exit()
         self._sync_buttons()
 
     def _go_back(self) -> None:
@@ -736,7 +815,11 @@ class MorphWizard(QtWidgets.QDialog):
         else:
             self.next_btn.setText("Next")
             self.next_btn.setEnabled(self.target_config is not None)
-        # After a commit the target object is already morphed; Cancel
-        # would imply it is not. (Nothing hits disk without the save
-        # buttons either way.)
-        self.cancel_btn.setVisible(not self.committed)
+        for i, label in enumerate(self._step_labels):
+            if i == index:
+                label.setStyleSheet(
+                    "QLabel { padding: 2px 8px; color: #f0562e;"
+                    " border: 1px solid #f0562e; }")
+            else:
+                label.setStyleSheet(
+                    "QLabel { padding: 2px 8px; color: #8d9299; }")

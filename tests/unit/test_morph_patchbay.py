@@ -307,3 +307,124 @@ class TestHandEditHook:
         import timeline_ui.light_block_widget as module
         source = inspect.getsource(module)
         assert source.count("self.block.modified = True") == 1
+
+
+class TestDragAndDropWiring:
+    """The drag path (mockup 6d: ZIEHEN QUELLE -> ZIEL). Drops route
+    through wire_drop_allowed/handle_wire_drop - the same gate as
+    click-click - so these drive the plain methods plus one real
+    QDragEnterEvent/QDropEvent pass through the target chip."""
+
+    def test_mime_round_trip(self, qapp):
+        from gui.dialogs.morph_patchbay import (decode_wire_mime,
+                                                encode_wire_mime)
+        assert decode_wire_mime(encode_wire_mime("L1", "dimmer")) == \
+            ("L1", "dimmer")
+        assert decode_wire_mime(encode_wire_mime("L1", None)) == \
+            ("L1", None)
+        from PyQt6 import QtCore
+        assert decode_wire_mime(QtCore.QMimeData()) is None
+
+    def test_stream_drop_on_matching_chip_docks(self, patchbay, rigs):
+        _s, _t, pars, _m = rigs
+        assert patchbay.wire_drop_allowed(
+            pars.lane_id, "colour", "WASH", "colour")
+        assert patchbay.handle_wire_drop(
+            pars.lane_id, "colour", "WASH", "colour")
+        assert [e.sublane for e in patchbay.plan.edges] == ["colour"]
+
+    def test_stream_drop_on_wrong_chip_is_refused(self, patchbay, rigs):
+        _s, _t, pars, _m = rigs
+        assert not patchbay.wire_drop_allowed(
+            pars.lane_id, "colour", "WASH", "dimmer")
+        assert not patchbay.handle_wire_drop(
+            pars.lane_id, "colour", "WASH", "dimmer")
+        assert patchbay.plan.edges == []
+
+    def test_stream_drop_on_the_row_docks_its_capability(self, patchbay,
+                                                         rigs):
+        _s, _t, pars, _m = rigs
+        assert patchbay.handle_wire_drop(pars.lane_id, "colour", "WASH")
+        assert [e.sublane for e in patchbay.plan.edges] == ["colour"]
+
+    def test_incompatible_stream_drop_on_row_is_refused(self, patchbay,
+                                                        rigs):
+        _s, _t, pars, _m = rigs
+        assert not patchbay.handle_wire_drop(
+            pars.lane_id, "colour", "STROBE")
+        assert patchbay.plan.edges == []
+
+    def test_lane_drop_fans_out_as_lane_patch(self, patchbay, rigs):
+        _s, _t, pars, _m = rigs
+        assert patchbay.handle_wire_drop(pars.lane_id, None, "WASH")
+        assert sorted(e.sublane for e in patchbay.plan.edges) == \
+            ["colour", "dimmer"]
+        assert patchbay.is_lane_patch(pars.lane_id, "WASH")
+
+    def test_lane_drop_on_chip_the_lane_lacks_is_refused(self, patchbay,
+                                                         rigs):
+        # PARS carries no movement: a lane drag may not dock via the
+        # POSITION chip even though SPOT renders it.
+        _s, _t, pars, _m = rigs
+        assert not patchbay.wire_drop_allowed(
+            pars.lane_id, None, "SPOT", "movement")
+
+    def test_unknown_lane_never_docks(self, patchbay):
+        assert not patchbay.wire_drop_allowed(
+            "no-such-lane", "dimmer", "WASH", None)
+
+    def _target_chip(self, patchbay, group, sublane):
+        from PyQt6 import QtWidgets
+        for chip in patchbay._board.findChildren(QtWidgets.QToolButton):
+            if chip.property("target_key") == (group, sublane):
+                return chip
+        raise AssertionError(f"no target chip {group}/{sublane}")
+
+    def test_drop_events_dock_through_the_chip(self, patchbay, rigs):
+        from PyQt6 import QtCore, QtGui
+        from gui.dialogs.morph_patchbay import encode_wire_mime
+        _s, _t, pars, _m = rigs
+        chip = self._target_chip(patchbay, "WASH", "colour")
+        mime = encode_wire_mime(pars.lane_id, "colour")
+        enter = QtGui.QDragEnterEvent(
+            QtCore.QPoint(2, 2), QtCore.Qt.DropAction.CopyAction, mime,
+            QtCore.Qt.MouseButton.LeftButton,
+            QtCore.Qt.KeyboardModifier.NoModifier)
+        chip.dragEnterEvent(enter)
+        assert enter.isAccepted()
+        drop = QtGui.QDropEvent(
+            QtCore.QPointF(2.0, 2.0), QtCore.Qt.DropAction.CopyAction,
+            mime, QtCore.Qt.MouseButton.LeftButton,
+            QtCore.Qt.KeyboardModifier.NoModifier)
+        chip.dropEvent(drop)
+        assert drop.isAccepted()
+        assert [e.sublane for e in patchbay.plan.edges] == ["colour"]
+
+    def test_incompatible_drag_enter_is_ignored(self, patchbay, rigs):
+        from PyQt6 import QtCore, QtGui
+        from gui.dialogs.morph_patchbay import encode_wire_mime
+        _s, _t, pars, _m = rigs
+        chip = self._target_chip(patchbay, "WASH", "dimmer")
+        # Keep the mime alive for the handler: QDragEnterEvent does NOT
+        # take ownership, an inline temporary is freed under the event.
+        mime = encode_wire_mime(pars.lane_id, "colour")
+        enter = QtGui.QDragEnterEvent(
+            QtCore.QPoint(2, 2), QtCore.Qt.DropAction.CopyAction, mime,
+            QtCore.Qt.MouseButton.LeftButton,
+            QtCore.Qt.KeyboardModifier.NoModifier)
+        enter.ignore()
+        chip.dragEnterEvent(enter)
+        assert not enter.isAccepted()
+
+    def test_drag_gates_targets_like_a_pending_click(self, patchbay,
+                                                     rigs):
+        _s, _t, pars, _m = rigs
+        patchbay.begin_wire_drag((pars.lane_id, "colour"))
+        assert "Drop on" in patchbay.hint_label.text()
+        assert self._target_chip(patchbay, "WASH", "colour").isEnabled()
+        assert not self._target_chip(patchbay, "WASH", "dimmer").isEnabled()
+        assert not self._target_chip(patchbay, "SPOT", "movement"
+                                     ).isEnabled()
+        patchbay.end_wire_drag()
+        assert self._target_chip(patchbay, "WASH", "dimmer").isEnabled()
+        assert patchbay.HINT_IDLE in patchbay.hint_label.text()

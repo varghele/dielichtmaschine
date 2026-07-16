@@ -497,8 +497,16 @@ the world-plane path; Tools > Convert Movement to World Targets; AIM
 click-to-aim on the Stage tab; spot/plane/point combo in the movement
 editor), the WHOLE morph engine (utils/morph/: plan, compile, checker,
 analysis_cache, preview, preflight + morph_cli; `python main.py morph`),
-the patchbay + Morph to Venue wizard (gui/dialogs/morph_patchbay.py /
-morph_wizard.py, per mockup 15-morph-patch-flow-6d), the pre-flight
+the patchbay + Morph to Venue flow (gui/dialogs/morph_patchbay.py +
+gui/screens/morph_screen.py, per mockup 15-morph-patch-flow-6d;
+REWORKED 2026-07-16 on the user's first desktop check: the modal
+wizard became a page-stack SCREEN under Tools > Morph to Venue -
+leaving keeps the in-progress plan, the menu resumes it, a project
+load discards stale screens - and the patchbay got drag-and-drop
+wiring alongside click-click plus the layout pass: names lead rows,
+chips size to their text, arrow expanders, FlowLayout edge chips
+via the promoted gui/widgets/flow_layout.py;
+gui/dialogs/morph_wizard.py is GONE), the pre-flight
 screen (gui/dialogs/preflight_dialog.py + utils/artnet/preflight_layer
 on the arbiter's exclusive slot; capture -> Fixture.calibration ONLY;
 export guard live in create_workspace + export CLI), per-fixture DMX

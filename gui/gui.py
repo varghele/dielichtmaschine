@@ -905,7 +905,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.actionImportCsvTable.triggered.connect(self.import_csv_lighting_table)
         self.actionImportShowsFromConfig.triggered.connect(self.import_shows_from_config_file)
         self.actionImportLegacyCsv.triggered.connect(self.import_legacy_csv_songs)
-        self.actionMorphToVenue.triggered.connect(self.open_morph_wizard)
+        self.actionMorphToVenue.triggered.connect(self.open_morph_screen)
         self.actionNewFromTemplate.triggered.connect(self.new_from_template)
         self.actionImportWorkspace.triggered.connect(self.import_workspace)
         self.actionCreateWorkspace.triggered.connect(self.create_workspace)
@@ -1462,28 +1462,57 @@ class MainWindow(QMainWindow, Ui_MainWindow):
                 f"{getattr(self, '_pending_config_path', 'project')}:"
                 f"\n{e}")
 
-    def open_morph_wizard(self):
-        """File > Morph to Venue: the morph patchbay + wizard flow
-        (gui/dialogs/morph_wizard.py). The open project is the SOURCE
-        and stays read-only; the wizard loads the target rig itself and
-        writes results only through its own save buttons."""
-        if not self.config.songs:
-            QMessageBox.information(
-                self, "Morph to Venue",
-                "The open project has no songs to morph. Open the show "
-                "you want to take to another venue first.")
+    def open_morph_screen(self):
+        """Tools > Morph to Venue: the full-window morph flow
+        (gui/screens/morph_screen.py), hosted in the page_stack like
+        Home so the shell nav stays usable mid-morph. The open project
+        is the SOURCE and stays read-only; the screen loads the target
+        rig itself and writes results only through its own save
+        buttons. Navigating away keeps an in-progress morph alive;
+        re-opening from the menu resumes it. A screen authored against
+        a project this window no longer holds is stale (load swapped
+        the config reference) and is discarded, never resumed."""
+        screen = getattr(self, '_morph_screen', None)
+        if screen is not None and screen.source_config is not self.config:
+            self._discard_morph_screen()
+            screen = None
+        if screen is None:
+            if not self.config.songs:
+                QMessageBox.information(
+                    self, "Morph to Venue",
+                    "The open project has no songs to morph. Open the "
+                    "show you want to take to another venue first.")
+                return
+            from gui.screens.morph_screen import MorphScreen
+            screen = MorphScreen(
+                self.config,
+                source_path=getattr(self, 'config_path', '') or '')
+            screen.leave_requested.connect(self.show_pages)
+            screen.closed.connect(self._discard_morph_screen)
+            self.page_stack.addWidget(screen)
+            self._morph_screen = screen
+        self.page_stack.setCurrentWidget(screen)
+        # Like Home: no shell section is active on a stack screen.
+        self.topbar.set_active_section(None)
+        self.subnav.setVisible(False)
+
+    def _discard_morph_screen(self):
+        """Tear the morph screen down (flow closed, or stale after a
+        project load). Idempotent."""
+        screen = getattr(self, '_morph_screen', None)
+        if screen is None:
             return
-        from gui.dialogs.morph_wizard import MorphWizard
-        wizard = MorphWizard(
-            self.config,
-            source_path=getattr(self, 'config_path', '') or '',
-            parent=self)
-        wizard.exec()
+        self._morph_screen = None
+        screen.shutdown()
+        if self.page_stack.currentWidget() is screen:
+            self.show_pages()
+        self.page_stack.removeWidget(screen)
+        screen.deleteLater()
 
     def open_venue_preflight(self):
         """Tools > Venue Pre-Flight: run (or resume) the on-site
         checklist for the CURRENT config - the standalone path, plan
-        derived from the config's own lanes. The morph wizard opens the
+        derived from the config's own lanes. The morph screen opens the
         same dialog with the real plan for config B."""
         from gui.dialogs.preflight_dialog import PreflightDialog
         dialog = PreflightDialog(

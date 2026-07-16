@@ -62,12 +62,16 @@ The whole v1.5 scope is code-complete on `v1.5-focus-morphing`
 unit-tested offscreen; these verify the parts only a real screen or
 the desk can judge:
 
-- [ ] Morph to Venue end to end on demo data: open demos/shows/
-      club_band.yaml, File > Morph to Venue, target
+- [ ] Morph to Venue end to end on demo data (REWORKED 2026-07-16
+      after the first pass failed this check: now a full-window screen
+      under Tools, drag-and-drop wiring, patchbay layout fixed): open
+      demos/shows/club_band.yaml, Tools > Morph to Venue, target
       demos/rigs/band_midsize.yaml, AUTO-SUGGEST, eyeball the patchbay
-      (wire curves, chip gating, checker strip), review page: coverage
-      table + RENDER PREVIEW side-by-side under real GL, commit, open
-      the morphed show in the timeline.
+      (wire curves, chip gating, checker strip), DRAG a source chip
+      onto a target, navigate to the Stage tab mid-morph and resume
+      via the menu, review page: coverage table + RENDER PREVIEW
+      side-by-side under real GL, commit, open the morphed show in the
+      timeline.
 - [ ] Click-to-aim live: select a movement block in the Shows tab,
       Stage tab AIM toggle, click the plan - the block's target and
       the 3D beam should follow.

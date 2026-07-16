@@ -186,10 +186,6 @@ class Ui_MainWindow(object):
         self.actionExportFixtureList = QAction("Export Fixture List...", MainWindow)
         self.actionImportShowsFromConfig = QAction("Import Shows from Config...", MainWindow)
         self.actionImportLegacyCsv = QAction("Import Legacy CSV Songs...", MainWindow)
-        # Venue adaptation: the morph wizard + patchbay
-        # (gui/dialogs/morph_wizard.py, design doc
-        # docs/design-show-morphing.md).
-        self.actionMorphToVenue = QAction("Morph to Venue...", MainWindow)
         self.actionImportWorkspace = QAction("Import QLC+ Workspace...", MainWindow)
         self.actionCreateWorkspace = QAction("Create QLC+ Workspace", MainWindow)
         self.actionExit = QAction("Exit", MainWindow)
@@ -205,7 +201,6 @@ class Ui_MainWindow(object):
         self.menuFile.addAction(self.actionExportShowStructure)
         self.menuFile.addAction(self.actionImportShowsFromConfig)
         self.menuFile.addAction(self.actionImportLegacyCsv)
-        self.menuFile.addAction(self.actionMorphToVenue)
         self.menuFile.addSeparator()
         self.menuFile.addAction(self.actionImportFixtureList)
         self.menuFile.addAction(self.actionImportCsvTable)
@@ -249,16 +244,27 @@ class Ui_MainWindow(object):
         # the landing point as its world target; gui.py wires the
         # handler, utils/movement_migration.py does the tracing).
         self.menuTools = QtWidgets.QMenu("Tools", parent=MainWindow)
-        self.actionConvertMovementTargets = QAction(
-            "Convert Movement to World Targets...", MainWindow)
-        self.menuTools.addAction(self.actionConvertMovementTargets)
+        # Venue adaptation first (the task the user reaches for here):
+        # the morph screen + patchbay (gui/screens/morph_screen.py,
+        # design doc docs/design-show-morphing.md; lived in the File
+        # menu as a dialog until 2026-07-16 - it is a venue WORKFLOW
+        # like the two below, not a file operation).
+        self.actionMorphToVenue = QAction("Morph to Venue...", MainWindow)
+        self.menuTools.addAction(self.actionMorphToVenue)
         # Venue pre-flight: the generated on-site checklist that drives
         # the rig into testable states (design doc 7, v1.5b phase 5).
         # gui.py wires the handler; the same dialog also opens from the
-        # morph wizard's commit page.
+        # morph screen's commit page.
         self.actionVenuePreflight = QAction("Venue Pre-Flight...",
                                             MainWindow)
         self.menuTools.addAction(self.actionVenuePreflight)
+        # Batch migration on the loaded config: the v1.5a movement
+        # conversion (trace each manual pan/tilt movement block's centre
+        # beam onto the stage and write the landing point as its world
+        # target; utils/movement_migration.py does the tracing).
+        self.actionConvertMovementTargets = QAction(
+            "Convert Movement to World Targets...", MainWindow)
+        self.menuTools.addAction(self.actionConvertMovementTargets)
 
         # Settings menu
         self.menuSettings = QtWidgets.QMenu("Settings", parent=MainWindow)

@@ -12,24 +12,29 @@ dimmer / colour / movement / special.
 Interaction contract (kept deliberately testable - every mutation is a
 plain method on the widget; painting only reads):
 
-- Wiring: click a source chip, then a target capability chip. While a
-  wire is pending, incompatible target chips are disabled - only the
-  matching capability docks (the mockup's core rule). Clicking the
-  pending chip again cancels. A collapsed lane row wires the whole
-  lane: every sublane the lane carries that the target renders.
+- Wiring, two equivalent paths sharing one gate (``can_dock``):
+  DRAG a source chip onto a target capability chip or target row (the
+  mockup's ZIEHEN: QUELLE -> ZIEL), or CLICK a source chip, then a
+  target capability chip. While a wire is pending (clicked or mid-
+  drag), incompatible target chips are disabled - only the matching
+  capability docks (the mockup's core rule). Clicking the pending chip
+  again cancels. A collapsed lane row wires the whole lane: every
+  sublane the lane carries that the target renders. Drops route
+  through ``handle_wire_drop`` so tests drive them without synthetic
+  mouse events.
 - POSITION on a lane with no movement content shows as a ghost chip;
   wiring it creates a ``regenerate`` edge (strategy ``manual`` until
   changed) - the design's "movement onto groups that had none" path.
-- Edges: each target row lists its incoming edges as chips; the wire
-  colour matches the source lane. Right-click an edge chip for mode
-  (copy / copy+transform / regenerate + strategy), transforms
-  (phase_offset amount, mirror, intensity_scale factor, spatial_subset
-  selector), priority and delete. Fan-in priority uses the menu's
-  "Priority +" / "Priority -" pair instead of drag-reorder: the edge
-  chips wrap in a flow, so a drag order would be ambiguous to read
+- Edges: each target row lists its incoming edges as chips in a
+  wrapping flow; the wire colour matches the source lane. Right-click
+  an edge chip for mode (copy / copy+transform / regenerate +
+  strategy), transforms (phase_offset amount, mirror, intensity_scale
+  factor, spatial_subset selector), priority and delete. Fan-in
+  priority uses the menu's "Priority +" / "Priority -" pair instead of
+  drag-reorder: chips wrap, so a drag order would be ambiguous to read
   and to test; the +/- pair maps 1:1 onto MorphEdge.priority. An edge
   carrying transforms wears the mockup's filter marker.
-- Lock: the padlock button per target row round-trips
+- Lock: the LOCK button per target row round-trips
   plan.protected_target_lanes (re-morph leaves the lane untouched).
 - AUTO-SUGGEST prefills edges by source lane primary-group
   lighting_role first, capability overlap second (design doc 8). It
@@ -46,6 +51,7 @@ from typing import Dict, List, Optional, Tuple
 from PyQt6 import QtCore, QtGui, QtWidgets
 from PyQt6.QtCore import Qt, pyqtSignal
 
+from gui.widgets.flow_layout import FlowLayout
 from utils.morph.checker import check, group_capabilities
 from utils.morph.compile import SUBLANE_ATTRS
 from utils.morph.plan import (MorphEdge, MorphPlan, REGENERATE_STRATEGIES,
@@ -68,6 +74,26 @@ SUBSET_SELECTORS = ("left-half", "right-half", "front-half", "back-half")
 
 ROW_HEIGHT = 40
 FILTER_MARK = "◐"   # the mockup's "capability filter active" glyph
+
+#: drag payload: "<lane_id>\n<sublane>" ('' = whole lane)
+WIRE_MIME = "application/x-lm-morph-wire"
+
+
+def encode_wire_mime(lane_id: str,
+                     sublane: Optional[str]) -> QtCore.QMimeData:
+    mime = QtCore.QMimeData()
+    mime.setData(WIRE_MIME, f"{lane_id}\n{sublane or ''}".encode("utf-8"))
+    return mime
+
+
+def decode_wire_mime(mime: QtCore.QMimeData
+                     ) -> Optional[Tuple[str, Optional[str]]]:
+    """(lane_id, sublane-or-None) from a wire drag, else None."""
+    if not mime.hasFormat(WIRE_MIME):
+        return None
+    raw = bytes(mime.data(WIRE_MIME)).decode("utf-8")
+    lane_id, _, sublane = raw.partition("\n")
+    return lane_id, (sublane or None)
 
 
 class LaneInfo:
@@ -136,11 +162,99 @@ class EdgeCanvas(QtWidgets.QWidget):
         painter.end()
 
 
+class _SourceChip(QtWidgets.QToolButton):
+    """A wireable source chip: click sets the pending wire, dragging it
+    carries the same key as a QDrag (both paths meet in the patchbay's
+    gating)."""
+
+    def __init__(self, patchbay: "MorphPatchbay",
+                 key: Tuple[str, Optional[str]]):
+        super().__init__()
+        self._patchbay = patchbay
+        self._key = key
+        self._press_pos: Optional[QtCore.QPoint] = None
+
+    def mousePressEvent(self, event):
+        if event.button() == Qt.MouseButton.LeftButton:
+            self._press_pos = event.pos()
+        super().mousePressEvent(event)
+
+    def mouseMoveEvent(self, event):
+        if (self._press_pos is not None
+                and event.buttons() & Qt.MouseButton.LeftButton
+                and (event.pos() - self._press_pos).manhattanLength()
+                >= QtWidgets.QApplication.startDragDistance()):
+            self._press_pos = None
+            # Release the button's pressed state before the drag eats
+            # the mouse-release, or the chip sticks visually pressed.
+            self.setDown(False)
+            drag = QtGui.QDrag(self)
+            drag.setMimeData(encode_wire_mime(*self._key))
+            self._patchbay.begin_wire_drag(self._key)
+            try:
+                drag.exec(Qt.DropAction.CopyAction)
+            finally:
+                self._patchbay.end_wire_drag()
+            return
+        super().mouseMoveEvent(event)
+
+
+class _TargetChip(QtWidgets.QToolButton):
+    """A target capability chip that accepts compatible wire drops."""
+
+    def __init__(self, patchbay: "MorphPatchbay", group: str, sublane: str):
+        super().__init__()
+        self._patchbay = patchbay
+        self._group = group
+        self._sublane = sublane
+        self.setAcceptDrops(True)
+
+    def dragEnterEvent(self, event):
+        wire = decode_wire_mime(event.mimeData())
+        if wire is not None and self._patchbay.wire_drop_allowed(
+                wire[0], wire[1], self._group, self._sublane):
+            event.acceptProposedAction()
+
+    def dropEvent(self, event):
+        wire = decode_wire_mime(event.mimeData())
+        if wire is not None and self._patchbay.handle_wire_drop(
+                wire[0], wire[1], self._group, self._sublane):
+            event.acceptProposedAction()
+
+
+class _TargetRowFrame(QtWidgets.QFrame):
+    """A whole target row accepts drops too - dropping anywhere on the
+    group docks the wire (lane drags fan out, stream drags dock their
+    own capability)."""
+
+    def __init__(self, patchbay: "MorphPatchbay", group: str):
+        super().__init__()
+        self._patchbay = patchbay
+        self._group = group
+        self.setAcceptDrops(True)
+
+    def dragEnterEvent(self, event):
+        wire = decode_wire_mime(event.mimeData())
+        if wire is not None and self._patchbay.wire_drop_allowed(
+                wire[0], wire[1], self._group, None):
+            event.acceptProposedAction()
+
+    def dropEvent(self, event):
+        wire = decode_wire_mime(event.mimeData())
+        if wire is not None and self._patchbay.handle_wire_drop(
+                wire[0], wire[1], self._group, None):
+            event.acceptProposedAction()
+
+
 class MorphPatchbay(QtWidgets.QWidget):
     """The routing editor. Owns a MorphPlan and mutates ONLY the plan
     (and its protected_target_lanes); configs are read-only here."""
 
     changed = pyqtSignal()
+
+    HINT_IDLE = ("Drag a source chip onto a matching target capability, "
+                 "or click source then target. "
+                 "Solid = 1:1 · dashed = lane patch.")
 
     def __init__(self, source_config, target_config,
                  plan: Optional[MorphPlan] = None, parent=None):
@@ -156,6 +270,7 @@ class MorphPatchbay(QtWidgets.QWidget):
         #: (lane_id, target_group) pairs wired as one lane-level patch
         self._lane_patches: set = set()
         self._pending: Optional[Tuple[str, Optional[str]]] = None
+        self._dragging = False
         self._source_anchors: Dict[Tuple[str, Optional[str]],
                                    QtWidgets.QWidget] = {}
         self._target_anchors: Dict[str, QtWidgets.QWidget] = {}
@@ -397,6 +512,59 @@ class MorphPatchbay(QtWidgets.QWidget):
             if len(sublanes) >= 2:
                 self._lane_patches.add(pair)
 
+    # ── drag-and-drop wiring (the drop half is plain methods) ────────────
+
+    def wire_drop_allowed(self, lane_id: str, sublane: Optional[str],
+                          target_group: str,
+                          target_sublane: Optional[str]) -> bool:
+        """Would this drop dock? Same gate for dragEnter and tests.
+        ``sublane`` None = whole-lane drag; ``target_sublane`` None =
+        dropped on the row rather than one capability chip."""
+        if lane_id not in self._lanes_by_id:
+            return False
+        if sublane is None:
+            content = self.lane_content(lane_id)
+            docks = [s for s in content
+                     if s in self._caps.get(target_group, set())]
+            if target_sublane is not None:
+                return target_sublane in docks
+            return bool(docks)
+        if target_sublane is not None and target_sublane != sublane:
+            return False
+        return self.can_dock(lane_id, sublane, target_group)
+
+    def handle_wire_drop(self, lane_id: str, sublane: Optional[str],
+                         target_group: str,
+                         target_sublane: Optional[str] = None) -> bool:
+        """A wire dropped on a target: lane drags fan out (dashed lane
+        patch), stream drags dock their capability. Returns True when
+        at least one edge was added."""
+        if not self.wire_drop_allowed(lane_id, sublane, target_group,
+                                      target_sublane):
+            return False
+        if sublane is None:
+            added = bool(self.add_lane_patch(lane_id, target_group))
+        else:
+            added = self.add_edge(lane_id, sublane, target_group) \
+                is not None
+        if added:
+            self._pending = None
+        return added
+
+    def begin_wire_drag(self, key: Tuple[str, Optional[str]]) -> None:
+        """Gate targets while the drag is in flight - same visual
+        language as a pending click."""
+        self._dragging = True
+        self._pending = key
+        self._refresh_gating()
+        self._sync_pending_checks()
+
+    def end_wire_drag(self) -> None:
+        self._dragging = False
+        self._pending = None
+        self._refresh_gating()
+        self._sync_pending_checks()
+
     # ── UI scaffolding ───────────────────────────────────────────────────
 
     def _build_ui(self) -> None:
@@ -410,9 +578,7 @@ class MorphPatchbay(QtWidgets.QWidget):
         font.setBold(True)
         title.setFont(font)
         header.addWidget(title)
-        self.hint_label = QtWidgets.QLabel(
-            "Click a source chip, then a matching target capability. "
-            "Solid = 1:1 · dashed = lane patch.")
+        self.hint_label = QtWidgets.QLabel(self.HINT_IDLE)
         header.addWidget(self.hint_label, 1)
         self.suggest_btn = QtWidgets.QPushButton("Auto-suggest")
         self.suggest_btn.setToolTip(
@@ -427,24 +593,28 @@ class MorphPatchbay(QtWidgets.QWidget):
         board_layout.setContentsMargins(0, 0, 0, 0)
         board_layout.setSpacing(0)
 
+        # Proportional columns (the fixed 280/320px of the dialog era
+        # squeezed chips into elided slivers): the wire canvas takes the
+        # slack but stays narrow enough that rows read as one board.
         self._source_column = QtWidgets.QVBoxLayout()
         self._source_column.setSpacing(8)
         source_holder = QtWidgets.QWidget()
         source_holder.setLayout(self._source_column)
-        source_holder.setFixedWidth(280)
+        source_holder.setMinimumWidth(320)
 
         self._canvas = EdgeCanvas(self)
-        self._canvas.setMinimumWidth(160)
+        self._canvas.setMinimumWidth(120)
+        self._canvas.setMaximumWidth(360)
 
         self._target_column = QtWidgets.QVBoxLayout()
         self._target_column.setSpacing(8)
         target_holder = QtWidgets.QWidget()
         target_holder.setLayout(self._target_column)
-        target_holder.setFixedWidth(320)
+        target_holder.setMinimumWidth(420)
 
-        board_layout.addWidget(source_holder)
+        board_layout.addWidget(source_holder, 2)
         board_layout.addWidget(self._canvas, 1)
-        board_layout.addWidget(target_holder)
+        board_layout.addWidget(target_holder, 3)
 
         scroll = QtWidgets.QScrollArea()
         scroll.setWidgetResizable(True)
@@ -458,31 +628,56 @@ class MorphPatchbay(QtWidgets.QWidget):
         self.checker_label.setTextFormat(Qt.TextFormat.RichText)
         layout.addWidget(self.checker_label)
 
-    def _chip(self, text: str, colour: str = "",
-              ghost: bool = False) -> QtWidgets.QToolButton:
-        chip = QtWidgets.QToolButton()
+    def _style_chip(self, chip: QtWidgets.QToolButton, text: str,
+                    colour: str = "", ghost: bool = False) -> None:
+        """Common chip look: never narrower than its own text (the
+        dialog-era fixed columns elided chips into 'I..Y')."""
         chip.setText(text)
         chip.setCheckable(True)
         chip.setCursor(Qt.CursorShape.PointingHandCursor)
+        metrics = QtGui.QFontMetrics(chip.font())
+        chip.setMinimumWidth(metrics.horizontalAdvance(text) + 20)
         border = colour or "#3a3a3a"
         style = (f"QToolButton {{ border: 1px solid {border};"
-                 f" padding: 2px 8px; }}"
-                 f" QToolButton:checked {{ background: {border}; }}"
+                 f" background: transparent; padding: 2px 8px; }}"
+                 f" QToolButton:checked {{ background: {border};"
+                 f" color: #0e0e10; }}"
                  f" QToolButton:disabled {{ color: #5c6068;"
                  f" border-color: #2d2d2d; }}")
         if ghost:
             style = style.replace("1px solid", "1px dashed")
         chip.setStyleSheet(style)
+
+    def _chip(self, text: str, colour: str = "",
+              ghost: bool = False) -> QtWidgets.QToolButton:
+        chip = QtWidgets.QToolButton()
+        self._style_chip(chip, text, colour, ghost)
         return chip
 
-    def _row_frame(self, colour: str) -> QtWidgets.QFrame:
-        frame = QtWidgets.QFrame()
+    def _source_chip(self, key: Tuple[str, Optional[str]], text: str,
+                     colour: str, ghost: bool = False) -> _SourceChip:
+        chip = _SourceChip(self, key)
+        self._style_chip(chip, text, colour, ghost)
+        return chip
+
+    def _row_frame(self, colour: str,
+                   frame: Optional[QtWidgets.QFrame] = None
+                   ) -> QtWidgets.QFrame:
+        if frame is None:
+            frame = QtWidgets.QFrame()
         frame.setStyleSheet(
             f"QFrame {{ border: 1px solid #2d2d2d;"
             f" border-left: 3px solid {colour}; }}"
             f" QLabel {{ border: none; }}")
         frame.setMinimumHeight(ROW_HEIGHT)
         return frame
+
+    def _name_label(self, text: str) -> QtWidgets.QLabel:
+        label = QtWidgets.QLabel(text)
+        font = label.font()
+        font.setBold(True)
+        label.setFont(font)
+        return label
 
     def _clear_column(self, column: QtWidgets.QVBoxLayout) -> None:
         while column.count():
@@ -518,17 +713,24 @@ class MorphPatchbay(QtWidgets.QWidget):
         frame = self._row_frame(info.colour)
         row = QtWidgets.QHBoxLayout(frame)
         row.setContentsMargins(8, 4, 8, 4)
+        expanded = info.lane_id in self._expanded
         expand = QtWidgets.QToolButton()
-        expand.setText("-" if info.lane_id in self._expanded else "+")
+        # A drawn arrow, not a text glyph: the dialog era used "+"/"-"
+        # text, which rendered as an anonymous blank square.
+        expand.setArrowType(Qt.ArrowType.DownArrow if expanded
+                            else Qt.ArrowType.RightArrow)
+        expand.setAutoRaise(True)
+        expand.setFixedSize(22, 22)
+        expand.setStyleSheet("QToolButton { border: none;"
+                             " background: transparent; padding: 0; }")
         expand.setToolTip("Expand to the four sublane streams")
         expand.clicked.connect(
             lambda _=False, lid=info.lane_id:
             self.set_expanded(lid, lid not in self._expanded))
         row.addWidget(expand)
-        name = QtWidgets.QLabel(info.name)
-        row.addWidget(name, 1)
+        row.addWidget(self._name_label(info.name), 1)
 
-        if info.lane_id in self._expanded:
+        if expanded:
             # Expanded: the lane header is not wireable; each sublane
             # stream gets its own chip row + anchor.
             for sublane in SUBLANE_ORDER:
@@ -537,13 +739,14 @@ class MorphPatchbay(QtWidgets.QWidget):
                     continue
                 sub = self._row_frame(info.colour)
                 sub_row = QtWidgets.QHBoxLayout(sub)
-                sub_row.setContentsMargins(24, 4, 8, 4)
+                sub_row.setContentsMargins(30, 4, 8, 4)
                 count = info.content.get(sublane, 0)
                 sub_row.addWidget(QtWidgets.QLabel(
                     f"{count}x" if count else "empty"))
                 sub_row.addStretch(1)
-                chip = self._chip(SUBLANE_LABELS[sublane], info.colour,
-                                  ghost=not has_content)
+                chip = self._source_chip(
+                    (info.lane_id, sublane), SUBLANE_LABELS[sublane],
+                    info.colour, ghost=not has_content)
                 if not has_content:
                     chip.setToolTip(
                         "No movement authored - wiring this creates a "
@@ -556,7 +759,8 @@ class MorphPatchbay(QtWidgets.QWidget):
                 self._source_anchors[(info.lane_id, sublane)] = sub
                 vbox.addWidget(sub)
         else:
-            chip = self._chip("LANE", info.colour)
+            chip = self._source_chip((info.lane_id, None), "LANE",
+                                     info.colour)
             chip.setToolTip(
                 "Wire the whole lane: every stream it carries that the "
                 "target renders (dashed fan-out)")
@@ -578,49 +782,54 @@ class MorphPatchbay(QtWidgets.QWidget):
                 if info:
                     colour = info.colour
                 break
-        frame = self._row_frame(colour)
+        frame = self._row_frame(colour, _TargetRowFrame(self, group))
         vbox = QtWidgets.QVBoxLayout(frame)
         vbox.setContentsMargins(8, 4, 8, 4)
         vbox.setSpacing(4)
 
-        row = QtWidgets.QHBoxLayout()
-        lock = QtWidgets.QToolButton()
-        lock.setCheckable(True)
+        # Header: the group's NAME leads (the dialog era hid it clipped
+        # behind the chips); wires anchor on this row.
+        head = QtWidgets.QWidget()
+        row = QtWidgets.QHBoxLayout(head)
+        row.setContentsMargins(0, 0, 0, 0)
+        fixtures = getattr(self.target_config.groups.get(group),
+                           "fixtures", [])
+        row.addWidget(self._name_label(group))
+        row.addWidget(QtWidgets.QLabel(f"{len(fixtures)}x"))
+        row.addStretch(1)
+        lock = self._chip("LOCK", "#8d9299")
         lock.setChecked(self.is_locked(group))
-        lock.setText("LOCK")
         lock.setToolTip(
             "Protect this target lane: re-morph leaves it untouched")
         lock.toggled.connect(
             lambda checked, g=group: self.set_lock(g, checked))
         row.addWidget(lock)
+        vbox.addWidget(head)
 
+        chip_holder = QtWidgets.QWidget()
+        chips = FlowLayout(chip_holder)
         for sublane in SUBLANE_ORDER:
             if sublane not in self._caps.get(group, set()):
                 continue
-            chip = self._chip(SUBLANE_LABELS[sublane], colour)
+            chip = _TargetChip(self, group, sublane)
+            self._style_chip(chip, SUBLANE_LABELS[sublane], colour)
             chip.setCheckable(False)
             chip.clicked.connect(
                 lambda _=False, g=group, s=sublane:
                 self._target_chip_clicked(g, s))
             self._register_target_chip(group, sublane, chip)
-            row.addWidget(chip)
-
-        row.addStretch(1)
-        fixtures = getattr(self.target_config.groups.get(group),
-                           "fixtures", [])
-        row.addWidget(QtWidgets.QLabel(f"{group} {len(fixtures)}x"))
-        vbox.addLayout(row)
+            chips.addWidget(chip)
+        vbox.addWidget(chip_holder)
 
         edges_here = [e for e in self.plan.edges if e.target_group == group]
         if edges_here:
-            edge_row = QtWidgets.QHBoxLayout()
-            edge_row.setSpacing(4)
+            edge_holder = QtWidgets.QWidget()
+            edge_flow = FlowLayout(edge_holder)
             for edge in sorted(edges_here, key=lambda e: -e.priority):
-                edge_row.addWidget(self._build_edge_chip(edge))
-            edge_row.addStretch(1)
-            vbox.addLayout(edge_row)
+                edge_flow.addWidget(self._build_edge_chip(edge))
+            vbox.addWidget(edge_holder)
 
-        self._target_anchors[group] = frame
+        self._target_anchors[group] = head
         return frame
 
     def _build_edge_chip(self, edge: MorphEdge) -> QtWidgets.QToolButton:
@@ -662,7 +871,8 @@ class MorphPatchbay(QtWidgets.QWidget):
 
     def _target_chip_clicked(self, group: str, sublane: str) -> None:
         if self._pending is None:
-            self.hint_label.setText("Click a source chip first.")
+            self.hint_label.setText(
+                "Click (or drag) a source chip first.")
             return
         lane_id, pending_sublane = self._pending
         if pending_sublane is None:
@@ -683,8 +893,9 @@ class MorphPatchbay(QtWidgets.QWidget):
                                 else False)
 
     def _refresh_gating(self) -> None:
-        """While a wire is pending, disable every target chip that
-        cannot dock it (the visible half of capability gating)."""
+        """While a wire is pending (clicked or dragged), disable every
+        target chip that cannot dock it (the visible half of capability
+        gating)."""
         pending = self._pending
         for chip in self._board.findChildren(QtWidgets.QToolButton):
             key = chip.property("target_key")
@@ -702,16 +913,15 @@ class MorphPatchbay(QtWidgets.QWidget):
                 chip.setEnabled(sublane == pending_sublane and
                                 self.can_dock(lane_id, sublane, group))
         if pending is None:
-            self.hint_label.setText(
-                "Click a source chip, then a matching target capability. "
-                "Solid = 1:1 · dashed = lane patch.")
+            self.hint_label.setText(self.HINT_IDLE)
         else:
             lane_id, sublane = pending
             info = self._lanes_by_id.get(lane_id)
             what = SUBLANE_LABELS.get(sublane, "LANE")
+            verb = "Drop on" if self._dragging else "Click"
             self.hint_label.setText(
-                f"Wiring {info.name if info else '?'} · {what} - click a "
-                f"matching target capability (incompatible chips are "
+                f"Wiring {info.name if info else '?'} · {what} - {verb} "
+                f"a matching target capability (incompatible chips are "
                 f"disabled).")
         self._canvas.update()
 
