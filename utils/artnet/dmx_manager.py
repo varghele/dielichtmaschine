@@ -858,6 +858,30 @@ class DMXManager:
                     universe, channel = fixture_map.get_absolute_address(ch_offset)
                     self.set_dmx_value(universe, channel, int(wheel_value))
 
+    def _point_center(self, fixture_map: FixtureChannelMap,
+                      point) -> tuple:
+        """(center_pan, center_tilt) DMX for a world-space aim point:
+        per-fixture IK at the definition's real ranges. Shared by the
+        target_point path and the dangling-spot-name fall-through
+        (2026-07-16)."""
+        fixture = fixture_map.fixture
+        group = self.config.groups.get(fixture.group) \
+            if fixture.group else None
+        mounting, yaw, pitch, roll = \
+            fixture.get_effective_orientation(group)
+        fixture_z = fixture.get_effective_z(group)
+        pan_degrees, tilt_degrees = calculate_pan_tilt(
+            fixture_x=fixture.x, fixture_y=fixture.y, fixture_z=fixture_z,
+            target_x=point[0], target_y=point[1], target_z=point[2],
+            mounting=mounting, yaw=yaw, pitch=pitch, roll=roll,
+            pan_range=fixture_map.pan_range,
+            tilt_range=fixture_map.tilt_range,
+        )
+        pan_dmx, tilt_dmx = pan_tilt_to_dmx(
+            pan_degrees, tilt_degrees,
+            fixture_map.pan_range, fixture_map.tilt_range)
+        return float(pan_dmx), float(tilt_dmx)
+
     def _apply_movement_block(self, fixture_map: FixtureChannelMap, block: MovementBlock, current_time: float,
                                fixture_index: int = 0, total_fixtures: int = 1):
         """Apply movement block to fixture channels with real-time shape calculation.
@@ -986,29 +1010,24 @@ class DMXManager:
 
                     center_pan = float(pan_dmx)
                     center_tilt = float(tilt_dmx)
+                elif getattr(block, 'target_point', None):
+                    # Dangling spot NAME (not in this config's spots):
+                    # continue down the documented priority chain
+                    # (plane > spot > point > manual) instead of
+                    # jumping to the raw pan/tilt - a morphed show's
+                    # spot names come from rig A, and rig A's manual
+                    # values point anywhere but rig B's stage
+                    # (2026-07-16 fix).
+                    center_pan, center_tilt = self._point_center(
+                        fixture_map, block.target_point)
                 else:
                     center_pan = block.pan
                     center_tilt = block.tilt
             elif getattr(block, 'target_point', None) and self.config:
                 # Ad-hoc world point (v1.5a): a spot without a name,
                 # same per-fixture IK at the definition's real ranges.
-                point = block.target_point
-                fixture = fixture_map.fixture
-                group = self.config.groups.get(fixture.group) if fixture.group else None
-                mounting, yaw, pitch, roll = fixture.get_effective_orientation(group)
-                fixture_z = fixture.get_effective_z(group)
-                pan_degrees, tilt_degrees = calculate_pan_tilt(
-                    fixture_x=fixture.x, fixture_y=fixture.y, fixture_z=fixture_z,
-                    target_x=point[0], target_y=point[1], target_z=point[2],
-                    mounting=mounting, yaw=yaw, pitch=pitch, roll=roll,
-                    pan_range=fixture_map.pan_range,
-                    tilt_range=fixture_map.tilt_range,
-                )
-                pan_dmx, tilt_dmx = pan_tilt_to_dmx(
-                    pan_degrees, tilt_degrees,
-                    fixture_map.pan_range, fixture_map.tilt_range)
-                center_pan = float(pan_dmx)
-                center_tilt = float(tilt_dmx)
+                center_pan, center_tilt = self._point_center(
+                    fixture_map, block.target_point)
             else:
                 center_pan = block.pan
                 center_tilt = block.tilt

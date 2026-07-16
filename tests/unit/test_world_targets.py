@@ -161,3 +161,31 @@ class TestSerialization:
         assert loaded.target_point is None
         legacy = MovementBlock.from_dict({"start_time": 0, "end_time": 1})
         assert legacy.target_point is None
+
+
+class TestDanglingSpotFallThrough:
+    def test_dangling_spot_name_falls_through_to_point(
+            self, mock_fixture_def):
+        """A spot name that does not resolve in THIS config (a morphed
+        show on rig B carrying rig A's spot names) must continue down
+        the documented priority chain to target_point - never jump to
+        rig A's raw pan/tilt (2026-07-16 fix; raw values pointed the
+        venue movers anywhere but the stage)."""
+        from utils.artnet.dmx_manager import DMXManager
+        fixture = _fixture(manufacturer="TestMfr")
+        fixture.model = "TestModel"
+        config = _config(fixture)
+        manager = DMXManager(config,
+                             {"TestMfr_TestModel": mock_fixture_def})
+        fmap = manager.fixture_maps[fixture.name]
+        helper = TestNativePointTargets()
+        via_point = helper._pan_tilt_after(
+            manager, fmap, _block(target_point=[1.0, -2.0, 0.0]))
+        dangling = helper._pan_tilt_after(
+            manager, fmap, _block(target_spot_name="NoSuchSpot",
+                                  target_point=[1.0, -2.0, 0.0],
+                                  pan=10.0, tilt=10.0))
+        manual = helper._pan_tilt_after(
+            manager, fmap, _block(pan=10.0, tilt=10.0))
+        assert dangling == via_point
+        assert dangling != manual

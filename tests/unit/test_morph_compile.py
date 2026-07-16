@@ -460,3 +460,61 @@ class TestAudioCarryOver:
         result = compile_setlist(a, plan, b)
         assert result.songs["S"].timeline_data.audio_file_path == \
             "light_track.mp3"
+
+
+class TestSpotBaking:
+    """Movement blocks aiming at NAMED spots (2026-07-16): a spot the
+    target rig lacks bakes into a world point from the SOURCE spot's
+    position; a same-named target spot wins so venue re-aiming keeps
+    working; a spot in neither config is reported and left alone."""
+
+    def _movement_source(self, spot=None):
+        from config.models import MovementBlock, Spot
+        lane = _lane("Movers", ["MH"],
+                     movement=[MovementBlock(0.0, 16.0,
+                                             effect_type="circle",
+                                             target_spot_name="DS CENTRE")])
+        a = _config({"MH": [_fixture("m1", group="MH")]},
+                    songs={"S": _song(lanes=[lane])})
+        if spot is not None:
+            a.spots = {"DS CENTRE": spot}
+        return a, lane
+
+    def test_dangling_spot_bakes_to_source_position(self):
+        from config.models import Spot
+        a, lane = self._movement_source(Spot(name="DS CENTRE", x=1.5,
+                                             y=-3.0, z=0.5))
+        b = _config({"HEADS": [_fixture("h1", group="HEADS")]})
+        plan = MorphPlan(edges=[_edge(lane, "movement", "HEADS")])
+        result = compile_setlist(a, plan, b)
+        (out_lane,) = result.songs["S"].timeline_data.lanes
+        (mb,) = [m for lb in out_lane.light_blocks
+                 for m in lb.movement_blocks]
+        assert mb.target_point == [1.5, -3.0, 0.5]
+        assert mb.target_spot_name is None
+        notes = " ".join(e.message
+                         for e in result.report.of_kind("transform"))
+        assert "re-anchored" in notes
+
+    def test_same_named_target_spot_wins(self):
+        from config.models import Spot
+        a, lane = self._movement_source(Spot(name="DS CENTRE", x=1.5,
+                                             y=-3.0, z=0.5))
+        b = _config({"HEADS": [_fixture("h1", group="HEADS")]})
+        b.spots = {"DS CENTRE": Spot(name="DS CENTRE", x=9.0, y=9.0,
+                                     z=9.0)}
+        plan = MorphPlan(edges=[_edge(lane, "movement", "HEADS")])
+        result = compile_setlist(a, plan, b)
+        (out_lane,) = result.songs["S"].timeline_data.lanes
+        (mb,) = [m for lb in out_lane.light_blocks
+                 for m in lb.movement_blocks]
+        assert mb.target_spot_name == "DS CENTRE"
+        assert not getattr(mb, "target_point", None)
+
+    def test_spot_in_neither_config_is_reported(self):
+        a, lane = self._movement_source(spot=None)
+        b = _config({"HEADS": [_fixture("h1", group="HEADS")]})
+        plan = MorphPlan(edges=[_edge(lane, "movement", "HEADS")])
+        result = compile_setlist(a, plan, b)
+        notes = " ".join(e.message for e in result.report.of_kind("note"))
+        assert "exists in neither config" in notes

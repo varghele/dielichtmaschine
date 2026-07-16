@@ -250,6 +250,42 @@ def _clip_block(block, winners) -> list:
     return pieces
 
 
+def _bake_dangling_spots(blocks: list, source_config, target_config,
+                         edge, song_name: str, report) -> None:
+    """Movement blocks aiming at a NAMED spot keep the name only when
+    the target rig has that spot; otherwise the source spot's position
+    bakes into ``target_point`` (2026-07-16 fix - a dangling spot name
+    used to fall back to the raw pan/tilt authored for rig A's movers,
+    which on rig B pointed anywhere but the stage). The look stays
+    anchored to the same point in space; a same-named spot in the
+    target rig wins so venue-local re-aiming keeps working."""
+    target_spots = getattr(target_config, "spots", None) or {}
+    source_spots = getattr(source_config, "spots", None) or {}
+    baked = 0
+    dropped = set()
+    for block in blocks:
+        name = getattr(block, "target_spot_name", None)
+        if not name or name in target_spots:
+            continue
+        spot = source_spots.get(name)
+        if spot is None:
+            dropped.add(name)
+            continue
+        block.target_point = [float(spot.x), float(spot.y),
+                              float(spot.z)]
+        block.target_spot_name = None
+        baked += 1
+    if baked:
+        report.add("transform", song_name,
+                   f"{baked} movement block(s) re-anchored from source "
+                   f"spots to world points ('{edge.target_group}' has "
+                   f"no spot of that name)", edge.edge_id)
+    for name in sorted(dropped):
+        report.add("note", song_name,
+                   f"movement spot '{name}' exists in neither config; "
+                   f"blocks keep their authored pan/tilt", edge.edge_id)
+
+
 def _resolve_fan_in(contributions: List[Tuple[MorphEdge, list]],
                     sublane: str, song: str,
                     report: MorphReport) -> list:
@@ -547,6 +583,9 @@ def compile_song(song: Song, plan: MorphPlan, source_config,
                        f"'{lane.name}' has no {edge.sublane} blocks; "
                        f"edge produced nothing", edge.edge_id)
             continue
+        if edge.sublane == "movement":
+            _bake_dangling_spots(blocks, source_config, target_config,
+                                 edge, song.name, report)
         blocks = _apply_transforms(blocks, edge.sublane, edge, report,
                                    song.name)
         bucket.setdefault(edge.sublane, []).append((edge, blocks))

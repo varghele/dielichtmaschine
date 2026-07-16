@@ -151,6 +151,18 @@ verbatim as the GitHub Release notes (see [docs/releasing.md](docs/releasing.md)
   row height - the lane name and the mute/solo chips were clipped
   beyond reach. Grid rows now reserve the header's minimum control
   height; the sublane band keeps its geometry at the top of the row.
+- **Spot-anchored movement survives the morph.** Movement blocks that
+  aim at a NAMED spot (marks, drum riser, solo positions) carried the
+  spot name onto the venue rig, where no such spot exists - and a
+  dangling spot name fell back to the raw pan/tilt authored for the
+  OLD rig's movers, pointing the venue heads anywhere but the stage
+  (and sometimes straight up, since those raw values are meaningless
+  on a different mount). Two fixes: the morph now bakes the source
+  spot's position into a world point when the target rig lacks the
+  spot (a same-named target spot still wins, so venue re-aiming keeps
+  working), and playback's target resolution follows its documented
+  priority chain - a spot name that does not resolve continues to the
+  world point instead of jumping to manual values.
 - **Morphed songs keep their audio.** The morph rebuilt each song's
   timeline with fresh lanes and silently dropped the audio file
   reference - a morphed show arrived at the venue with silent
