@@ -207,3 +207,39 @@ class TestOrientationReachable:
         with patch.object(stage_tab_module, "OrientationDialog", FakeDialog):
             tab.stage_view.set_orientation_requested.emit([item])
         assert opened == [[item]], "the menu signal no longer reaches the tab"
+
+
+class TestShowsDirectoryHeal:
+    """A hand-copied project carries the other machine's absolute
+    shows_directory verbatim; makedirs on it walked into a
+    PermissionError on the Stellwerk kit (2026-07-17). Load heals a
+    non-existent stored directory to the config's own directory; an
+    existing one is deliberate and stays."""
+
+    def _save(self, tmp_path, shows_directory):
+        cfg = Configuration(fixtures=[], groups={}, universes={})
+        cfg.shows_directory = shows_directory
+        path = str(tmp_path / "proj" / "show.lms")
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        cfg.save(path)
+        return path
+
+    def test_foreign_path_heals_to_the_config_dir(self, tmp_path):
+        foreign = str(tmp_path / "no" / "such" / "machine" / "kit")
+        path = self._save(tmp_path, foreign)
+        loaded = Configuration.load(path)
+        assert loaded.shows_directory == os.path.dirname(
+            os.path.abspath(path))
+        assert not os.path.exists(foreign), "healing must not mkdir"
+
+    def test_existing_directory_is_kept(self, tmp_path):
+        elsewhere = tmp_path / "legacy_shows"
+        elsewhere.mkdir()
+        path = self._save(tmp_path, str(elsewhere))
+        loaded = Configuration.load(path)
+        assert loaded.shows_directory == str(elsewhere)
+
+    def test_unset_stays_unset(self, tmp_path):
+        path = self._save(tmp_path, None)
+        loaded = Configuration.load(path)
+        assert not loaded.shows_directory

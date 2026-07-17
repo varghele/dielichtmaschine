@@ -2024,6 +2024,18 @@ class Configuration:
         # the user copied the config from.
         config._loaded_from = os.path.abspath(filename)
 
+        # Heal a shows_directory that travelled from another machine:
+        # the field stores an ABSOLUTE path verbatim, so a hand-copied
+        # project carries the other PC's user directory (the Stellwerk
+        # kit's C:/Users/<other user>/... walked makedirs into a
+        # PermissionError, 2026-07-17). When the stored directory does
+        # not exist HERE, the config's own directory is the only
+        # sensible anchor; an existing directory is kept - legacy
+        # layouts point it elsewhere on purpose.
+        if config.shows_directory \
+                and not os.path.isdir(config.shows_directory):
+            config.shows_directory = os.path.dirname(config._loaded_from)
+
         return config
 
     @staticmethod
