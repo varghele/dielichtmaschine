@@ -145,6 +145,16 @@ verbatim as the GitHub Release notes (see [docs/releasing.md](docs/releasing.md)
 
 ### Fixed
 
+- **Loading an audio file no longer crashes on a project from another
+  machine.** The Shows tab copied freshly loaded audio into
+  `<shows_directory>/audiofiles/` - but a project that travelled by
+  hand carries the OTHER machine's absolute `shows_directory`, and
+  creating it walked the missing parents into a PermissionError
+  (`C:\Users\<other user>`). The copy now goes through the config's
+  audio bundle dir (`<config dir>/audiofiles/`, the same place loading
+  already resolves from), and any bundle failure downgrades to a
+  Help > Warnings entry while the show keeps referencing the original
+  file.
 - **Dimmer-only lanes no longer crush their controls.** A lane whose
   fixtures render only intensity (e.g. Sunstrips) draws a single
   50 px sublane band, and the timeline grid took that as the whole

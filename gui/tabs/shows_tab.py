@@ -1196,44 +1196,61 @@ class ShowsTab(BaseTab):
     def _on_audio_file_loaded(self, file_path: str):
         """Handle audio file loaded.
 
-        Copies the audio file to the local audiofiles/ folder if not already there,
-        then updates the audio player with the local copy.
+        Copies the file into the project's audio bundle
+        (Configuration.audio_bundle_dir: <config dir>/audiofiles/, the
+        same place loading resolves from) and stores the basename in
+        the show. shows_directory is deliberately NOT the copy target:
+        a project that travelled from another machine carries that
+        machine's absolute path, and makedirs on it walks into a
+        PermissionError (hit on the Stellwerk gig kit 2026-07-17).
+        Any bundle failure falls back to referencing the original
+        location with a user warning instead of crashing.
         """
         import shutil
 
         local_path = file_path
         basename = os.path.basename(file_path)
 
-        # Copy to local audiofiles folder if shows_directory is set
-        if self.config.shows_directory:
-            audiofiles_dir = os.path.join(self.config.shows_directory, "audiofiles")
-            local_path = os.path.join(audiofiles_dir, basename)
+        audiofiles_dir = None
+        try:
+            audiofiles_dir = self.config.audio_bundle_dir(create=True)
+        except OSError as e:
+            user_warnings.warn(
+                f"Audio bundle folder could not be created; the project "
+                f"keeps referencing the original location: {e}",
+                category="audio")
 
-            # Check if file is already in the audiofiles folder
-            if os.path.normpath(file_path) != os.path.normpath(local_path):
-                # Create audiofiles directory if needed
-                os.makedirs(audiofiles_dir, exist_ok=True)
-
-                # Copy the file to local folder
+        if audiofiles_dir:
+            bundled = os.path.join(audiofiles_dir, basename)
+            if os.path.normpath(file_path) != os.path.normpath(bundled):
                 try:
                     if os.path.exists(file_path):
-                        shutil.copy2(file_path, local_path)
-                        print(f"Copied audio file to: {local_path}")
+                        shutil.copy2(file_path, bundled)
+                        print(f"Copied audio file to: {bundled}")
+                        local_path = bundled
 
                         # Update the audio lane to use the local copy
-                        self.audio_lane.audio_file_path = local_path
+                        self.audio_lane.audio_file_path = bundled
                         self.audio_lane.file_path_edit.setText(basename)
-                        self.audio_lane.file_path_edit.setToolTip(local_path)
+                        self.audio_lane.file_path_edit.setToolTip(bundled)
                 except Exception as e:
                     user_warnings.warn(f"Audio file could not be copied into the project; the project keeps referencing the original location: {e}", category="audio")
                     local_path = file_path  # Fall back to original
+            else:
+                local_path = bundled
 
-            # Update the show's timeline_data to store just the filename
-            if self.current_song_name and self.current_song_name in self.config.songs:
-                show = self.config.songs[self.current_song_name]
-                if show.timeline_data:
-                    show.timeline_data.audio_file_path = basename
-                    print(f"Stored audio filename in show: {basename}")
+        # Store the basename when the file sits in the bundle (loading
+        # resolves it via audio_bundle_dir); keep the full path when the
+        # bundle copy failed so the reference still resolves.
+        stored = basename if local_path != file_path or (
+            audiofiles_dir
+            and os.path.normpath(file_path) == os.path.normpath(
+                os.path.join(audiofiles_dir, basename))) else file_path
+        if self.current_song_name and self.current_song_name in self.config.songs:
+            show = self.config.songs[self.current_song_name]
+            if show.timeline_data:
+                show.timeline_data.audio_file_path = stored
+                print(f"Stored audio reference in show: {stored}")
 
         # Update simple audio player if it exists
         if self.simple_audio_player:
