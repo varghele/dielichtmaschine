@@ -27,13 +27,20 @@ a = Analysis(
         ('resources', 'resources'),
         ('riffs', 'riffs'),
         # The scene library (Live tab SCENES pool + pause looks) loads
-        # from scenes/<category>/*.json next to scene_library.py - the
-        # same layout riffs/ ships in. Forgotten when scenes arrived
-        # (2026-07-17): a frozen app had an EMPTY pool, which would
-        # also silence a scene-mode pause look. Whatever categories
+        # from scenes/<category>/*.json next to scene_library.py.
+        # Forgotten when scenes arrived: a frozen app had an EMPTY
+        # pool, which would also silence a scene-mode pause look.
+        # CATEGORY DIRS ONLY - bundling the whole scenes/ tree put
+        # __init__.py/scene_library.py/__pycache__ on disk next to the
+        # frozen package and the exe HUNG AT BOOT (2026-07-17); a data
+        # dir must never carry package .py files. Whatever categories
         # exist at build time ship (bench/stellwerk are machine-local
         # gig data - build on the machine whose scenes you need).
-        ('scenes', 'scenes'),
+        *[(f'scenes/{d}', f'scenes/{d}')
+          for d in sorted(os.listdir(os.path.join(project_root,
+                                                  'scenes')))
+          if os.path.isdir(os.path.join(project_root, 'scenes', d))
+          and not d.startswith(('_', '.'))],
         ('visualizer', 'visualizer'),
         # Starter rigs + demo shows for File -> New from Template. Only
         # rigs/ and shows/ - demos/media, demos/reference and the
