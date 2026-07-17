@@ -163,6 +163,15 @@ verbatim as the GitHub Release notes (see [docs/releasing.md](docs/releasing.md)
 
 ### Fixed
 
+- **Exporting a rig with an unconfigured universe no longer crashes.**
+  A universe whose output was never set in the Setup tab (script-built
+  rigs carry an empty output dict) killed the whole .qxw export with
+  KeyError 'plugin'; it now exports the Universe without an Output
+  element - a normal QLC+ workspace state, outputs get patched on the
+  desk. Configured universes are byte-identical.
+- **The packaged app ships the scene library.** scenes/ was missing
+  from the PyInstaller bundle, so a frozen build had an empty SCENES
+  pool - which would also have silenced a scene-mode pause look.
 - **Moving heads no longer twitch in the visualizer when output
   broadcasts.** With no universe Target IP the arbiter broadcasts the
   yoke-converted hardware frame, and its always-on loopback mirror

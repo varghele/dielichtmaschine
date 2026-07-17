@@ -65,17 +65,25 @@ def create_universe_elements(input_output_map, config: Configuration):
         universe_elem.set("Name", universe.name)
         universe_elem.set("ID", str(universe_id - 1))  # Convert to 0-based index
 
-        # Add Output
-        output = ET.SubElement(universe_elem, "Output")
-        output.set("Plugin", universe.output['plugin'])
+        # Add Output - only when the universe HAS a configured plugin.
+        # A universe with an empty output dict (never configured in the
+        # Setup tab, e.g. a rig built by script) exports WITHOUT an
+        # Output element, which is a normal QLC+ workspace state (the
+        # desk patches outputs later); indexing 'plugin' crashed the
+        # whole export with KeyError instead (found exporting the
+        # Stellwerk venue file, 2026-07-17).
+        plugin = (universe.output or {}).get('plugin')
+        if plugin:
+            output = ET.SubElement(universe_elem, "Output")
+            output.set("Plugin", plugin)
 
-        # Calculate Line number (skip Lines 0 and 1)
-        line_number = universe_id + 1
-        output.set("Line", str(line_number))
+            # Calculate Line number (skip Lines 0 and 1)
+            line_number = universe_id + 1
+            output.set("Line", str(line_number))
 
-        # Add UID (network interface IP) if available for this Line
-        if line_number in LINE_TO_UID:
-            output.set("UID", LINE_TO_UID[line_number])
+            # Add UID (network interface IP) if available for this Line
+            if line_number in LINE_TO_UID:
+                output.set("UID", LINE_TO_UID[line_number])
 
     # Add MIDI input universes for trigger devices
     for midi_device in getattr(config, 'midi_input_devices', []):

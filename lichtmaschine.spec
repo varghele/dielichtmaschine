@@ -26,6 +26,14 @@ a = Analysis(
         # so the rebranded identity ships without extra entries.
         ('resources', 'resources'),
         ('riffs', 'riffs'),
+        # The scene library (Live tab SCENES pool + pause looks) loads
+        # from scenes/<category>/*.json next to scene_library.py - the
+        # same layout riffs/ ships in. Forgotten when scenes arrived
+        # (2026-07-17): a frozen app had an EMPTY pool, which would
+        # also silence a scene-mode pause look. Whatever categories
+        # exist at build time ship (bench/stellwerk are machine-local
+        # gig data - build on the machine whose scenes you need).
+        ('scenes', 'scenes'),
         ('visualizer', 'visualizer'),
         # Starter rigs + demo shows for File -> New from Template. Only
         # rigs/ and shows/ - demos/media, demos/reference and the

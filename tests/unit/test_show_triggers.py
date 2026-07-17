@@ -165,6 +165,26 @@ class TestTriggerExportXML:
         assert midi_input.get("UID") == "apc mini mk2"
         assert midi_input.get("Profile") == "Akai APC Mini mk2"
 
+    def test_unconfigured_output_exports_without_output_element(self):
+        """A universe whose output was never configured (empty dict -
+        script-built rigs like the Stellwerk venue file) must export a
+        Universe WITHOUT an Output element, not crash the whole export
+        with KeyError 'plugin' (2026-07-17)."""
+        config = Configuration(
+            universes={1: Universe(id=1, name="Uni", output={}),
+                       2: Universe(id=2, name="Uni 2",
+                                   output={"plugin": "ArtNet"})}
+        )
+        iom = ET.Element("InputOutputMap")
+        from utils.to_xml.setup_to_xml import create_universe_elements
+        create_universe_elements(iom, config)
+
+        universes = {u.get("ID"): u for u in iom.findall("Universe")}
+        assert universes["0"].find("Output") is None
+        configured = universes["1"].find("Output")
+        assert configured is not None
+        assert configured.get("Plugin") == "ArtNet"
+
     def test_no_midi_universe_when_no_devices(self):
         """No MIDI universe when no devices configured."""
         config = Configuration(
