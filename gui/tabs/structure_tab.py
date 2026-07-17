@@ -159,6 +159,7 @@ TRIGGER_MODE_HINTS = {
 PAUSE_MODE_TEXTS = {
     "blackout": "Blackout",
     "warm_white": "Warm white",
+    "scene": "Scene",
     "hold_last": "Hold last look",
     "ambient_loop": "Ambient loop",
 }
@@ -196,6 +197,8 @@ def pause_look_line(pause) -> str:
     text = PAUSE_MODE_TEXTS.get(pause.mode, pause.mode)
     if pause.mode == "warm_white":
         text = f"{text} {pause.level}%"
+    elif pause.mode == "scene" and getattr(pause, "scene", ""):
+        text = f"{text} · {pause.scene.split('/')[-1]}"
     tail = ("until trigger" if pause.until == "trigger"
             else f"{pause.duration_s:g}s")
     return f"PAUSE LOOK · {text} · {tail}"

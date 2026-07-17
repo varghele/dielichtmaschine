@@ -83,6 +83,43 @@ def _hex_to_rgb(hex_color: str) -> Tuple[int, int, int]:
         return (0, 0, 0)
 
 
+def aim_fixture_at_position(write, config, presets_by_id, position_id,
+                            fixture, fixture_map) -> None:
+    """Aim one mover at a POSITION-pool id, writing through ``write``
+    (``write(fixture_map, offsets, value)``). Shared by the busk
+    layer's position palettes and the pause-look layer's scene aims so
+    both aim EXACTLY alike (2026-07-17)."""
+    if not (fixture_map.pan_channels or fixture_map.tilt_channels):
+        return
+    target = resolve_position_target(config, presets_by_id, position_id,
+                                     fixture)
+    if target is None:
+        return
+    # Orientation comes from the PRIMARY group (groups[0] drives
+    # orientation - locked first-group-wins), same as the playback
+    # layer's spot targeting.
+    primary = config.groups.get(fixture.group) if fixture.group else None
+    mounting, yaw, pitch, roll = fixture.get_effective_orientation(primary)
+    fixture_z = fixture.get_effective_z(primary)
+    pan_deg, tilt_deg = calculate_pan_tilt(
+        fixture_x=fixture.x, fixture_y=fixture.y, fixture_z=fixture_z,
+        target_x=target[0], target_y=target[1], target_z=target[2],
+        mounting=mounting, yaw=yaw, pitch=pitch, roll=roll,
+        pan_range=fixture_map.pan_range,
+        tilt_range=fixture_map.tilt_range,
+    )
+    # 16-bit aim: the coarse byte alone quantizes a 540-degree pan to
+    # ~2 degrees (~18 cm at 5 m); writing the fine bytes takes the aim
+    # to the fixture's real resolution. Claiming the fines also keeps a
+    # movement block underneath from jittering the busked aim.
+    pan_c, pan_f, tilt_c, tilt_f = pan_tilt_to_dmx16(
+        pan_deg, tilt_deg, fixture_map.pan_range, fixture_map.tilt_range)
+    write(fixture_map, fixture_map.pan_channels, pan_c)
+    write(fixture_map, fixture_map.tilt_channels, tilt_c)
+    write(fixture_map, fixture_map.pan_fine_channels, pan_f)
+    write(fixture_map, fixture_map.tilt_fine_channels, tilt_f)
+
+
 class LiveBuskLayer:
     """Arbiter LIVE layer over a ``LiveState``.
 
@@ -157,11 +194,18 @@ class LiveBuskLayer:
         # unknown key renders nothing.
         scene_hex = ""
         scene_groups: set = set()
+        scene_positions: dict = {}
         if state.scene and self._scene_provider is not None:
             scene = self._scene_provider(state.scene)
-            if scene is not None and getattr(scene, "color", ""):
-                scene_hex = scene.color
-                scene_groups = set(getattr(scene, "groups", ()) or ())
+            if scene is not None:
+                if getattr(scene, "color", ""):
+                    scene_hex = scene.color
+                    scene_groups = set(getattr(scene, "groups", ()) or ())
+                # Scene aims (2026-07-17): the scene's per-group mover
+                # positions apply while it is staged, released with it.
+                # Independent of the colour (an aim-only scene works).
+                scene_positions = dict(
+                    getattr(scene, "positions", None) or {})
 
         # Groups a MOVEMENT SHAPE currently covers: their held position
         # is the shape's anchor (rendered by the engine), so the static
@@ -187,7 +231,9 @@ class LiveBuskLayer:
             if has_swatch or has_scene or has_flash:
                 claimed_groups.append(
                     (group_name, group, has_swatch or has_scene))
-            position_id = state.positions.get(group_name)
+            # An explicitly held position beats the staged scene's aim.
+            position_id = state.positions.get(group_name) \
+                or scene_positions.get(group_name)
             if position_id and group_name not in shape_groups \
                     and group_has_movers(group):
                 position_groups.append((group, position_id))
@@ -325,46 +371,9 @@ class LiveBuskLayer:
                     fixture_map = self._fixture_maps.get(fixture.name)
                     if fixture_map is None:
                         continue
-                    if not (fixture_map.pan_channels
-                            or fixture_map.tilt_channels):
-                        continue
-                    target = self._target_for(config, presets_by_id,
-                                              position_id, fixture)
-                    if target is None:
-                        continue
-                    # Orientation comes from the PRIMARY group (groups[0]
-                    # drives orientation - locked first-group-wins), same
-                    # as the playback layer's spot targeting.
-                    primary = config.groups.get(fixture.group) \
-                        if fixture.group else None
-                    mounting, yaw, pitch, roll = \
-                        fixture.get_effective_orientation(primary)
-                    fixture_z = fixture.get_effective_z(primary)
-                    pan_deg, tilt_deg = calculate_pan_tilt(
-                        fixture_x=fixture.x, fixture_y=fixture.y,
-                        fixture_z=fixture_z,
-                        target_x=target[0], target_y=target[1],
-                        target_z=target[2],
-                        mounting=mounting, yaw=yaw, pitch=pitch,
-                        roll=roll,
-                        pan_range=fixture_map.pan_range,
-                        tilt_range=fixture_map.tilt_range,
-                    )
-                    # 16-bit aim: the coarse byte alone quantizes a
-                    # 540-degree pan to ~2 degrees (~18 cm at 5 m);
-                    # writing the fine bytes takes the aim to the
-                    # fixture's real resolution. Claiming the fines also
-                    # keeps a movement block underneath from jittering
-                    # the busked aim.
-                    pan_c, pan_f, tilt_c, tilt_f = pan_tilt_to_dmx16(
-                        pan_deg, tilt_deg,
-                        fixture_map.pan_range, fixture_map.tilt_range)
-                    _write(fixture_map, fixture_map.pan_channels, pan_c)
-                    _write(fixture_map, fixture_map.tilt_channels, tilt_c)
-                    _write(fixture_map, fixture_map.pan_fine_channels,
-                           pan_f)
-                    _write(fixture_map, fixture_map.tilt_fine_channels,
-                           tilt_f)
+                    aim_fixture_at_position(_write, config, presets_by_id,
+                                            position_id, fixture,
+                                            fixture_map)
 
         return {u: (bytes(values[u]), bytes(masks[u])) for u in values}
 

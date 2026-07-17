@@ -435,6 +435,35 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             self._ltc_service.timecode.connect(self._on_ltc_timecode)
         return self._ltc_service
 
+    def pause_look_layer(self):
+        """The one PauseLookLayer (utils/artnet/pause_layer.py),
+        created lazily; arm_ltc_chase installs it into the arbiter's
+        pause slot, disarm clears and removes it. The shell owns the
+        policy (WHEN a pause look shows - see _ltc_tick); the layer
+        only renders."""
+        if getattr(self, "_pause_look_layer", None) is None:
+            from utils.artnet.pause_layer import PauseLookLayer
+            self._pause_look_layer = PauseLookLayer(
+                config_provider=lambda: self.config,
+                scene_provider=lambda key:
+                    self.scene_library.get_scene(key) if key else None)
+        return self._pause_look_layer
+
+    def _current_pause_look(self):
+        """The pause look between songs: the ``pause_after`` of the
+        setlist entry whose song the transport last loaded (the pause
+        AFTER that song), falling back to the first entry's - so an
+        armed chase before the first song already shows the pre-show
+        look instead of the raw idle floor."""
+        entries = getattr(self.config.setlist, "entries", None) or []
+        if not entries:
+            return None
+        current = getattr(self.shows_tab, "current_song_name", None)
+        for entry in entries:
+            if entry.song == current:
+                return entry.pause_after
+        return entries[0].pause_after
+
     def ltc_chase_armed(self) -> bool:
         return getattr(self, "_ltc_timer", None) is not None
 
@@ -463,6 +492,11 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.shows_tab.set_chase_armed(True, disarm=self.disarm_ltc_chase)
         self.structure_tab.set_chase_armed(True)
         self.live_tab.set_sync_status("ltc", "no_signal")
+        # The pause-look layer lives exactly as long as the chase is
+        # armed: between songs the arbiter renders the entry's
+        # pause_after (a song firing covers it - playback merges above
+        # the pause slot), _ltc_tick drives activate/clear.
+        self.output_arbiter().set_pause_look_layer(self.pause_look_layer())
         from PyQt6.QtCore import QTimer
         timer = QTimer(self)
         timer.setInterval(100)
@@ -486,6 +520,12 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.shows_tab.set_chase_armed(False)
         self.structure_tab.set_chase_armed(False)
         self.live_tab.set_sync_status("int")
+        layer = getattr(self, "_pause_look_layer", None)
+        if layer is not None:
+            layer.clear()
+            arbiter = getattr(self, "_output_arbiter", None)
+            if arbiter is not None:
+                arbiter.set_pause_look_layer(None)
 
     def _ltc_tick(self):
         service = getattr(self, "_ltc_service", None)
@@ -504,6 +544,21 @@ class MainWindow(QMainWindow, Ui_MainWindow):
                     rate=rate)
         if self._ltc_runner is not None:
             self._ltc_runner.update(service.position())
+        # Pause look policy: armed + no song playing = the current
+        # entry's pause_after shows; a playing song clears it (playback
+        # would cover it anyway - the pause slot merges below - but a
+        # cleared layer also stops claiming groups the song leaves
+        # unclaimed).
+        layer = getattr(self, "_pause_look_layer", None)
+        if layer is not None:
+            if getattr(self.shows_tab, "is_playing", False):
+                layer.clear()
+            else:
+                look = self._current_pause_look()
+                if look is not None:
+                    layer.activate(look)
+                else:
+                    layer.clear()
 
     def _chase_song_duration(self, name: str) -> float:
         from timeline.song_structure import SongStructure

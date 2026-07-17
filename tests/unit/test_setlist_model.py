@@ -61,6 +61,17 @@ class TestPauseLook:
     def test_from_empty_dict_uses_defaults(self):
         assert PauseLook.from_dict({}) == PauseLook()
 
+    def test_scene_mode_round_trips_and_stays_off_old_looks(self):
+        """Mode "scene" (2026-07-17 minimal pause engine): the scene
+        key round-trips, and looks without one write no key so
+        pre-scene files stay byte-identical."""
+        p = PauseLook(mode="scene", level=100, until="trigger",
+                      scene="stellwerk/Red Room")
+        back = PauseLook.from_dict(p.to_dict())
+        assert back == p and back.scene == "stellwerk/Red Room"
+        assert "scene" not in PauseLook().to_dict()
+        assert PauseLook.from_dict({"mode": "blackout"}).scene == ""
+
 
 class TestSetlistEntry:
 

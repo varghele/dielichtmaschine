@@ -842,6 +842,12 @@ class Scene:
     color: str = ""
     # The fixture groups this look spans.
     groups: List[str] = field(default_factory=list)
+    # Optional mover aims: group name -> position id in the Live
+    # POSITION pool's namespace ("mark:<spot>", "preset:centre",
+    # "preset:cross", ...). Staging the scene also aims those groups'
+    # movers (2026-07-17); an explicit user-held position on a group
+    # still wins, and the aim releases with the scene.
+    positions: Dict[str, str] = field(default_factory=dict)
     # Metadata.
     tags: List[str] = field(default_factory=list)
     author: str = ""
@@ -855,6 +861,8 @@ class Scene:
             "description": self.description,
             "color": self.color,
             "groups": self.groups,
+            # Only when set - pre-aim scene files stay stable.
+            **({"positions": self.positions} if self.positions else {}),
             "tags": self.tags,
             "author": self.author,
             "version": self.version,
@@ -869,6 +877,7 @@ class Scene:
             description=data.get("description", ""),
             color=data.get("color", ""),
             groups=data.get("groups", []),
+            positions=data.get("positions", {}) or {},
             tags=data.get("tags", []),
             author=data.get("author", ""),
             version=data.get("version", "1.0"),
@@ -1523,16 +1532,20 @@ class SongTrigger:
 class PauseLook:
     """The look on stage between two setlist songs.
 
-    Modes: "blackout", "warm_white" (``level`` percent), "hold_last"
-    (freeze the previous song's last look), "ambient_loop" (reuses the
-    screensaver rig behaviour once the engine lands). ``until`` decides
-    how the pause ends: "trigger" (next song's start trigger) or
-    "duration" (``duration_s`` seconds, then follow on).
+    Modes: "blackout", "warm_white" (``level`` percent), "scene" (a
+    SceneLibrary look by "category/name" key in ``scene``; ``level``
+    scales its intensity - the minimal pause engine of 2026-07-17
+    renders blackout / warm_white / scene), "hold_last" (freeze the
+    previous song's last look) and "ambient_loop" (screensaver rig
+    behaviour) stay data-only until the full v1.8 engine. ``until``
+    decides how the pause ends: "trigger" (next song's start trigger)
+    or "duration" (``duration_s`` seconds, then follow on).
     """
-    mode: str = "hold_last"   # "blackout" | "warm_white" | "hold_last" | "ambient_loop"
-    level: int = 20           # percent, used by warm_white
+    mode: str = "hold_last"   # "blackout" | "warm_white" | "scene" | "hold_last" | "ambient_loop"
+    level: int = 20           # percent, used by warm_white and scene
     until: str = "trigger"    # "trigger" | "duration"
     duration_s: float = 0.0   # used when until == "duration"
+    scene: str = ""           # "category/name" key, used by mode "scene"
 
     def to_dict(self) -> Dict:
         return {
@@ -1540,6 +1553,9 @@ class PauseLook:
             "level": self.level,
             "until": self.until,
             "duration_s": self.duration_s,
+            # Only when set - files from before the scene mode stay
+            # byte-identical.
+            **({"scene": self.scene} if self.scene else {}),
         }
 
     @classmethod
@@ -1549,6 +1565,7 @@ class PauseLook:
             level=data.get("level", 20),
             until=data.get("until", "trigger"),
             duration_s=data.get("duration_s", 0.0),
+            scene=data.get("scene", ""),
         )
 
 

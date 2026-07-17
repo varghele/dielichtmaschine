@@ -13,6 +13,24 @@ verbatim as the GitHub Release notes (see [docs/releasing.md](docs/releasing.md)
 
 ### Added
 
+- **Pause lights between songs (minimal pause-look engine).** While
+  the LTC chase is armed and no song is playing, the output arbiter's
+  pause slot renders the current setlist entry's pause look - and the
+  next timecode-fired song simply covers it (the pause merges below
+  playback), so "hold until the next trigger" needs no teardown.
+  Rendered modes: a SceneLibrary look by key (new PauseLook mode
+  "scene", with the scene's colour, groups and mover aims, scaled by
+  the level percent), warm white, and blackout (a claim to zero, so
+  it beats the editor's full-white idle floor too). "Hold last" and
+  "ambient loop" stay data-only until the full conductor lands. The
+  Structure tab's pause rows and mode menu know the new mode.
+- **Scenes can aim the movers.** A Scene optionally carries per-group
+  positions in the Live POSITION pool's namespace ("mark:<spot>",
+  "preset:cross", ...): staging the scene colours its groups AND aims
+  their heads in one tap, an explicitly held position still wins on
+  its group, and the aim releases with the scene. The pause-look
+  engine renders scene aims through the exact same code path as the
+  busk layer, so a pause scene points the rig identically.
 - **Movement blocks can aim at the world, and old shows can convert.**
   Three authoring surfaces for the new world-space movement targets:
   the movement block editor's target picker now offers, besides named

@@ -392,6 +392,82 @@ class TestScenePool:
         assert layer.render(0.75)[1][0][DIMMER] == 0
 
 
+class TestSceneAims:
+    """Scenes carry mover aims (2026-07-17): Scene.positions maps a
+    group to a POSITION-pool id, applied while the scene is staged -
+    an explicitly held position wins, and the aim releases with the
+    scene. Colour and aim are independent (an aim-only scene works)."""
+
+    def _scene(self, color="#FF2A1E", groups=("Movers",), positions=None):
+        from config.models import Scene
+        return Scene(name="Aimed", category="general", color=color,
+                     groups=list(groups),
+                     positions=dict(positions or {}))
+
+    def _setup_with_scene(self, mock_fixture_def, scene):
+        state, layer, config, maps = _setup(mock_fixture_def)
+        config.spots = {"Target": Spot(name="Target", x=0.0, y=-2.0,
+                                       z=0.0)}
+        layer_provider = lambda key: scene \
+            if key == "general/Aimed" else None
+        layer = LiveBuskLayer(state, config_provider=lambda: config,
+                              swatches=COLOUR_SWATCHES,
+                              scene_provider=layer_provider)
+        layer.set_fixture_maps(maps)
+        return state, layer, config
+
+    def test_scene_positions_aim_the_groups_movers(self, qapp,
+                                                   mock_fixture_def):
+        scene = self._scene(positions={"Movers": "mark:Target"})
+        state, layer, config = self._setup_with_scene(mock_fixture_def,
+                                                      scene)
+        state.set_scene("general/Aimed")
+        values, mask = layer.render(0.0)[1]
+        # Colour on the group AND the aim, fine bytes included.
+        assert values[RED] == 0xFF
+        for fixture, base in ((config.fixtures[0], 0),
+                              (config.fixtures[1], 10)):
+            pan_c, pan_f, tilt_c, tilt_f = _expected_aim16(
+                fixture, (0.0, -2.0, 0.0))
+            assert mask[base + PAN]
+            assert (values[base + PAN], values[base + TILT]) == \
+                (pan_c, tilt_c)
+            assert (values[base + PAN_FINE], values[base + TILT_FINE]) \
+                == (pan_f, tilt_f)
+
+    def test_held_position_beats_the_scene_aim(self, qapp,
+                                               mock_fixture_def):
+        scene = self._scene(positions={"Movers": "mark:Target"})
+        state, layer, config = self._setup_with_scene(mock_fixture_def,
+                                                      scene)
+        state.set_scene("general/Aimed")
+        state.positions = {"Movers": "preset:centre"}
+        values, _ = layer.render(0.0)[1]
+        expected = _expected_aim(config.fixtures[0], (0.0, 0.0, 1.5))
+        assert (values[PAN], values[TILT]) == expected
+
+    def test_aim_only_scene_renders_the_aim(self, qapp,
+                                            mock_fixture_def):
+        """A scene with positions but no colour still aims - colour
+        and aim are independent claims."""
+        scene = self._scene(color="",
+                            positions={"Movers": "mark:Target"})
+        state, layer, config = self._setup_with_scene(mock_fixture_def,
+                                                      scene)
+        state.set_scene("general/Aimed")
+        values, mask = layer.render(0.0)[1]
+        assert mask[PAN] and mask[TILT]
+        assert mask[DIMMER] == 0 and mask[RED] == 0   # no colour claim
+
+    def test_scene_release_clears_the_aim(self, qapp, mock_fixture_def):
+        scene = self._scene(positions={"Movers": "mark:Target"})
+        state, layer, _ = self._setup_with_scene(mock_fixture_def, scene)
+        state.set_scene("general/Aimed")
+        assert layer.render(0.0)
+        state.set_scene(None)
+        assert layer.render(0.0) == {}
+
+
 class TestStrobe:
     def test_strobe_chops_the_dimmer_against_the_clock(
             self, qapp, mock_fixture_def):

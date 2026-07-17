@@ -44,6 +44,16 @@ class TestSceneModel:
         assert s.name == "Bare"
         assert s.groups == []
         assert s.color == ""
+        assert s.positions == {}
+
+    def test_positions_round_trip_and_stay_off_bare_scenes(self):
+        """Scene.positions (mover aims, 2026-07-17) round-trips; a
+        scene without aims writes no key, so pre-aim files stay
+        stable."""
+        aimed = Scene(name="Aimed", positions={"Heads": "mark:Spot1"})
+        assert Scene.from_dict(aimed.to_dict()).positions == \
+            {"Heads": "mark:Spot1"}
+        assert "positions" not in Scene(name="Plain").to_dict()
 
 
 class TestSceneLibrary:

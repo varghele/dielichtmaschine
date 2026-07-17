@@ -1435,14 +1435,15 @@ class TestPauseLookSection:
     def test_chip_shows_current_mode(self, setlist_tab):
         assert setlist_tab.pause_mode_chip.text() == "HOLD LAST LOOK ↓"
 
-    def test_menu_lists_the_four_modes_with_current_checked(self,
-                                                            setlist_tab):
+    def test_menu_lists_the_modes_with_current_checked(self,
+                                                       setlist_tab):
         menu = setlist_tab._build_pause_mode_menu()
         actions = menu.actions()
         assert [a.text() for a in actions] == \
-            ["BLACKOUT", "WARM WHITE", "HOLD LAST LOOK", "AMBIENT LOOP"]
+            ["BLACKOUT", "WARM WHITE", "SCENE", "HOLD LAST LOOK",
+             "AMBIENT LOOP"]
         assert [a.isChecked() for a in actions] == \
-            [False, False, True, False]
+            [False, False, False, True, False]
 
     def test_menu_action_writes_mode_and_refreshes_the_rail(self,
                                                             setlist_tab):
