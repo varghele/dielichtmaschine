@@ -150,6 +150,95 @@ class TestNativePointTargets:
         assert via_point != manual
 
 
+class TestShowsPlaybackPlaneTargets:
+    """Timeline playback receives the stage planes (2026-07-17 fix):
+    ShowsArtNetController never called set_stage_planes, so a
+    plane-targeted block silently skipped the plane branch in native
+    playback while export and Auto mode rendered it - the three
+    consumers of target_plane_name must stay in parity."""
+
+    class _StubSender:
+        target_ip = ""
+
+        def send_dmx(self, *a, **k):
+            return True
+
+        def set_target_ip(self, ip):
+            pass
+
+        def close(self):
+            pass
+
+    def _controller(self, config, defs):
+        from utils.artnet.arbiter import OutputArbiter
+        from utils.artnet.shows_artnet_controller import \
+            ShowsArtNetController
+        arbiter = OutputArbiter(config=config, sender=self._StubSender())
+        return ShowsArtNetController(config, defs, arbiter=arbiter)
+
+    def test_controller_feeds_planes_to_the_renderer(
+            self, qapp, mock_fixture_def):
+        from autogen.spatial import compute_stage_planes
+        fixture = _fixture(manufacturer="TestMfr")
+        fixture.model = "TestModel"
+        config = _config(fixture)
+        controller = self._controller(
+            config, {"TestMfr_TestModel": mock_fixture_def})
+        expected = {p.name for p in compute_stage_planes(config)}
+        assert set(controller.dmx_manager._stage_planes) == expected
+
+    def test_plane_block_renders_the_plane_path_in_playback(
+            self, qapp, mock_fixture_def):
+        """Through the controller's renderer, a plane-targeted block
+        must aim like a manager that was HANDED the planes (the
+        already-correct Auto-mode behaviour), not like the spot the
+        block also carries."""
+        from utils.artnet.dmx_manager import DMXManager
+        fixture = _fixture(manufacturer="TestMfr")
+        fixture.model = "TestModel"
+        config = _config(fixture)
+        defs = {"TestMfr_TestModel": mock_fixture_def}
+        controller = self._controller(config, defs)
+        manager = controller.dmx_manager
+        fmap = manager.fixture_maps[fixture.name]
+        helper = TestNativePointTargets()
+
+        block = _block(target_plane_name="Floor",
+                       target_spot_name="Mark", effect_type="circle",
+                       pan_amplitude=20.0, tilt_amplitude=20.0)
+        got = helper._pan_tilt_after(manager, fmap, block)
+
+        reference = DMXManager(config, defs)
+        from autogen.spatial import compute_stage_planes
+        reference.set_stage_planes(
+            {p.name: p for p in compute_stage_planes(config)})
+        ref_map = reference.fixture_maps[fixture.name]
+        assert got == helper._pan_tilt_after(reference, ref_map, block)
+
+        spot_only = helper._pan_tilt_after(
+            manager, fmap, _block(target_spot_name="Mark",
+                                  effect_type="circle",
+                                  pan_amplitude=20.0,
+                                  tilt_amplitude=20.0))
+        assert got != spot_only
+
+    def test_planes_refresh_when_fixtures_change(
+            self, qapp, mock_fixture_def):
+        """The plane box tracks the rig: raising a fixture raises the
+        Ceiling plane after update_fixtures(force=True)."""
+        fixture = _fixture(manufacturer="TestMfr")
+        fixture.model = "TestModel"
+        fixture.z_uses_group_default = False   # plane height reads f.z
+        config = _config(fixture)
+        controller = self._controller(
+            config, {"TestMfr_TestModel": mock_fixture_def})
+        before = controller.dmx_manager._stage_planes["Ceiling"].point[2]
+        fixture.z = 9.0
+        controller.update_fixtures(force=True)
+        after = controller.dmx_manager._stage_planes["Ceiling"].point[2]
+        assert after == 9.0 and after != before
+
+
 class TestSerialization:
     def test_target_point_round_trips(self):
         block = _block(target_point=[1.0, -2.5, 0.25])

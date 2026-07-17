@@ -67,6 +67,12 @@ class ShowsArtNetController(QObject):
 
         # Renderer (no socket): DMX state + channel maps + block engine.
         self.dmx_manager = DMXManager(config, fixture_definitions, song_structure)
+        # Stage planes for target_plane_name movement blocks. Without
+        # this the renderer's plane branch never fires and a
+        # plane-targeted block silently falls to spot/point/manual -
+        # export and Auto mode had the planes, timeline playback did
+        # not (found 2026-07-17).
+        self._refresh_stage_planes()
 
         # The arbiter owns the sender and the 44 Hz loop. The sender is
         # constructed HERE from this module's namespace so tests can
@@ -129,6 +135,10 @@ class ShowsArtNetController(QObject):
         with self._render_lock:
             self.light_lanes = lanes
             self._resolved_fixtures_cache.clear()
+            # Song switch is the natural refresh point for the planes
+            # too: stage geometry may have changed on the Stage tab
+            # since the last song (cheap - one walk over the fixtures).
+            self._refresh_stage_planes()
 
     def set_local_dmx_callback(
         self, callback: Optional[Callable[[int, bytes], None]]
@@ -160,8 +170,18 @@ class ShowsArtNetController(QObject):
         with self._render_lock:
             self.dmx_manager.rebuild_fixture_maps()
             self._resolved_fixtures_cache.clear()
+            self._refresh_stage_planes()
         self.arbiter.set_fixture_maps(self.dmx_manager.fixture_maps)
         print(f"ShowsArtNet: Fixture mappings updated ({len(self.config.fixtures)} fixtures)")
+
+    def _refresh_stage_planes(self):
+        """Give the renderer the stage's target planes, in the same
+        (spatial-module) frame the export sampler and Auto mode use -
+        the three consumers of target_plane_name must stay in parity."""
+        from autogen.spatial import compute_stage_planes
+        self.dmx_manager.set_stage_planes(
+            {plane.name: plane
+             for plane in compute_stage_planes(self.config)})
 
     # -- output / transport ------------------------------------------------
 
