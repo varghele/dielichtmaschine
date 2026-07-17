@@ -145,6 +145,17 @@ verbatim as the GitHub Release notes (see [docs/releasing.md](docs/releasing.md)
 
 ### Fixed
 
+- **Moving heads no longer twitch in the visualizer when output
+  broadcasts.** With no universe Target IP the arbiter broadcasts the
+  yoke-converted hardware frame, and its always-on loopback mirror
+  carries the solver-convention frame for the local viewer - a viewer
+  on the same machine received BOTH and rendered whichever packet
+  arrived last, flipping every mover between two poses of the same
+  aim 44 times a second (pan 170 vs 127, tilt 42 vs 127 at the idle
+  floor). The viewer's ArtNet listener now locks each universe to one
+  sender: loopback preferred (the mirror is the authoritative feed
+  for a local viewer), anything else first-come with a 1.5 s silence
+  failover, so following QLC+ or a remote desk still works.
 - **Plane-targeted movement blocks now play natively.** The movement
   editor has offered the stage's bounding planes as targets since the
   world-target work, and export and Auto mode rendered them - but
