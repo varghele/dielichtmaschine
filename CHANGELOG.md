@@ -145,6 +145,27 @@ verbatim as the GitHub Release notes (see [docs/releasing.md](docs/releasing.md)
 
 ### Fixed
 
+- **Plane-targeted movement blocks now play natively.** The movement
+  editor has offered the stage's bounding planes as targets since the
+  world-target work, and export and Auto mode rendered them - but
+  timeline playback never handed the planes to its renderer, so a
+  plane-targeted block silently fell back down the priority chain on
+  the wire. The playback controller now feeds the stage planes at
+  startup, on song switch and on fixture rebuilds, keeping all three
+  consumers of a plane target in parity.
+- **Morph provenance survives saving.** The .lms serializer dropped
+  LightBlock.provenance ("morphed:...", "hand_edited"), so after a
+  save/load a re-morph could no longer list which hand-edited blocks a
+  replace would destroy. Provenance now rides on each block's compact
+  entry (it is per-instance state and can never live in the dedup
+  template); files written before this change load as authored, and
+  projects without morph provenance are byte-identical.
+- **A project's shows_directory heals when it moved machines.** The
+  field stores an absolute path verbatim, so a hand-copied project
+  carried the other PC's user directory forever. Loading now points a
+  non-existent stored directory at the config file's own directory;
+  an existing directory is kept (legacy layouts point it elsewhere on
+  purpose).
 - **Loading an audio file no longer crashes on a project from another
   machine.** The Shows tab copied freshly loaded audio into
   `<shows_directory>/audiofiles/` - but a project that travelled by

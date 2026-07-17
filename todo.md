@@ -92,22 +92,21 @@ Found while sweeping the Stellwerk kit; neither blocks the gig (the
 show has zero plane-targeted blocks and the venue file is generated,
 not hand-edited), but both undercut shipped v1.5 features:
 
-- [ ] **Timeline playback never receives stage planes**: only
-      auto_tab and live_engine call DMXManager.set_stage_planes;
-      ShowsArtNetController does not, so a movement block with
-      target_plane_name (authorable in the movement editor since
-      v1.5a) silently falls past the plane branch in native playback
-      (plane > spot > point > manual starts at spot). Export resolves
-      planes itself (unified_sequence._stage_planes_for), which hides
-      the gap in .qxw comparisons. Fix: feed compute_stage_planes
-      (converted to the centred frame) into the playback manager.
-- [ ] **LightBlock.provenance does not survive .lms save/load**: the
-      compact serializer's LightBlock template only keeps effect_name/
-      name/riff_source/riff_version, so "morphed:<edge>"/"hand_edited"
-      dies on save and re-morph's pending_destruction can never list
-      hand-edited blocks from a loaded file. Provenance is per-instance
-      (like start/end), so it belongs on the compact ENTRY, not in the
-      dedup template.
+- [x] **Timeline playback never receives stage planes** - FIXED
+      2026-07-17: ShowsArtNetController._refresh_stage_planes feeds
+      compute_stage_planes (raw spatial frame, matching what export
+      and Auto mode already pass - parity, not correction) at
+      construction, on set_light_lanes and on update_fixtures. Pinned
+      by test_world_targets.py::TestShowsPlaybackPlaneTargets
+      (controller-fed renderer == manually-fed reference, planes
+      track fixture height changes).
+- [x] **LightBlock.provenance does not survive .lms save/load** -
+      FIXED 2026-07-17: provenance rides the compact ENTRY (written
+      only when set - pre-provenance files byte-stable, old files
+      load as ""); the dedup template stays provenance-free so
+      identical blocks still share one def. Pinned by
+      test_compact_serializer.py::TestProvenance incl. a real
+      Configuration.save/load round trip.
 
 ## Performance follow-ups (parked 2026-07-16, after the big three)
 
