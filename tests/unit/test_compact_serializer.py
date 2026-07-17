@@ -252,6 +252,89 @@ class TestLightBlockDedup:
         assert len(lane['light_blocks']) == 2
 
 
+class TestProvenance:
+    """Morph provenance survives the round trip (2026-07-17 fix): it is
+    PER-INSTANCE state riding on the compact entry, never part of the
+    dedup template - the field used to be dropped entirely, so a
+    re-morph could not list what a replace would destroy after a
+    save/load."""
+
+    def test_provenance_rides_the_entry_not_the_template(self):
+        lb1 = _make_lightblock(0, 10)
+        lb1["provenance"] = "morphed:e1"
+        lb2 = _make_lightblock(20, 30)
+        lb2["provenance"] = "hand_edited"
+        data = _make_config_with_shows({
+            "S1": _make_show(lanes=[_make_lane([lb1, lb2])])
+        })
+        compact = compact_serialize(data)
+
+        # Identical content still dedups to ONE template...
+        assert len(compact['light_block_defs']) == 1
+        for template in compact['light_block_defs'].values():
+            assert 'provenance' not in template
+        # ...while each entry keeps its own provenance.
+        lane = compact['songs']['S1']['timeline_data']['lanes'][0]
+        assert lane['light_blocks'][0]['provenance'] == "morphed:e1"
+        assert lane['light_blocks'][1]['provenance'] == "hand_edited"
+
+        expanded = expand_compact(compact)
+        blocks = expanded['songs']['S1']['timeline_data']['lanes'][0][
+            'light_blocks']
+        assert blocks[0]['provenance'] == "morphed:e1"
+        assert blocks[1]['provenance'] == "hand_edited"
+
+    def test_empty_provenance_writes_no_key(self):
+        """Pre-provenance files stay byte-stable: authored blocks add
+        nothing to the entry."""
+        data = _make_config_with_shows({
+            "S1": _make_show(lanes=[_make_lane([_make_lightblock(0, 10)])])
+        })
+        compact = compact_serialize(data)
+        lane = compact['songs']['S1']['timeline_data']['lanes'][0]
+        assert lane['light_blocks'][0] == {'ref': 'lb0', 'start': 0,
+                                           'end': 10}
+
+    def test_old_files_without_the_key_load_as_authored(self):
+        data = _make_config_with_shows({
+            "S1": _make_show(lanes=[_make_lane([_make_lightblock(0, 10)])])
+        })
+        compact = compact_serialize(data)
+        expanded = expand_compact(compact)
+        block = expanded['songs']['S1']['timeline_data']['lanes'][0][
+            'light_blocks'][0]
+        assert block['provenance'] == ""
+
+    def test_provenance_survives_a_real_lms_round_trip(self, tmp_path):
+        """End to end through Configuration.save/load - the layer the
+        bug actually lived in (LightBlock.to_dict always carried the
+        field; the compact template dropped it)."""
+        from config.models import (Configuration, LightBlock, LightLane,
+                                   Song, TimelineData)
+        blocks = [
+            LightBlock(start_time=0.0, end_time=10.0,
+                       effect_name="bars.static",
+                       provenance="morphed:edge-7"),
+            LightBlock(start_time=20.0, end_time=30.0,
+                       effect_name="bars.static",
+                       provenance="hand_edited"),
+            LightBlock(start_time=40.0, end_time=50.0,
+                       effect_name="bars.static"),
+        ]
+        lane = LightLane(name="L1", fixture_targets=["MH"],
+                         light_blocks=blocks)
+        cfg = Configuration(fixtures=[], groups={}, universes={})
+        cfg.songs = {"S1": Song(name="S1",
+                                timeline_data=TimelineData(lanes=[lane]))}
+        path = str(tmp_path / "prov.lms")
+        cfg.save(path)
+
+        loaded = Configuration.load(path)
+        got = [b.provenance for b in loaded.songs["S1"].timeline_data
+               .lanes[0].light_blocks]
+        assert got == ["morphed:edge-7", "hand_edited", ""]
+
+
 class TestOrderPreservation:
     def test_non_chronological_order_preserved(self):
         """Blocks not in chronological order are preserved in original order."""
