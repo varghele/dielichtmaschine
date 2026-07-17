@@ -571,6 +571,26 @@ the rehearsal .exe (rebuild: pyinstaller lichtmaschine.spec).
 Share credentials live in the per-machine Windows vault - re-enter
 via Settings > GDTF Share Account on any new PC.
 
+**Gig-day additions (2026-07-17 afternoon, app code + gig data):**
+the minimal pause-look engine shipped (utils/artnet/pause_layer.py on
+the arbiter's pause slot, BELOW playback - the next LTC-fired song
+covers it; gui._ltc_tick drives activate/clear from armed+is_playing;
+disarm removes the layer; PauseLook gained mode "scene" + scene key)
+and scenes carry mover aims (Scene.positions {group: position id},
+rendered by the busk layer's position pass - held positions win - and
+by the pause layer through the shared live_layer.aim_fixture_at_
+position). Venue data: all 12 entries pause to stellwerk/Red Room at
+level 100 until trigger; scenes/stellwerk/ grew to 18 (six Beams
+scenes aim via mark:Spot1/Spot2/SpotLeft/FloorCentre + preset:cross/
+audience; Red Room + Floor Party gained aims). Also that day: the
+viewer's ArtNet listener got a per-universe source lock (loopback
+mirror wins - the broadcast hw frame + solver mirror both arriving
+locally flapped every mover between two poses at idle), timeline
+playback finally receives stage planes, provenance persists through
+the .lms serializer, shows_directory heals on load, and audio loading
+bundles via audio_bundle_dir instead of makedirs-ing a foreign
+shows_directory.
+
 **Gig-prep night pass (2026-07-17, gig-data only, no app code):**
 both .lms setlists are sync_mode smpte (make_ltc.py set triggers but
 never sync_mode - ARM CHASE is hidden without it); all 12 ltc/ WAVs
