@@ -108,6 +108,25 @@ not hand-edited), but both undercut shipped v1.5 features:
       test_compact_serializer.py::TestProvenance incl. a real
       Configuration.save/load round trip.
 
+## Small-screen (720p) layout pass (exposed 2026-07-18)
+
+The app cannot fit a 1280x720 display: the LIVE tab's minimum is
+~1458x970 (palette pools + queue column) and STRUCTURE wants ~642px
+of height against the ~614 the shell leaves - through the tab stack
+they drive the WINDOW minimum to 1462x1020, which Windows enforces,
+so the whole window hangs off a 720p screen. The other five tabs fit
+(1257-1262px wide - tight but inside 1278). Pinned by
+tests/visual/test_720p_layout.py: per-tab fit checks with STRICT
+xfails on the two offenders (fixing a tab turns its xpass into an
+error, forcing the entry out of the table + a golden regen) and 720p
+goldens of every tab so the squeezed layouts cannot silently worsen.
+
+- [ ] LIVE tab: make the pool grid + queue column collapse/scroll
+      below ~1278x614 (biggest lever: it alone sets the window
+      minimum).
+- [ ] STRUCTURE tab: shave ~30px of minimum height (setlist rail +
+      inspector stack).
+
 ## Performance follow-ups (parked 2026-07-16, after the big three)
 
 The 2026-07-16 perf pass fixed the timer-driven UI freezes (libyaml
