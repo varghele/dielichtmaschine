@@ -9,13 +9,15 @@ via WM_GETMINMAXINFO, so a tab that wants more than the screen keeps
 the whole window from fitting the display at all; (2) a golden
 screenshot pins how the squeezed layout actually renders.
 
-Current state (probed 2026-07-18 on the venue-laptop question): the
-STRUCTURE tab wants 642px of height against the ~614 the shell leaves
-at 720p, and the LIVE tab wants 1458x970 - together they push the
-window minimum to 1462x1020, so a 720p display cannot show the whole
-app. Those carry STRICT xfails: fix a tab's layout and its xpass
-turns into an error, forcing the entry out of the table (and a golden
-regen).
+History: as probed 2026-07-18, STRUCTURE wanted 642px of height
+against the ~614 the shell leaves at 720p and LIVE wanted 1458x970 -
+together they pushed the window minimum to 1462x1020, so a 720p
+display could not show the whole app. Fixed the same day with
+explicit 720p minimum-size floors on the LIVE pools host and the
+STRUCTURE centre column (the floors override the layouts' demanded
+minimums; the squeezed renders are pinned by the goldens here). A tab
+that regresses past its viewport fails its fit test again - add an
+xfail mark in TABS only with a plan to remove it.
 
 Construction mirrors tests/e2e/conftest.main_window (ShowsTab does
 not construct headlessly without the stubs); the scene library is
@@ -39,14 +41,10 @@ TABS = [
     (0, "configuration", None),
     (1, "fixtures", None),
     (2, "stage", None),
-    (3, "structure",
-     "STRUCTURE wants ~1259x642; the shell leaves ~614px of height "
-     "at 720p (setlist rail + inspector minimums)"),
+    (3, "structure", None),
     (4, "shows", None),
     (5, "auto", None),
-    (6, "live",
-     "LIVE wants ~1458x970: the palette pools + queue column exceed "
-     "720p on both axes"),
+    (6, "live", None),
 ]
 
 
@@ -178,12 +176,10 @@ def test_tab_golden_720p(small_window, index, slug):
                       f"720p_{slug}_dark")
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="the window minimum is 1462x1020 (driven by the LIVE and "
-           "STRUCTURE tab minimums through the tab stack); Windows "
-           "enforces it, so the app cannot fit a 1280x720 display")
 def test_window_minimum_fits_a_720p_screen(small_window):
+    """The WM-enforced window minimum (minimumSizeHint with no
+    explicit override) fits a 1280x720 display - THE small-screen
+    guarantee; every tab minimum feeds it through the tab stack."""
     natural = small_window._natural_min
     assert natural.width() <= W and natural.height() <= H, (
         f"window effective minimum {natural.width()}x{natural.height()} "

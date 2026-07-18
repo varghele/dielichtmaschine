@@ -163,6 +163,14 @@ verbatim as the GitHub Release notes (see [docs/releasing.md](docs/releasing.md)
 
 ### Fixed
 
+- **The app fits a 720p screen.** The Live tab's palette pools and
+  the Structure tab's centre column demanded so much minimum space
+  that the window's enforced minimum grew to 1462x1020 - on a small
+  laptop the window simply hung off the display. Explicit small-
+  screen floors on those two containers let them compress instead;
+  every tab is now pinned at 1280x720 by per-tab fit checks, golden
+  screenshots of the squeezed layouts, and a window-level "fits a
+  720p display" test.
 - **The packaged app starts on double-click.** The windowed build has
   no console, so sys.stderr is None - and faulthandler.enable() at
   the top of main.py raised RuntimeError before any window appeared.

@@ -1579,6 +1579,16 @@ class LiveTab(BaseTab):
         hbox.addWidget(self._effects_pool, 11)
         hbox.addWidget(self._scenes_pool, 11)
         self._restyle_pools_host()
+        # 720p floor (2026-07-18): the pool grids DEMAND ~1128x624 as
+        # their layout minimum, which propagates through the tab stack
+        # into the WINDOW minimum (1462x1020) - Windows enforces that,
+        # so the app could not fit a 1280x720 display at all. An
+        # explicit minimum overrides the layout hint per axis
+        # (qSmartMinSize): the pools compress below their preferred
+        # size instead of pinning the window, and the squeezed render
+        # is pinned by tests/visual/test_720p_layout.py goldens. The
+        # proper pool re-layout (collapse/scroll) is the v1.6 pass.
+        host.setMinimumSize(600, 220)
         return host
 
     def _restyle_pools_host(self) -> None:

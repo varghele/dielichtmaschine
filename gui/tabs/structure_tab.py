@@ -986,6 +986,14 @@ class StructureTab(BaseTab):
         left_column = QVBoxLayout(left_host)
         left_column.setContentsMargins(28, 28, 28, 28)
         left_column.setSpacing(28)
+        # 720p floor (2026-07-18): the centre column's layout demands
+        # ~589x578, which put the tab ~30px over the height a 720p
+        # display leaves under the shell chrome - and the tab minimum
+        # propagates into the WM-enforced window minimum. The explicit
+        # minimum overrides the hint (qSmartMinSize); squeezed the
+        # column just compresses its 28px gaps, pinned by the 720p
+        # golden in tests/visual/test_720p_layout.py.
+        left_host.setMinimumSize(560, 500)
 
         # Song title row: name + meta line + rename/delete chips.
         left_column.addLayout(self._create_title_row())
