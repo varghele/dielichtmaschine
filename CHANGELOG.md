@@ -163,6 +163,12 @@ verbatim as the GitHub Release notes (see [docs/releasing.md](docs/releasing.md)
 
 ### Fixed
 
+- **The packaged app starts on double-click.** The windowed build has
+  no console, so sys.stderr is None - and faulthandler.enable() at
+  the top of main.py raised RuntimeError before any window appeared.
+  Launching from a shell inherits console handles, which is why every
+  CLI check passed while a plain double-click died. Without a stderr
+  the native-crash dumps now go to a file in the app log directory.
 - **Exporting a rig with an unconfigured universe no longer crashes.**
   A universe whose output was never set in the Setup tab (script-built
   rigs carry an empty output dict) killed the whole .qxw export with
