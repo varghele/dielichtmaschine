@@ -1,0 +1,107 @@
+name: Tests
+
+# The release workflow only builds; until now the 3000-test suite ran
+# exclusively on the dev machines. This runs it on every push and PR
+# so breakage shows up between releases, not at tag time.
+on:
+  push:
+  pull_request:
+
+# One run per ref; a new push cancels the older run.
+concurrency:
+  group: tests-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # The export byte-identity hash tests demand a fixed hash seed
+  # (preset_scenes_to_xml samples the global RNG; see CLAUDE.md).
+  PYTHONHASHSEED: "0"
+  # Every Qt-touching test module sets this itself via setdefault;
+  # explicit here as belt and braces for anything imported first.
+  QT_QPA_PLATFORM: offscreen
+
+jobs:
+  test-linux:
+    name: Tests (ubuntu)
+    runs-on: ubuntu-22.04
+    timeout-minutes: 60
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: requirements.txt
+
+      - name: Install system deps
+        # Same set the release build needs (PortAudio for sounddevice,
+        # GL/EGL for moderngl, xcb for PyQt6) plus mesa's software
+        # rasterizer so standalone GL contexts CAN come up headless
+        # (tests that still can't create one skip themselves), and a
+        # base font package so the offscreen font database is not
+        # empty (the brand fonts register from resources/ regardless).
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            libportaudio2 portaudio19-dev \
+            libgl1 libegl1 libgl1-mesa-dri libegl-mesa0 \
+            libxkbcommon-x11-0 libxcb-cursor0 libxcb-icccm4 libxcb-image0 \
+            libxcb-keysyms1 libxcb-randr0 libxcb-render-util0 libxcb-shape0 \
+            libxcb-sync1 libxcb-xfixes0 libxcb-xinerama0 \
+            fontconfig fonts-dejavu-core
+
+      - name: Install Python deps
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Unit suite (parallel)
+        run: python -m pytest tests/unit -n auto -q
+
+      - name: End-to-end suite
+        run: python -m pytest tests/e2e -q
+
+      - name: Visual suite (serial - tests/README.md rule)
+        # Golden comparisons skip on linux (goldens are per-platform,
+        # generated on the dev machine); the machine-independent ink
+        # and clipping checks still run, GL tests skip without a
+        # context.
+        run: python -m pytest tests/visual -q
+
+  test-windows:
+    name: Tests (windows)
+    runs-on: windows-latest
+    timeout-minutes: 60
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: requirements.txt
+
+      - name: Install Python deps
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Unit suite (parallel)
+        run: python -m pytest tests/unit -n auto -q
+
+      - name: End-to-end suite
+        run: python -m pytest tests/e2e -q
+
+      # tests/visual is deliberately NOT run here: the win32 goldens
+      # pin the dev machine's exact Qt raster output, and requirements
+      # float PyQt6 (>=), so a newer runner Qt legitimately shifts
+      # pixels. Goldens stay a dev-machine concern per tests/README.md;
+      # the linux job covers the machine-independent visual checks.
+
+  # tests/integration (sockets/devices) stays out of CI on purpose -
+  # it is written for machines with the real test rig attached.
