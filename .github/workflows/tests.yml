@@ -51,25 +51,32 @@ jobs:
             libxkbcommon-x11-0 libxcb-cursor0 libxcb-icccm4 libxcb-image0 \
             libxcb-keysyms1 libxcb-randr0 libxcb-render-util0 libxcb-shape0 \
             libxcb-sync1 libxcb-xfixes0 libxcb-xinerama0 \
-            fontconfig fonts-dejavu-core
+            fontconfig fonts-dejavu-core \
+            xvfb
 
       - name: Install Python deps
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
+      # xvfb-run: glcontext's Linux default is the X11 backend, so a
+      # display-less runner cannot create standalone GL contexts at
+      # all (first shakedown run, 2026-07-19). Qt itself stays on the
+      # offscreen QPA; the virtual display exists purely so the GL
+      # probe + render tests exercise mesa's software rasterizer
+      # instead of skipping.
       - name: Unit suite (parallel)
-        run: python -m pytest tests/unit -n auto -q
+        run: xvfb-run -a python -m pytest tests/unit -n auto -q
 
       - name: End-to-end suite
-        run: python -m pytest tests/e2e -q
+        run: xvfb-run -a python -m pytest tests/e2e -q
 
       - name: Visual suite (serial - tests/README.md rule)
         # Golden comparisons skip on linux (goldens are per-platform,
         # generated on the dev machine); the machine-independent ink
-        # and clipping checks still run, GL tests skip without a
-        # context.
-        run: python -m pytest tests/visual -q
+        # and clipping checks still run, and GL tests get a real
+        # context via xvfb + mesa.
+        run: xvfb-run -a python -m pytest tests/visual -q
 
   test-windows:
     name: Tests (windows)

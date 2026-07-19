@@ -243,7 +243,12 @@ class TestAudienceAtBottom:
 class TestTitle:
 
     def test_title_from_loaded_config_path(self, plot_config):
-        plot_config._loaded_from = r"C:\gigs\summerfest\rig_v2.yaml"
+        # OS-native path: a hardcoded C:\... literal broke on the CI
+        # linux leg (backslash is not a separator on posix, so basename
+        # returned the whole string) - the app only ever sees paths of
+        # its own platform.
+        plot_config._loaded_from = os.path.join(
+            os.sep, "gigs", "summerfest", "rig_v2.yaml")
         assert StagePlotRenderer(plot_config).title == "rig_v2"
 
     def test_default_title(self, plot_config):
