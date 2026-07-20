@@ -72,3 +72,15 @@ def test_real_changelog_has_current_version():
     text = open(os.path.join(root, "CHANGELOG.md"), encoding="utf-8").read()
     notes = extract(text, version)
     assert notes, f"CHANGELOG.md has no section for current version {version}"
+
+
+def test_dev_version_reads_the_unreleased_section():
+    """A milestone branch carries "X.Y.Z-dev" between releases
+    (2026-07-20): its notes ARE the [Unreleased] section, so the
+    current-version invariant holds mid-cycle and the release ritual
+    only drops the suffix."""
+    text = ("# Changelog\n\n## [Unreleased]\n\n- next thing\n\n"
+            "## [1.4.0] - 2026-07-15\n\n- shipped thing\n")
+    assert extract(text, "1.5.0-dev") == "- next thing"
+    assert extract(text, "v1.5.0-dev") == "- next thing"
+    assert extract(text, "1.4.0") == "- shipped thing"

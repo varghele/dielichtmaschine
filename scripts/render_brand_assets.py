@@ -39,13 +39,18 @@ DIM = QColor("#5c6068")
 
 GRID_STEP = 40
 
-#: the rating plate (README banner, right column, top to bottom)
+#: The rating plate (README banner, right column, top to bottom).
+#: Colour convention (2026-07-20): SHIPPED capabilities in CREAM,
+#: outstanding ones in DIM grey - the plate never claims more than the
+#: wire delivers today. Each line is a list of (text, colour) segments
+#: drawn right-aligned as one run.
 def plate_lines(version: str):
     return [
-        ("ARTNET / E1.31 / DMX · 44 Hz", GREY),
-        ("LTC / SMPTE TIMECODE CHASE", GREY),
-        ("COMPATIBLE WITH: GDTF · DIN SPEC 15800 · QLC+", GREY),
-        (f"v{version} · GPL-3.0 · WINDOWS / LINUX", DIM),
+        [("ARTNET", CREAM), (" / E1.31 / DMX", DIM)],
+        [("SYNC: ", GREY), ("LTC / SMPTE", CREAM), (" / MTC / MIDI", DIM)],
+        [("COMPATIBLE WITH: ", GREY),
+         ("GDTF · DIN SPEC 15800 · QLC+", CREAM)],
+        [(f"v{version} · GPL-3.0 · WINDOWS / LINUX", GREY)],
     ]
 
 
@@ -129,13 +134,21 @@ def render_banner(version: str) -> QImage:
                Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter,
                "ES WERDE LICHT")
 
-    p.setFont(_mono(14, tracking=1.4))
+    font = _mono(14, tracking=1.4)
+    p.setFont(font)
+    from PyQt6.QtGui import QFontMetricsF
+    metrics = QFontMetricsF(font)
+    right_edge = 1520.0
     y = 150
-    for text, colour in plate_lines(version):
-        p.setPen(colour)
-        p.drawText(QRectF(700, y, 820, 22),
-                   Qt.AlignmentFlag.AlignRight
-                   | Qt.AlignmentFlag.AlignVCenter, text)
+    for segments in plate_lines(version):
+        x = right_edge - sum(metrics.horizontalAdvance(t)
+                             for t, _c in segments)
+        for text, colour in segments:
+            p.setPen(colour)
+            p.drawText(QRectF(x, y, 820, 22),
+                       Qt.AlignmentFlag.AlignLeft
+                       | Qt.AlignmentFlag.AlignVCenter, text)
+            x += metrics.horizontalAdvance(text)
         y += 27
     p.end()
     return img
