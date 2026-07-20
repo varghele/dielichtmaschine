@@ -4,7 +4,7 @@
 
 **LET THERE BE LIGHT.** Die Lichtmaschine is a standalone visual light-show authoring tool: beat-synced timeline editing, a built-in 3D preview, automatic show generation from audio analysis, and live ArtNet/DMX playback - with export to [QLC+](https://www.qlcplus.org/) workspaces as an interop path.
 
-> **Status:** `v1.0.0` is the latest release; `v1.4.0` "the standalone switch" is in preparation on the current branch - setlists with SMPTE/LTC timecode chase, in-app GDTF Share downloads, CSV rig import, a live busking surface with native ArtNet output, and the Die Lichtmaschine rebrand all land with it. See the [CHANGELOG](CHANGELOG.md) and [ROADMAP](ROADMAP.md).
+> **Status:** `v1.4.0` "the standalone switch" is the latest release - setlists with SMPTE/LTC timecode chase, in-app GDTF Share downloads, CSV rig import, a live busking surface with native ArtNet output, and the Die Lichtmaschine rebrand. `v1.5.0` is in preparation on the current branch: world-space focus geometry, show morphing (take a whole show to another venue's rig), the venue pre-flight checklist, and a round of real-project performance work. See the [CHANGELOG](CHANGELOG.md) and [ROADMAP](ROADMAP.md).
 >
 > This project was formerly known as **QLC+ Show Creator** - old links, releases, and issues refer to the same codebase.
 

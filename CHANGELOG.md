@@ -116,6 +116,13 @@ verbatim as the GitHub Release notes (see [docs/releasing.md](docs/releasing.md)
 
 ### Changed
 
+- **The README banner speaks facts now.** The banner's side column
+  became a rating plate - protocols (ArtNet / E1.31 / DMX at 44 Hz,
+  LTC/SMPTE chase), compatibility (GDTF / DIN SPEC 15800, QLC+),
+  version, license and platforms - instead of adjectives. Both the
+  banner and the GitHub social preview render from
+  `scripts/render_brand_assets.py` using the bundled brand fonts, with
+  the version stamped at render time.
 - **The bundled demo rigs and shows now ship in the native `.lms`
   format** (the content stays YAML; the files carry the current
   schema: `songs:` + `setlist:`, compact block tables, stable lane
