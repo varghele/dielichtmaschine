@@ -768,10 +768,13 @@ class TestMasterGridHeader:
             QFileDialog, "getOpenFileName",
             staticmethod(lambda *a, **k: ("C:/tmp/song.wav", "")))
         loaded = []
-        monkeypatch.setattr(tab.audio_lane, "load_audio_file",
-                            loaded.append)
+        monkeypatch.setattr(
+            tab.audio_lane, "load_audio_file",
+            lambda path, force=False: loaded.append((path, force)))
         tab.load_audio_btn.click()
-        assert loaded == ["C:/tmp/song.wav"]
+        # force=True: an explicit user pick always reloads, even when
+        # the same path is already loaded (the file may have changed).
+        assert loaded == [("C:/tmp/song.wav", True)]
 
     def test_load_chip_cancel_is_a_noop(self, tab, monkeypatch):
         from PyQt6.QtWidgets import QFileDialog

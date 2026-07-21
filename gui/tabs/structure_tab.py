@@ -2342,7 +2342,7 @@ class StructureTab(BaseTab):
             self, "Select Audio File", "",
             "Audio Files (*.wav *.mp3 *.flac *.ogg);;All Files (*)")
         if file_path:
-            self.audio_lane.load_audio_file(file_path)
+            self.audio_lane.load_audio_file(file_path, force=True)
 
     def _create_playback_controls(self):
         """Compact transport row under the master grid: play/stop, the

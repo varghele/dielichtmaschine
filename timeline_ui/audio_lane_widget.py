@@ -371,13 +371,21 @@ class AudioLaneWidget(QFrame):
             "Audio Files (*.wav *.mp3 *.flac *.ogg);;All Files (*)"
         )
         if file_path:
-            self.load_audio_file(file_path)
+            self.load_audio_file(file_path, force=True)
 
-    def load_audio_file(self, file_path: str):
+    def load_audio_file(self, file_path: str, force: bool = False):
         """Load an audio file and display its waveform.
 
         Args:
             file_path: Path to the audio file
+            force: Reload even when ``file_path`` is already loaded or
+                loading. The explicit LOAD action passes True (the user
+                may be re-picking a file that changed on disk); config
+                refresh paths leave it False - Structure tab activation
+                re-runs the whole song load, and re-decoding the same
+                audio plus re-analyzing the waveform on every tab visit
+                cost real time on real projects AND left the waveform
+                row mid-load whenever the visit was brief.
         """
         if not AUDIO_AVAILABLE:
             self.file_path_edit.setText("Audio support not available")
@@ -385,6 +393,10 @@ class AudioLaneWidget(QFrame):
 
         if not os.path.exists(file_path):
             self.file_path_edit.setText(f"File not found: {file_path}")
+            return
+
+        if not force and file_path == self.audio_file_path and (
+                self._is_loading_audio or self.audio_file is not None):
             return
 
         # Cancel any ongoing load
