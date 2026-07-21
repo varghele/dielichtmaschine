@@ -57,16 +57,31 @@ def _tab_params():
 
 
 @pytest.fixture(scope="module")
-def small_window(qapp):
+def small_window(qapp, tmp_path_factory):
     """The real shell at 1280x720 with the demo project open.
 
     Module-scoped: MainWindow construction is expensive and every test
     only switches tabs. monkeypatch is function-scoped, so the e2e
     stubs ride a manual MonkeyPatch that undoes at teardown.
+
+    Runs against a VIRGIN QSettings directory: earlier tests in the
+    same process (the e2e suite's real MainWindows) legitimately
+    persist UI state - splitter positions save on tab-away - and a
+    splitter state captured at another window's geometry shifts the
+    stage/structure layouts off their goldens (2026-07-21: the full
+    e2e-then-visual run failed exactly those two goldens while either
+    suite alone passed). Golden windows must start from factory state.
     """
     from _pytest.monkeypatch import MonkeyPatch
-    from PyQt6.QtCore import QEvent
+    from PyQt6.QtCore import QEvent, QSettings
     from PyQt6.QtWidgets import QApplication
+
+    from utils.app_settings import app_settings
+    previous_root = os.path.dirname(os.path.dirname(
+        app_settings().fileName()))
+    QSettings.setPath(QSettings.Format.IniFormat,
+                      QSettings.Scope.UserScope,
+                      str(tmp_path_factory.mktemp("qsettings-720p")))
 
     from gui.theme_manager import ThemeManager
     from tests.e2e.conftest import _install_headless_stubs, \
@@ -139,6 +154,8 @@ def small_window(qapp):
         QApplication.sendPostedEvents(None,
                                       QEvent.Type.DeferredDelete.value)
         QApplication.processEvents()
+        QSettings.setPath(QSettings.Format.IniFormat,
+                          QSettings.Scope.UserScope, previous_root)
         mp.undo()
 
 
