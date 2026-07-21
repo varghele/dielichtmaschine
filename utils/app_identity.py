@@ -46,6 +46,28 @@ def version_string() -> str:
     return f"{APP_NAME} {APP_VERSION}"
 
 
+def rating_plate(version: str = None):
+    """The machine's RATING PLATE (2026-07-20 banner decision): only
+    verifiable claims - protocols, standards, formats, version, license,
+    platforms - never adjectives. Each line is a list of
+    (text, emphasis) segments; emphasis is "shipped" (capability on the
+    wire today), "outstanding" (declared but not delivered yet) or
+    "label" (neutral). Presentation maps emphasis to colours.
+
+    ONE copy of the facts: consumed by scripts/render_brand_assets.py
+    (README banner + social preview) and gui/dialogs/about_dialog.py.
+    """
+    version = version or APP_VERSION
+    return [
+        [("ARTNET", "shipped"), (" / E1.31 / DMX", "outstanding")],
+        [("SYNC: ", "label"), ("LTC / SMPTE", "shipped"),
+         (" / MTC / MIDI", "outstanding")],
+        [("COMPATIBLE WITH: ", "label"),
+         ("GDTF · DIN SPEC 15800 · QLC+", "shipped")],
+        [(f"v{version} · GPL-3.0 · WINDOWS / LINUX", "label")],
+    ]
+
+
 def project_open_filter() -> str:
     """QFileDialog name-filter for opening a project.
 

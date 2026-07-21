@@ -116,6 +116,13 @@ verbatim as the GitHub Release notes (see [docs/releasing.md](docs/releasing.md)
 
 ### Changed
 
+- **Help > About is a branded card now.** The generic message box
+  became a real dialog: rotor glyph and wordmark with the slogan, a
+  short body paragraph, the rating plate (the same verifiable facts
+  as the README banner - protocols, sync, compatibility, version,
+  license, platforms - from one shared source, shipped items in full
+  text colour and outstanding ones dimmed), and the domain as a
+  clickable link.
 - **Live pool cells read like names, not file keys.** Riff and scene
   names double as library keys ("intensity_crescendo_8bar"), and the
   Live pools displayed them verbatim - underscored, unwrappable and

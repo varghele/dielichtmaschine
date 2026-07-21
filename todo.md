@@ -85,13 +85,15 @@ the desk can judge:
       quiet (and warn after touching an orientation).
 - [ ] Orientation panel: the two INVERT DMX checkboxes on a mover,
       confirm the head mirrors on the wire and in a fresh .qxw.
-- [ ] **Write the About text by hand (user)** - Help > About currently
-      shows a generic feature bullet list (noted 2026-07-21: "not
-      nice"). The user authors the real copy before the v1.5.0 tag;
-      the string lives in `gui/gui.py::show_about` (a plain
-      QMessageBox.about - name/slogan/version/domain pull from
-      utils/app_identity, the body is the part to replace). Remember
-      the house rules: no em-dashes, separator is " · ".
+- [ ] **Write the About text by hand (user)** - noted 2026-07-21
+      ("not nice"); the dialog itself was reworked the same day into
+      a branded card (gui/dialogs/about_dialog.py: glyph + wordmark +
+      slogan, rating plate shared with the README banner via
+      app_identity.rating_plate, domain link). What remains for the
+      user is only the body paragraph: replace the `ABOUT_BODY`
+      constant at the top of about_dialog.py (a placeholder sentence
+      sits there now), then regenerate the dialog golden. House
+      rules: no em-dashes, separator is " · ".
 
 ## Bugs exposed by the 2026-07-17 gig-prep night (v1.5 follow-ups)
 

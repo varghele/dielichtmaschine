@@ -2544,23 +2544,9 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         QDesktopServices.openUrl(QUrl.fromLocalFile(directory))
 
     def show_about(self):
-        """Show about dialog"""
-        from utils import app_identity
-        QMessageBox.about(
-            self,
-            f"About {app_identity.APP_NAME}",
-            f"{app_identity.APP_NAME}\n"
-            f"{app_identity.SLOGAN_EN}\n\n"
-            f"Version {app_identity.APP_VERSION} · {app_identity.APP_DOMAIN}\n\n"
-            "Visual light show authoring:\n"
-            "- Beat-synced timeline editing\n"
-            "- Fixture management and grouping (GDTF and QLC+ formats)\n"
-            "- Stage layout and printable stage plots\n"
-            "- Automatic show generation from audio\n"
-            "- Real-time 3D visualizer preview\n"
-            "- Live ArtNet/DMX playback\n"
-            "- QLC+ workspace export (interop)"
-        )
+        """Show the branded About dialog (gui/dialogs/about_dialog.py)."""
+        from gui.dialogs.about_dialog import AboutDialog
+        AboutDialog(self).exec()
 
     def closeEvent(self, event):
         """Handle application close"""

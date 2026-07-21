@@ -40,18 +40,18 @@ DIM = QColor("#5c6068")
 GRID_STEP = 40
 
 #: The rating plate (README banner, right column, top to bottom).
-#: Colour convention (2026-07-20): SHIPPED capabilities in CREAM,
-#: outstanding ones in DIM grey - the plate never claims more than the
-#: wire delivers today. Each line is a list of (text, colour) segments
-#: drawn right-aligned as one run.
+#: Facts live in utils.app_identity.rating_plate - ONE copy, shared
+#: with the About dialog. Colour convention (2026-07-20): SHIPPED
+#: capabilities in CREAM, outstanding ones in DIM grey, labels GREY -
+#: the plate never claims more than the wire delivers today. Each line
+#: is a list of (text, colour) segments drawn right-aligned as one run.
+PLATE_COLOURS = {"shipped": CREAM, "outstanding": DIM, "label": GREY}
+
+
 def plate_lines(version: str):
-    return [
-        [("ARTNET", CREAM), (" / E1.31 / DMX", DIM)],
-        [("SYNC: ", GREY), ("LTC / SMPTE", CREAM), (" / MTC / MIDI", DIM)],
-        [("COMPATIBLE WITH: ", GREY),
-         ("GDTF · DIN SPEC 15800 · QLC+", CREAM)],
-        [(f"v{version} · GPL-3.0 · WINDOWS / LINUX", GREY)],
-    ]
+    from utils.app_identity import rating_plate
+    return [[(text, PLATE_COLOURS[emphasis]) for text, emphasis in line]
+            for line in rating_plate(version)]
 
 
 def _mono(px: int, weight=QFont.Weight.Medium, tracking=1.6) -> QFont:
