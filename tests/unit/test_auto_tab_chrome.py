@@ -285,7 +285,9 @@ class TestBpmRow:
 
 class TestMeterColumns:
     def test_stopped_shows_dashes_and_empty_bars(self, auto_tab):
-        for key in ("rms", "contrast", "vocal"):
+        # "input" included: a fresh tab was never activated, so idle
+        # capture never started and the level meter rests at "-".
+        for key in ("input", "rms", "contrast", "vocal"):
             assert auto_tab._meter_values[key].text() == "-"
             assert auto_tab._meter_bars[key].fraction() is None
 
@@ -307,6 +309,227 @@ class TestMeterColumns:
 
         auto_tab._clear_meters()
         assert auto_tab._meter_values["rms"].text() == "-"
+
+    def test_cleanup_drops_the_stale_frame(self, auto_tab):
+        """With the UI timer now running while the engine is stopped
+        (idle metering), a frame surviving _cleanup would repaint the
+        old RMS values forever."""
+        from audio.realtime_spectral import LiveFeatureFrame
+        auto_tab._latest_frame = LiveFeatureFrame(
+            timestamp=0.0, flux=0.5, transient=0.4, richness=0.6,
+            vocal=0.88, centroid=0.3, rms=0.74, contrast=0.60)
+        auto_tab._cleanup()
+        assert auto_tab._latest_frame is None
+        auto_tab._clear_meters()
+        auto_tab._update_ui()
+        assert auto_tab._meter_values["rms"].text() == "-"
+
+
+class _FakeInput:
+    """Duck-typed LiveAudioInput: a live source with a settable peak."""
+
+    def __init__(self, peak=0.1):
+        self.peak = peak
+        self.active = True
+        self.gains = []
+        self.cleaned_up = False
+
+    def initialize(self, device_index=None):
+        return True
+
+    def start(self):
+        return True
+
+    def is_active(self):
+        return self.active
+
+    def raw_peak(self):
+        return self.peak
+
+    def set_gain(self, gain):
+        self.gains.append(gain)
+
+    def gain(self):
+        return self.gains[-1] if self.gains else 1.0
+
+    def cleanup(self):
+        self.cleaned_up = True
+
+
+class TestInputMeterAndGain:
+    """The live input level meter + gain control (2026-07-21)."""
+
+    def test_meter_paints_post_gain_level(self, auto_tab):
+        from audio.live_input import level_to_fraction
+        auto_tab._idle_input = _FakeInput(peak=0.1)
+        auto_tab._input_gain = 2.0
+        auto_tab._update_ui()
+        assert auto_tab._meter_bars["input"].fraction() == \
+            pytest.approx(level_to_fraction(0.2))
+        # MicroLabel renders caps: "-14 DB".
+        assert auto_tab._meter_values["input"].text().endswith(" DB")
+
+    def test_dead_source_blanks_and_releases(self, auto_tab):
+        fake = _FakeInput()
+        fake.active = False
+        auto_tab._idle_input = fake
+        auto_tab._update_ui()
+        assert auto_tab._meter_bars["input"].fraction() is None
+        assert auto_tab._meter_values["input"].text() == "-"
+        assert fake.cleaned_up
+        assert auto_tab._idle_input is None
+
+    def test_gain_drag_pushes_to_the_source(self, auto_tab):
+        from audio.live_input import slider_to_gain
+        fake = _FakeInput()
+        auto_tab._idle_input = fake
+        auto_tab._gain_control.value_changed.emit(0.75)
+        assert fake.gains[-1] == pytest.approx(slider_to_gain(0.75))
+        assert auto_tab._input_gain == pytest.approx(slider_to_gain(0.75))
+        assert auto_tab._gain_value.text() == "+10.0 DB"
+
+    def test_auto_gain_sets_from_recent_peaks(self, auto_tab):
+        from audio.live_input import compute_auto_gain, gain_to_slider
+        fake = _FakeInput()
+        auto_tab._idle_input = fake
+        auto_tab._recent_raw_peaks.extend([0.02, 0.05, 0.03])
+        auto_tab._gain_auto_btn.click()
+        expected = compute_auto_gain(0.05)
+        assert auto_tab._input_gain == pytest.approx(expected)
+        assert fake.gains[-1] == pytest.approx(expected)
+        assert auto_tab._gain_control.value() == \
+            pytest.approx(gain_to_slider(expected))
+        assert any("Auto gain" in message
+                   for _, message, _ in auto_tab.engine_log_entries())
+
+    def test_auto_gain_refuses_silence(self, auto_tab):
+        auto_tab._idle_input = _FakeInput(peak=0.0)
+        auto_tab._input_gain = 1.5
+        auto_tab._recent_raw_peaks.clear()
+        auto_tab._gain_auto_btn.click()
+        assert auto_tab._input_gain == 1.5          # unchanged
+        assert any("Auto gain skipped" in message
+                   for _, message, _ in auto_tab.engine_log_entries())
+
+    def test_auto_button_role(self, auto_tab):
+        assert auto_tab._gain_auto_btn.property("role") == "primary"
+        assert not auto_tab._gain_auto_btn.isCheckable()
+
+    def test_persisted_gain_applies_and_clamps(self, qapp, monkeypatch):
+        from auto.settings import AutoModeSettings
+        from gui.tabs.auto_tab import AutoTab
+        monkeypatch.setattr("auto.settings.load",
+                            lambda: AutoModeSettings(input_gain=1000.0))
+        tab = AutoTab(_make_config(), parent=None)
+        try:
+            # Clamped to the +20 dB ceiling, never a 1000x multiplier.
+            assert tab._input_gain == 10.0
+            assert tab._gain_control.value() == pytest.approx(1.0)
+            assert tab._gain_value.text() == "+20.0 DB"
+        finally:
+            tab.cleanup()
+            tab.deleteLater()
+
+    def test_gain_persists_through_settings(self, auto_tab, monkeypatch):
+        saved = []
+        monkeypatch.setattr("auto.settings.save", saved.append)
+        auto_tab._gain_control.value_changed.emit(0.25)
+        auto_tab._save_settings()
+        from audio.live_input import slider_to_gain
+        assert saved[-1].input_gain == pytest.approx(slider_to_gain(0.25))
+
+
+class TestIdleCaptureLifecycle:
+    """Capture ownership: idle-owned XOR engine-owned, never both."""
+
+    @pytest.fixture
+    def fake_input_cls(self, monkeypatch):
+        instances = []
+
+        class _FakeInputCls(_FakeInput):
+            def __init__(self, *a, **k):
+                super().__init__(peak=0.1)
+                instances.append(self)
+
+        monkeypatch.setattr("gui.tabs.auto_tab.LiveAudioInput",
+                            _FakeInputCls)
+        return instances
+
+    def _select_a_device(self, auto_tab):
+        auto_tab._input_device_combo.blockSignals(True)
+        auto_tab._input_device_combo.addItem("Fake Mic  [Fake API]", 3)
+        auto_tab._input_device_combo.setCurrentIndex(
+            auto_tab._input_device_combo.count() - 1)
+        auto_tab._input_device_combo.blockSignals(False)
+
+    def test_activation_starts_idle_capture(self, auto_tab,
+                                            fake_input_cls, monkeypatch):
+        # Freeze the combos: on_tab_activated repopulates from real
+        # hardware, which would drop the fake device on a mic-less
+        # machine (and pick a real one on the dev box).
+        monkeypatch.setattr(type(auto_tab), "_populate_devices",
+                            lambda self: None)
+        monkeypatch.setattr(type(auto_tab), "_populate_input_apis",
+                            lambda self: None)
+        self._select_a_device(auto_tab)
+        auto_tab.on_tab_activated()
+        assert auto_tab._idle_input is not None
+        assert auto_tab._ui_timer.isActive()
+        auto_tab.on_tab_deactivated()
+        assert auto_tab._idle_input is None
+        assert fake_input_cls[0].cleaned_up
+
+    def test_no_device_selected_stays_dark(self, auto_tab,
+                                           fake_input_cls):
+        # The dev machine may enumerate a real mic - force the empty
+        # state the test is about.
+        auto_tab._input_device_combo.blockSignals(True)
+        auto_tab._input_device_combo.clear()
+        auto_tab._input_device_combo.blockSignals(False)
+        auto_tab._start_idle_capture()
+        assert auto_tab._idle_input is None
+        assert fake_input_cls == []              # never even constructed
+
+    def test_device_change_rebinds_idle_capture(self, auto_tab,
+                                                fake_input_cls,
+                                                monkeypatch):
+        self._select_a_device(auto_tab)
+        monkeypatch.setattr(type(auto_tab), "isVisible",
+                            lambda self: True)
+        auto_tab._start_idle_capture()
+        first = auto_tab._idle_input
+        auto_tab._on_input_device_changed(0)
+        assert first.cleaned_up
+        assert auto_tab._idle_input is not None
+        assert auto_tab._idle_input is not first
+        auto_tab._stop_idle_capture()
+
+    def test_engine_start_failure_resumes_idle(self, auto_tab,
+                                               fake_input_cls,
+                                               monkeypatch):
+        """_on_start's earliest gate (no groups) fires before capture
+        handover; the deeper failure paths all end in _cleanup +
+        _resume_idle_monitoring - pin the resume helper directly."""
+        self._select_a_device(auto_tab)
+        monkeypatch.setattr(type(auto_tab), "isVisible",
+                            lambda self: True)
+        auto_tab._start_idle_capture()
+        assert auto_tab._idle_input is not None
+        # The engine-owned half of the handover:
+        auto_tab._stop_idle_capture()
+        auto_tab._cleanup()                      # any failure path
+        auto_tab._resume_idle_monitoring()
+        assert auto_tab._idle_input is not None
+        assert auto_tab._ui_timer.isActive()
+        auto_tab._stop_idle_capture()
+
+    def test_cleanup_stops_idle_capture(self, auto_tab, fake_input_cls,
+                                        monkeypatch):
+        self._select_a_device(auto_tab)
+        auto_tab._start_idle_capture()
+        assert auto_tab._idle_input is not None
+        auto_tab._cleanup()
+        assert auto_tab._idle_input is None
 
 
 class TestActionRow:

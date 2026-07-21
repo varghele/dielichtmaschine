@@ -335,6 +335,33 @@ def _install_headless_stubs(monkeypatch):
     monkeypatch.setattr("auto.settings.load", lambda: AutoModeSettings())
     monkeypatch.setattr("auto.settings.save", lambda _s: None)
 
+    # The auto tab idle-monitors the input level on tab activation
+    # (2026-07-21): a real LiveAudioInput would open the developer's
+    # actual microphone during e2e tab switches and the 720p golden
+    # grabs. The stub refuses to initialize, so the meter renders its
+    # deterministic empty state.
+    from audio.live_input import GAIN_MAX, GAIN_MIN
+
+    class StubLiveInput:
+        def __init__(self, *a, **k):
+            self._gain = 1.0
+
+        def initialize(self, device_index=None): return False
+        def start(self): return False
+        def stop(self): pass
+        def cleanup(self): pass
+        def is_active(self): return False
+        def raw_peak(self): return 0.0
+        def gain(self): return self._gain
+
+        def set_gain(self, gain):
+            self._gain = float(min(GAIN_MAX, max(GAIN_MIN, gain)))
+
+        @property
+        def ring_buffer(self): return None
+
+    monkeypatch.setattr("gui.tabs.auto_tab.LiveAudioInput", StubLiveInput)
+
 
 def _warm_fixture_cache():
     """Pre-populate utils.fixture_utils._fixture_definitions_cache.

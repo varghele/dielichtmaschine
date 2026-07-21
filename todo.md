@@ -97,12 +97,21 @@ the desk can judge:
 
 ## v1.5 feature pull-ins (agreed 2026-07-21)
 
-- [ ] **Auto mode input level meter + gain** - a live audio bar in the
-      Auto screen showing what the microphone actually picks up (so
-      "does it react to sound at all" is a glance, not a guess), a
-      GAIN control beside it to amplify or dampen the incoming signal
-      before analysis (makes a too-quiet source usable), and an AUTO
-      button that sets the gain from the measured level.
+- [x] **Auto mode input level meter + gain** - SHIPPED 2026-07-21:
+      INPUT LEVEL strip above the analysis meters (dB bar fed by the
+      capture callback's pre-gain peak - frame.rms is EMA-normalized
+      and the ring buffer is starved by the analyzer, so neither can
+      meter), idle capture opens the device on tab activation and
+      releases it on deactivation/engine start (strict idle XOR
+      engine ownership, silent failure, resume on every engine-start
+      failure path), GAIN slider +/-20 dB applied in the callback
+      before the ring buffer (audio/live_input.py, LTC untouched -
+      separate instance), momentary AUTO targets -12 dBFS from 2 s of
+      peaks and refuses silence, input_gain persists in
+      AutoModeSettings. Tests: test_input_gain.py + chrome
+      TestInputMeterAndGain/TestIdleCaptureLifecycle; e2e stubs
+      LiveAudioInput so suites never open a real mic. Manual check on
+      a mic-equipped desktop rides the v1.5 desktop list.
 
 ## Bugs exposed by the 2026-07-17 gig-prep night (v1.5 follow-ups)
 

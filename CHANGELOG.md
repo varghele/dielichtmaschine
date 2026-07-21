@@ -13,6 +13,19 @@ verbatim as the GitHub Release notes (see [docs/releasing.md](docs/releasing.md)
 
 ### Added
 
+- **Auto mode shows what the microphone hears - and can turn it up.**
+  A live INPUT LEVEL meter on the Auto screen (dB scale, -60 to 0)
+  runs as soon as the tab opens, engine started or not, so "does it
+  react to sound" is a glance instead of a full engine start. Beside
+  it a GAIN slider (-20 to +20 dB, centre 0) amplifies or dampens the
+  signal before analysis - a too-quiet source becomes usable by the
+  engine - and AUTO measures the last two seconds and sets the gain
+  once, aiming peaks at -12 dBFS (it refuses on silence rather than
+  amplifying an empty room). The gain persists with the Auto settings;
+  the meter reads the true input, not the analyzer's self-normalizing
+  energy, and timecode input is untouched. The device is released
+  whenever the tab is out of sight.
+
 - **Pause lights between songs (minimal pause-look engine).** While
   the LTC chase is armed and no song is playing, the output arbiter's
   pause slot renders the current setlist entry's pause look - and the
