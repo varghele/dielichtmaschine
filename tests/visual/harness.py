@@ -165,8 +165,25 @@ def compare_to_golden(image: QImage, name: str, *,
     expected = qimage_to_array(golden).astype(np.int16)[:, :, :3]
     differing = (np.abs(actual - expected) > channel_tolerance).any(axis=2)
     fraction = float(differing.mean())
+    if fraction > max_diff_fraction:
+        # Keep the evidence: without the failing render, diagnosing a
+        # mismatch that only happens in a particular suite ordering (or
+        # flakes) means re-running the whole ordering under regen
+        # tricks. failures/ is gitignored.
+        failures_dir = os.path.join(os.path.dirname(__file__), "failures")
+        os.makedirs(failures_dir, exist_ok=True)
+        image.save(os.path.join(failures_dir, f"{name}_actual.png"))
+        overlay = qimage_to_array(image)[:, :, :3].copy()
+        overlay[differing] = (255, 0, 255)
+        try:
+            from PIL import Image as _PILImage
+            _PILImage.fromarray(overlay).save(
+                os.path.join(failures_dir, f"{name}_diff.png"))
+        except ImportError:
+            pass
     assert fraction <= max_diff_fraction, (
         f"{name}: {fraction:.2%} of pixels differ from the golden "
-        f"(allowed {max_diff_fraction:.2%}). If the change is intended, "
+        f"(allowed {max_diff_fraction:.2%}); actual render + diff saved "
+        f"to tests/visual/failures/. If the change is intended, "
         f"regenerate with QLC_REGEN_GOLDENS=1 and review the diff."
     )

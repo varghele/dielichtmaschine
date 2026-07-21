@@ -116,6 +116,14 @@ verbatim as the GitHub Release notes (see [docs/releasing.md](docs/releasing.md)
 
 ### Changed
 
+- **Live pool cells read like names, not file keys.** Riff and scene
+  names double as library keys ("intensity_crescendo_8bar"), and the
+  Live pools displayed them verbatim - underscored, unwrappable and
+  clipped mid-word. Every operator-facing label (pool cells, running
+  playback rows, the queue, the programmer bar) now reads underscores
+  as spaces, the cell text word-wraps onto extra lines, and the cell
+  font dropped a point so long single words fit the cell width. Keys
+  stay raw everywhere - staging, resolution and lookups are untouched.
 - **The README banner speaks facts now.** The banner's side column
   became a rating plate - protocols (ArtNet / E1.31 / DMX at 44 Hz,
   LTC/SMPTE chase), compatibility (GDTF / DIN SPEC 15800, QLC+),
@@ -170,6 +178,14 @@ verbatim as the GitHub Release notes (see [docs/releasing.md](docs/releasing.md)
 
 ### Fixed
 
+- **Visiting the Structure tab no longer re-decodes the song's
+  audio.** Every tab activation re-ran the whole song load, which
+  re-decoded the current audio file and re-analyzed its waveform on
+  two background threads - wasted work on every visit, and on a brief
+  visit the waveform row was still stuck in its loading paint. The
+  audio lane now skips a load whose file is already loaded or loading;
+  the explicit LOAD buttons still always reload (the file on disk may
+  have changed).
 - **Startup stopped narrating itself.** The console printed a pair of
   "RenderEngine: Updating stage size" lines for every redundant
   stage-size application (three embedded 3D views x construction,

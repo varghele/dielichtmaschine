@@ -108,3 +108,4 @@ archive/shows/audiofiles/backingtrack_*
 # GDTF fixture library folder: Share-downloaded files must never be committed
 # (gdtf-share.com terms of use). Self-authored test GDTFs live in tests/, not here.
 /gdtf_fixtures/
+tests/visual/failures/

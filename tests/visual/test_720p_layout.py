@@ -129,6 +129,7 @@ def small_window(qapp, tmp_path_factory):
         QTest.qWait(20)
     assert window.config.songs, \
         "the demo project did not load in the 720p fixture"
+    _wait_audio_quiescent(window)
     window.page_stack.setCurrentWidget(window.tabWidget)
 
     # The WINDOW minimum a real WM would enforce, before we override
@@ -159,11 +160,55 @@ def small_window(qapp, tmp_path_factory):
         mp.undo()
 
 
+def _wait_audio_quiescent(window):
+    """Pump until the STRUCTURE audio row's load chain is idle with data
+    present, held across a stability window.
+
+    The audio row loads through TWO chained worker threads
+    (AudioLoaderThread decode, then WaveformGeneratorThread analysis),
+    each load_audio_file call flips the widget back to its loading
+    paint, and loads re-fire during the session - project open runs
+    more than one, and tab switches can trigger another. Whether the
+    waveform band was painted at grab time was therefore a race (the
+    2026-07-21 hunt caught BOTH outcomes losing: peak-cache warmth
+    decided the winner per machine and per run). Waiting once at
+    fixture time was not enough - a tab switch inside the tests
+    restarted the chain - so every grab waits. The stability window
+    covers the idle gap between the decode and analyze stages.
+    """
+    from PyQt6.QtTest import QTest
+
+    lane = window.structure_tab.audio_lane
+
+    def quiescent():
+        loader = lane.audio_loader_thread
+        if lane._is_loading_audio or (loader is not None
+                                      and loader.isRunning()):
+            return False
+        waveform = lane.timeline_widget.waveform_widget
+        if waveform is None:
+            return True
+        generator = waveform.generator_thread
+        return (not waveform.is_loading
+                and waveform.waveform_data is not None
+                and (generator is None or generator.isFinished()))
+
+    stable = 0
+    for _ in range(500):
+        stable = stable + 1 if quiescent() else 0
+        if stable >= 10:
+            return
+        QTest.qWait(20)
+    raise AssertionError(
+        "the demo audio chain did not settle before a 720p grab")
+
+
 def _open_tab(window, index):
     from PyQt6.QtWidgets import QApplication
     window.tabWidget.setCurrentIndex(index)
     for _ in range(15):
         QApplication.processEvents()
+    _wait_audio_quiescent(window)
     return window.tabWidget.widget(index)
 
 
