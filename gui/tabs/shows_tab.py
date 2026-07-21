@@ -3,6 +3,9 @@
 
 import os
 import csv
+import logging
+
+_audio_logger = logging.getLogger("shows.audio")
 from PyQt6.QtWidgets import (QVBoxLayout, QHBoxLayout, QComboBox, QPushButton,
                              QLabel, QSlider, QScrollArea, QWidget, QFrame,
                              QSplitter, QSizePolicy, QInputDialog, QMessageBox, QCheckBox,
@@ -1329,17 +1332,22 @@ class ShowsTab(BaseTab):
                     if bundle_dir and basename else None
                 )
 
-                # Priority 1: bundle dir lookup
+                # Priority 1: bundle dir lookup. (Success paths log at
+                # debug; only the not-found case below is user-facing,
+                # via user_warnings - the v1.4 audit taxonomy.)
                 if local_audio_path and os.path.exists(local_audio_path):
-                    print(f"Using local audio file: {local_audio_path}")
+                    _audio_logger.debug("using local audio file: %s",
+                                        local_audio_path)
                     self.audio_lane.load_audio_file(local_audio_path)
                     # Migrate old absolute paths to filename-only on first read.
                     if os.path.isabs(audio_filename):
                         show.timeline_data.audio_file_path = basename
-                        print(f"Stored audio filename in show: {basename}")
+                        _audio_logger.debug(
+                            "stored audio filename in show: %s", basename)
                 # Priority 2: legacy absolute path stored directly in YAML
                 elif os.path.isabs(audio_filename) and os.path.exists(audio_filename):
-                    print(f"Using audio file from original path: {audio_filename}")
+                    _audio_logger.debug("using audio file from original "
+                                        "path: %s", audio_filename)
                     self.audio_lane.load_audio_file(audio_filename)
                 # Priority 3: not found anywhere
                 else:

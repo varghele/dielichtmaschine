@@ -2,7 +2,10 @@
 # Protocol definition for Lichtmaschine <-> Visualizer communication
 
 import json
+import logging
 from enum import Enum
+
+logger = logging.getLogger("visualizer.protocol")
 from typing import Dict, List, Any, Optional, Tuple
 from config.models import Configuration, Fixture, FixtureGroup
 from utils import user_warnings
@@ -326,7 +329,8 @@ def _parse_qxf_for_visualizer(manufacturer: str, model: str, mode_name: str) -> 
 
         if color_wheel_colors:
             result['color_wheel'] = color_wheel_colors
-            print(f"  Parsed {len(color_wheel_colors)} color wheel entries")
+            logger.debug("parsed %d color wheel entries",
+                         len(color_wheel_colors))
 
         # Extract gobo wheel capabilities
         gobo_wheel_entries = []

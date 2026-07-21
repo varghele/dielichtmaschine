@@ -170,6 +170,16 @@ verbatim as the GitHub Release notes (see [docs/releasing.md](docs/releasing.md)
 
 ### Fixed
 
+- **Startup stopped narrating itself.** The console printed a pair of
+  "RenderEngine: Updating stage size" lines for every redundant
+  stage-size application (three embedded 3D views x construction,
+  config rebind and song load - six-plus pairs before the window was
+  up), plus per-fixture colour-wheel parse counts and per-song audio
+  resolution traces. Unchanged stage sizes now return without doing
+  or saying anything (each engine's GL init re-applies its size, so
+  nothing can miss an update), and the remaining traces moved to the
+  debug log per the silent-fallback audit's taxonomy - audio
+  resolution FAILURES still surface in Help > Warnings as before.
 - **The app fits a 720p screen.** The Live tab's palette pools and
   the Structure tab's centre column demanded so much minimum space
   that the window's enforced minimum grew to 1462x1020 - on a small

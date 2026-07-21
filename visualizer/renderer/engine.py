@@ -1,9 +1,12 @@
 # visualizer/renderer/engine.py
 # ModernGL render engine with PyQt6 integration
 
+import logging
 import time
 import moderngl
 from typing import Optional
+
+logger = logging.getLogger("visualizer.engine")
 
 from PyQt6.QtWidgets import QWidget
 from PyQt6.QtOpenGLWidgets import QOpenGLWidget
@@ -252,11 +255,23 @@ class RenderEngine(QOpenGLWidget):
         """
         Update stage dimensions.
 
+        Unchanged sizes return without touching anything: set_config's
+        contract is "call me liberally" (three embedded engines each
+        receive it on construction, on every config rebind and on song
+        load), so the redundant-call half of that contract lives HERE.
+        Safe because every init path re-applies the current size
+        independently - initializeGL constructs stage_renderer and
+        stage_planes WITH self.stage_width/height and re-syncs the
+        camera (2026-07-21; the old unconditional print pair flooded
+        the startup log six-plus times).
+
         Args:
             width: Stage width in meters
             height: Stage depth in meters
         """
-        print(f"RenderEngine: Updating stage size to {width}x{height}m")
+        if width == self.stage_width and height == self.stage_height:
+            return
+        logger.debug("stage size %sx%sm", width, height)
         self.stage_width = width
         self.stage_height = height
 
@@ -271,7 +286,6 @@ class RenderEngine(QOpenGLWidget):
             self.stage_planes.set_stage_size(width, height)
 
         self.camera.set_stage_size(width, height)
-        print(f"RenderEngine: Stage size update complete")
 
     def set_highlighted_plane(self, name: Optional[str], rig_height: float = 3.0):
         """Highlight one face of the stage bounding cuboid (None clears).
