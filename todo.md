@@ -95,6 +95,15 @@ the desk can judge:
       sits there now), then regenerate the dialog golden. House
       rules: no em-dashes, separator is " · ".
 
+## v1.5 feature pull-ins (agreed 2026-07-21)
+
+- [ ] **Auto mode input level meter + gain** - a live audio bar in the
+      Auto screen showing what the microphone actually picks up (so
+      "does it react to sound at all" is a glance, not a guess), a
+      GAIN control beside it to amplify or dampen the incoming signal
+      before analysis (makes a too-quiet source usable), and an AUTO
+      button that sets the gain from the measured level.
+
 ## Bugs exposed by the 2026-07-17 gig-prep night (v1.5 follow-ups)
 
 Found while sweeping the Stellwerk kit; neither blocks the gig (the
