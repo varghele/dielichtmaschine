@@ -434,6 +434,37 @@ connected slot, including the ones production code connected.
 
 ---
 
+## 8. QSS geometry beats the widget-API minimums (`min-height: 0` vs `setMinimumHeight`)
+
+A theme rule like `QPushButton[role="output-select"] { min-height: 0; }`
+silently overrides `widget.setMinimumHeight(...)` - QSS geometry
+properties win over the widget-API value, the same cascade direction as
+the app-wide `QWidget { font-family }` rule beating `setFont` (pinned by
+the screensaver work). Diagnosed 2026-07-21 on the Auto tab's SETUP
+disclosure: opening it into a splitter pane without room crushed the
+toggle button to a 14px unlabelled bar, and `setMinimumHeight(25)`
+changed nothing.
+
+Two traps stacked on top:
+
+- The fix must be a rule in the WIDGET's own stylesheet
+  (`btn.setStyleSheet("min-height: 11px;")`) - that outranks the app
+  stylesheet for the properties it names while every other role rule
+  keeps applying.
+- QSS `min-height` is the CONTENT box: 11px content + 2x6px role
+  padding + 2x1px border = the 25px resting height. Writing the
+  resting height into `min-height` grows the widget by the padding.
+
+And the reason the crush happened at all: a construction-time
+`sizeHint()` reports the UNPOLISHED height (QSS applies at polish, on
+show) - never freeze a hint captured in `__init__` into fixed geometry.
+
+Landmark: `gui/tabs/auto_tab.py` SETUP toggle +
+`_on_setup_toggled` (which also grows the splitter pane instead of
+letting the disclosure fight the layout for space).
+
+---
+
 ## In-source landmarks
 
 - `gui/widgets/group_row_delegate.py` — strips `State_Selected` so the row tint survives selection

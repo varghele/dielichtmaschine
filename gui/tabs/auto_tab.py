@@ -898,6 +898,15 @@ class AutoTab(BaseTab):
         self._setup_toggle_btn.setCheckable(True)
         self._setup_toggle_btn.setProperty("role", "output-select")
         self._setup_toggle_btn.setFont(mono_font(8, QFont.Weight.Medium))
+        # Height floor: when the disclosure opens into a pane without
+        # room, the layout crushes height-flexible children - the
+        # button squeezed to a 14px unlabelled bar. Must be a WIDGET
+        # stylesheet rule: the theme's output-select role declares
+        # min-height: 0, and QSS geometry beats setMinimumHeight (same
+        # cascade trap as the app-wide font-family rule vs setFont).
+        # Content-box: 11px content + 2x6px padding + 2x1px border =
+        # the button's natural 25px resting height.
+        self._setup_toggle_btn.setStyleSheet("min-height: 11px;")
         self._setup_toggle_btn.setToolTip(
             "Show ArtNet, audio input and movement settings")
         self._setup_toggle_btn.toggled.connect(self._on_setup_toggled)
@@ -906,6 +915,8 @@ class AutoTab(BaseTab):
         self._setup_area = self._build_setup_area()
         self._setup_area.hide()
         lower_layout.addWidget(self._setup_area)
+        self._lower_panel = lower
+        self._pre_setup_splitter_sizes = None
 
         self._right_splitter.addWidget(lower)
         self._right_splitter.setStretchFactor(0, 0)
@@ -1337,7 +1348,33 @@ class AutoTab(BaseTab):
         self._save_right_splitter_state()
 
     def _on_setup_toggled(self, checked: bool) -> None:
-        self._setup_area.setVisible(checked)
+        """Show/hide the SETUP disclosure AND make the splitter room.
+
+        The disclosure demands its scroll area's minimum height inside
+        whatever pane height the splitter happens to hold - with the 3D
+        preview pane large, opening it crushed the log to nothing and
+        the toggle button itself to a flat unlabelled bar. Opening now
+        grows the lower pane to the content's minimum (taking from the
+        collapsible preview pane); closing restores the split the user
+        had. Programmatic setSizes does not emit splitterMoved, so the
+        temporary growth never overwrites the saved splitter state.
+        """
+        splitter = self._right_splitter
+        if checked:
+            self._pre_setup_splitter_sizes = splitter.sizes()
+            self._setup_area.setVisible(True)
+            sizes = splitter.sizes()
+            total = sum(sizes)
+            if total > 0:
+                needed = self._lower_panel.minimumSizeHint().height()
+                lower = max(sizes[1], min(needed, total))
+                splitter.setSizes([total - lower, lower])
+        else:
+            self._setup_area.setVisible(False)
+            previous = self._pre_setup_splitter_sizes
+            self._pre_setup_splitter_sizes = None
+            if previous and sum(previous) > 0:
+                splitter.setSizes(previous)
 
     def _launch_visualizer(self):
         """Pop-out callback. Delegates to the Stage tab's standalone

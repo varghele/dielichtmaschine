@@ -178,6 +178,14 @@ verbatim as the GitHub Release notes (see [docs/releasing.md](docs/releasing.md)
 
 ### Fixed
 
+- **The Auto screen's SETUP button no longer collapses.** Opening the
+  SETUP disclosure into a right-column splitter pane without room
+  (easy to reach - the pane split is remembered per machine) crushed
+  the toggle to a thin unlabelled bar and left no space for the
+  settings themselves. The button now carries a hard height floor, and
+  the toggle grows the lower pane to fit the disclosure (borrowing
+  from the collapsible 3D preview) and puts the split back the way it
+  was on close.
 - **Visiting the Structure tab no longer re-decodes the song's
   audio.** Every tab activation re-ran the whole song load, which
   re-decoded the current audio file and re-analyzed its waveform on

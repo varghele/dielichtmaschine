@@ -453,6 +453,45 @@ class TestSetupDisclosure:
         auto_tab._setup_toggle_btn.setChecked(True)
         assert not auto_tab._setup_area.isHidden()
 
+    def test_open_grows_the_lower_pane_and_close_restores(self, auto_tab,
+                                                          qapp):
+        """Opening SETUP into a splitter pane without room crushed the
+        disclosure (2026-07-21: the toggle button flattened to a 14px
+        unlabelled bar). The toggle now grows the lower pane to the
+        content's minimum, taking from the collapsible preview pane,
+        and puts the user's split back on close."""
+        from PyQt6.QtWidgets import QApplication
+        auto_tab.resize(1400, 860)
+        auto_tab.show()
+        QApplication.processEvents()
+        # The breaking scenario: preview pane large, lower pane small.
+        auto_tab._right_splitter.setSizes([600, 160])
+        QApplication.processEvents()
+        resting_height = auto_tab._setup_toggle_btn.height()
+
+        auto_tab._setup_toggle_btn.setChecked(True)
+        for _ in range(10):
+            QApplication.processEvents()
+        sizes = auto_tab._right_splitter.sizes()
+        assert sizes[1] >= auto_tab._lower_panel.minimumSizeHint().height()
+        assert auto_tab._setup_area.height() >= 260
+        assert auto_tab._setup_toggle_btn.height() >= resting_height
+
+        auto_tab._setup_toggle_btn.setChecked(False)
+        for _ in range(10):
+            QApplication.processEvents()
+        restored = auto_tab._right_splitter.sizes()
+        # The splitter clamps to pane minimums, so "restored" means the
+        # preview got its space back, not px-exact equality.
+        assert restored[0] >= 590
+        assert auto_tab._setup_toggle_btn.height() >= resting_height
+
+    def test_toggle_button_height_floor_survives_the_theme(self, auto_tab):
+        """The output-select role declares min-height: 0 in the theme,
+        and QSS geometry beats setMinimumHeight - the floor must live
+        in the widget's own stylesheet (qt-gotchas cascade trap)."""
+        assert "min-height" in auto_tab._setup_toggle_btn.styleSheet()
+
 
 # ---------------------------------------------------------------------------
 # Theme contract (never assert font().family() - polish-order race)
