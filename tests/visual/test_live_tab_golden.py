@@ -121,8 +121,12 @@ def test_live_tab_golden(qapp, scene_config, tmp_path):
         riff_lib = RiffLibrary(riffs_directory=str(tmp_path / "riffs"))
         riff_lib.riffs = {}
         riff_lib.by_category = {}
+        # intensity_crescendo_8bar pins the underscores-to-spaces label
+        # treatment: the cell must read "INTENSITY CRESCENDO 8BAR",
+        # wrapped, never the raw underscored key.
         for cat, name in (("drops", "Build Drop"), ("loops", "Four Floor"),
-                          ("fills", "Snare Roll")):
+                          ("fills", "Snare Roll"),
+                          ("builds", "intensity_crescendo_8bar")):
             riff_lib.riffs[f"{cat}/{name}"] = Riff(name=name, category=cat)
         tab.set_effect_library(riff_lib)
 

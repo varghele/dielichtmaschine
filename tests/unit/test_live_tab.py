@@ -722,6 +722,64 @@ class TestEffectsPool:
         assert "FX: RIFF A" in live_tab._programmer_label.text()
 
 
+class TestPoolLabels:
+    """Library names double as file keys ("intensity_crescendo_8bar"),
+    so every operator-facing label reads underscores as spaces (which
+    also lets the cell word-wrap long names). Keys stay raw - staging,
+    resolution and the cell dicts all keep the exact library key."""
+
+    def test_display_name_reads_underscores_as_spaces(self):
+        from gui.tabs.live_tab import _display_name
+        assert _display_name("intensity_crescendo_8bar") == \
+            "intensity crescendo 8bar"
+        assert _display_name("Pulse") == "Pulse"
+        assert _display_name("__odd__name__") == "odd name"
+        assert _display_name(None) == ""
+
+    def test_effect_cell_label_and_raw_key(self, live_tab, tmp_path):
+        lib = _riff_library(tmp_path,
+                            [("builds", "intensity_crescendo_8bar")])
+        live_tab.set_effect_library(lib)
+        cell = live_tab._effect_cells["builds/intensity_crescendo_8bar"]
+        assert cell.item_key == "builds/intensity_crescendo_8bar"
+        # DisplayLabel renders caps; the underscores are gone either way.
+        assert cell.name_label.text() == "INTENSITY CRESCENDO 8BAR"
+
+    def test_scene_cell_label(self, live_tab, tmp_path):
+        live_tab.set_scene_library(_scene_library(
+            tmp_path, [("red_room_wash", "looks", "#F0562E")]))
+        cell = live_tab._scene_cells["looks/red_room_wash"]
+        assert cell.name_label.text() == "RED ROOM WASH"
+
+    def test_running_row_label(self, live_tab):
+        live_tab.state.set_effect("builds/intensity_crescendo_8bar")
+        assert live_tab.state.running[0]["label"] == \
+            "intensity crescendo 8bar"
+        assert live_tab.state.running[0]["key"] == \
+            "builds/intensity_crescendo_8bar"
+
+    def test_programmer_bar_label(self, live_tab, tmp_path):
+        lib = _riff_library(tmp_path,
+                            [("builds", "intensity_crescendo_8bar")])
+        live_tab.set_effect_library(lib)
+        live_tab.state.toggle_group("Movers")
+        live_tab.state.set_effect("builds/intensity_crescendo_8bar")
+        assert "FX: INTENSITY CRESCENDO 8BAR" in \
+            live_tab._programmer_label.text()
+
+    def test_queued_label(self, live_tab, tmp_path):
+        lib = _riff_library(tmp_path,
+                            [("builds", "intensity_crescendo_8bar")])
+        live_tab.set_effect_library(lib)
+        live_tab._queue_latch_btn.setChecked(True)
+        live_tab._effect_cells[
+            "builds/intensity_crescendo_8bar"].clicked.emit(
+            "builds/intensity_crescendo_8bar")
+        assert live_tab.state.next_up == [{
+            "kind": "effect", "key": "builds/intensity_crescendo_8bar",
+            "label": "intensity crescendo 8bar"}]
+
+
 class TestScenesPool:
     def test_cells_created_per_scene(self, live_tab, tmp_path):
         lib = _scene_library(tmp_path, [

@@ -160,6 +160,16 @@ SHAPE_SIZES: Tuple[Tuple[str, float], ...] = (
 DEFAULT_SHAPE_SIZE_M = 0.75
 
 
+def _display_name(raw: Optional[str]) -> str:
+    """Human-readable label for a library item name. Riff and scene
+    names double as file keys ("intensity_crescendo_8bar"), so the
+    underscores come out for display - the spaces also let the pool
+    cells word-wrap long names onto a second line instead of running
+    an unbreakable token past the cell edge. Keys stay raw everywhere;
+    only what the operator reads goes through here."""
+    return " ".join((raw or "").replace("_", " ").split())
+
+
 def _active_tokens() -> dict:
     """The token dict of the theme currently applied to the app.
 
@@ -568,7 +578,8 @@ class LiveState(QObject):
                 del self.running[index]
             return
         record = {"kind": kind, "key": key,
-                  "label": key.split("/")[-1], "paused": False}
+                  "label": _display_name(key.split("/")[-1]),
+                  "paused": False}
         if index is None:
             self.running.append(record)
         else:
@@ -977,7 +988,10 @@ class _LibraryCell(QWidget):
                 f"#LiveLibraryChip {{ background-color: {chip_color}; }}")
             layout.addWidget(chip)
             self._chip = chip
-        self.name_label = DisplayLabel(label, point_size=11,
+        # 10pt (was 11): library names word-wrap since the underscore
+        # cleanup, but QLabel cannot break INSIDE a word - a long single
+        # word ("CRESCENDO") must fit the cell width in one piece.
+        self.name_label = DisplayLabel(label, point_size=10,
                                        weight=QFont.Weight.Bold,
                                        tracking_em=0.03)
         self.name_label.setMinimumWidth(1)
@@ -1907,8 +1921,9 @@ class LiveTab(BaseTab):
         columns = 2
         for i, riff in enumerate(riffs):
             key = f"{riff.category}/{riff.name}"
-            cell = _LibraryCell(key, riff.name)
-            cell.setToolTip(f"{riff.name} · {riff.description} · "
+            cell = _LibraryCell(key, _display_name(riff.name))
+            cell.setToolTip(f"{_display_name(riff.name)} · "
+                            f"{riff.description} · "
                             "dimmer-only, loops on the selected groups "
                             "· touch again to release")
             cell.clicked.connect(self._on_intensity_touched)
@@ -2017,7 +2032,7 @@ class LiveTab(BaseTab):
         columns = 2
         for i, riff in enumerate(riffs):
             key = f"{riff.category}/{riff.name}"
-            cell = _LibraryCell(key, riff.name)
+            cell = _LibraryCell(key, _display_name(riff.name))
             cell.clicked.connect(self._on_effect_touched)
             self._effect_cells[key] = cell
             self._effects_grid.addWidget(cell, i // columns, i % columns)
@@ -2038,7 +2053,8 @@ class LiveTab(BaseTab):
         for i, scene in enumerate(scenes):
             key = f"{scene.category}/{scene.name}"
             chip = scene.color if scene.color else None
-            cell = _LibraryCell(key, scene.name, chip_color=chip)
+            cell = _LibraryCell(key, _display_name(scene.name),
+                                chip_color=chip)
             cell.clicked.connect(self._on_scene_touched)
             self._scene_cells[key] = cell
             self._scenes_grid.addWidget(cell, i // columns, i % columns)
@@ -2743,10 +2759,11 @@ class LiveTab(BaseTab):
 
     @staticmethod
     def _key_name(key: Optional[str]) -> str:
-        """The display name from a "category/name" library key."""
+        """The display name from a "category/name" library key
+        (underscores read as spaces, see _display_name)."""
         if not key:
             return "-"
-        return key.split("/")[-1]
+        return _display_name(key.split("/")[-1])
 
     @staticmethod
     def _colour_label(colour_id: Optional[str]) -> str:
