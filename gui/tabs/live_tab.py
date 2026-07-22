@@ -248,12 +248,14 @@ class LiveState(QObject):
         # whether a predefined show also runs underneath ("show") or not
         # ("live", the default). No engine merges them yet.
         self.mode: str = "live"                  # "show" | "live"
-        # Library-backed staging. An effect is a riff (key "category/name")
-        # scoped to the current SELECT state; a scene is a whole-rig look
-        # (key "category/name") independent of the selection. Both toggle;
-        # neither is tied to the group set, so update_from_config leaves
-        # them alone (like bpm / mode).
-        self.effect: Optional[str] = None        # staged riff key
+        # Library-backed staging. EFFECTS are riffs (key
+        # "category/name") applied PER GROUP (2026-07-22, the
+        # positions pattern): staging assigns the riff to every
+        # selected group, a second touch on a fully-held key releases
+        # those groups, and an effect KEEPS RUNNING on its group after
+        # deselection - selection scopes staging, never playback. A
+        # scene is a whole-rig look independent of the selection.
+        self.effects: Dict[str, str] = {}        # group name -> riff key
         self.scene: Optional[str] = None         # staged scene key
         # Staged MOVEMENT SHAPE (a MOVEMENT_REGISTRY rudiment id like
         # "circle"). Selection-scoped like effect (the movement binder
@@ -288,9 +290,10 @@ class LiveState(QObject):
         self.positions: Dict[str, str] = {}       # group name -> id
         self.position_labels: Dict[str, str] = {}  # id -> display label
         # Dual queue. ``running`` is the running-playbacks stack - plain
-        # dict records {"kind": "effect"|"scene", "key", "label",
-        # "paused"} mirroring the single active effect/scene (at most one
-        # record per kind, rendered as individual playback rows).
+        # dict records {"kind", "key", "label", "paused"}; effect-kind
+        # records additionally carry "groups" (sorted list) and there
+        # is one PER DISTINCT RIFF KEY held in ``effects``; the other
+        # kinds keep at most one record each.
         # ``next_up`` holds preloaded records (same shape, no "paused")
         # staged via enqueue(); fire_next() (GO) pops the head and
         # applies it. Both survive update_from_config (like bpm / mode).
@@ -319,6 +322,11 @@ class LiveState(QObject):
         self.positions = {g: p for g, p in self.positions.items()
                           if g in valid}
         self._prune_positions(spot_names, valid_element_ids)
+        # Per-group effects follow their group out of the config (the
+        # riff keys themselves are library-bound, not config-bound).
+        self.effects = {g: k for g, k in self.effects.items()
+                        if g in valid}
+        self._sync_running_effects()
 
     def _prune_positions(self, spot_names, valid_element_ids) -> None:
         spot_names = set(spot_names)
@@ -393,7 +401,7 @@ class LiveState(QObject):
         self.colours.clear()
         self.staged_colour = None
         self.selected.clear()
-        self.effect = None
+        self.effects.clear()
         self.scene = None
         self.shape = None
         self.intensity = None
@@ -489,12 +497,58 @@ class LiveState(QObject):
         self.state_changed.emit()
 
     # -- library staging (effects / scenes) -----------------------------
-    def set_effect(self, key: Optional[str]) -> None:
-        """Toggle the staged effect (a riff, selection-scoped). Touching
-        the same key again clears it. Mirrors into the running stack."""
-        self.effect = None if key == self.effect else key
-        self._sync_running("effect", self.effect)
+    def stage_effect(self, key: str, apply_only: bool = False) -> int:
+        """Touch an effect riff: apply it to every selected group (the
+        positions pattern - each group runs its own riff, and a riff
+        KEEPS RUNNING on its group after deselection). Touching a key
+        every selected group already runs RELEASES it from those groups
+        unless ``apply_only`` (GO fires apply-only: never toggles).
+        Returns the number of groups affected - 0 means nothing was
+        selected and the touch was a no-op the tab must surface."""
+        if not self.selected:
+            self.state_changed.emit()
+            return 0
+        if not apply_only and all(self.effects.get(g) == key
+                                  for g in self.selected):
+            for group in self.selected:
+                self.effects.pop(group, None)
+        else:
+            for group in self.selected:
+                self.effects[group] = key
+        self._sync_running_effects()
         self.state_changed.emit()
+        return len(self.selected)
+
+    def active_effect_keys(self) -> set:
+        """Riff keys running on any SELECTED group - the cells the
+        pool outlines in the accent (mirrors active_position_ids)."""
+        return {self.effects[g] for g in self.selected
+                if g in self.effects}
+
+    def _sync_running_effects(self) -> None:
+        """Rebuild the effect-kind running records from ``effects``:
+        one record per DISTINCT riff key carrying its sorted group
+        list. Existing records keep their position and paused flag;
+        emptied records leave; new keys append. Silent - the calling
+        mutator emits."""
+        groups_by_key: Dict[str, list] = {}
+        for group, key in self.effects.items():
+            groups_by_key.setdefault(key, []).append(group)
+        kept: List[dict] = []
+        for record in self.running:
+            if record.get("kind") != "effect":
+                kept.append(record)
+                continue
+            groups = groups_by_key.pop(record["key"], None)
+            if groups:
+                record["groups"] = sorted(groups)
+                kept.append(record)
+        for key in groups_by_key:
+            kept.append({"kind": "effect", "key": key,
+                         "label": _display_name(key.split("/")[-1]),
+                         "groups": sorted(groups_by_key[key]),
+                         "paused": False})
+        self.running[:] = kept
 
     def set_scene(self, key: Optional[str]) -> None:
         """Toggle the staged scene (a whole-rig look, selection-agnostic).
@@ -599,9 +653,9 @@ class LiveState(QObject):
             self.state_changed.emit()
 
     def fire_next(self) -> None:
-        """GO: pop the head of next_up and apply it live via
-        set_effect/set_scene. Applies, never toggles - firing a key that
-        is already running keeps it running."""
+        """GO: pop the head of next_up and apply it live. Applies,
+        never toggles - firing a key the selection already runs keeps
+        it running (stage_effect apply_only)."""
         if not self.next_up:
             return
         record = self.next_up.pop(0)
@@ -610,9 +664,8 @@ class LiveState(QObject):
                 self.set_scene(record["key"])
                 return
         else:
-            if record["key"] != self.effect:
-                self.set_effect(record["key"])
-                return
+            self.stage_effect(record["key"], apply_only=True)
+            return
         self.state_changed.emit()
 
     def kill_playback(self, index: int) -> None:
@@ -629,7 +682,10 @@ class LiveState(QObject):
         elif record["kind"] == "intensity":
             self.intensity = None
         else:
-            self.effect = None
+            # Per-group effects: release ONLY this record's groups;
+            # other riffs keep running on theirs.
+            for group in record.get("groups") or ():
+                self.effects.pop(group, None)
         self.state_changed.emit()
 
     def toggle_pause(self, index: int) -> None:
@@ -768,7 +824,9 @@ class _VerticalFader(QWidget):
 # ---------------------------------------------------------------------------
 
 class _SelectTile(QWidget):
-    """A group SELECT tile: 3px data-color bar, caps name, fixture count.
+    """A group SELECT tile: 3px data-color bar, caps name, fixture
+    count, and the group's RUNNING EFFECT name (per-group effects,
+    2026-07-22 - the auto tab's per-group riff readout precedent).
 
     Toggles selection on click (emits ``clicked``); selected state paints
     an accent border + raised fill (widget-local, token-derived colors).
@@ -798,6 +856,10 @@ class _SelectTile(QWidget):
                                       tracking_em=0.1)
         self.count_label.setMinimumWidth(1)
         layout.addWidget(self.count_label)
+        self.effect_label = MicroLabel("-", point_size=7,
+                                       tracking_em=0.1)
+        self.effect_label.setMinimumWidth(1)
+        layout.addWidget(self.effect_label)
         self._restyle()
 
     def is_selected(self) -> bool:
@@ -809,6 +871,10 @@ class _SelectTile(QWidget):
             self._selected = selected
         self._restyle()
 
+    def set_running_effect(self, label: str) -> None:
+        """The group's running effect display name ("" / "-" = none)."""
+        self.effect_label.setText(label or "-")
+
     def _restyle(self) -> None:
         tokens = _active_tokens()
         bg = tokens["raised"] if self._selected else tokens["panel"]
@@ -818,6 +884,8 @@ class _SelectTile(QWidget):
             f" background-color: {bg};"
             f" border: 1px solid {border};"
             f" border-left: 3px solid {self._color}; }}")
+        self.effect_label.setStyleSheet(
+            f"color: {tokens['accent']}; background: transparent;")
 
     def mousePressEvent(self, event):
         if event.button() == Qt.MouseButton.LeftButton:
@@ -1984,6 +2052,13 @@ class LiveTab(BaseTab):
             item = grid.takeAt(0)
             widget = item.widget()
             if widget is not None:
+                # Detach immediately: deleteLater alone leaves the
+                # widget parented and PAINTING until the event loop
+                # runs - a repopulate could show the old empty-state
+                # marker ghosting behind the new cells (exposed by the
+                # category headers, same lesson as _clear_light_lanes).
+                widget.hide()
+                widget.setParent(None)
                 widget.deleteLater()
 
     def _empty_riff_library(self):
@@ -2018,6 +2093,10 @@ class LiveTab(BaseTab):
         return self._scene_library
 
     def _populate_effects_pool(self) -> None:
+        """Rebuild the EFFECTS pool GROUPED BY RIFF CATEGORY
+        (2026-07-22): one small header per category (the POSITION
+        pool's PRESETS/MARKS subsection precedent) over a 2-col grid
+        of its riffs. Cells keep their "category/name" keys."""
         self._clear_grid(self._effects_grid)
         self._effect_cells = {}
         library = self._resolve_effect_library()
@@ -2030,12 +2109,25 @@ class LiveTab(BaseTab):
                 0, 0, 1, 2)
             return
         columns = 2
-        for i, riff in enumerate(riffs):
-            key = f"{riff.category}/{riff.name}"
-            cell = _LibraryCell(key, _display_name(riff.name))
-            cell.clicked.connect(self._on_effect_touched)
-            self._effect_cells[key] = cell
-            self._effects_grid.addWidget(cell, i // columns, i % columns)
+        by_category: Dict[str, list] = {}
+        for riff in riffs:                    # get_all_riffs is sorted
+            by_category.setdefault(riff.category, []).append(riff)
+        grid_row = 0
+        for category in sorted(by_category):
+            header = MicroLabel(_display_name(category), point_size=7,
+                                tracking_em=0.12)
+            self._effects_grid.addWidget(header, grid_row, 0, 1, columns)
+            grid_row += 1
+            for i, riff in enumerate(by_category[category]):
+                key = f"{riff.category}/{riff.name}"
+                cell = _LibraryCell(key, _display_name(riff.name))
+                cell.clicked.connect(self._on_effect_touched)
+                self._effect_cells[key] = cell
+                self._effects_grid.addWidget(cell,
+                                             grid_row + i // columns,
+                                             i % columns)
+            grid_row += (len(by_category[category]) + columns - 1) \
+                // columns
         for col in range(columns):
             self._effects_grid.setColumnStretch(col, 1)
 
@@ -2071,8 +2163,9 @@ class LiveTab(BaseTab):
 
     def riff_for_key(self, key: Optional[str]):
         """The Riff behind a "category/name" pool key, or None. The
-        live engine binder (utils/artnet/live_engine.py) resolves the
-        staged LiveState.effect through this."""
+        live engine binders (utils/artnet/live_engine.py) resolve the
+        per-group LiveState.effects keys and LiveState.intensity
+        through this."""
         if not key:
             return None
         return self._resolve_effect_library().riffs.get(key)
@@ -2107,18 +2200,15 @@ class LiveTab(BaseTab):
 
     def _on_effect_touched(self, key: str) -> None:
         """Latched QUEUE stages the effect in next_up (cell stays
-        inactive); unlatched fires it live via the toggle. Effects are
-        selection-scoped (one engine lane per selected group): staging
-        one with nothing selected keeps the state but plays silence, so
-        the programmer bar says so - it starts the moment groups are
-        selected (the binder restages on selection change)."""
+        inactive); unlatched applies it to the SELECTED groups (the
+        positions pattern - each group runs its own riff, and it keeps
+        running after deselection)."""
         if self._queue_latch_btn.isChecked():
             self.state.enqueue("effect", key, self._key_name(key))
             return
-        self.state.set_effect(key)
-        if self.state.effect == key and not self.state.selected:
+        if not self.state.stage_effect(key):
             self._flash_programmer_warning(
-                "NO GROUP SELECTED · THE EFFECT PLAYS ON SELECTED GROUPS")
+                "NO GROUP SELECTED · PICK GROUPS, THEN TOUCH AN EFFECT")
         else:
             self._clear_programmer_warning()
 
@@ -2532,17 +2622,22 @@ class LiveTab(BaseTab):
         state = self.state
         for name, tile in self._select_tiles.items():
             tile.set_selected(name in state.selected)
+            tile.set_running_effect(_display_name(
+                (state.effects.get(name) or "").split("/")[-1]))
 
         active_ids = state.active_colour_ids()
         for colour_id, swatch in self._colour_swatches.items():
             swatch.set_active(colour_id in active_ids)
 
-        # EFFECTS and INTENSITY FX: selection-scoped. Grey the pools
-        # with no selection, then outline the active key. SCENES:
+        # EFFECTS: per-group. The pool greys with no selection
+        # (STAGING targets the selection; running effects keep
+        # running) and outlines the keys held by any selected group.
+        # INTENSITY FX stays single-slot selection-scoped. SCENES:
         # whole-rig, always enabled.
         self._effects_pool.setEnabled(bool(state.selected))
+        active_effects = state.active_effect_keys()
         for key, cell in self._effect_cells.items():
-            cell.set_active(key == state.effect)
+            cell.set_active(key in active_effects)
         self._intensity_pool.setEnabled(bool(state.selected))
         for key, cell in self._intensity_cells.items():
             cell.set_active(key == state.intensity)
@@ -2648,6 +2743,9 @@ class LiveTab(BaseTab):
     def _make_running_row(self, index: int, record: dict) -> QWidget:
         row, hbox = self._row_shell()
         tag = "FX" if record["kind"] == "effect" else "SCENE"
+        groups = record.get("groups") or ()
+        if groups:
+            tag += " · " + " + ".join(groups)
         self._row_text(hbox, record["label"],
                        f"{tag} · PAUSED" if record["paused"] else tag)
         pause = self._row_button(
@@ -2733,8 +2831,14 @@ class LiveTab(BaseTab):
             text = f"PROGRAMMER: {groups_txt} (HELD) · RELEASE TO SHOW"
         else:
             text = "PROGRAMMER: EMPTY · SELECT A GROUP · TOUCH A PALETTE"
-        if state.effect:
-            text += f" · FX: {self._key_name(state.effect).upper()}"
+        # FX lists the selection's running riffs; with no selection,
+        # everything held (mirrors the POS branch below).
+        effect_keys = state.active_effect_keys() if state.selected \
+            else set(state.effects.values())
+        if effect_keys:
+            fx_labels = sorted(self._key_name(k).upper()
+                               for k in effect_keys)
+            text += f" · FX: {' · '.join(fx_labels)}"
         if state.scene:
             text += f" · SCENE: {self._key_name(state.scene).upper()}"
         if state.shape:

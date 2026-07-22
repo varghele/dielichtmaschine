@@ -13,6 +13,20 @@ verbatim as the GitHub Release notes (see [docs/releasing.md](docs/releasing.md)
 
 ### Added
 
+- **Different effects on different groups, live.** The Live tab's
+  EFFECTS pool now works like the POSITION pool: touching a riff
+  applies it to the selected groups, each group runs its own riff
+  simultaneously (its own loop length and pause), and a riff keeps
+  running on its group after deselection - set the drums pattern,
+  reselect, set the movers pattern, both run. Touching a riff every
+  selected group already runs releases it there. Each group tile
+  names its running effect, the ACTIVE PLAYBACKS rows tag their group
+  set (PAUSE freezes exactly that riff's groups, KILL releases only
+  them), the programmer bar lists the selection's riffs, and a group
+  joining an already-running riff starts in phase with it instead of
+  restarting anyone. The pool itself is now grouped by riff category
+  (BUILDS, DROPS, FILLS, LOOPS, ...) instead of one flat grid.
+
 - **Finished songs can be locked against accidental edits.** A LOCK
   chip on the Structure tab's song header (next to RENAME SONG and
   DELETE) and on the Timeline toolbar - where it replaces the SAVE

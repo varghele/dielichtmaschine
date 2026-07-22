@@ -38,7 +38,17 @@ from typing import Callable, Dict, List, Optional, Tuple
 
 Frame = Dict[int, Tuple[bytes, bytes]]
 
+#: Slot CATEGORIES, in merge order. A slot key is either a bare
+#: category ("intensity", "movement") or a namespaced
+#: "category:suffix" ("effect:Front Pars" - the per-group effects,
+#: 2026-07-22): every group runs its own slot with its own loop
+#: length, clock and pause flag, so different riffs coexist and
+#: pausing one never freezes another.
 SLOTS = ("effect", "intensity", "movement")
+
+
+def _slot_category(slot: str) -> str:
+    return slot.split(":", 1)[0]
 
 _SUBLANES = ("dimmer", "colour", "movement", "special")
 
@@ -91,9 +101,10 @@ class LiveEngine:
 
     def stage(self, slot: str, lanes, loop_beats: float,
               bpm: float, config_override=None,
-              stage_planes=None) -> None:
+              stage_planes=None, phase_from: Optional[str] = None) -> None:
         """Stage synthetic lanes into a slot, replacing what ran there.
 
+        ``slot`` is a bare category or "category:suffix" (see SLOTS).
         ``lanes``: iterable of (fixtures, light_blocks) pairs;
         ``loop_beats``: loop length in beats; ``bpm``: the tempo the
         blocks' second-times were built against (usually the live bpm
@@ -104,8 +115,13 @@ class LiveEngine:
         manager's world-space movement path - the movement binder's
         orbit planes live here, one per fixture, so shapes trace in
         METERS around their anchor instead of raw DMX amplitude.
+        ``phase_from`` names an existing slot whose clock the new slot
+        adopts - a group JOINING an already-running riff starts in
+        phase with it instead of at beat 0 (paused donors freeze the
+        joiner at the same pose: the binder re-applies the paused flag
+        right after staging).
         """
-        if slot not in SLOTS:
+        if _slot_category(slot) not in SLOTS:
             raise ValueError(f"unknown live slot: {slot!r}")
         if loop_beats <= 0 or bpm <= 0:
             raise ValueError("loop_beats and bpm must be positive")
@@ -113,11 +129,25 @@ class LiveEngine:
                                         config_override)
         if stage_planes:
             manager.set_stage_planes(dict(stage_planes))
-        self._slots[slot] = _Slot(manager, lanes, loop_beats, bpm)
+        record = _Slot(manager, lanes, loop_beats, bpm)
+        donor = self._slots.get(phase_from) if phase_from else None
+        if donor is not None:
+            # Same riff, hence same loop length; the modulo makes a
+            # mismatch safe rather than wrong.
+            record.beat_pos = donor.beat_pos % record.loop_beats
+            record.last_now = None if donor.paused else donor.last_now
+        self._slots[slot] = record
 
     def kill(self, slot: str) -> None:
         """Drop a slot: its claims vanish on the next render."""
         self._slots.pop(slot, None)
+
+    def kill_prefix(self, prefix: str) -> None:
+        """Drop the bare ``prefix`` slot and every ``prefix:...``
+        slot (the per-group effects family in one sweep)."""
+        for key in [k for k in self._slots
+                    if k == prefix or k.startswith(prefix + ":")]:
+            del self._slots[key]
 
     def kill_all(self) -> None:
         self._slots.clear()
@@ -151,16 +181,25 @@ class LiveEngine:
         return slot in self._slots
 
     def active_slots(self) -> List[str]:
-        return [s for s in SLOTS if s in self._slots]
+        return self._ordered_slots()
+
+    def _ordered_slots(self) -> List[str]:
+        """Deterministic total merge order: categories in SLOTS order
+        (intensity still overrides effect on shared channels), the
+        bare slot before its group slots, group slots sorted by name -
+        matching the old sorted-lane order, so shared-fixture
+        conflicts resolve exactly as before."""
+        return sorted(self._slots,
+                      key=lambda s: (SLOTS.index(_slot_category(s)), s))
 
     # -- rendering ---------------------------------------------------------
 
     def render(self, now: float) -> Frame:
         """The merged (values, mask) frame across all slots at wall
-        time ``now`` - later SLOTS entries override earlier ones per
-        claimed channel."""
+        time ``now`` - later entries in the slot order override
+        earlier ones per claimed channel."""
         frames = []
-        for slot_name in SLOTS:
+        for slot_name in self._ordered_slots():
             record = self._slots.get(slot_name)
             if record is None:
                 continue
@@ -358,6 +397,121 @@ class LiveEffectsBinder:
                           [riff.to_light_block(0.0, structure)]))
         return lanes, loop_beats, bool(getattr(riff, "dimmer_blocks",
                                                None))
+
+
+class LiveGroupEffectsBinder:
+    """Maps LiveState's PER-GROUP effects (state.effects: group -> riff
+    key, 2026-07-22) onto one engine slot per group
+    ("effect:<group>") - different groups run different riffs
+    simultaneously, each on its own loop length and pause flag.
+
+    Semantics (the positions pattern): SELECTION scopes STAGING only -
+    an effect keeps running on its group after deselection; silence
+    only when no group holds any effect. ``sync()`` diffs the full
+    mapping against what was last staged: removed groups kill their
+    slot, added/changed groups stage a single-group lane (a group
+    JOINING a riff already running elsewhere adopts that slot's phase
+    via ``phase_from`` - no restart of the groups that did not
+    change). An unknown riff key or an empty group silences ONLY its
+    own slot. PAUSE maps per running record (one record per distinct
+    riff key with its ``groups`` list) onto that record's group slots.
+
+    ``LiveEffectsBinder`` above stays byte-identical - the INTENSITY
+    pool keeps using it on its single "intensity" slot.
+    """
+
+    def __init__(self, state, engine: LiveEngine,
+                 config_provider: Callable,
+                 riff_provider: Callable,
+                 category: str = "effect",
+                 state_attr: str = "effects",
+                 record_kind: str = "effect") -> None:
+        self._state = state
+        self._engine = engine
+        self._config_provider = config_provider
+        self._riff_provider = riff_provider
+        self._category = category
+        self._state_attr = state_attr
+        self._record_kind = record_kind
+        self._staged: Dict[str, str] = {}   # group -> ATTEMPTED riff key
+        self._dimmer: set = set()           # groups whose riff has dimmers
+
+    def dimmer_groups(self) -> frozenset:
+        """Groups whose RUNNING riff drives dimmer sublanes - incl.
+        deselected groups still running one (the busk dimmer must
+        yield wherever the pattern actually runs). Same contract as
+        LiveEffectsBinder.dimmer_groups for the busk layer."""
+        return frozenset(self._dimmer)
+
+    def _slot(self, group_name: str) -> str:
+        return f"{self._category}:{group_name}"
+
+    def sync(self) -> None:
+        state = self._state
+        engine = self._engine
+        engine.set_bpm(state.bpm)
+
+        effects = dict(getattr(state, self._state_attr, None) or {})
+
+        for group_name in [g for g in self._staged if g not in effects]:
+            engine.kill(self._slot(group_name))
+            del self._staged[group_name]
+            self._dimmer.discard(group_name)
+
+        for group_name in sorted(effects):
+            key = effects[group_name]
+            if self._staged.get(group_name) == key:
+                continue
+            lane, loop_beats, has_dimmer = self._build_group_lane(
+                key, group_name, state.bpm)
+            if lane is not None:
+                donor = next(
+                    (self._slot(g) for g in sorted(self._staged)
+                     if g != group_name and self._staged[g] == key
+                     and engine.is_active(self._slot(g))), None)
+                engine.stage(self._slot(group_name), [lane], loop_beats,
+                             state.bpm, phase_from=donor)
+                if has_dimmer:
+                    self._dimmer.add(group_name)
+                else:
+                    self._dimmer.discard(group_name)
+            else:
+                # Silence is a kill, not an empty stage - and it is
+                # scoped to THIS group only.
+                engine.kill(self._slot(group_name))
+                self._dimmer.discard(group_name)
+            # Record the ATTEMPT (also for failed builds): no re-probe
+            # of a dead key on every sync, mirroring the old binder.
+            self._staged[group_name] = key
+
+        paused: Dict[str, bool] = {}
+        for record in state.running:
+            if record.get("kind") == self._record_kind:
+                for group_name in record.get("groups") or ():
+                    paused[group_name] = bool(record.get("paused"))
+        for group_name in self._staged:
+            engine.pause(self._slot(group_name),
+                         paused.get(group_name, False))
+
+    def _build_group_lane(self, key: str, group_name: str, bpm: float):
+        """(lane|None, loop_beats, has_dimmer) for ONE group - the
+        single-group slice of LiveEffectsBinder._build_lanes."""
+        riff = self._riff_provider(key)
+        config = self._config_provider()
+        if riff is None or config is None:
+            return None, 0.0, False
+        loop_beats = float(getattr(riff, "length_beats", 0.0) or 0.0)
+        if loop_beats <= 0:
+            return None, 0.0, False
+        group = (getattr(config, "groups", {}) or {}).get(group_name)
+        fixtures = list(getattr(group, "fixtures", None) or []) \
+            if group is not None else []
+        if not fixtures:
+            return None, 0.0, False
+        structure = OnePartStructure(bpm)
+        lane = (fixtures, [riff.to_light_block(0.0, structure)])
+        return lane, loop_beats, bool(getattr(riff, "dimmer_blocks",
+                                              None))
 
 
 # Movement shapes loop over this many beats: at effect speed "1" the

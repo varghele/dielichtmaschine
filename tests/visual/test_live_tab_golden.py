@@ -150,9 +150,12 @@ def test_live_tab_golden(qapp, scene_config, tmp_path):
         tab.state.set_strobe_rate(40)
         # Round-2 additions: a tapped tempo and the default LIVE mode, plus
         # one staged effect and one staged scene so both pools show active.
+        # Per-group effects (2026-07-22): the riff runs on the two
+        # SELECTED groups - their tiles name it, the running row tags
+        # the group set, the pool cell outlines selection-scoped.
         tab.state.set_bpm(128)
         tab.state.set_mode("live")
-        tab.state.set_effect("loops/Four Floor")
+        tab.state.stage_effect("loops/Four Floor")
         tab.state.set_scene("looks/Warm Wash")
         # Round-3: apply the computed CROSS preset to the selection
         # (per-group positions). The Movers group (type MH) is selected,

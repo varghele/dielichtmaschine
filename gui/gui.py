@@ -282,7 +282,8 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         if getattr(self, "_output_arbiter", None) is None:
             from utils.artnet.live_layer import LiveBuskLayer
             from utils.artnet.live_engine import (
-                LiveEffectsBinder, LiveEngine, LiveMovementBinder,
+                LiveEffectsBinder, LiveEngine, LiveGroupEffectsBinder,
+                LiveMovementBinder,
             )
             from gui.tabs.live_tab import COLOUR_SWATCHES
 
@@ -310,7 +311,10 @@ class MainWindow(QMainWindow, Ui_MainWindow):
                                   emit_safe_idle=False)
 
             self._live_engine = LiveEngine(_live_manager_factory)
-            self._live_effects_binder = LiveEffectsBinder(
+            # Per-group effects (2026-07-22): one engine slot per
+            # group ("effect:<group>"), different riffs on different
+            # groups simultaneously; selection scopes staging only.
+            self._live_effects_binder = LiveGroupEffectsBinder(
                 state=self.live_tab.state,
                 engine=self._live_engine,
                 config_provider=lambda: self.live_tab.config,

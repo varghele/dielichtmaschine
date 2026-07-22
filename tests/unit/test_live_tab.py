@@ -467,11 +467,12 @@ class TestRightColumnActions:
         assert "EMPTY" in live_tab._programmer_label.text()
 
     def test_release_all_clears_running_and_staged_playbacks(self, live_tab):
-        live_tab.state.set_effect("custom/Riff A")
+        live_tab.state.toggle_group("Movers")
+        live_tab.state.stage_effect("custom/Riff A")
         live_tab.state.set_scene("looks/Warm Wash")
         live_tab.state.enqueue("effect", "custom/Riff B", "Riff B")
         live_tab._release_all_btn.click()
-        assert live_tab.state.effect is None
+        assert live_tab.state.effects == {}
         assert live_tab.state.scene is None
         assert live_tab.state.running == []
         # The preloaded queue is deliberately kept (it is not output).
@@ -662,24 +663,53 @@ class TestEffectsPool:
         live_tab.set_effect_library(lib)
         assert set(live_tab._effect_cells) == {"custom/Riff A", "loops/Riff B"}
 
-    def test_click_stages_effect(self, live_tab, tmp_path):
+    def test_click_stages_effect_on_selected_groups(self, live_tab,
+                                                    tmp_path):
         lib = _riff_library(tmp_path, [("custom", "Riff A")])
         live_tab.set_effect_library(lib)
         live_tab.state.toggle_group("Movers")
         cell = live_tab._effect_cells["custom/Riff A"]
         cell.clicked.emit("custom/Riff A")
-        assert live_tab.state.effect == "custom/Riff A"
+        assert live_tab.state.effects == {"Movers": "custom/Riff A"}
         assert cell.is_active()
 
-    def test_click_same_cell_toggles_off(self, live_tab, tmp_path):
+    def test_click_same_cell_releases_the_selection(self, live_tab,
+                                                    tmp_path):
         lib = _riff_library(tmp_path, [("custom", "Riff A")])
         live_tab.set_effect_library(lib)
+        live_tab.state.toggle_group("Movers")
         cell = live_tab._effect_cells["custom/Riff A"]
         cell.clicked.emit("custom/Riff A")
-        assert live_tab.state.effect == "custom/Riff A"
+        assert live_tab.state.effects == {"Movers": "custom/Riff A"}
         cell.clicked.emit("custom/Riff A")
-        assert live_tab.state.effect is None
+        assert live_tab.state.effects == {}
         assert not cell.is_active()
+
+    def test_groups_hold_effects_independently(self, live_tab, tmp_path):
+        """The per-group headline: each group runs its own riff, and
+        deselection does not stop it."""
+        lib = _riff_library(tmp_path, [("custom", "Riff A"),
+                                       ("loops", "Riff B")])
+        live_tab.set_effect_library(lib)
+        live_tab.state.set_selection(["Movers"])
+        live_tab.state.stage_effect("custom/Riff A")
+        live_tab.state.set_selection(["Front Pars"])
+        live_tab.state.stage_effect("loops/Riff B")
+        assert live_tab.state.effects == {
+            "Movers": "custom/Riff A", "Front Pars": "loops/Riff B"}
+        # Outlines are selection-scoped: only the selected group's riff.
+        assert live_tab._effect_cells["loops/Riff B"].is_active()
+        assert not live_tab._effect_cells["custom/Riff A"].is_active()
+
+    def test_tiles_show_the_running_effect(self, live_tab, tmp_path):
+        lib = _riff_library(tmp_path, [("custom", "strobe_hit")])
+        live_tab.set_effect_library(lib)
+        live_tab.state.set_selection(["Movers"])
+        live_tab.state.stage_effect("custom/strobe_hit")
+        tile = live_tab._select_tiles["Movers"]
+        assert tile.effect_label.text() == "STROBE HIT"   # caps, no _
+        other = live_tab._select_tiles["Front Pars"]
+        assert other.effect_label.text() == "-"
 
     def test_pool_disabled_without_selection_enabled_with(self, live_tab,
                                                           tmp_path):
@@ -706,19 +736,35 @@ class TestEffectsPool:
         cell = live_tab._effect_cells["custom/Riff A"]
         assert cell.property("role") == "card"
 
-    def test_set_effect_emits_state_changed(self, live_tab):
+    def test_stage_effect_emits_state_changed(self, live_tab):
         hits = []
+        live_tab.state.toggle_group("Movers")
         live_tab.state.state_changed.connect(lambda: hits.append(1))
-        live_tab.state.set_effect("custom/Riff A")
-        live_tab.state.set_effect("custom/Riff A")  # toggle off
+        live_tab.state.stage_effect("custom/Riff A")
+        live_tab.state.stage_effect("custom/Riff A")  # release
         assert len(hits) == 2
-        assert live_tab.state.effect is None
+        assert live_tab.state.effects == {}
+
+    def test_category_headers_group_the_pool(self, live_tab, tmp_path):
+        """The pool renders per-category subsections (2026-07-22):
+        a header label per category over its cells."""
+        from gui.typography import MicroLabel
+        lib = _riff_library(tmp_path, [("builds", "Riser"),
+                                       ("loops", "Four Floor"),
+                                       ("loops", "Pulse")])
+        live_tab.set_effect_library(lib)
+        grid = live_tab._effects_grid
+        headers = [grid.itemAt(i).widget() for i in range(grid.count())
+                   if isinstance(grid.itemAt(i).widget(), MicroLabel)]
+        assert [h.text() for h in headers] == ["BUILDS", "LOOPS"]
+        assert set(live_tab._effect_cells) == {
+            "builds/Riser", "loops/Four Floor", "loops/Pulse"}
 
     def test_programmer_bar_shows_effect(self, live_tab, tmp_path):
         live_tab.set_effect_library(_riff_library(tmp_path,
                                                   [("custom", "Riff A")]))
         live_tab.state.toggle_group("Movers")
-        live_tab.state.set_effect("custom/Riff A")
+        live_tab.state.stage_effect("custom/Riff A")
         assert "FX: RIFF A" in live_tab._programmer_label.text()
 
 
@@ -752,18 +798,20 @@ class TestPoolLabels:
         assert cell.name_label.text() == "RED ROOM WASH"
 
     def test_running_row_label(self, live_tab):
-        live_tab.state.set_effect("builds/intensity_crescendo_8bar")
+        live_tab.state.toggle_group("Movers")
+        live_tab.state.stage_effect("builds/intensity_crescendo_8bar")
         assert live_tab.state.running[0]["label"] == \
             "intensity crescendo 8bar"
         assert live_tab.state.running[0]["key"] == \
             "builds/intensity_crescendo_8bar"
+        assert live_tab.state.running[0]["groups"] == ["Movers"]
 
     def test_programmer_bar_label(self, live_tab, tmp_path):
         lib = _riff_library(tmp_path,
                             [("builds", "intensity_crescendo_8bar")])
         live_tab.set_effect_library(lib)
         live_tab.state.toggle_group("Movers")
-        live_tab.state.set_effect("builds/intensity_crescendo_8bar")
+        live_tab.state.stage_effect("builds/intensity_crescendo_8bar")
         assert "FX: INTENSITY CRESCENDO 8BAR" in \
             live_tab._programmer_label.text()
 
@@ -1241,19 +1289,32 @@ class TestPositionPool:
 
 
 class TestLibraryStatePreserved:
-    def test_effect_and_scene_survive_group_change(self, live_tab):
-        live_tab.state.set_effect("custom/Riff A")
+    def test_scene_survives_and_effects_prune_with_groups(self,
+                                                          live_tab):
+        """Scenes are group-agnostic and survive any config change;
+        per-group effects follow their group out of the config."""
+        live_tab.state.toggle_group("Movers")
+        live_tab.state.stage_effect("custom/Riff A")
         live_tab.state.set_scene("looks/Warm Wash")
         new_config = _config((("Spots", "#5F86C9", 1),))
         live_tab.config = new_config
         live_tab.update_from_config()
-        assert live_tab.state.effect == "custom/Riff A"
+        assert live_tab.state.effects == {}      # "Movers" left the rig
         assert live_tab.state.scene == "looks/Warm Wash"
 
+    def test_effects_survive_when_their_group_does(self, live_tab):
+        live_tab.state.toggle_group("Movers")
+        live_tab.state.stage_effect("custom/Riff A")
+        new_config = _config((("Movers", "#C95FD0", 2, "MH"),))
+        live_tab.config = new_config
+        live_tab.update_from_config()
+        assert live_tab.state.effects == {"Movers": "custom/Riff A"}
+
     def test_running_and_next_up_survive_group_change(self, live_tab):
-        live_tab.state.set_effect("custom/Riff A")
+        live_tab.state.toggle_group("Movers")
+        live_tab.state.stage_effect("custom/Riff A")
         live_tab.state.enqueue("scene", "looks/Warm Wash", "Warm Wash")
-        new_config = _config((("Spots", "#5F86C9", 1),))
+        new_config = _config((("Movers", "#C95FD0", 2, "MH"),))
         live_tab.config = new_config
         live_tab.update_from_config()
         assert [r["key"] for r in live_tab.state.running] == ["custom/Riff A"]
@@ -1262,22 +1323,49 @@ class TestLibraryStatePreserved:
 
 
 class TestRunningStack:
-    def test_set_effect_creates_running_record(self, live_tab):
-        live_tab.state.set_effect("custom/Riff A")
+    def test_stage_effect_creates_running_record(self, live_tab):
+        live_tab.state.toggle_group("Movers")
+        live_tab.state.stage_effect("custom/Riff A")
         assert live_tab.state.running == [{
             "kind": "effect", "key": "custom/Riff A",
-            "label": "Riff A", "paused": False}]
+            "label": "Riff A", "groups": ["Movers"], "paused": False}]
 
-    def test_toggle_off_removes_record(self, live_tab):
-        live_tab.state.set_effect("custom/Riff A")
-        live_tab.state.set_effect("custom/Riff A")
+    def test_release_touch_removes_record(self, live_tab):
+        live_tab.state.toggle_group("Movers")
+        live_tab.state.stage_effect("custom/Riff A")
+        live_tab.state.stage_effect("custom/Riff A")
         assert live_tab.state.running == []
 
-    def test_replacing_effect_swaps_record(self, live_tab):
-        live_tab.state.set_effect("custom/Riff A")
-        live_tab.state.set_effect("loops/Riff B")
-        # At most one kind=="effect" record; the newest key wins.
+    def test_restaging_the_selection_swaps_its_record(self, live_tab):
+        """Staging a new riff over the same selection releases the old
+        one there - one record per DISTINCT running key."""
+        live_tab.state.toggle_group("Movers")
+        live_tab.state.stage_effect("custom/Riff A")
+        live_tab.state.stage_effect("loops/Riff B")
         assert [r["key"] for r in live_tab.state.running] == ["loops/Riff B"]
+
+    def test_one_record_per_distinct_key_with_groups(self, live_tab):
+        live_tab.state.set_selection(["Movers", "Front Pars"])
+        live_tab.state.stage_effect("custom/Riff A")
+        live_tab.state.set_selection(["Rear Wash"])
+        live_tab.state.stage_effect("loops/Riff B")
+        records = [r for r in live_tab.state.running
+                   if r["kind"] == "effect"]
+        assert [(r["key"], r["groups"]) for r in records] == [
+            ("custom/Riff A", ["Front Pars", "Movers"]),
+            ("loops/Riff B", ["Rear Wash"])]
+
+    def test_partial_release_shrinks_the_record(self, live_tab):
+        """Releasing one group of a two-group riff keeps the record
+        with the remaining group (paused flag preserved)."""
+        live_tab.state.set_selection(["Movers", "Front Pars"])
+        live_tab.state.stage_effect("custom/Riff A")
+        live_tab.state.toggle_pause(0)
+        live_tab.state.set_selection(["Front Pars"])
+        live_tab.state.stage_effect("custom/Riff A")   # release Pars
+        record = live_tab.state.running[0]
+        assert record["groups"] == ["Movers"]
+        assert record["paused"] is True
 
     def test_scene_record_parallel_to_effect(self, live_tab):
         live_tab.state.set_scene("looks/Warm Wash")
@@ -1290,16 +1378,17 @@ class TestRunningStack:
         live_tab.state.set_scene("looks/Cold Snap")
         assert live_tab.state.running == []
 
-    def test_at_most_one_record_per_kind(self, live_tab):
-        live_tab.state.set_effect("custom/Riff A")
+    def test_scene_record_stays_single_beside_effects(self, live_tab):
+        live_tab.state.toggle_group("Movers")
+        live_tab.state.stage_effect("custom/Riff A")
         live_tab.state.set_scene("looks/Warm Wash")
-        live_tab.state.set_effect("loops/Riff B")
         live_tab.state.set_scene("looks/Cold Snap")
         kinds = [r["kind"] for r in live_tab.state.running]
         assert sorted(kinds) == ["effect", "scene"]
 
     def test_running_records_render_rows_with_buttons(self, live_tab):
-        live_tab.state.set_effect("custom/Riff A")
+        live_tab.state.toggle_group("Movers")
+        live_tab.state.stage_effect("custom/Riff A")
         live_tab.state.set_scene("looks/Warm Wash")
         assert len(live_tab._pause_buttons) == 2
         assert len(live_tab._kill_buttons) == 2
@@ -1307,23 +1396,26 @@ class TestRunningStack:
         for btn in live_tab._kill_buttons:
             assert btn.property("role") == "destructive"
 
-    def test_kill_removes_record_and_clears_effect(self, live_tab):
-        live_tab.state.set_effect("custom/Riff A")
+    def test_kill_removes_record_and_releases_its_groups(self, live_tab):
+        live_tab.state.toggle_group("Movers")
+        live_tab.state.stage_effect("custom/Riff A")
         live_tab._kill_buttons[0].click()
         assert live_tab.state.running == []
-        assert live_tab.state.effect is None
+        assert live_tab.state.effects == {}
 
     def test_kill_scene_record_clears_scene(self, live_tab):
-        live_tab.state.set_effect("custom/Riff A")
+        live_tab.state.toggle_group("Movers")
+        live_tab.state.stage_effect("custom/Riff A")
         live_tab.state.set_scene("looks/Warm Wash")
         # Kill the scene row (index 1); the effect keeps running.
         live_tab.state.kill_playback(1)
         assert live_tab.state.scene is None
-        assert live_tab.state.effect == "custom/Riff A"
+        assert live_tab.state.effects == {"Movers": "custom/Riff A"}
         assert [r["kind"] for r in live_tab.state.running] == ["effect"]
 
     def test_toggle_pause_flips_flag_and_row_shows_resume(self, live_tab):
-        live_tab.state.set_effect("custom/Riff A")
+        live_tab.state.toggle_group("Movers")
+        live_tab.state.stage_effect("custom/Riff A")
         assert live_tab._pause_buttons[0].text() == "PAUSE"
         live_tab._pause_buttons[0].click()
         assert live_tab.state.running[0]["paused"] is True
@@ -1331,6 +1423,17 @@ class TestRunningStack:
         live_tab._pause_buttons[0].click()
         assert live_tab.state.running[0]["paused"] is False
         assert live_tab._pause_buttons[0].text() == "PAUSE"
+
+    def test_running_row_tag_names_the_groups(self, live_tab):
+        from PyQt6.QtWidgets import QLabel
+        live_tab.state.set_selection(["Movers", "Front Pars"])
+        live_tab.state.stage_effect("custom/Riff A")
+        record = live_tab.state.running[0]
+        assert record["groups"] == ["Front Pars", "Movers"]
+        row = live_tab._make_running_row(0, record)
+        texts = " ".join(w.text() for w in row.findChildren(QLabel))
+        assert "FRONT PARS + MOVERS" in texts.upper()
+        row.deleteLater()
 
 
 class TestQueue:
@@ -1341,14 +1444,15 @@ class TestQueue:
         assert [r["key"] for r in live_tab.state.next_up] == [
             "custom/Riff A", "custom/Riff A", "looks/Warm Wash"]
         # Enqueueing never touches the live staged state.
-        assert live_tab.state.effect is None
+        assert live_tab.state.effects == {}
         assert live_tab.state.scene is None
 
     def test_fire_next_pops_head_and_applies_effect(self, live_tab):
+        live_tab.state.toggle_group("Movers")
         live_tab.state.enqueue("effect", "custom/Riff A", "Riff A")
         live_tab.state.enqueue("scene", "looks/Warm Wash", "Warm Wash")
         live_tab.state.fire_next()
-        assert live_tab.state.effect == "custom/Riff A"
+        assert live_tab.state.effects == {"Movers": "custom/Riff A"}
         assert [r["key"] for r in live_tab.state.running] == ["custom/Riff A"]
         assert [r["key"] for r in live_tab.state.next_up] == \
             ["looks/Warm Wash"]
@@ -1357,11 +1461,12 @@ class TestQueue:
         assert live_tab.state.next_up == []
 
     def test_fire_next_never_toggles_a_running_key_off(self, live_tab):
-        live_tab.state.set_effect("custom/Riff A")
+        live_tab.state.toggle_group("Movers")
+        live_tab.state.stage_effect("custom/Riff A")
         live_tab.state.enqueue("effect", "custom/Riff A", "Riff A")
         live_tab.state.fire_next()
         # GO applies; firing the already-running key keeps it running.
-        assert live_tab.state.effect == "custom/Riff A"
+        assert live_tab.state.effects == {"Movers": "custom/Riff A"}
         assert [r["key"] for r in live_tab.state.running] == ["custom/Riff A"]
         assert live_tab.state.next_up == []
 
@@ -1370,7 +1475,7 @@ class TestQueue:
         live_tab.state.state_changed.connect(lambda: hits.append(1))
         live_tab.state.fire_next()
         assert hits == []
-        assert live_tab.state.effect is None
+        assert live_tab.state.effects == {}
 
     def test_remove_queued_drops_by_index(self, live_tab):
         live_tab.state.enqueue("effect", "custom/Riff A", "Riff A")
@@ -1393,9 +1498,10 @@ class TestQueue:
         assert live_tab._queue_empty_hint.isHidden()
 
     def test_go_button_fires_next(self, live_tab):
+        live_tab.state.toggle_group("Movers")
         live_tab.state.enqueue("effect", "custom/Riff A", "Riff A")
         live_tab._go_btn.click()
-        assert live_tab.state.effect == "custom/Riff A"
+        assert live_tab.state.effects == {"Movers": "custom/Riff A"}
         assert live_tab.state.next_up == []
         assert live_tab._go_btn.isEnabled() is False
 
@@ -1414,7 +1520,7 @@ class TestQueue:
         assert live_tab.state.next_up == [{
             "kind": "effect", "key": "custom/Riff A", "label": "Riff A"}]
         # The cell did NOT fire live: no staged effect, cell not active.
-        assert live_tab.state.effect is None
+        assert live_tab.state.effects == {}
         assert not cell.is_active()
 
     def test_latched_touch_enqueues_scene(self, live_tab, tmp_path):
@@ -1434,10 +1540,11 @@ class TestQueue:
         live_tab.state.toggle_group("Movers")
         assert live_tab._queue_latch_btn.isChecked() is False
         live_tab._effect_cells["custom/Riff A"].clicked.emit("custom/Riff A")
-        assert live_tab.state.effect == "custom/Riff A"
+        assert live_tab.state.effects == {"Movers": "custom/Riff A"}
         assert live_tab.state.next_up == []
 
     def test_state_changed_emitted_by_queue_mutators(self, live_tab):
+        live_tab.state.toggle_group("Movers")   # GO needs a selection
         hits = []
         live_tab.state.state_changed.connect(lambda: hits.append(1))
         live_tab.state.enqueue("effect", "custom/Riff A", "Riff A")

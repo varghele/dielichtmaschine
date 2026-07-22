@@ -131,8 +131,16 @@ class TestLoopClock:
             engine.stage("nope", [_ab_lane(fixtures)],
                          loop_beats=4, bpm=120)
         with pytest.raises(ValueError):
+            engine.stage("nope:Left", [_ab_lane(fixtures)],
+                         loop_beats=4, bpm=120)
+        with pytest.raises(ValueError):
             engine.stage("effect", [_ab_lane(fixtures)],
                          loop_beats=0, bpm=120)
+        # Namespaced slots of a known category are valid (per-group
+        # effects, 2026-07-22).
+        engine.stage("effect:Left", [_ab_lane(fixtures)],
+                     loop_beats=4, bpm=120)
+        assert engine.is_active("effect:Left")
 
 
 class TestPauseAndKill:
@@ -214,6 +222,101 @@ class TestConcurrentSlots:
         assert values[DIMMER] == 255
 
 
+class TestGroupSlots:
+    """The dynamic slot namespace (per-group effects, 2026-07-22):
+    "category:suffix" slots with independent loop lengths, clocks and
+    pause flags, deterministic merge order, kill_prefix, phase_from."""
+
+    def _two_group_engine(self, mock_fixture_def):
+        left = _fixture("MH1", 1)
+        right = _fixture("MH2", 11)
+        config = _config([left, right])
+        engine = LiveEngine(_factory(config, mock_fixture_def))
+        return engine, [left], [right]
+
+    def _flat_lane(self, fixtures, intensity, seconds):
+        block = LightBlock(start_time=0.0, end_time=seconds,
+                           effect_name="")
+        block.dimmer_blocks.append(DimmerBlock(
+            start_time=0.0, end_time=seconds, intensity=intensity))
+        return (fixtures, [block])
+
+    def test_different_loop_lengths_coexist(self, qapp,
+                                            mock_fixture_def):
+        engine, left, right = self._two_group_engine(mock_fixture_def)
+        engine.set_bpm(120)
+        engine.stage("effect:A", [_ab_lane(left)],
+                     loop_beats=4, bpm=120)          # 255/100 halves
+        block = LightBlock(start_time=0.0, end_time=4.0, effect_name="")
+        block.dimmer_blocks.append(DimmerBlock(
+            start_time=0.0, end_time=2.0, intensity=200.0))
+        block.dimmer_blocks.append(DimmerBlock(
+            start_time=2.0, end_time=4.0, intensity=50.0))
+        engine.stage("effect:B", [(right, [block])],
+                     loop_beats=8, bpm=120)          # 8-beat loop
+        engine.render(0.0)
+        # +2.0 s: the 4-beat loop wrapped (255 again); the 8-beat loop
+        # is at beat 4 -> its second half (50).
+        values, _ = engine.render(2.0)[1]
+        assert values[DIMMER] == 255
+        assert values[10 + DIMMER] == 50
+
+    def test_merge_order_is_category_then_name(self, qapp,
+                                               mock_fixture_def):
+        engine, left, _right = self._two_group_engine(mock_fixture_def)
+        # Two group slots on the SAME fixture channel: sorted suffix
+        # wins within the category; bare intensity beats both.
+        engine.stage("effect:A", [self._flat_lane(left, 10.0, 2.0)],
+                     loop_beats=4, bpm=120)
+        engine.stage("effect:B", [self._flat_lane(left, 20.0, 2.0)],
+                     loop_beats=4, bpm=120)
+        values, _ = engine.render(0.0)[1]
+        assert values[DIMMER] == 20                 # B after A
+        engine.stage("intensity", [self._flat_lane(left, 30.0, 2.0)],
+                     loop_beats=4, bpm=120)
+        values, _ = engine.render(0.1)[1]
+        assert values[DIMMER] == 30                 # category order
+        assert engine.active_slots() == ["effect:A", "effect:B",
+                                         "intensity"]
+
+    def test_pause_freezes_one_group_slot_only(self, qapp,
+                                               mock_fixture_def):
+        engine, left, right = self._two_group_engine(mock_fixture_def)
+        engine.set_bpm(120)
+        engine.stage("effect:A", [_ab_lane(left)], loop_beats=4, bpm=120)
+        engine.stage("effect:B", [_ab_lane(right)], loop_beats=4,
+                     bpm=120)
+        engine.render(0.0)
+        engine.pause("effect:A")
+        values, _ = engine.render(1.0)[1]           # +2 beats
+        assert values[DIMMER] == 255                # A frozen at beat 0
+        assert values[10 + DIMMER] == 100           # B moved on
+
+    def test_kill_prefix_drops_the_family_only(self, qapp,
+                                               mock_fixture_def):
+        engine, left, right = self._two_group_engine(mock_fixture_def)
+        engine.stage("effect:A", [_ab_lane(left)], loop_beats=4, bpm=120)
+        engine.stage("effect:B", [_ab_lane(right)], loop_beats=4,
+                     bpm=120)
+        engine.stage("intensity", [self._flat_lane(left, 30.0, 2.0)],
+                     loop_beats=4, bpm=120)
+        engine.kill_prefix("effect")
+        assert engine.active_slots() == ["intensity"]
+
+    def test_phase_from_adopts_the_donor_clock(self, qapp,
+                                               mock_fixture_def):
+        engine, left, right = self._two_group_engine(mock_fixture_def)
+        engine.set_bpm(120)
+        engine.stage("effect:A", [_ab_lane(left)], loop_beats=4, bpm=120)
+        engine.render(0.0)
+        engine.render(1.2)                          # A at beat 2.4 -> 100
+        engine.stage("effect:B", [_ab_lane(right)], loop_beats=4,
+                     bpm=120, phase_from="effect:A")
+        values, _ = engine.render(1.3)[1]
+        assert values[DIMMER] == 100                # A undisturbed
+        assert values[10 + DIMMER] == 100           # B joined in phase
+
+
 class TestSafeIdleFlag:
     def test_private_manager_claims_nothing_when_idle(
             self, qapp, mock_fixture_def):
@@ -250,14 +353,27 @@ def _riff():
     return riff
 
 
+def _second_riff():
+    """Wave: an 8-beat dimmer riff (200 / 50 halves) - a DIFFERENT
+    loop length than _riff's 4 beats, for coexistence tests."""
+    riff = Riff(name="Wave", category="basics", length_beats=8.0)
+    riff.dimmer_blocks.append(
+        RiffDimmerBlock(start_beat=0.0, end_beat=4.0, intensity=200.0))
+    riff.dimmer_blocks.append(
+        RiffDimmerBlock(start_beat=4.0, end_beat=8.0, intensity=50.0))
+    return riff
+
+
 class TestEffectsBinder:
-    """LiveEffectsBinder: LiveState's EFFECTS staging drives the
-    engine's "effect" slot - the phase 3 state->output link, exercised
-    through the REAL LiveState mutators (set_effect, set_selection,
-    toggle_pause, kill_playback, fire_next)."""
+    """LiveGroupEffectsBinder: LiveState's PER-GROUP effects drive one
+    engine slot per group ("effect:<group>") - different riffs on
+    different groups simultaneously, selection scopes STAGING only.
+    Exercised through the REAL LiveState mutators (stage_effect,
+    set_selection, toggle_pause, kill_playback, fire_next)."""
 
     def _bound(self, mock_fixture_def):
         from gui.tabs.live_tab import LiveState
+        from utils.artnet.live_engine import LiveGroupEffectsBinder
         mh1 = _fixture("MH1", 1)
         mh2 = _fixture("MH2", 11)
         config = Configuration(
@@ -269,12 +385,11 @@ class TestEffectsBinder:
         engine = LiveEngine(_factory(config, mock_fixture_def))
         state = LiveState()
         state.update_from_config(config.groups.keys())
-        riff = _riff()
-        binder = LiveEffectsBinder(
+        riffs = {"basics/Pulse": _riff(), "basics/Wave": _second_riff()}
+        binder = LiveGroupEffectsBinder(
             state, engine,
             config_provider=lambda: config,
-            riff_provider=lambda key: riff
-            if key == "basics/Pulse" else None,
+            riff_provider=riffs.get,
         )
         state.state_changed.connect(binder.sync)
         # The signal holds bound methods weakly: the caller must keep
@@ -286,7 +401,7 @@ class TestEffectsBinder:
             self, qapp, mock_fixture_def):
         state, engine, _binder = self._bound(mock_fixture_def)
         state.set_selection(["Left"])
-        state.set_effect("basics/Pulse")
+        state.stage_effect("basics/Pulse")
         values, mask = engine.render(0.0)[1]
         assert mask[DIMMER] and values[DIMMER] == 255   # MH1, beat 0
         assert mask[10 + DIMMER] == 0                   # Right silent
@@ -297,40 +412,85 @@ class TestEffectsBinder:
         values, _ = engine.render(2.0)[1]
         assert values[DIMMER] == 255
 
-    def test_selection_change_restages_the_scope(self, qapp,
-                                                 mock_fixture_def):
+    def test_groups_run_different_riffs_simultaneously(
+            self, qapp, mock_fixture_def):
+        """The headline scenario: stage on drums, reselect, stage
+        another on movers - both run, the first undisturbed."""
         state, engine, _binder = self._bound(mock_fixture_def)
         state.set_selection(["Left"])
-        state.set_effect("basics/Pulse")
+        state.stage_effect("basics/Pulse")
         engine.render(0.0)
-        state.set_selection(["Left", "Right"])          # rescope
-        values, mask = engine.render(0.1)[1]
-        assert mask[DIMMER] and mask[10 + DIMMER]       # both groups
-        assert values[10 + DIMMER] == 255               # fresh loop
+        engine.render(0.7)                  # Left mid-loop (beat 1.4)
+        state.set_selection(["Right"])      # deselect Left: keeps running
+        state.stage_effect("basics/Wave")
+        values, mask = engine.render(0.8)[1]
+        assert mask[DIMMER] and mask[10 + DIMMER]
+        assert values[DIMMER] == 255        # Pulse, still first half
+        assert values[10 + DIMMER] == 200   # Wave, fresh loop
+        # Left was NOT restarted: +0.5 s from 0.8 = 1.3 s total = 2.6
+        # beats -> Pulse's 100 half; a restart at 0.8 would still be
+        # in the 255 half at 1.3.
+        values, _ = engine.render(1.3)[1]
+        assert values[DIMMER] == 100
 
-    def test_second_touch_kills_the_slot(self, qapp, mock_fixture_def):
+    def test_join_adopts_the_running_phase(self, qapp,
+                                           mock_fixture_def):
+        """A group joining a running riff starts IN PHASE with it
+        (phase_from) instead of at beat 0 - and the running group's
+        clock is undisturbed."""
         state, engine, _binder = self._bound(mock_fixture_def)
         state.set_selection(["Left"])
-        state.set_effect("basics/Pulse")
-        assert engine.render(0.0)
-        state.set_effect("basics/Pulse")                # toggle off
-        assert engine.render(0.1) == {}
-        assert not engine.is_active("effect")
+        state.stage_effect("basics/Pulse")
+        engine.render(0.0)
+        engine.render(1.2)                  # Left at beat 2.4 -> 100 half
+        state.set_selection(["Left", "Right"])
+        state.stage_effect("basics/Pulse")  # Right joins (Left keeps key)
+        values, mask = engine.render(1.3)[1]
+        assert mask[DIMMER] and mask[10 + DIMMER]
+        assert values[DIMMER] == 100        # Left undisturbed, 100 half
+        assert values[10 + DIMMER] == 100   # Right joined IN PHASE
 
-    def test_no_selection_stages_silence_until_groups_arrive(
+    def test_second_touch_releases_the_selected_groups(
             self, qapp, mock_fixture_def):
         state, engine, _binder = self._bound(mock_fixture_def)
-        state.set_effect("basics/Pulse")                # nothing selected
+        state.set_selection(["Left"])
+        state.stage_effect("basics/Pulse")
+        assert engine.render(0.0)
+        state.stage_effect("basics/Pulse")              # toggle off
+        assert engine.render(0.1) == {}
+        assert not engine.is_active("effect:Left")
+
+    def test_no_selection_touch_is_a_no_op(self, qapp,
+                                           mock_fixture_def):
+        """The positions pattern: staging with nothing selected does
+        NOT latch a pending effect - silence until a group is selected
+        AND the effect is touched."""
+        state, engine, _binder = self._bound(mock_fixture_def)
+        state.stage_effect("basics/Pulse")              # nothing selected
+        assert state.effects == {}
         assert engine.render(0.0) == {}
-        state.set_selection(["Right"])                  # now it starts
-        values, mask = engine.render(0.1)[1]
+        state.set_selection(["Right"])                  # still silent
+        assert engine.render(0.1) == {}
+        state.stage_effect("basics/Pulse")              # now it starts
+        values, mask = engine.render(0.2)[1]
         assert mask[10 + DIMMER] and values[10 + DIMMER] == 255
+
+    def test_deselection_keeps_the_effect_running(self, qapp,
+                                                  mock_fixture_def):
+        """Selection scopes staging, never playback."""
+        state, engine, _binder = self._bound(mock_fixture_def)
+        state.set_selection(["Left"])
+        state.stage_effect("basics/Pulse")
+        assert engine.render(0.0)
+        state.set_selection([])                         # clear selection
+        values, mask = engine.render(0.1)[1]
+        assert mask[DIMMER] and values[DIMMER] == 255   # still running
 
     def test_pause_row_freezes_and_resumes_the_riff(self, qapp,
                                                     mock_fixture_def):
         state, engine, _binder = self._bound(mock_fixture_def)
         state.set_selection(["Left"])
-        state.set_effect("basics/Pulse")
+        state.stage_effect("basics/Pulse")
         engine.render(0.0)
         index = next(i for i, r in enumerate(state.running)
                      if r["kind"] == "effect")
@@ -343,15 +503,49 @@ class TestEffectsBinder:
         values, _ = engine.render(101.0)[1]             # +2 beats
         assert values[DIMMER] == 100
 
+    def test_record_pause_freezes_all_its_groups_only(
+            self, qapp, mock_fixture_def):
+        """Pulse on Left+Right (one record), Wave would be elsewhere -
+        pausing the record freezes BOTH its group slots; other slots
+        keep looping."""
+        state, engine, _binder = self._bound(mock_fixture_def)
+        state.set_selection(["Left", "Right"])
+        state.stage_effect("basics/Pulse")
+        engine.render(0.0)
+        index = next(i for i, r in enumerate(state.running)
+                     if r["kind"] == "effect")
+        state.toggle_pause(index)
+        values, _ = engine.render(5.0)[1]
+        assert values[DIMMER] == 255                    # both frozen
+        assert values[10 + DIMMER] == 255
+
     def test_kill_row_clears_the_output(self, qapp, mock_fixture_def):
         state, engine, _binder = self._bound(mock_fixture_def)
         state.set_selection(["Left"])
-        state.set_effect("basics/Pulse")
+        state.stage_effect("basics/Pulse")
         assert engine.render(0.0)
         index = next(i for i, r in enumerate(state.running)
                      if r["kind"] == "effect")
         state.kill_playback(index)
+        assert "Left" not in state.effects
         assert engine.render(0.1) == {}
+
+    def test_kill_one_record_spares_the_other_riff(
+            self, qapp, mock_fixture_def):
+        state, engine, _binder = self._bound(mock_fixture_def)
+        state.set_selection(["Left"])
+        state.stage_effect("basics/Pulse")
+        state.set_selection(["Right"])
+        state.stage_effect("basics/Wave")
+        index = next(i for i, r in enumerate(state.running)
+                     if r["kind"] == "effect"
+                     and r["key"] == "basics/Pulse")
+        state.kill_playback(index)
+        values, mask = engine.render(0.0)[1]
+        assert mask[DIMMER] == 0                        # Pulse gone
+        assert mask[10 + DIMMER]                        # Wave survives
+        assert values[10 + DIMMER] == 200
+        assert state.effects == {"Right": "basics/Wave"}
 
     def test_go_promotes_the_queue_head(self, qapp, mock_fixture_def):
         state, engine, _binder = self._bound(mock_fixture_def)
@@ -366,36 +560,48 @@ class TestEffectsBinder:
                                                  mock_fixture_def):
         state, engine, _binder = self._bound(mock_fixture_def)
         state.set_selection(["Left"])
-        state.set_effect("basics/Pulse")
+        state.stage_effect("basics/Pulse")
         engine.render(0.0)                              # anchor, beat 0
         state.set_bpm(240)                              # TAP doubles it
         values, _ = engine.render(0.5)[1]               # 2 beats now
         assert values[DIMMER] == 100
 
-    def test_unknown_riff_key_stays_silent(self, qapp, mock_fixture_def):
+    def test_unknown_riff_key_silences_only_its_group(
+            self, qapp, mock_fixture_def):
         state, engine, _binder = self._bound(mock_fixture_def)
         state.set_selection(["Left"])
-        state.set_effect("basics/Ghost")
-        assert engine.render(0.0) == {}
+        state.stage_effect("basics/Pulse")
+        state.set_selection(["Right"])
+        state.stage_effect("basics/Ghost")              # unknown key
+        values, mask = engine.render(0.0)[1]
+        assert mask[DIMMER] and values[DIMMER] == 255   # Left plays
+        assert mask[10 + DIMMER] == 0                   # Right silent
+        assert engine.is_active("effect:Left")
+        assert not engine.is_active("effect:Right")
 
-    def test_release_all_kills_the_slot(self, qapp, mock_fixture_def):
+    def test_release_all_kills_every_group_slot(self, qapp,
+                                                mock_fixture_def):
         state, engine, _binder = self._bound(mock_fixture_def)
         state.set_selection(["Left"])
-        state.set_effect("basics/Pulse")
+        state.stage_effect("basics/Pulse")
+        state.set_selection(["Right"])
+        state.stage_effect("basics/Wave")
         assert engine.render(0.0)
         state.release_all()
         assert engine.render(0.1) == {}
+        assert state.effects == {}
 
 
 class TestIntensityBinder:
-    """The SAME binder class on the "intensity" slot (phase 5): a
-    dimmer riff from LiveState.intensity runs CONCURRENTLY with a
-    colour riff from LiveState.effect, and the intensity slot's dimmer
-    overrides the effect slot's on shared channels (SLOTS order)."""
+    """The ORIGINAL LiveEffectsBinder on the "intensity" slot (phase
+    5) - unchanged by the per-group effects work - running CONCURRENTLY
+    with the per-group effects binder: the intensity slot's dimmer
+    overrides the effect slots' on shared channels (category order)."""
 
     def _bound(self, mock_fixture_def):
         from config.models import RiffColourBlock
         from gui.tabs.live_tab import LiveState
+        from utils.artnet.live_engine import LiveGroupEffectsBinder
         mh1 = _fixture("MH1", 1)
         config = Configuration(
             fixtures=[mh1],
@@ -412,7 +618,7 @@ class TestIntensityBinder:
         dim_riff = _riff()      # dimmer 255 / 100 halves
         riffs = {"looks/RedWash": colour_riff,
                  "intensity/Pulse": dim_riff}
-        effects = LiveEffectsBinder(
+        effects = LiveGroupEffectsBinder(
             state, engine, config_provider=lambda: config,
             riff_provider=riffs.get)
         intensity = LiveEffectsBinder(
@@ -428,12 +634,12 @@ class TestIntensityBinder:
             self, qapp, mock_fixture_def):
         state, engine, _binders = self._bound(mock_fixture_def)
         state.set_selection(["Left"])
-        state.set_effect("looks/RedWash")
+        state.stage_effect("looks/RedWash")
         state.set_intensity("intensity/Pulse")
         values, mask = engine.render(0.0)[1]
         assert values[RED] == 255                # effect slot colour
         assert mask[DIMMER] and values[DIMMER] == 255   # intensity dim
-        assert engine.active_slots() == ["effect", "intensity"]
+        assert engine.active_slots() == ["effect:Left", "intensity"]
         # The intensity riff keeps looping on its own clock.
         values, _ = engine.render(1.0)[1]
         assert values[DIMMER] == 100
@@ -443,7 +649,7 @@ class TestIntensityBinder:
             self, qapp, mock_fixture_def):
         state, engine, _binders = self._bound(mock_fixture_def)
         state.set_selection(["Left"])
-        state.set_effect("looks/RedWash")
+        state.stage_effect("looks/RedWash")
         state.set_intensity("intensity/Pulse")
         engine.render(0.0)
         index = next(i for i, r in enumerate(state.running)
@@ -452,7 +658,7 @@ class TestIntensityBinder:
         values, mask = engine.render(0.1)[1]
         assert mask[DIMMER] == 0                 # dimmer released
         assert values[RED] == 255                # colour still runs
-        assert engine.active_slots() == ["effect"]
+        assert engine.active_slots() == ["effect:Left"]
 
 
 class TestDimmerConjunction:
@@ -496,7 +702,8 @@ class TestDimmerConjunction:
             RiffColourBlock(start_beat=0.0, end_beat=4.0, red=255.0))
         riffs = {"intensity/Pulse": _riff(),
                  "looks/RedWash": colour_riff}
-        effects = LiveEffectsBinder(
+        from utils.artnet.live_engine import LiveGroupEffectsBinder
+        effects = LiveGroupEffectsBinder(
             state, engine, config_provider=lambda: config,
             riff_provider=riffs.get)
         intensity = LiveEffectsBinder(
@@ -553,7 +760,7 @@ class TestDimmerConjunction:
         state, layer, _binders = self._stack(mock_fixture_def)
         state.set_selection(["Left"])
         state.stage_colour("red")
-        state.set_effect("looks/RedWash")         # NO dimmer sublanes
+        state.stage_effect("looks/RedWash")       # NO dimmer sublanes
         values, mask = layer.render(1.0)[1]
         # dimmer_groups is empty: the swatch's static dimmer applies.
         assert mask[DIMMER] and values[DIMMER] == 255
