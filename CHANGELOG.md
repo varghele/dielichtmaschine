@@ -198,6 +198,12 @@ verbatim as the GitHub Release notes (see [docs/releasing.md](docs/releasing.md)
 
 ### Fixed
 
+- **"Build the show" can finally be crossed off.** The Home
+  checklist's last step read a lane list attribute that does not
+  exist on the timeline model, so it silently saw every project as
+  empty and never checked - no matter how many shows were built. It
+  now reads the real attribute; loading a project with timeline
+  blocks completes the checklist 5 / 5.
 - **The Auto screen's SETUP button no longer collapses.** Opening the
   SETUP disclosure into a right-column splitter pane without room
   (easy to reach - the pane split is remembered per machine) crushed

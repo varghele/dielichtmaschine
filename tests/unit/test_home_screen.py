@@ -147,6 +147,36 @@ class TestChecklist:
         finally:
             home.deleteLater()
 
+    def test_built_show_completes_the_checklist(self, qapp,
+                                                sample_configuration):
+        """A config whose song carries timeline blocks checks the last
+        step. Regression: the predicate read timeline_data.light_lanes
+        but the model attribute is ``lanes``, so "Build the show" never
+        checked on ANY config (found 2026-07-22 by the user loading a
+        fully built project). Built with the real model classes - a
+        duck-typed fake would have hidden exactly this bug."""
+        from config.models import (LightBlock, LightLane, ShowPart, Song,
+                                   TimelineData)
+        song = Song(name="Opener")
+        song.parts.append(ShowPart(
+            name="Verse", color="#F0562E", signature="4/4", bpm=120.0,
+            num_bars=8, transition="cut"))
+        lane = LightLane(name="Front", fixture_targets=["Front Pars"])
+        lane.light_blocks.append(LightBlock(
+            start_time=0.0, end_time=4.0, effect_name="bars.static"))
+        song.timeline_data = TimelineData(lanes=[lane])
+        sample_configuration.songs = {"Opener": song}
+
+        home = self._home()
+        try:
+            home.refresh_checklist(sample_configuration)
+            states = [r.property("state") for r in home.checklist_rows]
+            assert states == ["done"] * 5
+            assert home.progress_label.text().startswith("5 / 5")
+            assert home.checklist_rows[4].marker.text() == "✓"
+        finally:
+            home.deleteLater()
+
     def test_rows_emit_their_tab_index(self, qapp):
         from PyQt6.QtCore import Qt
         from PyQt6.QtTest import QTest
