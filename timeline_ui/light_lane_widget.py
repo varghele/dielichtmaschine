@@ -10,6 +10,7 @@ from PyQt6.QtGui import QUndoStack
 from .timeline_widget import (TimelineWidget, HEADER_COLUMN_WIDTH,
                               sublane_band_geometry)
 from .light_block_widget import LightBlockWidget
+from .locking import flash_locked
 from .undo_commands import InsertRiffCommand, DeleteBlockCommand, AddBlockCommand
 from timeline.light_lane import LightLane
 
@@ -493,6 +494,9 @@ class LightLaneWidget(QFrame):
 
     def add_light_block(self):
         """Add a new light block at the current playhead position."""
+        if self._locked():
+            flash_locked(self)
+            return
         from config.models import DimmerBlock, ColourBlock, MovementBlock, SpecialBlock
 
         start_time = self.timeline_widget.playhead_position
@@ -563,6 +567,9 @@ class LightLaneWidget(QFrame):
             block_widget: The widget to remove
             use_undo: If True, use undo command (default). Set False for internal use.
         """
+        if self._locked():
+            flash_locked(self)
+            return
         block = block_widget.block
         undo_stack = self._get_undo_stack() if use_undo else None
 
@@ -593,6 +600,8 @@ class LightLaneWidget(QFrame):
 
     # Event handlers
     def on_name_changed(self, text):
+        if self._locked():
+            return          # belt: the edit is read-only when locked
         self.lane.name = text
 
     def group_color(self):
@@ -681,6 +690,9 @@ class LightLaneWidget(QFrame):
 
     def open_target_selection(self):
         """Open the target selection dialog."""
+        if self._locked():
+            flash_locked(self)
+            return
         from timeline_ui.target_selection_dialog import TargetSelectionDialog
         from PyQt6.QtWidgets import QDialog
 
@@ -699,6 +711,8 @@ class LightLaneWidget(QFrame):
 
     def on_targets_changed(self, targets):
         """Handle fixture targets change - update capabilities and sublanes."""
+        if self._locked():
+            return          # belt: the dialog entry point is guarded
         self.lane.fixture_targets = targets
         self._update_targets_display()
 
@@ -760,6 +774,9 @@ class LightLaneWidget(QFrame):
         Args:
             target_time: Start time for the pasted effect
         """
+        if self._locked():
+            flash_locked(self)
+            return
         from timeline_ui.effect_clipboard import paste_effect, has_multi_clipboard_data, paste_multiple_effects
 
         # Check if we have multi-clipboard data
@@ -807,6 +824,25 @@ class LightLaneWidget(QFrame):
             undo_stack.push(AddBlockCommand(self, new_block, "Paste Effect"))
         self.block_edited.emit()
 
+    def _locked(self) -> bool:
+        """True when the hosting tab's current song is locked. Lane
+        identity cannot resolve the song data-driven (the runtime lane
+        is a from_data_model copy; only block objects are shared), so
+        this walks to the ShowsTab. Fails OPEN outside a ShowsTab -
+        lane-level edit entry points only exist inside its chrome, and
+        block-level guards stay data-driven regardless."""
+        tab = self._get_shows_tab()
+        checker = getattr(tab, "is_current_song_locked", None)
+        return bool(checker()) if callable(checker) else False
+
+    def set_locked(self, locked: bool) -> None:
+        """UI half of the fence: the name edit and TARGETS chip grey
+        out (their handlers are also guarded - belt and braces)."""
+        self.name_edit.setReadOnly(locked)
+        self.targets_chip.setEnabled(not locked)
+        if hasattr(self, "add_block_button"):
+            self.add_block_button.setEnabled(not locked)
+
     def _get_shows_tab(self):
         """Get the ShowsTab parent widget if available."""
         # Walk up the parent chain to find ShowsTab (has lane_widgets)
@@ -852,6 +888,9 @@ class LightLaneWidget(QFrame):
             riff_path: Path to riff like "category/name"
             drop_time: Time position where riff was dropped
         """
+        if self._locked():
+            flash_locked(self)
+            return
         # Get riff library from main window
         riff_library = getattr(self, 'riff_library', None)
         if not riff_library:

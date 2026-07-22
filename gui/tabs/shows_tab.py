@@ -26,6 +26,7 @@ from timeline_ui.light_block_widget import (bar_range_label,
 from gui.icons import line_icon, shell_icon
 from gui.typography import DisplayLabel, MicroLabel, mono_font
 from gui.tabs.configuration_tab import TOOLBAR_BTN_WIDTH
+from timeline_ui.locking import flash_locked
 from timeline_ui.selection_manager import SelectionManager
 from timeline_ui.selection_overlay import SelectionOverlay
 from timeline_ui.effect_clipboard import (copy_multiple_effects, paste_multiple_effects,
@@ -829,15 +830,19 @@ class ShowsTab(BaseTab):
         return "1"
 
     def _update_status_line(self):
-        """"<n> LANES · <n> BLOCKS · GRID 1/4 · ZOOM 1.0x"."""
+        """"<n> LANES · <n> BLOCKS · GRID 1/4 · ZOOM 1.0x" (+ LOCKED)."""
         if not hasattr(self, "status_line"):
             return
         lanes = len(self.lane_widgets)
         blocks = sum(len(w.lane.light_blocks) for w in self.lane_widgets)
         zoom = self.zoom_slider.value() / 100.0
+        # The lock is toggled on the Structure tab's song header (the
+        # toolbar row is width-critical at 720p, no room for a chip);
+        # here it reads as footer state.
+        locked = " · LOCKED" if self.is_current_song_locked() else ""
         self.status_line.setText(
             f"{lanes} LANES · {blocks} BLOCKS · "
-            f"GRID {self._grid_label()} · ZOOM {zoom:.1f}X"
+            f"GRID {self._grid_label()} · ZOOM {zoom:.1f}X{locked}"
         )
 
     @staticmethod
@@ -1158,6 +1163,8 @@ class ShowsTab(BaseTab):
                 # cheaply, keeping the selected song by data.
                 self._populate_show_combo(
                     select=self.show_combo.currentData() or "")
+            # Lock may have been toggled from the Structure tab.
+            self._refresh_lock_ui()
         finally:
             self._is_activating = False
 
@@ -1383,6 +1390,7 @@ class ShowsTab(BaseTab):
         # Footer + bar readout now that the structure and lanes are in place.
         self._update_status_line()
         self._update_playhead_display(self.playhead_position)
+        self._refresh_lock_ui()
 
     def _clear_timeline(self):
         """Clear all timeline data."""
@@ -1391,6 +1399,32 @@ class ShowsTab(BaseTab):
         self._clear_light_lanes()
         self.master_timeline.timeline_widget.set_song_structure(None)
         self.audio_lane.set_song_structure(None)
+        self._refresh_lock_ui()
+
+    # -- Song lock (v1.5) ---------------------------------------------------
+    # The lock TOGGLE lives on the Structure tab's song header (with
+    # RENAME SONG / DELETE - the toolbar row here is width-critical at
+    # 720p). This tab enforces and displays: guarded handlers, disabled
+    # edit chrome, a LOCKED footer tag, statusbar flashes.
+
+    def is_current_song_locked(self) -> bool:
+        """Public: lane widgets duck-type this through _get_shows_tab."""
+        song = self.config.songs.get(self.current_song_name) \
+            if self.current_song_name else None
+        return bool(song is not None and getattr(song, "locked", False))
+
+    def _refresh_lock_ui(self) -> None:
+        """Sync the cheap-to-disable edit chrome with the current
+        song's lock. Handlers stay guarded regardless - this is the
+        visible half of the fence, not the fence."""
+        locked = self.is_current_song_locked()
+        self.add_lane_btn.setEnabled(not locked)
+        if self.autogen_btn.text() != "GENERATING...":
+            self.autogen_btn.setEnabled(not locked)
+        for lane_widget in self.lane_widgets:
+            if hasattr(lane_widget, "set_locked"):
+                lane_widget.set_locked(locked)
+        self._update_status_line()
 
     def _clear_light_lanes(self):
         """Remove all light lane widgets.
@@ -1483,6 +1517,9 @@ class ShowsTab(BaseTab):
                 QMessageBox.StandardButton.Ok
             )
             return
+        if self.is_current_song_locked():
+            flash_locked(self)
+            return
 
         # Show status indicator
         progress = get_progress_manager()
@@ -1510,6 +1547,9 @@ class ShowsTab(BaseTab):
         if not self.current_song_name:
             QMessageBox.warning(self, "No Show Selected",
                 "Please select a show first.", QMessageBox.StandardButton.Ok)
+            return
+        if self.is_current_song_locked():
+            flash_locked(self)
             return
 
         show = self.config.songs.get(self.current_song_name)
@@ -1575,8 +1615,12 @@ class ShowsTab(BaseTab):
 
     def _on_autogen_finished(self, lanes, report=None):
         """Handle generated lanes from background worker."""
-        self.autogen_btn.setEnabled(True)
+        self.autogen_btn.setEnabled(not self.is_current_song_locked())
         self.autogen_btn.setText("AUTOGEN")
+        if self.is_current_song_locked():
+            # A worker started pre-lock finished post-lock: drop it.
+            flash_locked(self)
+            return
 
         # Store generation report for inspector
         self._generation_report = report
@@ -1654,6 +1698,9 @@ class ShowsTab(BaseTab):
     def _on_lane_remove_requested(self, lane_widget: LightLaneWidget):
         """The lane header's "x": remove through the undo stack so
         Ctrl+Z brings the lane (and every block on it) back."""
+        if self.is_current_song_locked():
+            flash_locked(self)
+            return
         undo_stack = self._get_undo_stack()
         if undo_stack is not None:
             from timeline_ui.undo_commands import RemoveLaneCommand
@@ -3039,6 +3086,9 @@ class ShowsTab(BaseTab):
 
     def _paste_at_playhead(self):
         """Paste clipboard blocks at playhead position."""
+        if self.is_current_song_locked():
+            flash_locked(self)
+            return
         if has_multi_clipboard_data():
             # Paste multiple blocks
             results = paste_multiple_effects(self.playhead_position, self.lane_widgets)
@@ -3090,6 +3140,9 @@ class ShowsTab(BaseTab):
     def _delete_selected_blocks(self):
         """Delete all selected blocks - one undo macro, so a single
         Ctrl+Z restores the whole selection."""
+        if self.is_current_song_locked():
+            flash_locked(self)
+            return
         selected = self.selection_manager.get_selected_blocks()
         if not selected:
             return

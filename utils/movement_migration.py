@@ -282,11 +282,23 @@ def plan_migration(config, song_names=None) -> List[BlockMigration]:
         timeline = getattr(song, "timeline_data", None)
         if timeline is None:
             continue
+        locked = bool(getattr(song, "locked", False))
         for lane in timeline.lanes:
             fixtures = _mover_fixtures(lane, config)
             for envelope in lane.light_blocks:
                 for block in envelope.movement_blocks:
                     if _has_world_target(block):
+                        continue
+                    if locked:
+                        # Locked songs refuse edits; report the skip so
+                        # the conversion dialog says why, and apply
+                        # (converted-only) leaves them untouched.
+                        entries.append(BlockMigration(
+                            song=song_name, lane=lane.name,
+                            start_time=block.start_time,
+                            end_time=block.end_time,
+                            status="skipped",
+                            reason="song is locked", block=block))
                         continue
                     entries.append(_trace_block(
                         song_name, lane, block, fixtures, bounds, config))

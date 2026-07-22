@@ -1398,6 +1398,10 @@ class Song:
     # without the audio file. utils/morph/analysis_cache.py owns the
     # shape. Empty dict = never analyzed.
     analysis_cache: Dict = field(default_factory=dict)
+    # Lock (v1.5): a finished song refuses timeline/structure edits in
+    # the UI until unlocked. Playback, export, morphing and the setlist
+    # are untouched - the lock is an editor fence, not a data seal.
+    locked: bool = False
 
     def apply_palette(self) -> int:
         """Re-resolve every role-tagged colour block against ``palette``.
@@ -1442,6 +1446,8 @@ class Song:
             data['lineage'] = dict(self.lineage)
         if self.analysis_cache:
             data['analysis_cache'] = dict(self.analysis_cache)
+        if self.locked:
+            data['locked'] = True
         return data
 
     @classmethod
@@ -1485,6 +1491,7 @@ class Song:
                      in (data.get('palette') or {}).items()},
             lineage=dict(data.get('lineage') or {}),
             analysis_cache=dict(data.get('analysis_cache') or {}),
+            locked=bool(data.get('locked', False)),
             trigger_device=data.get('trigger_device', '') or '',
             trigger_channel=(
                 data.get('trigger_channel', -1)

@@ -13,6 +13,22 @@ verbatim as the GitHub Release notes (see [docs/releasing.md](docs/releasing.md)
 
 ### Added
 
+- **Finished songs can be locked against accidental edits.** A LOCK
+  chip on the Structure tab's song header (next to RENAME SONG and
+  DELETE): while locked, every timeline and structure edit refuses -
+  blocks cannot be added, moved, resized, renamed, deleted or edited
+  (keyboard shortcuts, drag, context menus, Ctrl+wheel speed and the
+  block dialogs included), lanes cannot be added, removed, renamed or
+  retargeted, parts and song rename/delete grey out, autogenerate and
+  the movement-to-world-targets conversion skip the song. Playback,
+  export, morphing, the setlist and the lane mute/solo toggles stay
+  fully live, and copy/save-as-riff keep working - the lock protects
+  content, not operation. The Shows tab shows a LOCKED tag in its
+  footer and refuses with a statusbar note; the flag persists in the
+  project file (older files load unlocked, unlocked songs stay
+  byte-identical), and a morphed copy of a locked song starts
+  unlocked - it is new work.
+
 - **Auto mode shows what the microphone hears - and can turn it up.**
   A live INPUT LEVEL meter on the Auto screen (dB scale, -60 to 0)
   runs as soon as the tab opens, engine started or not, so "does it

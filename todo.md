@@ -97,12 +97,22 @@ the desk can judge:
 
 ## v1.5 feature pull-ins (agreed 2026-07-21)
 
-- [ ] **Lock finished shows against accidental edits** (agreed
-      2026-07-22) - a per-song lock: a finished show can be marked
-      locked so timeline and structure edits refuse until unlocked;
-      playback, export and morphing stay untouched. Grew out of the
-      checklist discussion (the "Build the show" step) - protecting
-      a done show is its own feature, not checklist state.
+- [x] **Lock finished shows against accidental edits** - SHIPPED
+      2026-07-22: Song.locked (only-when-set in the .lms, pre-lock
+      files byte-stable, morph output unlocked by design), toggled by
+      the LOCK chip on the Structure tab song header (the Shows
+      toolbar is width-critical at 720p - that tab shows a LOCKED
+      footer tag instead). Enforcement is belt-and-braces: handler
+      guards on every mutation surface (block press/drag family
+      killed at pickup, double-click, context menus, Delete keys,
+      Ctrl+wheel speed, sublane marquee, lane add/remove/rename/
+      retarget/riff-drop/paste, all part/song handlers, autogen on
+      both tabs, CSV import) + disabled chrome; movement migration
+      reports locked songs as skipped; mute/solo/snap and every
+      read-only path stay live; undo of pre-lock edits stays allowed
+      by design. timeline_ui/locking.py carries the statusbar flash.
+      Tests: test_song_lock.py + TestSongLock in the serializer
+      suite; structure goldens regenerated.
 
 - [x] **Auto mode input level meter + gain** - SHIPPED 2026-07-21:
       INPUT LEVEL strip above the analysis meters (dB bar fed by the

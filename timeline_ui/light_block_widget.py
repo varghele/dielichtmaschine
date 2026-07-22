@@ -8,6 +8,7 @@ from PyQt6.QtGui import (
     QPainter, QColor, QPen, QBrush, QMouseEvent, QFont, QLinearGradient,
 )
 from config.models import LightBlock
+from .locking import flash_locked
 from .timeline_widget import STRIP_ZONE_HEIGHT, sublane_band_geometry
 
 # Glutorange, the brand accent (gui/theme_tokens.py); selection marks in
@@ -1433,6 +1434,11 @@ class LightBlockWidget(QWidget):
     def mousePressEvent(self, event: QMouseEvent):
         """Handle mouse press for dragging/resizing envelope or sublane blocks."""
         if event.button() == Qt.MouseButton.RightButton:
+            if self._locked():
+                # No marquee pickup (its only action is bulk delete); a
+                # plain right-click still reaches contextMenuEvent,
+                # whose mutating items are disabled when locked.
+                return
             # Track press position. If the user drags, mouseMoveEvent activates
             # a marquee for sublane blocks. A plain right-click (no drag) falls
             # through to the existing contextMenuEvent.
@@ -1450,6 +1456,17 @@ class LightBlockWidget(QWidget):
             # FIRST: Check for intensity handle click (takes priority over header zone)
             # This allows adjusting dimmer intensity even when the handle is in the header area
             sublane_type, sublane_block = self._get_sublane_block_at_pos(pos)
+
+            if self._locked():
+                # LOCKED: selection only. No drag flag is ever picked
+                # up, so the whole mutation family rooted here (move,
+                # resize, drag-to-create, intensity drag, shift-copy)
+                # is unreachable while copy/save-as-riff keep working.
+                self.selected_sublane_type = sublane_type
+                self.selected_sublane_block = sublane_block
+                self.update()
+                flash_locked(self)
+                return
             if sublane_block is not None and self._is_on_intensity_handle(pos, sublane_type, sublane_block):
                 # Clicking on intensity handle - start intensity drag
                 self.selected_sublane_type = sublane_type
@@ -1831,6 +1848,8 @@ class LightBlockWidget(QWidget):
             start_time: Start time for the block
             end_time: End time for the block
         """
+        if self._locked():
+            return
         from config.models import DimmerBlock, ColourBlock, MovementBlock, SpecialBlock
 
         # Reject mouse-slip-tiny blocks that would be near-impossible to grab afterward.
@@ -1995,6 +2014,9 @@ class LightBlockWidget(QWidget):
 
     def mouseDoubleClickEvent(self, event: QMouseEvent):
         """Handle double-click to open effect editor or sublane block editor."""
+        if self._locked():
+            flash_locked(self)
+            return
         if event.button() == Qt.MouseButton.LeftButton:
             pos = event.position().toPoint()
             sublane_type, sublane_block = self._get_sublane_block_at_pos(pos)
@@ -2016,6 +2038,10 @@ class LightBlockWidget(QWidget):
         from PyQt6.QtWidgets import QMenu
         menu = QMenu(self)
 
+        # LOCKED: mutating items are disabled in place (Copy and Save
+        # as Riff stay live - they read, never write).
+        locked = self._locked()
+
         # Check if right-clicked on a sublane block
         pos = self.mapFromGlobal(event.globalPos())
         sublane_type, sublane_block = self._get_sublane_block_at_pos(pos)
@@ -2034,16 +2060,19 @@ class LightBlockWidget(QWidget):
             edit_sublane_action.triggered.connect(
                 lambda: self.open_sublane_dialog(sublane_type, sublane_block)
             )
+            edit_sublane_action.setEnabled(not locked)
 
             delete_sublane_action = menu.addAction(f"Delete {label} Block")
             delete_sublane_action.triggered.connect(
                 lambda: self._delete_sublane_block(sublane_type, sublane_block)
             )
+            delete_sublane_action.setEnabled(not locked)
 
             menu.addSeparator()
 
         set_name_action = menu.addAction("Set Name...")
         set_name_action.triggered.connect(self.set_block_name)
+        set_name_action.setEnabled(not locked)
 
         menu.addSeparator()
 
@@ -2077,6 +2106,7 @@ class LightBlockWidget(QWidget):
 
         delete_action = menu.addAction(delete_label)
         delete_action.triggered.connect(self._delete_effect_or_selection)
+        delete_action.setEnabled(not locked)
 
         menu.exec(event.globalPos())
 
@@ -2110,6 +2140,9 @@ class LightBlockWidget(QWidget):
 
     def set_block_name(self):
         """Set or change the custom name for this effect block."""
+        if self._locked():
+            flash_locked(self)
+            return
         from PyQt6.QtWidgets import QInputDialog
 
         # Get current name (or empty string if None)
@@ -2136,6 +2169,11 @@ class LightBlockWidget(QWidget):
             sublane_type: Type of sublane ("dimmer", "colour", "movement", "special")
             sublane_block: The sublane block to edit
         """
+        if self._locked():
+            # Also fences the palette editor, which only opens from the
+            # colour block dialog.
+            flash_locked(self)
+            return
         dialog = None
 
         if sublane_type == "dimmer":
@@ -2173,7 +2211,7 @@ class LightBlockWidget(QWidget):
         the blocks), so the block sitting in a song's timeline_data IS
         self.block. Data-driven, so it works from any host tab.
         """
-        config = self.lane_widget.config if self.lane_widget else None
+        config = getattr(self.lane_widget, "config", None)
         for song in (getattr(config, "songs", None) or {}).values():
             timeline = getattr(song, "timeline_data", None)
             if timeline is None:
@@ -2182,6 +2220,13 @@ class LightBlockWidget(QWidget):
                 if any(b is self.block for b in lane.light_blocks):
                     return song
         return None
+
+    def _locked(self) -> bool:
+        """True when the owning song refuses edits (Song.locked). Data
+        driven via _find_owning_song, so the fence holds from any host;
+        blocks not (yet) in a song - e.g. mid-construction - are open."""
+        song = self._find_owning_song()
+        return bool(song is not None and getattr(song, "locked", False))
 
     def _get_color_wheel_options(self):
         """Get color wheel options from fixture group if available.
@@ -2216,6 +2261,8 @@ class LightBlockWidget(QWidget):
             sublane_type: Type of sublane
             sublane_block: The block to delete
         """
+        if self._locked():
+            return
         block_list = None
         if sublane_type == "dimmer":
             block_list = self.block.dimmer_blocks
@@ -2297,6 +2344,7 @@ class LightBlockWidget(QWidget):
             label = "Delete Block" if count == 1 else f"Delete {count} Blocks"
             delete = menu.addAction(label)
             delete.triggered.connect(lambda: self._bulk_delete_sublane_blocks(hits))
+            delete.setEnabled(not self._locked())
             menu.addSeparator()
             cancel = menu.addAction("Cancel")
             cancel.triggered.connect(lambda: None)
@@ -2373,6 +2421,9 @@ class LightBlockWidget(QWidget):
 
     def _delete_effect_or_selection(self):
         """Delete this effect or all selected effects."""
+        if self._locked():
+            flash_locked(self)
+            return
         # Check if this block is part of a multi-selection
         if self._is_multi_selected:
             shows_tab = self._get_shows_tab()
@@ -2389,6 +2440,10 @@ class LightBlockWidget(QWidget):
 
         # Check if Ctrl is pressed and a dimmer or movement block is selected
         if event.modifiers() & Qt.KeyboardModifier.ControlModifier:
+            if self._locked():
+                event.accept()
+                flash_locked(self)
+                return
             if self.selected_sublane_type in ["dimmer", "movement"] and self.selected_sublane_block:
                 # Speed options in order
                 speed_options = ["1/16", "1/8", "1/4", "1/2", "1", "2", "4", "8", "16"]
@@ -2430,6 +2485,9 @@ class LightBlockWidget(QWidget):
     def keyPressEvent(self, event):
         """Handle key press for deletion."""
         if event.key() == Qt.Key.Key_Delete or event.key() == Qt.Key.Key_Backspace:
+            if self._locked():
+                flash_locked(self)
+                return
             self.remove_requested.emit(self)
         else:
             super().keyPressEvent(event)

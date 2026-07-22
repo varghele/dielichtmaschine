@@ -335,6 +335,36 @@ class TestProvenance:
         assert got == ["morphed:edge-7", "hand_edited", ""]
 
 
+class TestSongLock:
+    """Song.locked (v1.5): a SONG-level flag, so the compact serializer
+    passes it through untouched - the only-when-set idiom lives in
+    Song.to_dict/from_dict, keeping pre-lock files byte-stable."""
+
+    def test_unlocked_song_writes_no_key(self):
+        data = _make_config_with_shows({
+            "S1": _make_show(lanes=[_make_lane([_make_lightblock(0, 10)])])
+        })
+        compact = compact_serialize(data)
+        assert 'locked' not in compact['songs']['S1']
+
+    def test_locked_survives_a_real_lms_round_trip(self, tmp_path):
+        from config.models import Configuration, Song
+        cfg = Configuration(fixtures=[], groups={}, universes={})
+        cfg.songs = {"Done": Song(name="Done", locked=True),
+                     "Draft": Song(name="Draft")}
+        path = str(tmp_path / "lock.lms")
+        cfg.save(path)
+
+        loaded = Configuration.load(path)
+        assert loaded.songs["Done"].locked is True
+        assert loaded.songs["Draft"].locked is False
+
+    def test_old_files_without_the_key_load_unlocked(self):
+        from config.models import Song
+        song = Song.from_dict("S1", {"parts": [], "effects": []})
+        assert song.locked is False
+
+
 class TestOrderPreservation:
     def test_non_chronological_order_preserved(self):
         """Blocks not in chronological order are preserved in original order."""
