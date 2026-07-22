@@ -97,6 +97,13 @@ the desk can judge:
 
 ## v1.5 feature pull-ins (agreed 2026-07-21)
 
+- [ ] **Lock finished shows against accidental edits** (agreed
+      2026-07-22) - a per-song lock: a finished show can be marked
+      locked so timeline and structure edits refuse until unlocked;
+      playback, export and morphing stay untouched. Grew out of the
+      checklist discussion (the "Build the show" step) - protecting
+      a done show is its own feature, not checklist state.
+
 - [x] **Auto mode input level meter + gain** - SHIPPED 2026-07-21:
       INPUT LEVEL strip above the analysis meters (dB bar fed by the
       capture callback's pre-gain peak - frame.rms is EMA-normalized
