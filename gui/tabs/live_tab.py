@@ -1152,6 +1152,11 @@ class LiveTab(BaseTab):
     effects wait on the live engine (docs/live-output-plan.md).
     """
 
+    #: ARM toggled by the operator on the busk surface (2026-07-22);
+    #: the shell arms/disarms and reflects the ACTUAL state back via
+    #: set_chase_armed - same contract as the Structure tab's chip.
+    chase_arm_requested = pyqtSignal(bool)
+
     def __init__(self, config: Configuration, parent=None):
         # Non-UI state must exist before super().__init__ runs setup_ui().
         self.state = LiveState()
@@ -1500,6 +1505,28 @@ class LiveTab(BaseTab):
             "clock, MTC, LTC - arrives with the sync engine and will "
             "slave the clock shown here")
         hbox.addWidget(self._sync_chip)
+        # Incoming SMPTE readout (2026-07-22): the received timecode,
+        # inline instead of tooltip-only - the operator glance line.
+        # Empty (hidden) while the sync is internal.
+        self._sync_tc_label = QLabel("")
+        self._sync_tc_label.setObjectName("TimeReadout")
+        self._sync_tc_label.setToolTip("Last received SMPTE timecode")
+        self._sync_tc_label.hide()
+        hbox.addWidget(self._sync_tc_label)
+        # ARM CHASE from the busk surface (the same shell arm/disarm
+        # the Structure tab drives; the input DEVICE stays configured
+        # there - it is setlist configuration, like triggers).
+        self._arm_chase_btn = QPushButton("ARM")
+        self._arm_chase_btn.setCheckable(True)
+        self._arm_chase_btn.setProperty("role", "output-select")
+        self._arm_chase_btn.setFont(mono_font(8, QFont.Weight.Medium))
+        self._arm_chase_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._arm_chase_btn.setToolTip(
+            "Follow incoming SMPTE timecode (songs with an SMPTE "
+            "trigger fire at their start time) · the sync input device "
+            "is picked on the Structure tab")
+        self._arm_chase_btn.toggled.connect(self._on_arm_chase_toggled)
+        hbox.addWidget(self._arm_chase_btn)
         hbox.addSpacing(8)
         self._refresh_output_status()
 
@@ -1621,8 +1648,9 @@ class LiveTab(BaseTab):
         """SYNC chip source (docs/ltc-plan.md phase 3). ``source`` is
         "int" (internal TAP, the default) or "ltc" with the chase's
         state ("locked" / "freewheel" / "no_signal") and the last
-        received timecode label for the tooltip. Display-only; the
-        shell drives this from the LTC service's signals."""
+        received timecode label - shown INLINE in the #TimeReadout
+        next to the chip (2026-07-22). Display-only; the shell drives
+        this from the LTC service's signals."""
         chip = self._sync_chip
         if source == "ltc":
             text = {"locked": "SYNC LTC",
@@ -1639,6 +1667,8 @@ class LiveTab(BaseTab):
                 tip += " · no signal"
             chip.setToolTip(tip)
             self._set_chip_state(chip, state == "locked")
+            self._sync_tc_label.setText(label or "--:--:--:--")
+            self._sync_tc_label.show()
         else:
             chip.setText("SYNC INT")
             chip.setToolTip(
@@ -1646,6 +1676,21 @@ class LiveTab(BaseTab):
                 "clock, MTC, LTC - arrives with the sync engine and "
                 "will slave the clock shown here")
             self._set_chip_state(chip, True)
+            self._sync_tc_label.clear()
+            self._sync_tc_label.hide()
+
+    def _on_arm_chase_toggled(self, checked: bool) -> None:
+        self.chase_arm_requested.emit(bool(checked))
+
+    def set_chase_armed(self, armed: bool) -> None:
+        """The shell reflects the ACTUAL chase state here (arming can
+        fail; disarm can come from the timeline's STOP or the
+        Structure tab's chip)."""
+        btn = self._arm_chase_btn
+        btn.blockSignals(True)
+        btn.setChecked(armed)
+        btn.setText("CHASING" if armed else "ARM")
+        btn.blockSignals(False)
 
     @staticmethod
     def _set_chip_state(chip: QLabel, on: bool) -> None:

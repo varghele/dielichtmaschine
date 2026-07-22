@@ -1577,6 +1577,42 @@ class TestQueue:
         assert len(hits) == 6
 
 
+class TestSyncCluster:
+    """The fade row's SMPTE surface (2026-07-22): inline timecode
+    readout + ARM chip on the busk surface. Display + request only -
+    the shell owns arming and reflects the actual state back."""
+
+    def test_arm_chip_emits_the_request(self, live_tab):
+        fired = []
+        live_tab.chase_arm_requested.connect(fired.append)
+        live_tab._arm_chase_btn.setChecked(True)
+        assert fired == [True]
+        live_tab._arm_chase_btn.setChecked(False)
+        assert fired == [True, False]
+
+    def test_set_chase_armed_reflects_without_echo(self, live_tab):
+        fired = []
+        live_tab.chase_arm_requested.connect(fired.append)
+        live_tab.set_chase_armed(True)
+        assert live_tab._arm_chase_btn.isChecked()
+        assert live_tab._arm_chase_btn.text() == "CHASING"
+        live_tab.set_chase_armed(False)
+        assert live_tab._arm_chase_btn.text() == "ARM"
+        assert fired == []          # shell pushes never re-emit
+
+    def test_ltc_status_shows_inline_timecode(self, live_tab):
+        live_tab.set_sync_status("ltc", "locked", "01:23:45:12")
+        assert live_tab._sync_chip.text() == "SYNC LTC"
+        assert live_tab._sync_tc_label.text() == "01:23:45:12"
+        assert not live_tab._sync_tc_label.isHidden()
+        live_tab.set_sync_status("ltc", "no_signal")
+        assert live_tab._sync_chip.text() == "SYNC LTC · NO SIG"
+        assert live_tab._sync_tc_label.text() == "--:--:--:--"
+        live_tab.set_sync_status("int")
+        assert live_tab._sync_chip.text() == "SYNC INT"
+        assert live_tab._sync_tc_label.isHidden()
+
+
 class TestRoles:
     def test_actions_use_theme_roles(self, live_tab):
         # DBO is destructive-outline: quiet outline idle, filled red

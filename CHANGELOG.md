@@ -13,6 +13,17 @@ verbatim as the GitHub Release notes (see [docs/releasing.md](docs/releasing.md)
 
 ### Added
 
+- **The Live tab can arm the SMPTE chase and watch it.** The fade
+  row's SYNC cluster grew an ARM chip (the same chase the Structure
+  tab arms - the input device stays configured there, with the
+  setlist) and an inline timecode readout: while armed, the last
+  received SMPTE timecode shows next to SYNC LTC in the LED readout
+  voice, with LOCKED / FREEWHEEL / NO SIG states at a glance - so
+  "is the desk sending timecode" is answered from the busk surface.
+  Arming without the setlist in SMPTE sync mode explains itself in
+  the status bar instead of silently failing. Render Show to Video
+  moved from its one-action Render menu into Tools.
+
 - **Every Live pool is per-group now - a full look per group.** The
   EFFECTS, INTENSITY FX and MOVEMENT SHAPES pools all work like the
   POSITION pool: touching a key applies it to the selected groups,

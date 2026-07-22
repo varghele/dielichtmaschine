@@ -473,8 +473,16 @@ class MainWindow(QMainWindow, Ui_MainWindow):
 
     def _on_chase_arm_requested(self, armed: bool):
         if armed:
+            if getattr(self.config.setlist, "sync_mode", "") != "smpte":
+                self.statusBar().showMessage(
+                    "Set the setlist sync mode to SMPTE on the "
+                    "Structure tab before arming the chase", 6000)
+                self.structure_tab.set_chase_armed(False)
+                self.live_tab.set_chase_armed(False)
+                return
             if not self.arm_ltc_chase():
                 self.structure_tab.set_chase_armed(False)
+                self.live_tab.set_chase_armed(False)
         else:
             self.disarm_ltc_chase()
 
@@ -495,6 +503,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self._ltc_runner = None    # built once the incoming rate is known
         self.shows_tab.set_chase_armed(True, disarm=self.disarm_ltc_chase)
         self.structure_tab.set_chase_armed(True)
+        self.live_tab.set_chase_armed(True)
         self.live_tab.set_sync_status("ltc", "no_signal")
         # The pause-look layer lives exactly as long as the chase is
         # armed: between songs the arbiter renders the entry's
@@ -523,6 +532,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             self._ltc_service.stop()
         self.shows_tab.set_chase_armed(False)
         self.structure_tab.set_chase_armed(False)
+        self.live_tab.set_chase_armed(False)
         self.live_tab.set_sync_status("int")
         layer = getattr(self, "_pause_look_layer", None)
         if layer is not None:
@@ -611,6 +621,8 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         # LTC chase: the Structure tab's ARM CHASE chip only requests;
         # the SHELL arms/disarms (docs/ltc-plan.md phase 3).
         self.structure_tab.chase_arm_requested.connect(
+            self._on_chase_arm_requested)
+        self.live_tab.chase_arm_requested.connect(
             self._on_chase_arm_requested)
 
         # The Live tab's show strip drives the Shows tab's transport
