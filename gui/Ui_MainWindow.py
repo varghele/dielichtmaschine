@@ -265,6 +265,13 @@ class Ui_MainWindow(object):
         self.actionConvertMovementTargets = QAction(
             "Convert Movement to World Targets...", MainWindow)
         self.menuTools.addAction(self.actionConvertMovementTargets)
+        # Render-to-video: lived in its own one-action Render menu
+        # until 2026-07-22 - it is a tool over the loaded show, not a
+        # menu category. gui.py wires the handler.
+        self.menuTools.addSeparator()
+        self.actionRenderToVideo = QAction("Render Show to Video...",
+                                           MainWindow)
+        self.menuTools.addAction(self.actionRenderToVideo)
 
         # Settings menu
         self.menuSettings = QtWidgets.QMenu("Settings", parent=MainWindow)

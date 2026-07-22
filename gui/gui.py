@@ -1037,6 +1037,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             self.convert_movement_targets)
         self.actionVenuePreflight.triggered.connect(
             self.open_venue_preflight)
+        self.actionRenderToVideo.triggered.connect(self.render_to_video)
 
         # Settings menu actions
         self.actionAudioSettings.triggered.connect(self.open_audio_settings)
@@ -1066,13 +1067,6 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             self.actionThemeLight.setChecked(True)
         else:
             self.actionThemeDark.setChecked(True)
-
-        # Render menu (insert before Help)
-        self.menuRender = QtWidgets.QMenu("Render", parent=self)
-        self.overflow_menu.insertMenu(self.menuHelp.menuAction(), self.menuRender)
-        self.actionRenderToVideo = QAction("Render Show to Video...", self)
-        self.menuRender.addAction(self.actionRenderToVideo)
-        self.actionRenderToVideo.triggered.connect(self.render_to_video)
 
         # Ctrl+L focuses the embedded Auto tab (index 5) — the auto-DJ
         # audio-reactive lighting mode. Was originally a separate "Live
