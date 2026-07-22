@@ -257,11 +257,11 @@ class LiveState(QObject):
         # scene is a whole-rig look independent of the selection.
         self.effects: Dict[str, str] = {}        # group name -> riff key
         self.scene: Optional[str] = None         # staged scene key
-        # Staged MOVEMENT SHAPE (a MOVEMENT_REGISTRY rudiment id like
-        # "circle"). Selection-scoped like effect (the movement binder
-        # restages on selection change); anchored per group at the held
-        # position. Survives update_from_config like effect/scene.
-        self.shape: Optional[str] = None
+        # MOVEMENT SHAPES, PER GROUP (2026-07-22, same pattern as
+        # effects): group name -> MOVEMENT_REGISTRY rudiment id.
+        # Each mover group traces its own shape at its own held-
+        # position anchor; a shape keeps running after deselection.
+        self.shapes: Dict[str, str] = {}
         # Orbit radius in METERS (the S/M/L chips) - live shapes trace
         # in stage space around their anchor, so the size is physical,
         # not a DMX amplitude. A preference like fade/bpm: survives
@@ -272,10 +272,11 @@ class LiveState(QObject):
         # lockstep, 100 fans the heads evenly across the whole cycle.
         # A preference like shape_size.
         self.shape_stagger: int = 0
-        # Staged INTENSITY FX (a bundled "intensity/..." dimmer riff
-        # key). Same mechanics as effect on its own engine slot, so a
-        # dimmer pattern and a colour riff run concurrently.
-        self.intensity: Optional[str] = None
+        # INTENSITY FX, PER GROUP (2026-07-22): group name -> bundled
+        # "intensity/..." dimmer riff key. Same pattern as effects, on
+        # its own engine slot family, so each group's dimmer pattern
+        # runs concurrently with its colour riff.
+        self.intensities: Dict[str, str] = {}
         # Applied position palettes, PER GROUP (group name -> namespaced
         # id: "preset:centre", "preset:element:<id>", "mark:<spot name>"
         # - see utils/position_presets.py). Mirrors ``colours``: staging
@@ -322,11 +323,17 @@ class LiveState(QObject):
         self.positions = {g: p for g, p in self.positions.items()
                           if g in valid}
         self._prune_positions(spot_names, valid_element_ids)
-        # Per-group effects follow their group out of the config (the
-        # riff keys themselves are library-bound, not config-bound).
+        # Per-group effects/intensity/shapes follow their group out of
+        # the config (the keys themselves are library-bound).
         self.effects = {g: k for g, k in self.effects.items()
                         if g in valid}
-        self._sync_running_effects()
+        self.intensities = {g: k for g, k in self.intensities.items()
+                            if g in valid}
+        self.shapes = {g: k for g, k in self.shapes.items()
+                       if g in valid}
+        self._sync_running_grouped("effect", self.effects)
+        self._sync_running_grouped("intensity", self.intensities)
+        self._sync_running_grouped("shape", self.shapes)
 
     def _prune_positions(self, spot_names, valid_element_ids) -> None:
         spot_names = set(spot_names)
@@ -403,8 +410,8 @@ class LiveState(QObject):
         self.selected.clear()
         self.effects.clear()
         self.scene = None
-        self.shape = None
-        self.intensity = None
+        self.shapes.clear()
+        self.intensities.clear()
         self.positions.clear()
         self.running.clear()
         self.state_changed.emit()
@@ -496,47 +503,76 @@ class LiveState(QObject):
         self.mode = "show" if mode == "show" else "live"
         self.state_changed.emit()
 
-    # -- library staging (effects / scenes) -----------------------------
-    def stage_effect(self, key: str, apply_only: bool = False) -> int:
-        """Touch an effect riff: apply it to every selected group (the
-        positions pattern - each group runs its own riff, and a riff
-        KEEPS RUNNING on its group after deselection). Touching a key
+    # -- library staging (effects / intensity / shapes / scenes) --------
+    def _stage_grouped(self, mapping: Dict[str, str], kind: str,
+                       key: str, apply_only: bool = False) -> int:
+        """The shared per-group touch (the positions pattern): apply
+        ``key`` to every selected group in ``mapping``; touching a key
         every selected group already runs RELEASES it from those groups
-        unless ``apply_only`` (GO fires apply-only: never toggles).
+        unless ``apply_only`` (GO fires apply-only: never toggles). A
+        staged key KEEPS RUNNING on its group after deselection.
         Returns the number of groups affected - 0 means nothing was
         selected and the touch was a no-op the tab must surface."""
         if not self.selected:
             self.state_changed.emit()
             return 0
-        if not apply_only and all(self.effects.get(g) == key
+        if not apply_only and all(mapping.get(g) == key
                                   for g in self.selected):
             for group in self.selected:
-                self.effects.pop(group, None)
+                mapping.pop(group, None)
         else:
             for group in self.selected:
-                self.effects[group] = key
-        self._sync_running_effects()
+                mapping[group] = key
+        self._sync_running_grouped(kind, mapping)
         self.state_changed.emit()
         return len(self.selected)
+
+    def stage_effect(self, key: str, apply_only: bool = False) -> int:
+        """Touch an effect riff (per-group, see _stage_grouped)."""
+        return self._stage_grouped(self.effects, "effect", key,
+                                   apply_only)
+
+    def stage_intensity(self, key: str) -> int:
+        """Touch an intensity FX (per-group, see _stage_grouped)."""
+        return self._stage_grouped(self.intensities, "intensity", key)
+
+    def stage_shape(self, key: str) -> int:
+        """Touch a movement shape (per-group; non-mover groups hold
+        the id silently - the binder only drives movers)."""
+        return self._stage_grouped(self.shapes, "shape", key)
+
+    @staticmethod
+    def _active_keys(mapping: Dict[str, str], selected) -> set:
+        return {mapping[g] for g in selected if g in mapping}
 
     def active_effect_keys(self) -> set:
         """Riff keys running on any SELECTED group - the cells the
         pool outlines in the accent (mirrors active_position_ids)."""
-        return {self.effects[g] for g in self.selected
-                if g in self.effects}
+        return self._active_keys(self.effects, self.selected)
 
-    def _sync_running_effects(self) -> None:
-        """Rebuild the effect-kind running records from ``effects``:
-        one record per DISTINCT riff key carrying its sorted group
+    def active_intensity_keys(self) -> set:
+        return self._active_keys(self.intensities, self.selected)
+
+    def active_shape_keys(self) -> set:
+        return self._active_keys(self.shapes, self.selected)
+
+    def _grouped_mapping(self, kind: str) -> Optional[Dict[str, str]]:
+        return {"effect": self.effects, "intensity": self.intensities,
+                "shape": self.shapes}.get(kind)
+
+    def _sync_running_grouped(self, kind: str,
+                              mapping: Dict[str, str]) -> None:
+        """Rebuild ``kind``'s running records from its per-group
+        mapping: one record per DISTINCT key carrying its sorted group
         list. Existing records keep their position and paused flag;
         emptied records leave; new keys append. Silent - the calling
         mutator emits."""
         groups_by_key: Dict[str, list] = {}
-        for group, key in self.effects.items():
+        for group, key in mapping.items():
             groups_by_key.setdefault(key, []).append(group)
         kept: List[dict] = []
         for record in self.running:
-            if record.get("kind") != "effect":
+            if record.get("kind") != kind:
                 kept.append(record)
                 continue
             groups = groups_by_key.pop(record["key"], None)
@@ -544,8 +580,9 @@ class LiveState(QObject):
                 record["groups"] = sorted(groups)
                 kept.append(record)
         for key in groups_by_key:
-            kept.append({"kind": "effect", "key": key,
-                         "label": _display_name(key.split("/")[-1]),
+            label = key.split("/")[-1] if "/" in key else key
+            kept.append({"kind": kind, "key": key,
+                         "label": _display_name(label),
                          "groups": sorted(groups_by_key[key]),
                          "paused": False})
         self.running[:] = kept
@@ -556,23 +593,6 @@ class LiveState(QObject):
         stack."""
         self.scene = None if key == self.scene else key
         self._sync_running("scene", self.scene)
-        self.state_changed.emit()
-
-    def set_shape(self, key: Optional[str]) -> None:
-        """Toggle the staged movement shape (a rudiment id, applied to
-        the selected mover groups by the movement binder). Touching the
-        same key again clears it. Mirrors into the running stack as
-        kind "shape" so the PAUSE/KILL rows work on it."""
-        self.shape = None if key == self.shape else key
-        self._sync_running("shape", self.shape)
-        self.state_changed.emit()
-
-    def set_intensity(self, key: Optional[str]) -> None:
-        """Toggle the staged intensity FX (a bundled dimmer riff key,
-        selection-scoped like effect, own engine slot). Mirrors into
-        the running stack as kind "intensity"."""
-        self.intensity = None if key == self.intensity else key
-        self._sync_running("intensity", self.intensity)
         self.state_changed.emit()
 
     def set_shape_size(self, meters: float) -> None:
@@ -677,15 +697,13 @@ class LiveState(QObject):
         record = self.running.pop(index)
         if record["kind"] == "scene":
             self.scene = None
-        elif record["kind"] == "shape":
-            self.shape = None
-        elif record["kind"] == "intensity":
-            self.intensity = None
         else:
-            # Per-group effects: release ONLY this record's groups;
-            # other riffs keep running on theirs.
-            for group in record.get("groups") or ():
-                self.effects.pop(group, None)
+            # Grouped kinds (effect/intensity/shape): release ONLY
+            # this record's groups; other keys keep running on theirs.
+            mapping = self._grouped_mapping(record["kind"])
+            if mapping is not None:
+                for group in record.get("groups") or ():
+                    mapping.pop(group, None)
         self.state_changed.emit()
 
     def toggle_pause(self, index: int) -> None:
@@ -1687,6 +1705,27 @@ class LiveTab(BaseTab):
         layout.setSpacing(0)
         return pool, layout
 
+    @staticmethod
+    def _pool_scroller(grid_host: QWidget) -> QScrollArea:
+        """Wrap a pool grid in a vertical scroller (2026-07-22): a
+        long library made the fixed grid overflow its column - cells
+        painting over each other and the category headers. The scroll
+        area's minimum is a few rows, so the pools keep squeezing at
+        720p instead of demanding their content height."""
+        scroller = QScrollArea()
+        scroller.setWidgetResizable(True)
+        scroller.setFrameShape(QFrame.Shape.NoFrame)
+        scroller.setHorizontalScrollBarPolicy(
+            Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        scroller.setWidget(grid_host)
+        scroller.setMinimumHeight(60)
+        # The viewport must keep the pool's themed background - a bare
+        # QScrollArea paints the platform base color.
+        scroller.setStyleSheet(
+            "QScrollArea, QScrollArea > QWidget > QWidget "
+            "{ background: transparent; }")
+        return scroller
+
     def _pool_header(self, title: str, tag: Optional[str] = None,
                      tag_accent: bool = False) -> QWidget:
         header = QWidget()
@@ -1861,12 +1900,10 @@ class LiveTab(BaseTab):
         return pool
 
     def _on_shape_touched(self, shape_id: str) -> None:
-        """Fire/toggle a movement shape on the selected mover groups.
-        Fire-only (no QUEUE latch - shapes are not queueable records);
-        selection-scoped like effects, so a touch with no mover
-        selection keeps the state and warns."""
-        self.state.set_shape(shape_id)
-        if self.state.shape == shape_id and not self._selection_has_movers():
+        """Apply/release a movement shape on the selected groups
+        (per-group, the effects pattern; the binder only drives the
+        mover groups among them). Fire-only - no QUEUE latch."""
+        if not self.state.stage_shape(shape_id):
             self._flash_programmer_warning(
                 "NO MOVER GROUP SELECTED · SHAPES RUN ON SELECTED MOVERS")
         else:
@@ -1968,10 +2005,10 @@ class LiveTab(BaseTab):
         grid = QGridLayout(grid_host)
         grid.setContentsMargins(14, 0, 14, 8)
         grid.setSpacing(6)
+        grid.setRowStretch(999, 1)      # content packs to the top
         self._intensity_grid = grid
         self._intensity_grid_host = grid_host
-        layout.addWidget(grid_host)
-        layout.addStretch(1)
+        layout.addWidget(self._pool_scroller(grid_host), 1)
         self._populate_intensity_pool()
         return pool
 
@@ -2002,10 +2039,10 @@ class LiveTab(BaseTab):
             self._intensity_grid.setColumnStretch(col, 1)
 
     def _on_intensity_touched(self, key: str) -> None:
-        """Fire/toggle an intensity FX (selection-scoped, own engine
-        slot - runs under a colour riff). Fire-only like shapes."""
-        self.state.set_intensity(key)
-        if self.state.intensity == key and not self.state.selected:
+        """Apply/release an intensity FX on the selected groups
+        (per-group, the effects pattern - each group's dimmer pattern
+        runs under its colour riff). Fire-only like shapes."""
+        if not self.state.stage_intensity(key):
             self._flash_programmer_warning(
                 "NO GROUP SELECTED · INTENSITY FX RUN ON SELECTED GROUPS")
         else:
@@ -2024,9 +2061,9 @@ class LiveTab(BaseTab):
         grid = QGridLayout(grid_host)
         grid.setContentsMargins(14, 0, 14, 10)
         grid.setSpacing(6)
+        grid.setRowStretch(999, 1)      # content packs to the top
         self._effects_grid = grid
-        layout.addWidget(grid_host)
-        layout.addStretch(1)
+        layout.addWidget(self._pool_scroller(grid_host), 1)
         self._populate_effects_pool()
         return pool
 
@@ -2040,9 +2077,9 @@ class LiveTab(BaseTab):
         grid = QGridLayout(grid_host)
         grid.setContentsMargins(14, 0, 14, 10)
         grid.setSpacing(6)
+        grid.setRowStretch(999, 1)      # content packs to the top
         self._scenes_grid = grid
-        layout.addWidget(grid_host)
-        layout.addStretch(1)
+        layout.addWidget(self._pool_scroller(grid_host), 1)
         self._populate_scenes_pool()
         return pool
 
@@ -2622,25 +2659,33 @@ class LiveTab(BaseTab):
         state = self.state
         for name, tile in self._select_tiles.items():
             tile.set_selected(name in state.selected)
-            tile.set_running_effect(_display_name(
-                (state.effects.get(name) or "").split("/")[-1]))
+            # Tile readout: "EFFECT · DIM INTENSITY" (the riff-like
+            # per-group runners; positions/colours read on stage).
+            parts = []
+            if name in state.effects:
+                parts.append(_display_name(
+                    state.effects[name].split("/")[-1]))
+            if name in state.intensities:
+                parts.append("DIM " + _display_name(
+                    state.intensities[name].split("/")[-1]))
+            tile.set_running_effect(" · ".join(parts))
 
         active_ids = state.active_colour_ids()
         for colour_id, swatch in self._colour_swatches.items():
             swatch.set_active(colour_id in active_ids)
 
-        # EFFECTS: per-group. The pool greys with no selection
-        # (STAGING targets the selection; running effects keep
-        # running) and outlines the keys held by any selected group.
-        # INTENSITY FX stays single-slot selection-scoped. SCENES:
-        # whole-rig, always enabled.
+        # EFFECTS and INTENSITY FX: per-group. The pools grey with no
+        # selection (STAGING targets the selection; running keys keep
+        # running) and outline the keys held by any selected group.
+        # SCENES: whole-rig, always enabled.
         self._effects_pool.setEnabled(bool(state.selected))
         active_effects = state.active_effect_keys()
         for key, cell in self._effect_cells.items():
             cell.set_active(key in active_effects)
         self._intensity_pool.setEnabled(bool(state.selected))
+        active_intensities = state.active_intensity_keys()
         for key, cell in self._intensity_cells.items():
-            cell.set_active(key == state.intensity)
+            cell.set_active(key in active_intensities)
         for key, cell in self._scene_cells.items():
             cell.set_active(key == state.scene)
 
@@ -2652,12 +2697,12 @@ class LiveTab(BaseTab):
         for name, cell in self._position_cells.items():
             cell.set_active(name in active_positions)
 
-        # MOVEMENT SHAPES: same movers-only gate; outline the staged
-        # rudiment (one active shape, like the effect key) and check
-        # the matching orbit-size chip.
+        # MOVEMENT SHAPES: same movers-only gate; per-group like
+        # effects, so outline the selection's held shapes.
         self._shapes_section.setEnabled(self._selection_has_movers())
+        active_shapes = state.active_shape_keys()
         for shape_id, cell in self._movement_cells.items():
-            cell.set_active(shape_id == state.shape)
+            cell.set_active(shape_id in active_shapes)
         for btn, meters in self._shape_size_buttons:
             self._sync_toggle(btn, abs(state.shape_size - meters) < 1e-9)
         self._stagger_slider.set_value(state.shape_stagger)
@@ -2841,12 +2886,19 @@ class LiveTab(BaseTab):
             text += f" · FX: {' · '.join(fx_labels)}"
         if state.scene:
             text += f" · SCENE: {self._key_name(state.scene).upper()}"
-        if state.shape:
-            shape_label = dict(MOVEMENT_SHAPES).get(state.shape,
-                                                    state.shape)
-            text += f" · SHAPE: {shape_label.upper()}"
-        if state.intensity:
-            text += f" · DIM: {self._key_name(state.intensity).upper()}"
+        shape_ids = state.active_shape_keys() if state.selected \
+            else set(state.shapes.values())
+        if shape_ids:
+            shape_labels = sorted(
+                dict(MOVEMENT_SHAPES).get(s, s).upper()
+                for s in shape_ids)
+            text += f" · SHAPE: {' · '.join(shape_labels)}"
+        intensity_keys = state.active_intensity_keys() if state.selected \
+            else set(state.intensities.values())
+        if intensity_keys:
+            dim_labels = sorted(self._key_name(k).upper()
+                                for k in intensity_keys)
+            text += f" · DIM: {' · '.join(dim_labels)}"
         # POS shows the selection's applied targets; with no selection,
         # everything held (mirrors the colour HELD branch). Display
         # labels ("CROSS", "DS CENTRE"), not raw namespaced ids; fall

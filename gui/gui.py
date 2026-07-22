@@ -282,8 +282,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         if getattr(self, "_output_arbiter", None) is None:
             from utils.artnet.live_layer import LiveBuskLayer
             from utils.artnet.live_engine import (
-                LiveEffectsBinder, LiveEngine, LiveGroupEffectsBinder,
-                LiveMovementBinder,
+                LiveEngine, LiveGroupEffectsBinder, LiveMovementBinder,
             )
             from gui.tabs.live_tab import COLOUR_SWATCHES
 
@@ -324,15 +323,16 @@ class MainWindow(QMainWindow, Ui_MainWindow):
                 self._live_effects_binder.sync)
             self._live_effects_binder.sync()
 
-            # Intensity FX: the same binder class on its own slot, fed
-            # from LiveState.intensity (bundled dimmer riffs) - a
-            # dimmer pattern runs under a colour riff concurrently.
-            self._live_intensity_binder = LiveEffectsBinder(
+            # Intensity FX: the same per-group binder on its own slot
+            # family ("intensity:<group>"), fed from
+            # LiveState.intensities - each group's dimmer pattern runs
+            # under its colour riff concurrently.
+            self._live_intensity_binder = LiveGroupEffectsBinder(
                 state=self.live_tab.state,
                 engine=self._live_engine,
                 config_provider=lambda: self.live_tab.config,
                 riff_provider=self.live_tab.riff_for_key,
-                slot="intensity", state_attr="intensity",
+                category="intensity", state_attr="intensities",
                 record_kind="intensity",
             )
             self.live_tab.state.state_changed.connect(

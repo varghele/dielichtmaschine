@@ -24,7 +24,7 @@ from config.models import (
 )
 from utils.artnet.dmx_manager import DMXManager
 from utils.artnet.live_engine import (
-    LiveEffectsBinder, LiveEngine, OnePartStructure, SLOTS,
+    LiveEngine, LiveGroupEffectsBinder, OnePartStructure, SLOTS,
 )
 
 DIMMER, RED, GREEN, BLUE, WHITE, PAN = 0, 1, 2, 3, 4, 5
@@ -593,10 +593,10 @@ class TestEffectsBinder:
 
 
 class TestIntensityBinder:
-    """The ORIGINAL LiveEffectsBinder on the "intensity" slot (phase
-    5) - unchanged by the per-group effects work - running CONCURRENTLY
-    with the per-group effects binder: the intensity slot's dimmer
-    overrides the effect slots' on shared channels (category order)."""
+    """The per-group binder on the "intensity" slot family
+    (2026-07-22): each group's dimmer riff runs CONCURRENTLY with its
+    colour riff, and intensity slots override effect slots on shared
+    channels (category order)."""
 
     def _bound(self, mock_fixture_def):
         from config.models import RiffColourBlock
@@ -621,10 +621,10 @@ class TestIntensityBinder:
         effects = LiveGroupEffectsBinder(
             state, engine, config_provider=lambda: config,
             riff_provider=riffs.get)
-        intensity = LiveEffectsBinder(
+        intensity = LiveGroupEffectsBinder(
             state, engine, config_provider=lambda: config,
             riff_provider=riffs.get,
-            slot="intensity", state_attr="intensity",
+            category="intensity", state_attr="intensities",
             record_kind="intensity")
         state.state_changed.connect(effects.sync)
         state.state_changed.connect(intensity.sync)
@@ -635,11 +635,12 @@ class TestIntensityBinder:
         state, engine, _binders = self._bound(mock_fixture_def)
         state.set_selection(["Left"])
         state.stage_effect("looks/RedWash")
-        state.set_intensity("intensity/Pulse")
+        state.stage_intensity("intensity/Pulse")
         values, mask = engine.render(0.0)[1]
         assert values[RED] == 255                # effect slot colour
         assert mask[DIMMER] and values[DIMMER] == 255   # intensity dim
-        assert engine.active_slots() == ["effect:Left", "intensity"]
+        assert engine.active_slots() == ["effect:Left",
+                                         "intensity:Left"]
         # The intensity riff keeps looping on its own clock.
         values, _ = engine.render(1.0)[1]
         assert values[DIMMER] == 100
@@ -650,7 +651,7 @@ class TestIntensityBinder:
         state, engine, _binders = self._bound(mock_fixture_def)
         state.set_selection(["Left"])
         state.stage_effect("looks/RedWash")
-        state.set_intensity("intensity/Pulse")
+        state.stage_intensity("intensity/Pulse")
         engine.render(0.0)
         index = next(i for i, r in enumerate(state.running)
                      if r["kind"] == "intensity")
@@ -706,10 +707,10 @@ class TestDimmerConjunction:
         effects = LiveGroupEffectsBinder(
             state, engine, config_provider=lambda: config,
             riff_provider=riffs.get)
-        intensity = LiveEffectsBinder(
+        intensity = LiveGroupEffectsBinder(
             state, engine, config_provider=lambda: config,
             riff_provider=riffs.get,
-            slot="intensity", state_attr="intensity",
+            category="intensity", state_attr="intensities",
             record_kind="intensity")
         state.state_changed.connect(effects.sync)
         state.state_changed.connect(intensity.sync)
@@ -727,7 +728,7 @@ class TestDimmerConjunction:
         state, layer, _binders = self._stack(mock_fixture_def)
         state.set_selection(["Left"])
         state.stage_colour("red")
-        state.set_intensity("intensity/Pulse")
+        state.stage_intensity("intensity/Pulse")
         values, mask = layer.render(0.0)[1]
         assert values[RED] == 0xFF               # the swatch colour holds
         assert mask[self.SHUTTER] and values[self.SHUTTER] == 255
@@ -740,7 +741,7 @@ class TestDimmerConjunction:
     def test_flash_still_forces_full(self, qapp, mock_fixture_def):
         state, layer, _binders = self._stack(mock_fixture_def)
         state.set_selection(["Left"])
-        state.set_intensity("intensity/Pulse")
+        state.stage_intensity("intensity/Pulse")
         state.set_flash("Left", True)
         layer.render(0.0)
         values, _ = layer.render(1.0)[1]          # pattern half B...
@@ -750,7 +751,7 @@ class TestDimmerConjunction:
                                                 mock_fixture_def):
         state, layer, _binders = self._stack(mock_fixture_def)
         state.set_selection(["Left"])
-        state.set_intensity("intensity/Pulse")    # no busk claim at all
+        state.stage_intensity("intensity/Pulse")    # no busk claim at all
         values, mask = layer.render(0.0)[1]
         assert mask[DIMMER] and values[DIMMER] == 255
         assert mask[self.SHUTTER] and values[self.SHUTTER] == 255
@@ -914,7 +915,7 @@ class TestMovementBinder:
         )
         state, engine, binder, config = self._bound(mock_fixture_def)
         state.set_selection(["Movers"])
-        state.set_shape("circle")
+        state.stage_shape("circle")
         presets = {p.preset_id: p for p in compute_presets(config)}
         target = resolve_position_target(
             config, presets, "preset:centre", config.fixtures[0])
@@ -937,7 +938,7 @@ class TestMovementBinder:
                                                     spots=spots)
         state.set_selection(["Movers"])
         state.stage_position("mark:Riser", "Riser")
-        state.set_shape("circle")
+        state.stage_shape("circle")
         values, _ = engine.render(0.0)[1]
         expected = self._expected("circle", config.fixtures[0],
                                   (1.0, 1.5, 0.6), 0.0)
@@ -948,19 +949,19 @@ class TestMovementBinder:
             self, qapp, mock_fixture_def):
         state, engine, binder, config = self._bound(mock_fixture_def)
         state.set_selection(["Movers"])
-        state.set_shape("circle")
+        state.stage_shape("circle")
         assert engine.render(0.0)
-        state.set_shape("circle")               # toggle off
+        state.stage_shape("circle")             # release
         assert engine.render(0.1) == {}
         assert binder.active_groups() == frozenset()
         state.set_selection(["Pars"])           # no movers in scope
-        state.set_shape("circle")
+        state.stage_shape("circle")
         assert engine.render(0.2) == {}
 
     def test_shape_claims_pan_tilt_only(self, qapp, mock_fixture_def):
         state, engine, binder, config = self._bound(mock_fixture_def)
         state.set_selection(["Movers"])
-        state.set_shape("bounce")
+        state.stage_shape("bounce")
         _, mask = engine.render(0.0)[1]
         assert mask[PAN] and mask[self.TILT]
         assert mask[DIMMER] == 0                # shapes can run dark
@@ -970,7 +971,7 @@ class TestMovementBinder:
             self, qapp, mock_fixture_def):
         state, engine, binder, config = self._bound(mock_fixture_def)
         state.set_selection(["Movers"])
-        state.set_shape("circle")
+        state.stage_shape("circle")
         engine.render(0.0)
         assert not getattr(config, "spots", None), \
             "anchors must not leak into the saved config"
@@ -996,7 +997,7 @@ class TestMovementBinder:
                                     config_provider=lambda: config)
         state.state_changed.connect(binder.sync)
         state.set_selection(["Movers"])
-        state.set_shape("circle")
+        state.stage_shape("circle")
         # Unison (stagger 0): both heads trace the same phase.
         values, _ = engine.render(0.0)[1]
         at_zero_1 = self._expected("circle", mh1, (0.0, 0.0, 1.5), 0.0)
@@ -1017,7 +1018,7 @@ class TestMovementBinder:
         # at the new radius in meters.
         state, engine, binder, config = self._bound(mock_fixture_def)
         state.set_selection(["Movers"])
-        state.set_shape("circle")
+        state.stage_shape("circle")
         engine.render(0.0)
         state.set_shape_size(1.5)             # the L chip
         values, _ = engine.render(0.1)[1]
@@ -1051,7 +1052,7 @@ class TestMovementBinder:
         # Shape staged: the anchor claim yields to the orbit - the
         # engine's coarse write reaches the frame and the fines are
         # unclaimed again (a static aim on top would freeze the orbit).
-        state.set_shape("circle")
+        state.stage_shape("circle")
         values, mask = layer.render(0.1)[1]
         assert mask[PAN]
         assert mask[self.PAN_FINE] == 0

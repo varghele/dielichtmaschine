@@ -322,12 +322,23 @@ class TestPools:
         live_tab.state.toggle_group("Movers")
         cell = live_tab._intensity_cells["intensity/Pulse"]
         cell.clicked.emit("intensity/Pulse")
-        assert live_tab.state.intensity == "intensity/Pulse"
+        assert live_tab.state.intensities == {
+            "Movers": "intensity/Pulse"}
         assert cell.is_active()
         assert any(r["kind"] == "intensity"
                    for r in live_tab.state.running)
         cell.clicked.emit("intensity/Pulse")    # release
-        assert live_tab.state.intensity is None
+        assert live_tab.state.intensities == {}
+
+    def test_groups_hold_intensities_independently(self, live_tab):
+        self._with_bundled_riffs(live_tab)
+        live_tab.state.set_selection(["Movers"])
+        live_tab.state.stage_intensity("intensity/Pulse")
+        live_tab.state.set_selection(["Front Pars"])
+        live_tab.state.stage_intensity("intensity/Sparkle")
+        assert live_tab.state.intensities == {
+            "Movers": "intensity/Pulse",
+            "Front Pars": "intensity/Sparkle"}
 
     def test_intensity_pool_gates_on_selection(self, live_tab):
         assert live_tab._intensity_pool.isEnabled() is False
@@ -343,11 +354,12 @@ class TestPools:
 
     def test_kill_row_clears_the_intensity(self, live_tab):
         state = live_tab.state
-        state.set_intensity("intensity/Pulse")
+        state.toggle_group("Movers")
+        state.stage_intensity("intensity/Pulse")
         index = next(i for i, r in enumerate(state.running)
                      if r["kind"] == "intensity")
         state.kill_playback(index)
-        assert state.intensity is None
+        assert state.intensities == {}
 
 
 class TestFade:
@@ -946,14 +958,22 @@ class TestMovementShapesPool:
         position_tab.state.toggle_group("Movers")
         cell = position_tab._movement_cells["circle"]
         cell.clicked.emit("circle")
-        assert position_tab.state.shape == "circle"
+        assert position_tab.state.shapes == {"Movers": "circle"}
         assert cell.is_active()
         assert any(r["kind"] == "shape"
                    for r in position_tab.state.running)
         cell.clicked.emit("circle")             # release
-        assert position_tab.state.shape is None
+        assert position_tab.state.shapes == {}
         assert not any(r["kind"] == "shape"
                        for r in position_tab.state.running)
+
+    def test_groups_hold_shapes_independently(self, position_tab):
+        position_tab.state.set_selection(["Movers"])
+        position_tab.state.stage_shape("circle")
+        position_tab.state.set_selection(["Front Pars"])
+        position_tab.state.stage_shape("fan")
+        assert position_tab.state.shapes == {
+            "Movers": "circle", "Front Pars": "fan"}
 
     def test_shapes_section_gates_on_movers(self, position_tab):
         assert position_tab._shapes_section.isEnabled() is False
@@ -977,17 +997,18 @@ class TestMovementShapesPool:
     def test_kill_row_clears_the_shape(self, position_tab):
         state = position_tab.state
         state.toggle_group("Movers")
-        state.set_shape("bounce")
+        state.stage_shape("bounce")
         index = next(i for i, r in enumerate(state.running)
                      if r["kind"] == "shape")
         state.kill_playback(index)
-        assert state.shape is None
+        assert state.shapes == {}
 
     def test_release_all_clears_the_shape(self, position_tab):
         state = position_tab.state
-        state.set_shape("fan")
+        state.toggle_group("Movers")
+        state.stage_shape("fan")
         state.release_all()
-        assert state.shape is None
+        assert state.shapes == {}
 
     def test_size_chips_set_the_orbit_radius(self, position_tab):
         from gui.tabs.live_tab import DEFAULT_SHAPE_SIZE_M, SHAPE_SIZES
