@@ -1238,6 +1238,7 @@ class LiveTab(BaseTab):
         preset-relevant stage elements or the stage dimensions change."""
         self._rebuild_groups()
         self._rebuild_positions()
+        self._select_persisted_sync_device()
         self._sync_from_state()
 
     # -- CENTRE: select row, fade row, pools, programmer bar -------------
@@ -1513,9 +1514,24 @@ class LiveTab(BaseTab):
         self._sync_tc_label.setToolTip("Last received SMPTE timecode")
         self._sync_tc_label.hide()
         hbox.addWidget(self._sync_tc_label)
+        # Sync input DEVICE (2026-07-22, moved here from the Structure
+        # rail): the physical input is a VENUE concern - it changes
+        # with the rig, not with the show - so it lives on the busk
+        # surface (the Auto tab precedent). The choice still persists
+        # in setlist.sync_device (the project remembers its venue).
+        # Device enumeration is not free: populated on tab activation.
+        self._sync_device_combo = QComboBox()
+        self._sync_device_combo.setObjectName("SyncDeviceCombo")
+        self._sync_device_combo.setProperty("role", "lane-chip")
+        self._sync_device_combo.setFont(mono_font(8))
+        self._sync_device_combo.setMaximumWidth(180)
+        self._sync_device_combo.setToolTip(
+            "Audio input carrying the LTC/SMPTE signal")
+        self._sync_device_combo.currentIndexChanged.connect(
+            self._on_sync_device_selected)
+        hbox.addWidget(self._sync_device_combo)
         # ARM CHASE from the busk surface (the same shell arm/disarm
-        # the Structure tab drives; the input DEVICE stays configured
-        # there - it is setlist configuration, like triggers).
+        # the Structure tab drives).
         self._arm_chase_btn = QPushButton("ARM")
         self._arm_chase_btn.setCheckable(True)
         self._arm_chase_btn.setProperty("role", "output-select")
@@ -1523,11 +1539,11 @@ class LiveTab(BaseTab):
         self._arm_chase_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self._arm_chase_btn.setToolTip(
             "Follow incoming SMPTE timecode (songs with an SMPTE "
-            "trigger fire at their start time) · the sync input device "
-            "is picked on the Structure tab")
+            "trigger fire at their start time)")
         self._arm_chase_btn.toggled.connect(self._on_arm_chase_toggled)
         hbox.addWidget(self._arm_chase_btn)
         hbox.addSpacing(8)
+        self._seed_sync_device_combo()
         self._refresh_output_status()
 
         # Tempo cluster (right end): a BPM readout + TAP + RESET. This is
@@ -1691,6 +1707,68 @@ class LiveTab(BaseTab):
         btn.setChecked(armed)
         btn.setText("CHASING" if armed else "ARM")
         btn.blockSignals(False)
+
+    def _seed_sync_device_combo(self) -> None:
+        """Cheap pre-enumeration state: Default input plus the
+        persisted device (so the project's choice reads correctly
+        before the device list is ever enumerated)."""
+        combo = self._sync_device_combo
+        combo.blockSignals(True)
+        combo.clear()
+        combo.addItem("Default input", "")
+        persisted = getattr(getattr(self.config, "setlist", None),
+                            "sync_device", "") or ""
+        if persisted:
+            combo.addItem(persisted, persisted)
+            combo.setCurrentIndex(1)
+        combo.blockSignals(False)
+
+    def refresh_sync_devices(self) -> None:
+        """Enumerate the audio inputs into the combo (once per
+        session; called on tab activation - enumeration is not free).
+        Keeps the persisted selection, appending it verbatim when the
+        enumeration no longer lists it (unplugged interface: the
+        choice must survive a venue where the box is not attached)."""
+        if getattr(self, "_sync_devices_loaded", False):
+            self._select_persisted_sync_device()
+            return
+        combo = self._sync_device_combo
+        combo.blockSignals(True)
+        combo.clear()
+        combo.addItem("Default input", "")
+        try:
+            from audio.device_manager import DeviceManager
+            for dev in DeviceManager().enumerate_input_devices():
+                combo.addItem(dev.display_name or dev.name, dev.name)
+            self._sync_devices_loaded = True
+        except Exception:
+            pass    # enumeration failed: default input only
+        combo.blockSignals(False)
+        self._select_persisted_sync_device()
+
+    def _select_persisted_sync_device(self) -> None:
+        combo = self._sync_device_combo
+        persisted = getattr(getattr(self.config, "setlist", None),
+                            "sync_device", "") or ""
+        combo.blockSignals(True)
+        index = combo.findData(persisted)
+        if index < 0 and persisted:
+            combo.addItem(persisted, persisted)
+            index = combo.count() - 1
+        combo.setCurrentIndex(max(0, index))
+        combo.blockSignals(False)
+
+    def _on_sync_device_selected(self, index: int) -> None:
+        value = self._sync_device_combo.itemData(index) or ""
+        setlist = getattr(self.config, "setlist", None)
+        if setlist is None or setlist.sync_device == value:
+            return
+        setlist.sync_device = value
+
+    def on_tab_activated(self) -> None:
+        """Shell hook (gui._on_tab_changed): the device list is
+        enumerated the first time the busk surface is actually shown."""
+        self.refresh_sync_devices()
 
     @staticmethod
     def _set_chip_state(chip: QLabel, on: bool) -> None:

@@ -873,7 +873,6 @@ class TestThemeContract:
         texts = [setlist_tab.rail_title.text(),
                  setlist_tab.rail_summary.text(),
                  setlist_tab.chase_arm_btn.text(),
-                 setlist_tab.sync_device_combo.currentText(),
                  setlist_tab.add_song_tile.text(),
                  setlist_tab.rail_footer_hint.text()]
         texts += [b.text() for b in setlist_tab.sync_buttons.values()]
@@ -1013,9 +1012,9 @@ class TestSetlistRailAnatomy:
         assert setlist_tab.rail_title.text() == "SETLIST · DEMO_TOUR"
 
     def test_chase_row_hidden_outside_smpte_mode(self, setlist_tab):
-        # Default sync mode is manual: no device combo, no ARM chip.
+        # Default sync mode is manual: no ARM chip. (The sync device
+        # combo moved to the Live tab 2026-07-22.)
         assert setlist_tab.config.setlist.sync_mode != "smpte"
-        assert setlist_tab.sync_device_combo.isHidden()
         assert setlist_tab.chase_arm_btn.isHidden()
 
     def test_add_song_tile_is_dashed(self, setlist_tab):
@@ -1541,26 +1540,15 @@ class TestChaseRow:
             entry.trigger.timecode = "01:00:00:00"
         tab._refresh_sync_chase_row()
 
-    def test_smpte_mode_reveals_and_populates_devices(self, setlist_tab):
+    def test_smpte_mode_reveals_the_arm_chip(self, setlist_tab):
         self._smpte(setlist_tab)
-        combo = setlist_tab.sync_device_combo
-        assert not combo.isHidden()
         assert not setlist_tab.chase_arm_btn.isHidden()
-        assert [combo.itemText(i) for i in range(combo.count())] == \
-            ["Default input", "Line In"]
-        assert combo.itemData(1) == "Line In (HD Audio)"
 
     def test_arm_needs_an_smpte_trigger(self, setlist_tab):
         self._smpte(setlist_tab, with_trigger=False)
         assert not setlist_tab.chase_arm_btn.isEnabled()
         self._smpte(setlist_tab, with_trigger=True)
         assert setlist_tab.chase_arm_btn.isEnabled()
-
-    def test_device_choice_persists_to_the_setlist(self, setlist_tab):
-        self._smpte(setlist_tab)
-        setlist_tab.sync_device_combo.setCurrentIndex(1)
-        assert setlist_tab.config.setlist.sync_device == \
-            "Line In (HD Audio)"
 
     def test_arm_toggle_requests_and_reflect_does_not_reemit(
             self, setlist_tab):

@@ -1612,6 +1612,36 @@ class TestSyncCluster:
         assert live_tab._sync_chip.text() == "SYNC INT"
         assert live_tab._sync_tc_label.isHidden()
 
+    def test_device_combo_enumerates_on_activation(self, live_tab,
+                                                   monkeypatch):
+        """The sync input moved here from the Structure rail
+        (2026-07-22): a venue concern, picked on the busk surface."""
+        from audio.device_manager import AudioDevice, DeviceManager
+        devices = [AudioDevice(index=3, name="Line In (HD Audio)",
+                               max_output_channels=0,
+                               max_input_channels=2,
+                               default_sample_rate=44100.0,
+                               host_api="Windows WASAPI",
+                               host_api_index=1,
+                               display_name="Line In")]
+        monkeypatch.setattr(DeviceManager, "enumerate_input_devices",
+                            lambda self, **kw: devices)
+        live_tab.on_tab_activated()
+        combo = live_tab._sync_device_combo
+        assert [combo.itemText(i) for i in range(combo.count())] == \
+            ["Default input", "Line In"]
+        combo.setCurrentIndex(1)
+        assert live_tab.config.setlist.sync_device == \
+            "Line In (HD Audio)"
+
+    def test_persisted_device_shows_before_enumeration(self, live_tab):
+        """The project's saved device reads correctly even when the
+        interface is not attached / never enumerated."""
+        live_tab.config.setlist.sync_device = "USB Reader (Venue)"
+        live_tab._select_persisted_sync_device()
+        combo = live_tab._sync_device_combo
+        assert combo.currentData() == "USB Reader (Venue)"
+
 
 class TestRoles:
     def test_actions_use_theme_roles(self, live_tab):

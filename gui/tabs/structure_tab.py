@@ -1288,24 +1288,16 @@ class StructureTab(BaseTab):
         sync_row.addWidget(segment_host)
         sync_row.addStretch(1)
         header_column.addLayout(sync_row)
-        # Device + ARM row (docs/ltc-plan.md phase 3). Own row: inline
-        # after four segments it overflows 330px and squeezes the
-        # SMPTE/MANUAL glyphs. The combo lists audio inputs only when
-        # SMPTE is the sync mode (device enumeration is not free and
-        # the other modes read their devices elsewhere); ARM CHASE asks
-        # the shell to start/stop the LTC chase - the SHELL owns the
-        # policy, this row only requests and reflects.
+        # ARM row (docs/ltc-plan.md phase 3). Own row: inline after
+        # four segments it overflows 330px and squeezes the SMPTE/
+        # MANUAL glyphs. The sync input DEVICE moved to the Live tab's
+        # SYNC cluster 2026-07-22 (a venue concern, not show
+        # structure); ARM CHASE asks the shell to start/stop the LTC
+        # chase - the SHELL owns the policy, this row only requests
+        # and reflects.
         device_row = QHBoxLayout()
         device_row.setSpacing(8)
-        self.sync_device_combo = QComboBox()
-        self.sync_device_combo.setObjectName("SyncDeviceCombo")
-        self.sync_device_combo.setProperty("role", "lane-chip")
-        self.sync_device_combo.setFont(mono_font(8))
-        self.sync_device_combo.setToolTip(
-            "Audio input carrying the LTC signal")
-        self.sync_device_combo.currentIndexChanged.connect(
-            self._on_sync_device_selected)
-        device_row.addWidget(self.sync_device_combo, stretch=1)
+        device_row.addStretch(1)
         self.chase_arm_btn = QPushButton("ARM CHASE")
         self.chase_arm_btn.setCheckable(True)
         self.chase_arm_btn.setProperty("role", "cta-outline")
@@ -1530,40 +1522,18 @@ class StructureTab(BaseTab):
     # -- LTC chase row (docs/ltc-plan.md phase 3) ----------------------
 
     def _refresh_sync_chase_row(self):
-        """Device combo + ARM CHASE reflect the setlist. Both only show
-        in SMPTE mode (the other modes read their devices elsewhere,
-        and audio enumeration is not free); ARM is offered only when a
-        chase could do something - at least one SMPTE trigger."""
+        """ARM CHASE reflects the setlist. Only shows in SMPTE mode;
+        offered only when a chase could do something - at least one
+        SMPTE trigger. (The sync input DEVICE is picked on the Live
+        tab's SYNC cluster - a venue concern, not show structure.)"""
         setlist = self.config.setlist
         smpte = setlist.sync_mode == "smpte"
-        combo = self.sync_device_combo
-        combo.blockSignals(True)
-        if smpte and combo.count() == 0:
-            combo.addItem("Default input", "")
-            try:
-                from audio.device_manager import DeviceManager
-                for dev in DeviceManager().enumerate_input_devices():
-                    combo.addItem(dev.display_name or dev.name, dev.name)
-            except Exception:
-                pass    # enumeration failed: default input only
-        if combo.count():
-            index = combo.findData(setlist.sync_device or "")
-            combo.setCurrentIndex(index if index >= 0 else 0)
-        combo.setVisible(smpte)
-        combo.blockSignals(False)
         armable = smpte and any(
             e.trigger.mode == "smpte" and e.trigger.timecode
             for e in setlist.entries)
         self.chase_arm_btn.setVisible(smpte)
         self.chase_arm_btn.setEnabled(
             armable or self.chase_arm_btn.isChecked())
-
-    def _on_sync_device_selected(self, index: int):
-        value = self.sync_device_combo.itemData(index) or ""
-        if self.config.setlist.sync_device == value:
-            return
-        self.config.setlist.sync_device = value
-        self._auto_save()
 
     def _on_chase_arm_toggled(self, checked: bool):
         self.chase_arm_requested.emit(bool(checked))
