@@ -100,9 +100,11 @@ the desk can judge:
 - [x] **Lock finished shows against accidental edits** - SHIPPED
       2026-07-22: Song.locked (only-when-set in the .lms, pre-lock
       files byte-stable, morph output unlocked by design), toggled by
-      the LOCK chip on the Structure tab song header (the Shows
-      toolbar is width-critical at 720p - that tab shows a LOCKED
-      footer tag instead). Enforcement is belt-and-braces: handler
+      the LOCK chip on the Structure tab song header AND the Timeline
+      toolbar (user 2026-07-22: it replaced the SAVE button there -
+      save_to_config runs on every edit, manual SAVE was a relic -
+      which also solved the 720p width budget; the LOCKED footer tag
+      stays). Enforcement is belt-and-braces: handler
       guards on every mutation surface (block press/drag family
       killed at pickup, double-click, context menus, Delete keys,
       Ctrl+wheel speed, sublane marquee, lane add/remove/rename/

@@ -214,7 +214,9 @@ def step5_build_timeline(window, dialogs):
     # The same call the block widget's double-click / context menu makes.
     block_widget.open_sublane_dialog("colour", colour_block)
 
-    tab.save_btn.click()
+    # SAVE button removed 2026-07-22 (redundant - save_to_config runs
+    # on every edit); the direct call is the same sync-back.
+    tab.save_to_config()
 
 
 def step6_build_playback_controller(window, monkeypatch):

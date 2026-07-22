@@ -15,7 +15,10 @@ verbatim as the GitHub Release notes (see [docs/releasing.md](docs/releasing.md)
 
 - **Finished songs can be locked against accidental edits.** A LOCK
   chip on the Structure tab's song header (next to RENAME SONG and
-  DELETE): while locked, every timeline and structure edit refuses -
+  DELETE) and on the Timeline toolbar - where it replaces the SAVE
+  button, which had been a relic since edits started syncing to the
+  project automatically. While locked, every timeline and structure
+  edit refuses -
   blocks cannot be added, moved, resized, renamed, deleted or edited
   (keyboard shortcuts, drag, context menus, Ctrl+wheel speed and the
   block dialogs included), lanes cannot be added, removed, renamed or

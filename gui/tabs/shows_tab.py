@@ -539,12 +539,20 @@ class ShowsTab(BaseTab):
 
         toolbar.addStretch()
 
-        # Save button - a bordered display-caps text action (uniform with
-        # Inspector / POP OUT); not accent-filled, so Autogen stays the
-        # sole CTA of the strip.
-        self.save_btn = QPushButton("SAVE")
-        self.save_btn.setProperty("role", "cta-outline")
-        toolbar.addWidget(self.save_btn)
+        # LOCK chip (v1.5) - in the slot the SAVE button held until
+        # 2026-07-22 (save_to_config runs on every edit via the
+        # undo-stack/block_edited fan-in, so manual SAVE was a no-op
+        # relic). Checkable, snap_chip treatment; checked = the current
+        # song refuses timeline/structure edits everywhere.
+        self.lock_chip = QPushButton("LOCK")
+        self.lock_chip.setCheckable(True)
+        self.lock_chip.setProperty("role", "output-select")
+        self.lock_chip.setFont(mono_font(8, tracking_em=0.05))
+        self.lock_chip.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.lock_chip.setToolTip(
+            "Lock this song against timeline and structure edits · "
+            "playback, export and mute/solo stay live")
+        toolbar.addWidget(self.lock_chip)
 
         # 3D-pane chevron (right-pane collapse affordance, kept in the
         # always-visible toolbar so a collapsed pane can be re-opened).
@@ -1049,7 +1057,7 @@ class ShowsTab(BaseTab):
         self.autogen_btn.clicked.connect(self._on_autogenerate)
         self.inspector_btn.toggled.connect(self._on_inspector_toggled)
         self.zoom_slider.valueChanged.connect(self._on_zoom_changed)
-        self.save_btn.clicked.connect(self.save_to_config)
+        self.lock_chip.clicked.connect(self._on_lock_chip_clicked)
         self.pane_toggle_btn.toggled.connect(self._on_pane_toggle)
 
         # Grid chips are the single global GRID control (the master's own
@@ -1402,10 +1410,9 @@ class ShowsTab(BaseTab):
         self._refresh_lock_ui()
 
     # -- Song lock (v1.5) ---------------------------------------------------
-    # The lock TOGGLE lives on the Structure tab's song header (with
-    # RENAME SONG / DELETE - the toolbar row here is width-critical at
-    # 720p). This tab enforces and displays: guarded handlers, disabled
-    # edit chrome, a LOCKED footer tag, statusbar flashes.
+    # Toggled here (the LOCK chip in the SAVE button's old slot) and on
+    # the Structure tab's song header; enforced by guarded handlers +
+    # disabled edit chrome + the LOCKED footer tag + statusbar flashes.
 
     def is_current_song_locked(self) -> bool:
         """Public: lane widgets duck-type this through _get_shows_tab."""
@@ -1413,11 +1420,27 @@ class ShowsTab(BaseTab):
             if self.current_song_name else None
         return bool(song is not None and getattr(song, "locked", False))
 
+    def _on_lock_chip_clicked(self, checked: bool) -> None:
+        song = self.config.songs.get(self.current_song_name) \
+            if self.current_song_name else None
+        if song is None:
+            self.lock_chip.setChecked(False)
+            return
+        song.locked = bool(checked)
+        self.mark_config_dirty()
+        self._refresh_lock_ui()
+        structure_tab = getattr(self.window(), "structure_tab", None)
+        if structure_tab is not None and hasattr(structure_tab,
+                                                 "refresh_lock_ui"):
+            structure_tab.refresh_lock_ui()
+
     def _refresh_lock_ui(self) -> None:
-        """Sync the cheap-to-disable edit chrome with the current
-        song's lock. Handlers stay guarded regardless - this is the
-        visible half of the fence, not the fence."""
+        """Sync the chip and the cheap-to-disable edit chrome with the
+        current song's lock. Handlers stay guarded regardless - this is
+        the visible half of the fence, not the fence."""
         locked = self.is_current_song_locked()
+        self.lock_chip.setChecked(locked)
+        self.lock_chip.setEnabled(bool(self.current_song_name))
         self.add_lane_btn.setEnabled(not locked)
         if self.autogen_btn.text() != "GENERATING...":
             self.autogen_btn.setEnabled(not locked)

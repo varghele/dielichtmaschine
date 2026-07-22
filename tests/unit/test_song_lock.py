@@ -54,6 +54,30 @@ def _lock_current(tab, locked=True):
 
 class TestShowsTabLock:
 
+    def test_lock_chip_writes_and_reflects_the_model(self, shows_tab):
+        """The chip sits in the removed SAVE button's slot; toggling
+        writes Song.locked and re-derives the chrome."""
+        song = shows_tab.config.songs["Demo Show"]
+        assert shows_tab.lock_chip.isCheckable()
+        assert not shows_tab.lock_chip.isChecked()
+
+        shows_tab.lock_chip.setChecked(True)
+        shows_tab._on_lock_chip_clicked(True)
+        assert song.locked is True
+        assert not shows_tab.add_lane_btn.isEnabled()
+
+        shows_tab._on_lock_chip_clicked(False)
+        assert song.locked is False
+        assert shows_tab.add_lane_btn.isEnabled()
+
+    def test_lock_chip_follows_external_toggles(self, shows_tab):
+        """Locking from the Structure tab (or a loaded file) must show
+        on the chip via _refresh_lock_ui."""
+        _lock_current(shows_tab)
+        assert shows_tab.lock_chip.isChecked()
+        _lock_current(shows_tab, False)
+        assert not shows_tab.lock_chip.isChecked()
+
     def test_locked_disables_edit_chrome_and_tags_the_footer(self,
                                                             shows_tab):
         _lock_current(shows_tab)
