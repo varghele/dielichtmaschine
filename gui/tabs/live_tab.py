@@ -862,7 +862,12 @@ class _SelectTile(QWidget):
         self.setCursor(Qt.CursorShape.PointingHandCursor)
 
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(12, 7, 14, 7)
+        # 4px vertical margins (were 7): the third line (running
+        # effect) grew the tile, and the tile drives the LIVE tab's
+        # height minimum - which drives the WINDOW minimum. Linux CI
+        # renders fonts a few px taller, so the 720p guarantee needs
+        # headroom, not exactness (caught 2026-07-22 at 725/720).
+        layout.setContentsMargins(12, 4, 14, 4)
         layout.setSpacing(1)
         self.name_label = DisplayLabel(group_name, point_size=13,
                                        weight=QFont.Weight.Bold,
@@ -1686,9 +1691,11 @@ class LiveTab(BaseTab):
         # explicit minimum overrides the layout hint per axis
         # (qSmartMinSize): the pools compress below their preferred
         # size instead of pinning the window, and the squeezed render
-        # is pinned by tests/visual/test_720p_layout.py goldens. The
-        # proper pool re-layout (collapse/scroll) is the v1.6 pass.
-        host.setMinimumSize(600, 220)
+        # is pinned by tests/visual/test_720p_layout.py goldens.
+        # 200 (was 220) since the riff pools scroll (2026-07-22): a
+        # lower floor stays usable, and the LIVE tab is the window
+        # height driver - Linux CI needs the headroom.
+        host.setMinimumSize(600, 200)
         return host
 
     def _restyle_pools_host(self) -> None:
