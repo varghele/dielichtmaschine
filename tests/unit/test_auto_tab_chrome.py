@@ -692,13 +692,21 @@ class TestSetupDisclosure:
         QApplication.processEvents()
         resting_height = auto_tab._setup_toggle_btn.height()
 
+        # The styled floor: 11px content + 2x6px padding + 2x1px border
+        # (the widget-stylesheet min-height that beats the theme's
+        # min-height: 0). NOT the pre-open resting height - on Linux
+        # taller fonts rest the button at 27px while the squeezed
+        # legitimate minimum is the 25px floor (CI caught the stricter
+        # assert 2026-07-22). The bug this pins was a 14px sliver.
+        floor = 25
+
         auto_tab._setup_toggle_btn.setChecked(True)
         for _ in range(10):
             QApplication.processEvents()
         sizes = auto_tab._right_splitter.sizes()
         assert sizes[1] >= auto_tab._lower_panel.minimumSizeHint().height()
         assert auto_tab._setup_area.height() >= 260
-        assert auto_tab._setup_toggle_btn.height() >= resting_height
+        assert auto_tab._setup_toggle_btn.height() >= floor
 
         auto_tab._setup_toggle_btn.setChecked(False)
         for _ in range(10):
@@ -707,7 +715,8 @@ class TestSetupDisclosure:
         # The splitter clamps to pane minimums, so "restored" means the
         # preview got its space back, not px-exact equality.
         assert restored[0] >= 590
-        assert auto_tab._setup_toggle_btn.height() >= resting_height
+        assert auto_tab._setup_toggle_btn.height() >= floor
+        assert resting_height >= floor
 
     def test_toggle_button_height_floor_survives_the_theme(self, auto_tab):
         """The output-select role declares min-height: 0 in the theme,
