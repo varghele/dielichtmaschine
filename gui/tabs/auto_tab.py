@@ -1923,7 +1923,11 @@ class AutoTab(BaseTab):
                 self._resume_idle_monitoring()
                 return
 
-            self._analyzer = RealtimeSpectralAnalyzer(sample_rate=44100)
+            # The stream may have fallen back to the device's native
+            # rate (Invalid-sample-rate devices): analyze at the rate
+            # the stream ACTUALLY runs at.
+            self._analyzer = RealtimeSpectralAnalyzer(
+                sample_rate=self._live_input.sample_rate)
             self._bridge = LiveFeatureBridge(self._analyzer)
             self._bridge.feature_updated.connect(self._on_feature_frame)
 

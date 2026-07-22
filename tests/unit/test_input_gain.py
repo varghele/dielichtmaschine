@@ -133,3 +133,60 @@ class TestCallbackGainStage:
         source = LiveAudioInput()
         assert source.gain() == 1.0
         source.cleanup()
+
+
+class TestSampleRateFallback:
+    """Onboard inputs under Windows shared mode often refuse anything
+    but their native rate (PaErrorCode -9997, found 2026-07-22 arming
+    the LTC chase on a Realtek mic): initialize() falls back to the
+    device default / 48 kHz, updates self.sample_rate to the rate the
+    stream ACTUALLY runs at and rebuilds the ring buffer for it."""
+
+    class _FussyStream:
+        """Accepts only 48 kHz, like the Realtek mic."""
+
+        def __init__(self, samplerate=None, **kwargs):
+            if int(samplerate) != 48000:
+                raise Exception(
+                    "Error opening InputStream: Invalid sample rate "
+                    "[PaErrorCode -9997]")
+            self.samplerate = samplerate
+            self.active = False
+
+        def start(self):
+            self.active = True
+
+        def abort(self):
+            self.active = False
+
+        def close(self):
+            pass
+
+    def test_falls_back_to_the_device_native_rate(self, monkeypatch):
+        import audio.live_input as live_input_module
+        monkeypatch.setattr(live_input_module.sd, "InputStream",
+                            self._FussyStream)
+        monkeypatch.setattr(
+            live_input_module.sd, "query_devices",
+            lambda *a, **k: {"default_samplerate": 48000.0})
+        source = LiveAudioInput(sample_rate=44100)
+        assert source.initialize(device_index=3) is True
+        assert source.sample_rate == 48000
+        assert source.ring_buffer.sample_rate == 48000
+        assert source.start() is True
+        source.cleanup()
+
+    def test_all_rates_refused_fails_cleanly(self, monkeypatch):
+        import audio.live_input as live_input_module
+
+        def _refuse(**kwargs):
+            raise Exception("Invalid sample rate [PaErrorCode -9997]")
+
+        monkeypatch.setattr(live_input_module.sd, "InputStream",
+                            lambda **k: _refuse(**k))
+        monkeypatch.setattr(
+            live_input_module.sd, "query_devices",
+            lambda *a, **k: {"default_samplerate": 96000.0})
+        source = LiveAudioInput(sample_rate=44100)
+        assert source.initialize(device_index=3) is False
+        assert not source.is_active()

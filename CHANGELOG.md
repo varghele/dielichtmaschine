@@ -248,6 +248,13 @@ verbatim as the GitHub Release notes (see [docs/releasing.md](docs/releasing.md)
 
 ### Fixed
 
+- **Audio inputs that refuse 44.1 kHz work now.** Arming the SMPTE
+  chase (or Auto mode) on an onboard microphone input failed with
+  "Invalid sample rate" - many Windows inputs only accept their
+  native mixer rate. Audio capture now falls back to the device's
+  native rate (then 48 kHz), and the LTC decoder and the Auto
+  analyzer follow the rate the stream actually runs at. The failure
+  message, when everything is refused, names the rates it tried.
 - **"Build the show" can finally be crossed off.** The Home
   checklist's last step read a lane list attribute that does not
   exist on the timeline model, so it silently saw every project as

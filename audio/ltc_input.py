@@ -124,7 +124,12 @@ class LTCInputService(QObject):
 
         with self._lock:
             self._audio = audio
-            self._decoder = LTCDecoder(sample_rate=self.sample_rate)
+            # The stream may have fallen back to the device's native
+            # rate (Invalid-sample-rate devices, 2026-07-22): decode
+            # at the rate the stream ACTUALLY runs at.
+            self._active_rate = int(getattr(audio, "sample_rate",
+                                            self.sample_rate))
+            self._decoder = LTCDecoder(sample_rate=self._active_rate)
             self._chase = None
             self._samples_fed = 0
         self._running = True
@@ -204,9 +209,11 @@ class LTCInputService(QObject):
                     if rate is not None:
                         self._chase = TimecodeChase(rate)
                 if self._chase is not None:
+                    rate = getattr(self, "_active_rate",
+                                   self.sample_rate)
                     for frame in decoded:
                         lag = (self._samples_fed - frame.end_sample) \
-                            / self.sample_rate
+                            / rate
                         self._chase.feed(frame, now - lag)
             chase = self._chase
             state = chase.state(now).value if chase else NO_SIGNAL

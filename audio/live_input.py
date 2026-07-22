@@ -84,6 +84,7 @@ class LiveAudioInput:
         self.sample_rate = sample_rate
         self.channels = channels
         self.buffer_size = buffer_size
+        self._ring_seconds = ring_buffer_seconds
 
         self._ring_buffer = AudioRingBuffer(
             max_seconds=ring_buffer_seconds,
@@ -127,32 +128,65 @@ class LiveAudioInput:
     def initialize(self, device_index: Optional[int] = None) -> bool:
         """Initialize the input stream.
 
+        Tries the requested sample rate first, then falls back to the
+        device's native default rate and 48 kHz (2026-07-22: onboard
+        inputs under Windows shared mode often refuse anything but
+        their mixer rate - PaErrorCode -9997 Invalid sample rate).
+        After a fallback ``self.sample_rate`` reports the rate the
+        stream ACTUALLY runs at, and the ring buffer is rebuilt for it
+        - consumers must read the rate post-initialize.
+
         Args:
             device_index: Input device to use (None = default)
 
         Returns:
             True if initialization successful
         """
+        if self._is_initialized:
+            return True
+
+        rates = [self.sample_rate]
         try:
-            if self._is_initialized:
-                return True
+            info = sd.query_devices(
+                device_index if device_index is not None else None,
+                kind='input' if device_index is None else None)
+            native = int(float(info.get('default_samplerate') or 0))
+            if native and native not in rates:
+                rates.append(native)
+        except Exception:
+            pass
+        if 48000 not in rates:
+            rates.append(48000)
 
-            self._stream = sd.InputStream(
-                samplerate=self.sample_rate,
-                blocksize=self.buffer_size,
-                device=device_index,
-                channels=self.channels,
-                dtype='float32',
-                callback=self._input_callback,
-            )
-
+        last_error: Optional[Exception] = None
+        for rate in rates:
+            try:
+                stream = sd.InputStream(
+                    samplerate=rate,
+                    blocksize=self.buffer_size,
+                    device=device_index,
+                    channels=self.channels,
+                    dtype='float32',
+                    callback=self._input_callback,
+                )
+            except Exception as e:
+                last_error = e
+                continue
+            self._stream = stream
+            if rate != self.sample_rate:
+                self.sample_rate = rate
+                self._ring_buffer = AudioRingBuffer(
+                    max_seconds=self._ring_seconds,
+                    sample_rate=rate,
+                    channels=self.channels,
+                )
             self._is_initialized = True
             return True
 
-        except Exception as e:
-            print(f"Failed to initialize live audio input: {e}")
-            self.cleanup()
-            return False
+        print(f"Failed to initialize live audio input "
+              f"(tried {rates} Hz): {last_error}")
+        self.cleanup()
+        return False
 
     def start(self) -> bool:
         """Start capturing audio.
