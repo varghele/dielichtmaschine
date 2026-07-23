@@ -114,11 +114,12 @@ class TestOverflowMenu:
                   if a.menu() is not None]
         assert titles == ["File", "View", "Tools", "Settings", "Help"]
 
-    def test_gui_py_insertion_points_exist(self, shell_window):
-        """gui.py inserts Edit before Settings and Render before Help."""
+    def test_gui_py_insertion_point_exists(self, shell_window):
+        """gui.py inserts Edit before View (final order: File, Edit,
+        View, Tools, Settings, Help - user call 2026-07-23)."""
         _, ui = shell_window
         actions = ui.overflow_menu.actions()
-        assert ui.menuSettings.menuAction() in actions
+        assert ui.menuView.menuAction() in actions
         assert ui.menuHelp.menuAction() in actions
 
     def test_import_legacy_csv_action_in_file_menu(self, shell_window):

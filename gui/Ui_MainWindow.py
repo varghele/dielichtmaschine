@@ -310,11 +310,11 @@ class Ui_MainWindow(object):
         self.menuHelp.addAction(self.actionAbout)
 
         # No QMenuBar (North Star shell): the menus live in one overflow
-        # QMenu behind the topbar's ☰ button. gui.py inserts the Edit and
-        # Render menus into this container (before Settings / Help), and
-        # re-registers every shortcut on the window afterwards
-        # (register_menu_shortcuts) since popup-only actions don't fire
-        # their shortcuts app-wide.
+        # QMenu behind the topbar's ☰ button. gui.py inserts the Edit
+        # menu into this container (before View - final order File,
+        # Edit, View, Tools, Settings, Help), and re-registers every
+        # shortcut on the window afterwards (register_menu_shortcuts)
+        # since popup-only actions don't fire their shortcuts app-wide.
         self.overflow_menu = QtWidgets.QMenu(MainWindow)
         self.overflow_menu.addMenu(self.menuFile)
         self.overflow_menu.addMenu(self.menuView)

@@ -760,8 +760,10 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         # Create Edit menu if it doesn't exist
         if not hasattr(self, 'menuEdit'):
             self.menuEdit = QtWidgets.QMenu("Edit", parent=self)
-            # Insert Edit menu after File menu (before Settings menu)
-            self.overflow_menu.insertMenu(self.menuSettings.menuAction(), self.menuEdit)
+            # Menu order (user call 2026-07-23): File, Edit, View,
+            # Tools, Settings, Help - Edit slots in before View.
+            self.overflow_menu.insertMenu(self.menuView.menuAction(),
+                                          self.menuEdit)
 
         # Create undo action
         self.undo_action = self.undo_stack.createUndoAction(self, "Undo")
