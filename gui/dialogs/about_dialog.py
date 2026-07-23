@@ -28,10 +28,31 @@ from utils import app_identity
 #: release list) - this placeholder describes the tool factually until
 #: the real text lands.
 ABOUT_BODY = (
-    "Standalone light show authoring for bands and small stages: "
-    "beat-synced timelines, GDTF and QLC+ fixtures, printable stage "
-    "plots, automatic show generation, a real-time 3D preview and "
-    "native ArtNet playback."
+    "Hello and welcome, you have found the Lichtmaschine! Step right up! "
+    "If you read this: first of all, thank you very much for checking out "
+    "the code, it means a lot to me. "
+    "Now, this little program is meant to take care of the light-show needs "
+    "of your band, be you big or be you small. "
+    "With it you can pre-program light shows the way you would arrange sound "
+    "in a DAW, and run them live via LTC, MTC (WIP) or MIDI (WIP). "
+    "If you want to see how it works, you can run the automatic generation, "
+    "or busk along with the Live tab. "
+    "Check out the visualizer too, so you get immediate 3D renderings of "
+    "your show! We work with the GDTF lighting standard, but also support "
+    "import and export from QLC+, "
+    "another marvelous free lighting program (seriously, check them out, "
+    "they might fit your needs even better). "
+    "I'll keep working on this to support MIDI controllers, custom effect "
+    "creation and much more, so check in regularly. "
+    "And last but not least: this is free, but non-commercial. If you want "
+    "to do a good deed, spend your money on an animal shelter, "
+    "or on literally any other worthwhile online project (might I recommend "
+    "Wikipedia?), because I already earn a comfortable living. "
+    "Take code from this project if you like, but please do not "
+    "commercialise it. That would be so not radical of you. "
+    "Otherwise, have fun, good luck with your project, and if you wish for a "
+    "feature or encounter a bug, let me know on the repo! "
+    "Cheers! -V"
 )
 
 
