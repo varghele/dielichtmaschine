@@ -4,9 +4,9 @@
 Identity (wordmark, slogan, version, domain) pulls from
 utils.app_identity; the rating plate is app_identity.rating_plate -
 the SAME facts the README banner renders (one copy, mapped to colours
-per consumer). ABOUT_BODY is the user-editable paragraph (todo.md has
-the user hand-writing the final copy before v1.5.0). House rule: no
-em-dashes anywhere in the visible strings.
+per consumer). ABOUT_BODY is the user-editable paragraph (the author's
+own copy, hand-written 2026-07-23). House rule: no em-dashes anywhere
+in the visible strings.
 """
 
 import os

@@ -610,3 +610,20 @@ band (smoke-tested through LiveBuskLayer). Two v1.5 bugs exposed and
 parked in todo.md: shows playback never gets stage planes;
 LightBlock.provenance is dropped by the compact serializer.
 Pre-pass backups: shoo_bee_doom/backup_20260717/.
+
+**todo.md folded into ROADMAP and deleted (2026-07-23):** the working
+agenda had drifted a release behind (header still said "next tag
+v1.4.0", carried the completed v1.4 build-order as history). Its live
+remainder - the v1.5.0 desktop checks, the release ritual, and the
+post-release hardware verification - moved into a new **"## v1.5.0
+release gate"** section in ROADMAP.md (after v1.5b), and the deferred
+non-blocking polish (song-switch waveform stall, structure-rail
+rebuild cost, per-fixture mixed-rig beam axes, LIVE pool label
+truncation) moved to ROADMAP v1.6. Any historical "todo.md" mention
+above or in docs/ refers to that gate list or the v1.6 deferred block
+now. The 2026-07-16 morphing sweep also shipped a run of v1.5
+hardening (per-group Live pools, the SMPTE busk cluster with its own
+input picker, the Song lock, the Auto input meter + gain, the
+native-sample-rate audio fallback, the branded About dialog) - all in
+CHANGELOG [Unreleased], all CI-green on origin; only geometry/morph
+code-completeness was the 2026-07-16 line.

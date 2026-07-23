@@ -9,10 +9,10 @@ link. Identity fields (name, version, domain, slogan) all pull from
 utils.app_identity, so a release bump changes the dialog without
 touching this file.
 
-ABOUT_BODY is deliberately a plain module constant: the v1.5 release
-list (todo.md) has the user hand-writing the final copy - edit the
-constant, nothing else. House rules apply: no em-dashes, separator
-is " · ".
+ABOUT_BODY is a plain module constant carrying the author's copy
+(hand-written 2026-07-23) - edit the constant, nothing else, then
+regenerate the golden (test_about_dialog_golden.py). House rules
+apply: no em-dashes, separator is " · ".
 """
 
 from PyQt6.QtCore import Qt
@@ -24,9 +24,9 @@ from gui.fonts import FONT_MONO
 from gui.typography import DisplayLabel, MicroLabel, mono_font
 from utils import app_identity
 
-#: The human paragraph. USER-AUTHORED copy pending (todo.md, v1.5
-#: release list) - this placeholder describes the tool factually until
-#: the real text lands.
+#: The human paragraph - the author's own words (2026-07-23). Each
+#: line is a separate string literal, so keep a trailing space on
+#: every line but the last, or sentences run together at the joins.
 ABOUT_BODY = (
     "Hello and welcome, you have found the Lichtmaschine! Step right up! "
     "If you read this: first of all, thank you very much for checking out "

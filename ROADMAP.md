@@ -103,7 +103,7 @@ The release that ships Die Lichtmaschine as a functional product in its own righ
 
 Today, moving-head pan / tilt is stored as raw DMX values (or normalised 0-1 equivalents). That breaks the moment the fixture moves an inch: the values point at empty air. It also blocks morphing entirely, because any new rig will have fixtures in different positions and the pan / tilt numbers carry no meaning across rigs.
 
-v1.5a reworks how movement is authored and stored so that focus is geometric, not arbitrary. v1.5a and v1.5b together make the **v1.5.0** release (decided 2026-07-14). **Code-complete 2026-07-16** (status log in `docs/focus-morphing-plan.md`, CLOSED); the release itself waits on the manual desktop/bench checks + release ritual in `todo.md`.
+v1.5a reworks how movement is authored and stored so that focus is geometric, not arbitrary. v1.5a and v1.5b together make the **v1.5.0** release (decided 2026-07-14). **Code-complete 2026-07-16** (status log in `docs/focus-morphing-plan.md`, CLOSED); the release itself waits on the manual desktop/bench checks + release ritual in the **v1.5.0 release gate** section below.
 
 - [x] **World-space targets on `MovementBlock`.** Done: `target_point` / named-spot / `StagePlane`-face storage everywhere, playback and export both take the world-plane path (`test_world_targets.py`).
 - [x] **Per-fixture pan / tilt resolution at playback / export.** Done: resolution via `calculate_pan_tilt` at the definition's physical Focus ranges in the Live palettes, native playback, AND the export pipeline - the "range-aware export still open" note was stale, the export has aimed at real Focus ranges since the yoke work (pinned in `test_dmx_invert.py`).
@@ -125,6 +125,37 @@ This is foundational for v1.5b but useful on its own, even without morphing. It 
 Morphing is a **compile step, never a runtime layer**: `(config A, setlist, patch plan, config B) -> new shows inside config B`. The morph is described by a user-authored **patch plan** (`*.morphplan.yaml`, diffable and reusable per venue), visualized as a patchbay: source lanes decomposed into sublane streams (INTENSITY / COLOUR / POSITION / BEAM = dimmer / colour / movement / special) wired onto target groups, with fan-out, fan-in (dimmer HTP, others by explicit priority), per-edge modes (`copy`, `copy+transform`, `regenerate(strategy)`) and composable transforms (phase offset, mirror, intensity scale, spatial subset). Manual-first: auto-suggestion only prefills, the user always confirms. Every morph produces a **report** (the plan's execution trace) and passes a live **completeness checker** whose saved expectations double as the show's minimum-rig manifest. Re-morph replaces (bluntly, with a destroyed-hand-edits manifest and per-target-lane protection flags); provenance tags (`morphed`/`hand_edited`/`authored`) make that honest; regeneration is seeded and deterministic. Venue adaptation is two-phase: the morph compile (anywhere) and the **on-site pre-flight** - a generated operator checklist (verify + capture item types, Live tab as the control surface) that reconciles config B with physical reality; captured values land in the CONFIG, never in show blocks, and the `.qxw` exporter warns hard when a checklist is incomplete (native playback resolves geometry at runtime, exports bake it in). The v1.5a calibration helper is absorbed into pre-flight as an item type. Explicitly out of scope for v1: runtime morphing, three-way merge, semantic gobo mapping, blended fan-in, quantity choreography beyond transforms, taxonomy-rethink-as-blocker, camera-assisted verification.
 
 Prerequisites (phase 0 of the plan): deterministic group topology (explicit order; existing groups snapshot their current order, new groups spatial-sort - decided 2026-07-15), stable lane ids, colour palette roles with literal fallback (decided 2026-07-15, in-milestone), autogen determinism audit, two-configs-in-process audit. The fixture role-taxonomy rethink is DEMOTED off the critical path (feeds auto-suggest prefill only); fixture physical metadata stays useful for suggestions but is no longer a blocker.
+
+---
+
+## v1.5.0 release gate
+
+The code is done; these are the manual checks and the release chore that stand between the branch and the tag. Folded in from `todo.md` 2026-07-23 (that file is gone - this is its live remainder). Everything is unit-tested offscreen and green on CI; what follows is what only a real screen, the desk, or a human can sign off.
+
+**Desktop checks** (user; any PC with a GPU except the bench item):
+
+- [ ] **Morph to Venue end to end on demo data**: open `demos/shows/club_band.lms`, Tools > Morph to Venue, target `demos/rigs/band_midsize.lms`, AUTO-SUGGEST, eyeball the patchbay (wire curves, chip gating, checker strip), DRAG a source chip onto a target, leave to the Stage tab mid-morph and resume via the menu, review page: coverage table + RENDER PREVIEW under real GL, commit, open the morphed show in the timeline.
+- [ ] **Click-to-aim live**: select a movement block in the Shows tab, Stage tab AIM toggle, click the plan - the block's target and the 3D beam follow.
+- [ ] **Tools > Convert Movement to World Targets** on a real project - read the report table, apply, confirm beams land where they did.
+- [ ] **Colour palette roles**: tag two blocks with a role, EDIT PALETTE, change the colour - both blocks re-skin.
+- [ ] **Pre-flight against the bench rig** (desk PC): Tools > Venue Pre-Flight with the Hero Spots patched - flash, aim at Spot1, capture focus, complete; then export and see the guard stay quiet (and warn after touching an orientation).
+- [ ] **Orientation panel**: the two INVERT DMX checkboxes on a mover, confirm the head mirrors on the wire and in a fresh .qxw.
+
+**Release ritual** (user, at tag time - `docs/releasing.md`):
+
+- [ ] Drop the `-dev` suffix (`_version.py`: `1.5.0-dev` -> `1.5.0`).
+- [ ] Rename CHANGELOG `[Unreleased]` to `[1.5.0]` with the date.
+- [ ] Re-render the brand assets (`python scripts/render_brand_assets.py` - the README banner + social preview stamp the version at render time; regenerate the About dialog golden too, `test_about_dialog_golden.py`).
+- [ ] Merge `v1.5-focus-morphing` to `main` (`--no-ff`), tag `v1.5.0`, push.
+
+**Post-release hardware verification** (user, needs the rig; findings land as patch releases). Bench kit sits in the repo root (gitignored, machine-local): `bench_kit.lms` / `bench_ltc_25fps_01h.wav` / `bench_kit.qxw`.
+
+- [ ] **LTC chase bench checkpoint, hardware half**: play a `write_ltc_wav` file from a phone/DAW into the picked input, ARM, see one song fire. (Device-open + native-rate decode already proven 2026-07-22 arming on a Realtek mic; a real analog LTC feed is the remaining half.)
+- [ ] **QLC+ export aim check**: export a mover project to .qxw, fire a position preset from the Virtual Console at the hung head - the beam lands where Lichtmaschine lands it; also run an exported circle movement pattern.
+- [ ] **Busk a colour over a playing show** against a real ArtNet node or the standalone visualizer.
+- [ ] **Topbar VISUALIZER OPEN end to end**: one press = feed up + viewer launched + client count ticks to 1 (process launch is stubbed in tests).
+- [ ] **Eyeball the rebranded visualizer frame** under a live GL context (header spacing, statusbar colours).
+- [ ] **GDTF Share online check**: Add Fixture > GDTF SHARE, CONNECT with the real account, search, download one fixture, see it appear [GDTF] and patch it (the flow is fake-API tested; this closes the live-endpoint + real-keyring link).
 
 ---
 
