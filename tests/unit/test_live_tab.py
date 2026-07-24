@@ -82,7 +82,15 @@ def live_tab(qapp, three_group_config):
     ThemeManager().apply(qapp, "dark")
     tab = LiveTab(three_group_config, parent=None)
     yield tab
+    # Actually FREE the widget tree, do not just schedule it: the
+    # session qapp never spins an event loop, so a bare deleteLater
+    # leaves every LiveTab's widgets alive for the rest of the worker's
+    # run - and ThemeManager.apply re-polishes app.allWidgets() on every
+    # fixture setup, so the accumulation eventually segfaults setStyleSheet
+    # on offscreen Linux. processEvents delivers the DeferredDelete now
+    # (same teardown other heavy UI fixtures use, e.g. test_stage_tab).
     tab.deleteLater()
+    qapp.processEvents()
 
 
 class TestSelectTiles:
@@ -995,7 +1003,11 @@ def position_tab(qapp):
     ThemeManager().apply(qapp, "dark")
     tab = LiveTab(_spot_config(), parent=None)
     yield tab
+    # Free the tree now (see the live_tab fixture note): a bare
+    # deleteLater accumulates widgets across the worker and segfaults
+    # ThemeManager.apply's global re-polish on offscreen Linux.
     tab.deleteLater()
+    qapp.processEvents()
 
 
 class TestMovementShapesPool:
@@ -1177,6 +1189,7 @@ class TestPositionPool:
             assert cell.tag_label.text() == "0.0 · 1.5"
         finally:
             tab.deleteLater()
+            qapp.processEvents()
 
     def test_click_applies_and_second_click_releases(self, position_tab):
         position_tab.state.set_selection(["Movers"])
@@ -1245,6 +1258,7 @@ class TestPositionPool:
             assert tab._position_section.isEnabled() is True
         finally:
             tab.deleteLater()
+            qapp.processEvents()
 
     def test_update_from_config_prunes_removed_mark(self, position_tab):
         position_tab.state.set_selection(["Movers"])
@@ -1291,6 +1305,7 @@ class TestPositionPool:
             assert "preset:element:drums1" not in tab._position_cells
         finally:
             tab.deleteLater()
+            qapp.processEvents()
 
     def test_adding_an_element_rebuilds_the_pool(self, position_tab):
         from config.models import StageElement
