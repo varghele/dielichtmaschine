@@ -20,6 +20,11 @@ busk programmer actually drives:
   colour - selection-independent, same level/strobe treatment - but
   BELOW explicit swatches: a touched swatch on a group overrides the
   scene on that group. Second touch releases (the state contract).
+- A group with a COLOUR FX (LiveState.colour_fx, per group, e.g.
+  "rainbow") claims colour like a swatch but from a PROCEDURAL,
+  time-cycling source (overriding the static swatch/scene on that
+  group). The hue fans across the group's fixtures by stage X, so the
+  group reads as a moving rainbow.
 - A group HELD ON FLASH without a colour claims only dimmer +
   shutter - the show's colour keeps showing through underneath at
   busk intensity (dimmer merges HTP in the arbiter).
@@ -71,6 +76,23 @@ from .dmx_manager import rgb_to_color_wheel
 # band (Hz); 50% duty cycle against the arbiter clock.
 STROBE_MIN_HZ = 1.0
 STROBE_MAX_HZ = 10.0
+
+# COLOUR FX "rainbow": seconds for one full hue rotation, and the hue
+# spread across a group's fixtures (by stage-X order) so the group reads
+# as a moving rainbow rather than one flat colour cycling in unison.
+RAINBOW_PERIOD_S = 6.0
+RAINBOW_SPREAD = 1.0
+
+
+def _rainbow_rgb(now: float, index: int, total: int) -> Tuple[int, int, int]:
+    """Full-saturation rainbow colour at wall time ``now`` for fixture
+    ``index`` of ``total`` in the group: the hue advances one full turn
+    per RAINBOW_PERIOD_S and fans RAINBOW_SPREAD across the group."""
+    import colorsys
+    fan = (index / total) * RAINBOW_SPREAD if total else 0.0
+    hue = ((now / RAINBOW_PERIOD_S) + fan) % 1.0
+    red, green, blue = colorsys.hsv_to_rgb(hue, 1.0, 1.0)
+    return (round(red * 255), round(green * 255), round(blue * 255))
 
 
 def _hex_to_rgb(hex_color: str) -> Tuple[int, int, int]:
@@ -224,13 +246,15 @@ class LiveBuskLayer:
 
         claimed_groups = []
         position_groups = []
+        colour_fx = getattr(state, "colour_fx", None) or {}
         for group_name, group in getattr(config, "groups", {}).items():
             has_swatch = group_name in state.colours
             has_scene = bool(scene_hex) and group_name in scene_groups
             has_flash = group_name in state.flash
-            if has_swatch or has_scene or has_flash:
+            has_fx = group_name in colour_fx
+            if has_swatch or has_scene or has_flash or has_fx:
                 claimed_groups.append(
-                    (group_name, group, has_swatch or has_scene))
+                    (group_name, group, has_swatch or has_scene or has_fx))
             # An explicitly held position beats the staged scene's aim.
             position_id = state.positions.get(group_name) \
                 or scene_positions.get(group_name)
@@ -267,8 +291,12 @@ class LiveBuskLayer:
         for group_name, group, has_colour in claimed_groups:
             level = state.group_level_local(group_name)
             effective = level if strobe_open else 0.0
+            # A COLOUR FX on the group is a procedural colour that
+            # overrides the swatch/scene (a deliberate "cycle this
+            # group" touch); computed per fixture in the loop below.
+            fx_id = colour_fx.get(group_name)
             primary_hex, secondary_hex = (None, None)
-            if has_colour:
+            if has_colour and not fx_id:
                 if group_name in state.colours:      # swatch beats scene
                     primary_hex, secondary_hex = self._swatch_colors.get(
                         state.colours[group_name], (None, None))
@@ -288,7 +316,9 @@ class LiveBuskLayer:
                 if fixture_map is None:
                     continue
 
-                if has_colour and primary_hex:
+                if fx_id == "rainbow":
+                    red, green, blue = _rainbow_rgb(now, index, len(fixtures))
+                elif has_colour and primary_hex:
                     hex_color = secondary_hex \
                         if (secondary_hex and index % 2) else primary_hex
                     red, green, blue = _hex_to_rgb(hex_color)

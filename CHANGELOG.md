@@ -27,22 +27,32 @@ verbatim as the GitHub Release notes (see [docs/releasing.md](docs/releasing.md)
   to Video moved from its one-action Render menu into Tools.
 
 - **Every Live pool is per-group now - a full look per group.** The
-  EFFECTS, INTENSITY FX and MOVEMENT SHAPES pools all work like the
-  POSITION pool: touching a key applies it to the selected groups,
-  each group runs its own riff/dimmer pattern/shape simultaneously
-  (own loop length, own pause), and everything keeps running on its
-  group after deselection - build a complete individual configuration
-  per group (colour, position, intensity, effect, shape); scenes stay
-  the one whole-rig override. Touching a key every selected group
-  already runs releases it there. Each group tile reads its running
-  effect and dimmer pattern ("PULSE · DIM SPARKLE"), the ACTIVE
+  INTENSITY FX and MOVEMENT SHAPES pools work like the POSITION pool:
+  touching a key applies it to the selected groups, each group runs
+  its own dimmer pattern/shape simultaneously (own loop length, own
+  pause), and everything keeps running on its group after deselection
+  - build a complete individual configuration per group (colour,
+  position, intensity, shape); scenes stay the one whole-rig
+  override. Touching a key every selected group already runs releases
+  it there. Each group tile reads its running look, the ACTIVE
   PLAYBACKS rows tag their group set (PAUSE freezes exactly that
   key's groups, KILL releases only them), the programmer bar lists
-  the selection's keys, and a group joining an already-running riff
-  starts in phase with it instead of restarting anyone. The EFFECTS
-  pool is grouped by riff category (BUILDS, DROPS, FILLS, LOOPS,
-  ...), and the riff-backed pools scroll instead of overflowing
-  their column when the library grows.
+  the selection's keys, and a group joining an already-running
+  pattern starts in phase with it instead of restarting anyone. The
+  riff-backed pools scroll instead of overflowing their column when
+  the library grows.
+
+- **The EFFECTS pool fires composite looks; a COLOUR FX pool cycles
+  the colour.** Each EFFECTS cell is now a COMPOSITE macro - one grab
+  sets a coordinated intensity FX and movement shape on the selected
+  groups at once (colour stays with the swatch), so you build a look
+  without touching three pools. Ten composites split into LOOPS
+  (sustained) and HITS (short and punchy); firing one shows up in the
+  running stack as its intensity + shape parts, and each group tile
+  names the composite it holds. New below the colour palettes: a
+  COLOUR FX subsection whose RAINBOW look cycles a moving hue across
+  the selected groups (overriding the static swatch), the same
+  per-group, touch-to-release contract as the swatches.
 
 - **Finished songs can be locked against accidental edits.** A LOCK
   chip on the Structure tab's song header (next to RENAME SONG and

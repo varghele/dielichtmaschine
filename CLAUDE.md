@@ -627,3 +627,28 @@ input picker, the Song lock, the Auto input meter + gain, the
 native-sample-rate audio fallback, the branded About dialog) - all in
 CHANGELOG [Unreleased], all CI-green on origin; only geometry/morph
 code-completeness was the 2026-07-16 line.
+
+**Live EFFECTS became composites + a COLOUR FX pool (2026-07-24):**
+the per-group EFFECTS pool (riff-per-group, its own engine slot) was
+REPLACED by COMPOSITE macros - a composite is a fixed (intensity FX,
+movement shape) pair (`COMPOSITE_EFFECTS` in gui/tabs/live_tab.py,
+split LOOPS/HITS) and `stage_composite` WRITES `state.intensities` +
+`state.shapes` for the selected groups, so composites render through
+the SURVIVING intensity + movement binders - there is NO effect
+engine slot driven by production anymore (the engine still supports
+"effect" as a generic slot; the low-level tests use it). Rationale:
+an effect-as-riff-with-movement fights the busk position aim (which
+overrides engine movement) and swings raw pan/tilt around centre, not
+the aimed target - the macro reuses the correct dimmer + world-
+anchored-movement rendering. Colour stays with the swatch; a new
+COLOUR FX subsection under the colour pool (`COLOUR_FX`, currently
+RAINBOW) writes `state.colour_fx` per group and renders as a moving
+procedural hue in utils/artnet/live_layer.py (`_rainbow_rgb`,
+overrides the static swatch). `LiveState` lost `stage_effect` /
+`active_effect_keys` / `state.effects`; the gui.py effect-binder
+instance is gone (intensity binder renamed `_live_intensity_binder`).
+The riff library files (riffs/{builds,drops,fills,loops,movement})
+were KEPT - they still back the riff browser, autogen and timeline.
+Tests: test_live_tab.py TestCompositeEffectsPool + TestColourFXPool,
+test_live_engine.py TestPerGroupIntensityBinder, test_live_busk_layer
+TestColourFX; two live goldens regenerated.

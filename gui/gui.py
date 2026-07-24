@@ -310,23 +310,13 @@ class MainWindow(QMainWindow, Ui_MainWindow):
                                   emit_safe_idle=False)
 
             self._live_engine = LiveEngine(_live_manager_factory)
-            # Per-group effects (2026-07-22): one engine slot per
-            # group ("effect:<group>"), different riffs on different
-            # groups simultaneously; selection scopes staging only.
-            self._live_effects_binder = LiveGroupEffectsBinder(
-                state=self.live_tab.state,
-                engine=self._live_engine,
-                config_provider=lambda: self.live_tab.config,
-                riff_provider=self.live_tab.riff_for_key,
-            )
-            self.live_tab.state.state_changed.connect(
-                self._live_effects_binder.sync)
-            self._live_effects_binder.sync()
-
-            # Intensity FX: the same per-group binder on its own slot
-            # family ("intensity:<group>"), fed from
-            # LiveState.intensities - each group's dimmer pattern runs
-            # under its colour riff concurrently.
+            # Intensity FX: a per-group binder on its own slot family
+            # ("intensity:<group>"), fed from LiveState.intensities -
+            # each group's dimmer pattern runs under its colour riff
+            # concurrently. (The EFFECTS pool is now composites that
+            # SET intensity + shape - 2026-07-24 - so there is no
+            # separate effect slot: composites render through this
+            # binder and the movement binder below.)
             self._live_intensity_binder = LiveGroupEffectsBinder(
                 state=self.live_tab.state,
                 engine=self._live_engine,
@@ -364,9 +354,8 @@ class MainWindow(QMainWindow, Ui_MainWindow):
                 engine=self._live_engine,
                 shape_groups_provider=(
                     self._live_movement_binder.active_groups),
-                dimmer_groups_provider=lambda: (
-                    self._live_effects_binder.dimmer_groups()
-                    | self._live_intensity_binder.dimmer_groups()),
+                dimmer_groups_provider=(
+                    self._live_intensity_binder.dimmer_groups),
             )
             arbiter.set_live_layer(self._live_busk_layer)
 

@@ -179,6 +179,60 @@ class TestClaimRules:
         assert layer.render(0.0) == {}
 
 
+class TestColourFX:
+    """COLOUR FX (LiveState.colour_fx, 2026-07-24): a procedural,
+    time-cycling colour that claims like a swatch but from a moving
+    hue, overriding the static swatch on that group."""
+
+    def test_rainbow_claims_colour_and_moves_over_time(self, qapp,
+                                                       mock_fixture_def):
+        state, layer, _, _ = _setup(mock_fixture_def)
+        state.selected = {"Movers"}
+        state.stage_colour_fx("rainbow")
+        v0, mask0 = layer.render(0.0)[1]
+        # Claims dimmer + colour + shutter like a swatch would.
+        assert mask0[DIMMER] and v0[DIMMER] == 255
+        assert mask0[RED] and mask0[GREEN] and mask0[BLUE]
+        # A quarter period later the hue has moved (different RGB).
+        from utils.artnet.live_layer import RAINBOW_PERIOD_S
+        v1, _ = layer.render(RAINBOW_PERIOD_S / 4.0)[1]
+        assert (v1[RED], v1[GREEN], v1[BLUE]) != (v0[RED], v0[GREEN],
+                                                  v0[BLUE])
+
+    def test_rainbow_overrides_a_held_swatch(self, qapp, mock_fixture_def):
+        from utils.artnet.live_layer import _rainbow_rgb
+        state, layer, _, _ = _setup(mock_fixture_def)
+        state.selected = {"Movers"}
+        state.stage_colour("red")           # static swatch...
+        state.stage_colour_fx("rainbow")    # ...overridden by the FX
+        values, _ = layer.render(0.0)[1]
+        # MH1 (index 0 of 2 by stage x) carries the rainbow hue at t=0,
+        # not the swatch red.
+        expected = _rainbow_rgb(0.0, 0, 2)
+        assert (values[0 + RED], values[0 + GREEN], values[0 + BLUE]) \
+            == expected
+
+    def test_rainbow_fans_across_group_fixtures(self, qapp,
+                                                mock_fixture_def):
+        state, layer, _, _ = _setup(mock_fixture_def)
+        state.selected = {"Movers"}
+        state.stage_colour_fx("rainbow")
+        values, _ = layer.render(0.0)[1]
+        # Two fixtures, hue spread by stage x: their colours differ.
+        assert (values[0 + RED], values[0 + GREEN], values[0 + BLUE]) != \
+            (values[10 + RED], values[10 + GREEN], values[10 + BLUE])
+
+    def test_fx_alone_still_lights_the_group(self, qapp, mock_fixture_def):
+        # No swatch, no scene, no flash - just the FX: it lights the
+        # group on its own (dimmer at submaster + a colour claim).
+        state, layer, _, _ = _setup(mock_fixture_def)
+        state.selected = {"Movers"}
+        state.stage_colour_fx("rainbow")
+        values, mask = layer.render(0.0)[1]
+        assert mask[DIMMER] and values[DIMMER] == 255
+        assert mask[RED] and mask[GREEN] and mask[BLUE]
+
+
 class TestDimmerlessFixtures:
     def _par_setup(self, mock_fixture_def, rgb_par_def):
         par1 = _fixture("PAR1", 100, x=-1.0, model="ParModel")

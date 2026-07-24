@@ -970,7 +970,7 @@ class TestOutputShellWiring:
         # The live engine renders under the busk writes and its binder
         # follows LiveState (live-output-plan phase 3).
         assert window._live_busk_layer._engine is window._live_engine
-        assert window._live_effects_binder._engine is window._live_engine
+        assert window._live_intensity_binder._engine is window._live_engine
 
     def test_live_masters_push_into_the_arbiter(self, wired_window):
         window, arbiter = wired_window

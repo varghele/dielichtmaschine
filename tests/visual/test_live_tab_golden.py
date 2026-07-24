@@ -149,13 +149,15 @@ def test_live_tab_golden(qapp, scene_config, tmp_path):
         tab.state.set_submaster("Movers", 55)
         tab.state.set_strobe_rate(40)
         # Round-2 additions: a tapped tempo and the default LIVE mode, plus
-        # one staged effect and one staged scene so both pools show active.
-        # Per-group effects (2026-07-22): the riff runs on the two
-        # SELECTED groups - their tiles name it, the running row tags
-        # the group set, the pool cell outlines selection-scoped.
+        # one staged composite and one staged scene so both pools show
+        # active. Composites (2026-07-24): a composite sets the intensity
+        # FX + movement shape on the two SELECTED groups - their tiles
+        # name the composite, the running rows tag the group set, the
+        # pool cell outlines selection-scoped.
         tab.state.set_bpm(128)
         tab.state.set_mode("live")
-        tab.state.stage_effect("loops/Four Floor")
+        tab.state.stage_composite("pulse_sweep")
+        tab.state.stage_colour_fx("rainbow")   # COLOUR FX subsection lit
         tab.state.set_scene("looks/Warm Wash")
         # Round-3: apply the computed CROSS preset to the selection
         # (per-group positions). The Movers group (type MH) is selected,
@@ -163,10 +165,10 @@ def test_live_tab_golden(qapp, scene_config, tmp_path):
         # preset cell renders accent-outlined (the programmer bar reads
         # "POS: CROSS") - pixel-identical to the old staged rendering.
         tab.state.stage_position("preset:cross", "Cross")
-        # Dual queue: the staged effect+scene render as running rows;
-        # preload two NEXT UP items (one effect, one scene) so the queue
-        # rows, the remove X and the enabled GO all pin.
-        tab.state.enqueue("effect", "drops/Build Drop", "Build Drop")
+        # Dual queue: the staged composite+scene render as running rows;
+        # preload two NEXT UP items (one composite, one scene) so the
+        # queue rows, the remove X and the enabled GO all pin.
+        tab.state.enqueue("composite", "chase_run", "Chase Run")
         tab.state.enqueue("scene", "looks/Cold Snap", "Cold Snap")
         tab.setFixedSize(1600, 900)
         compare_to_golden(tab.grab().toImage(), "live_tab_dark")
