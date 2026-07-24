@@ -82,9 +82,18 @@ def test_theme_manager_apply_sets_stylesheet(qapp, name):
     from gui.theme_manager import ThemeManager
 
     tm = ThemeManager()
-    assert tm.apply(qapp, name) is True
-    assert qapp.styleSheet().strip(), "apply() must set a non-empty stylesheet"
-    assert "#F0562E" in qapp.styleSheet()
+    try:
+        assert tm.apply(qapp, name) is True
+        assert qapp.styleSheet().strip(), \
+            "apply() must set a non-empty stylesheet"
+        assert "#F0562E" in qapp.styleSheet()
+    finally:
+        # Never leak a non-dark theme into other tests on this xdist
+        # worker: token painters sniff the GLOBAL stylesheet (timeline_ui
+        # active_tokens, the tab _active_tokens helpers), so a left-over
+        # light theme flips brand-token assertions elsewhere - an
+        # order-dependent flake. Restore the default (dark).
+        tm.apply(qapp, "dark")
 
 
 def test_apply_never_persists_the_choice(qapp):
