@@ -41,12 +41,48 @@ def move_event(x: int, y: int) -> QMouseEvent:
         Qt.KeyboardModifier.NoModifier)
 
 
+@pytest.fixture(scope="module", autouse=True)
+def _brand_fonts(qapp):
+    """Render in the fonts the shipped app registers (main.py) before
+    any widget exists, like tests/visual/conftest.py does.
+
+    Without this the module depended on test order: the screensaver pins
+    IBM Plex Mono / Barlow Condensed in its own QSS, and whether those
+    families existed depended on whether test_branding.py (or this
+    file's glyph test) had registered them earlier in the same worker.
+    Unregistered, Linux falls back to a system font that (a) is taller,
+    so at 960x540 the centered column overflows into the 34px status bar
+    (test_status_bar_pinned_to_the_bottom), and (b) rasterises the 72px
+    clock with slightly different anti-aliasing on its first paint than
+    on later ones (test_set_phase_is_deterministic). Registration is
+    idempotent, so every ordering is equivalent with it."""
+    from gui.fonts import register_brand_fonts
+    register_brand_fonts()
+
+
 @pytest.fixture
 def window(qapp):
     w = make_window()
     yield w
     w.close()
     w.deleteLater()
+
+
+def test_renders_in_the_brand_fonts(window):
+    """The precondition the geometry and pixel tests below rely on: the
+    pinned families resolve to the real brand fonts, not a fallback.
+    Skipped where the platform has no font database (offscreen QPA on
+    Windows), as in test_no_glyph_outside_the_brand_fonts."""
+    from gui.fonts import FONT_DISPLAY, FONT_MONO
+    from gui.typography import mono_font
+    from PyQt6.QtGui import QFontInfo
+
+    if not QFontMetrics(mono_font(10)).inFont("A"):
+        pytest.skip("no font database on this platform (offscreen QPA)")
+    window.grab()  # polish: the families come from the labels' own QSS
+    assert QFontInfo(window.clock_label.font()).family() == FONT_MONO
+    assert QFontInfo(window.state_label.font()).family() == FONT_MONO
+    assert QFontInfo(window.wordmark_label.font()).family() == FONT_DISPLAY
 
 
 # ----------------------------------------------------------------- content

@@ -38,6 +38,16 @@ verbatim as the GitHub Release notes (see [docs/releasing.md](docs/releasing.md)
   before any create, and the ways around it (Miniforge needs none).
   A test now keeps `environment.yml` and `requirements.txt` listing the
   same packages and version floors.
+- **The screensaver tests no longer fail depending on test order.** Two
+  of them (the status bar position and the same-phase-same-frame check)
+  failed on Linux whenever no earlier test in the same process had
+  registered the brand fonts: the screensaver then rendered in a system
+  fallback font, which is taller (the clock reached into the status bar
+  at the test's 960x540) and anti-aliases the 72px clock slightly
+  differently on its first paint. The tests now register the brand fonts
+  the way the app does at startup, and a new test checks that the clock
+  and wordmark really resolve to IBM Plex Mono and Barlow Condensed. The
+  screensaver itself is unchanged.
 
 ## [1.5.0] - 2026-08-09
 
