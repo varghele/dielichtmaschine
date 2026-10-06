@@ -100,11 +100,18 @@ class OrientationPreviewWidget(QOpenGLWidget):
         self.wall_vao = None
         self.axes_vao = None
         self.handle_vao = None
+        # Beam direction line, built once with the axes (it used to be
+        # rebuilt and freed every frame).
+        self.beam_vao = None
+        self.beam_vbo = None
+        self.beam_cbo = None
 
-        # Render timer
-        self.render_timer = QTimer()
+        # Render timer (~30 FPS). Parented, and only running while the
+        # widget is shown (showEvent / hideEvent): the Stage tab keeps an
+        # inline preview alive on a tab that is usually not current.
+        self.render_timer = QTimer(self)
+        self.render_timer.setInterval(33)
         self.render_timer.timeout.connect(self.update)
-        self.render_timer.start(33)  # ~30 FPS
 
         # Compact-friendly minimum so the preview can sit comfortably inside
         # the Stage tab's right-hand splitter without forcing the whole
@@ -114,6 +121,12 @@ class OrientationPreviewWidget(QOpenGLWidget):
 
     def initializeGL(self):
         """Initialize OpenGL context and resources."""
+        # Release with the context current when Qt destroys it (the same
+        # hook as visualizer.renderer.engine.RenderEngine; Qt calls
+        # initializeGL once per context, so no duplicate connections).
+        context = self.context()
+        if context is not None:
+            context.aboutToBeDestroyed.connect(self._release_gl)
         try:
             self.ctx = moderngl.create_context(standalone=False)
             self.ctx.enable(moderngl.DEPTH_TEST)
@@ -181,17 +194,24 @@ class OrientationPreviewWidget(QOpenGLWidget):
             self.chassis = chassis_from_legacy_type(fixture_type)
             self.segment_count = segment_count
             if self.ctx:
-                self._update_fixture_geometry()
+                # Build in this widget's own context, not whichever one
+                # (the Stage tab's 3D preview, say) happens to be current.
+                self.makeCurrent()
+                try:
+                    self._update_fixture_geometry()
+                finally:
+                    self.doneCurrent()
             self.update()
 
-    def _release_fixture_vaos(self):
-        """Release all fixture-related VAOs."""
+    def _release_fixture_vaos(self, release: bool = True):
+        """Release all fixture-related VAOs (``release=False`` only drops
+        the references, for a context that cannot be made current)."""
         vao_attrs = ['fixture_vao', 'indicator_vao', 'segment_vao', 'lens_vao',
                      'base_vao', 'yoke_vao', 'head_vao', 'lamp_vao']
         for attr in vao_attrs:
             if hasattr(self, attr):
                 vao = getattr(self, attr)
-                if vao:
+                if vao and release:
                     try:
                         vao.release()
                     except:
@@ -1179,6 +1199,17 @@ class OrientationPreviewWidget(QOpenGLWidget):
             [(vbo, '3f', 'in_position'), (cbo, '3f', 'in_color')]
         )
 
+        # Beam direction: the local Z axis in yellow, drawn by
+        # _render_beam_indicator.
+        beam_vertices = np.array([[0, 0, 0], [0, 0, 1]], dtype='f4').flatten()
+        beam_colors = np.array([[1, 1, 0], [1, 1, 0]], dtype='f4').flatten()
+        self.beam_vbo = self.ctx.buffer(beam_vertices)
+        self.beam_cbo = self.ctx.buffer(beam_colors)
+        self.beam_vao = self.ctx.vertex_array(
+            self.floor_program,
+            [(self.beam_vbo, '3f', 'in_position'), (self.beam_cbo, '3f', 'in_color')]
+        )
+
     def _create_ring_geometry(self):
         """Create gimbal ring geometry."""
         # Create circle vertices for rings
@@ -1694,7 +1725,7 @@ class OrientationPreviewWidget(QOpenGLWidget):
 
     def _render_beam_indicator(self, mvp: glm.mat4, fixture_transform: glm.mat4):
         """Render a line showing beam direction."""
-        if not self.axes_vao or not self.floor_program:
+        if not self.beam_vao or not self.floor_program:
             return
 
         # Transform for beam direction (local Z axis)
@@ -1703,22 +1734,10 @@ class OrientationPreviewWidget(QOpenGLWidget):
 
         self.floor_program['mvp'].write(np.array(beam_mvp.to_list(), dtype='f4').flatten().tobytes())
 
-        # Only render Z axis (beam direction) with yellow color
-        vertices = np.array([[0, 0, 0], [0, 0, 1]], dtype='f4').flatten()
-        colors = np.array([[1, 1, 0], [1, 1, 0]], dtype='f4').flatten()
-
-        vbo = self.ctx.buffer(vertices)
-        cbo = self.ctx.buffer(colors)
-
-        beam_vao = self.ctx.vertex_array(
-            self.floor_program,
-            [(vbo, '3f', 'in_position'), (cbo, '3f', 'in_color')]
-        )
+        # Only the Z axis (beam direction), yellow; geometry from
+        # _create_axes_geometry.
         self.ctx.line_width = 3.0
-        beam_vao.render(moderngl.LINES)
-        beam_vao.release()
-        vbo.release()
-        cbo.release()
+        self.beam_vao.render(moderngl.LINES)
 
     def _get_ring_at_position(self, pos) -> Optional[str]:
         """
@@ -1862,14 +1881,57 @@ class OrientationPreviewWidget(QOpenGLWidget):
         self.camera_distance = max(2, min(10, self.camera_distance))
         self.update()
 
-    def cleanup(self):
-        """Release resources."""
+    def showEvent(self, event):
+        """Resume the render tick when the widget becomes visible."""
+        super().showEvent(event)
+        if not self.render_timer.isActive():
+            self.render_timer.start()
+
+    def hideEvent(self, event):
+        """Pause the render tick while hidden."""
         self.render_timer.stop()
-        # Release fixture VAOs
-        self._release_fixture_vaos()
-        if self.ctx:
-            self.ctx.release()
-            self.ctx = None
+        super().hideEvent(event)
+
+    def _release_gl(self):
+        """Release GL resources with this widget's context current, so the
+        deletes cannot land in another widget's context. Idempotent; a
+        no-op for a preview that never initialised."""
+        if self.ctx is None:
+            return
+        try:
+            self.makeCurrent()
+            current = True
+        except RuntimeError:
+            # The C++ widget is already gone; nothing can be made current,
+            # so only drop the references (the dying context frees them).
+            current = False
+        try:
+            for attr in ('beam_vao', 'beam_vbo', 'beam_cbo'):
+                obj = getattr(self, attr)
+                setattr(self, attr, None)
+                if obj is not None and current:
+                    try:
+                        obj.release()
+                    except Exception:
+                        pass
+            self._release_fixture_vaos(release=current)
+            ctx, self.ctx = self.ctx, None
+            if current:
+                try:
+                    ctx.release()
+                except Exception:
+                    pass
+        finally:
+            if current:
+                try:
+                    self.doneCurrent()
+                except RuntimeError:
+                    pass
+
+    def cleanup(self):
+        """Stop rendering and release resources."""
+        self.render_timer.stop()
+        self._release_gl()
 
 
 class OrientationPanel(QWidget):

@@ -225,6 +225,21 @@ verbatim as the GitHub Release notes (see [docs/releasing.md](docs/releasing.md)
   whole length of the download, so adding, removing or re-patching a
   fixture meanwhile could make it skip a fixture, check the wrong mode
   or fail. It now reads a copy taken when it starts.
+- **The 3D previews stop drawing while nobody can see them.** The
+  Stage tab, the show timeline and Auto mode each keep a 3D preview,
+  and the Stage tab an orientation preview as well; all of them redrew
+  30 to 60 times a second from startup on, also on screens that were
+  not open. They now draw only while visible and pick up straight away
+  when their tab is shown again. The orientation preview also no
+  longer builds and throws away the beam direction line on every frame.
+- **The 3D previews release their graphics memory cleanly.** Their
+  GPU resources were freed without first selecting the preview's own
+  graphics context, so on quit the release could hit another preview's
+  context or none at all, and the Stage tab's previews were never
+  released. Every preview now releases with its own context selected,
+  on quit and when the graphics context goes away, and the orientation
+  preview builds the shape for a newly picked fixture type in its own
+  context too. What the previews show is unchanged.
 
 ## [1.5.0] - 2026-08-09
 

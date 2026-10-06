@@ -2581,6 +2581,11 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         if hasattr(self, 'auto_tab') and hasattr(self.auto_tab, 'cleanup'):
             self.auto_tab.cleanup()
 
+        # Release the Stage tab's GL surfaces while their contexts still
+        # exist (the Shows and Auto tabs release theirs in cleanup above).
+        if hasattr(self, 'stage_tab') and hasattr(self.stage_tab, 'cleanup'):
+            self.stage_tab.cleanup()
+
         # The shared output arbiter outlives the per-tab controllers;
         # close its socket last.
         if getattr(self, "_output_arbiter", None) is not None:

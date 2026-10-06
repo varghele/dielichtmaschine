@@ -192,10 +192,16 @@ class EmbeddedVisualizer(QWidget):
         self._popout_btn.setVisible(visible)
 
     def cleanup(self) -> None:
-        """Stop the FPS timer. The engine's GL teardown happens through Qt's
-        normal child-deletion when the widget itself is destroyed."""
+        """Stop the FPS timer and tear the engine down (render timer off,
+        GL resources released with its context current). Child deletion
+        alone does not do it: an embedded QOpenGLWidget never receives a
+        closeEvent, and in Qt 6 its context's aboutToBeDestroyed is not
+        guaranteed to reach the engine before the widget goes away."""
         if hasattr(self, "_fps_timer") and self._fps_timer is not None:
             self._fps_timer.stop()
+        engine = getattr(self, "_engine", None)
+        if engine is not None:
+            engine.cleanup()
 
     # ── Internals ─────────────────────────────────────────────────────
 

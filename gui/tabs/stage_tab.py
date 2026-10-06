@@ -1737,6 +1737,20 @@ class StageTab(BaseTab):
         self._tcp_update_pending = False
         self._save_splitter_state()
 
+    def cleanup(self):
+        """Release the tab's GL surfaces (3D preview and the inline
+        orientation preview) with their contexts current. Called from
+        MainWindow.closeEvent on app shutdown; embedded GL widgets never
+        receive a closeEvent of their own."""
+        for name in ("embedded_visualizer", "orientation_panel"):
+            widget = getattr(self, name, None)
+            if widget is None:
+                continue
+            try:
+                widget.cleanup()
+            except Exception:
+                pass
+
     def _save_splitter_state(self) -> None:
         """Persist the preview/inspector splitter sizes via QSettings so
         the Stage tab opens with the same proportions next session."""

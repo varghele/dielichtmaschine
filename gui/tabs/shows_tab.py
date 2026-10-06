@@ -2650,8 +2650,8 @@ class ShowsTab(BaseTab):
                 pass
             self.tcp_server = None
 
-        # Clean up embedded visualizer (stops its FPS timer; the GL
-        # surface is destroyed via Qt's normal child teardown).
+        # Clean up embedded visualizer (stops its timers and releases
+        # the engine's GL resources with its context current).
         if hasattr(self, "embedded_visualizer") and self.embedded_visualizer:
             try:
                 self.embedded_visualizer.cleanup()
