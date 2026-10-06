@@ -1157,8 +1157,9 @@ def chassis_from_legacy_type(legacy_type: Optional[str]) -> Chassis:
 # the data is derivable from the QXF). Instead, callers ask the module for a
 # cached :class:`FixtureCapabilities` keyed by (manufacturer, model, mode).
 #
-# Cache is invalidated when the fixture-definition cache in
-# ``fixture_utils.py`` is cleared (e.g. when QXF files change on disk).
+# Cleared by ``utils.fixture_library.invalidate_fixture_caches`` (the
+# rescan paths call it when fixture files change on disk). Clearing only
+# the library cache does NOT clear this one.
 
 
 _FIXTURE_CAPABILITIES_CACHE: Dict[Tuple[str, str, str], 'FixtureCapabilities'] = {}

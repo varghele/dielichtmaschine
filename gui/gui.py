@@ -1632,8 +1632,8 @@ class MainWindow(QMainWindow, Ui_MainWindow):
     def _on_gdtf_autopull_done(self, kept):
         if not kept:
             return
-        from utils.fixture_library import clear_library_cache
-        clear_library_cache()
+        from utils.fixture_library import invalidate_fixture_caches
+        invalidate_fixture_caches()
         names = ", ".join(os.path.splitext(os.path.basename(p))[0]
                           .split("@")[1] if "@" in os.path.basename(p)
                           else os.path.basename(p) for p in kept)

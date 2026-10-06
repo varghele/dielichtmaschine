@@ -30,8 +30,7 @@ generation time (utils/to_xml, 2026-07-13) so QLC+ playback aims like
 native output.
 """
 
-from functools import lru_cache
-from typing import Tuple
+from typing import Dict, Tuple
 
 from utils.orientation import (
     calculate_pan_tilt,
@@ -52,7 +51,20 @@ def solver_to_gdtf_axes(pan_deg: float, tilt_deg: float,
     return _impl(pan_deg, tilt_deg, flipped)
 
 
-@lru_cache(maxsize=256)
+# (manufacturer, model, mode) -> (convert, flipped). Only answers for a
+# RESOLVED definition are stored: a lookup that found no definition is
+# retried (cheap, the library memoizes the miss until its next clear), so
+# a definition that lands mid-session (GDTF autopull, Share download) is
+# picked up. utils.fixture_library.invalidate_fixture_caches clears it.
+_YOKE_CACHE: Dict[Tuple[str, str, str], Tuple[bool, bool]] = {}
+
+
+def clear_yoke_cache() -> None:
+    """Drop the yoke and physical-range lookups (fixture files changed)."""
+    _YOKE_CACHE.clear()
+    _PHYSICAL_RANGES_CACHE.clear()
+
+
 def fixture_yoke(manufacturer: str, model: str,
                  mode: str) -> Tuple[bool, bool]:
     """``(convert, flipped)`` for a fixture identity.
@@ -73,39 +85,68 @@ def fixture_yoke(manufacturer: str, model: str,
     caller additionally gates on the map having pan+tilt channels, so
     non-movers never reach the conversion).
 
-    Cached by identity; the lazy imports keep the DMX thread clear of
-    the renderer package until a mover is actually on the wire.
+    Cached by identity once the definition resolves; the lazy imports
+    keep the DMX thread clear of the renderer package until a mover is
+    actually on the wire.
     """
+    key = (manufacturer, model, mode)
+    cached = _YOKE_CACHE.get(key)
+    if cached is not None:
+        return cached
     try:
         from utils.fixture_library import get_definition
         defn = get_definition(manufacturer, model)
-        if defn is None:
-            return (False, False)
-        if getattr(defn, "gdtf", None) is None:
-            return (True, True)   # synthetic standard yoke for .qxf
-        from visualizer.renderer.gdtf_draw_plan import build_draw_plan
-        plan = build_draw_plan(defn.gdtf, mode)
-        return (True, bool(getattr(plan, "flipped", False)))
     except Exception:
         return (False, False)
+    if defn is None:
+        return (False, False)
+    try:
+        if getattr(defn, "gdtf", None) is None:
+            result = (True, True)   # synthetic standard yoke for .qxf
+        else:
+            from visualizer.renderer.gdtf_draw_plan import build_draw_plan
+            plan = build_draw_plan(defn.gdtf, mode)
+            result = (True, bool(getattr(plan, "flipped", False)))
+    except Exception:
+        # A resolved definition whose chain cannot be built: cached like
+        # a success, so the 44 Hz output loop does not rebuild it every
+        # frame; the next invalidation retries it.
+        result = (False, False)
+    _YOKE_CACHE[key] = result
+    return result
 
 
+# lru_cache-compatible alias: callers and tests clear with
+# fixture_yoke.cache_clear().
+fixture_yoke.cache_clear = _YOKE_CACHE.clear
 
 
+# (manufacturer, model) -> (pan_range, tilt_range); like _YOKE_CACHE,
+# only resolved definitions are stored.
+_PHYSICAL_RANGES_CACHE: Dict[Tuple[str, str], Tuple[float, float]] = {}
 
 
-@lru_cache(maxsize=256)
 def _physical_ranges(manufacturer: str, model: str) -> Tuple[float, float]:
     """(pan_range, tilt_range) from the definition's <Physical><Focus>,
     with the historical 540/270 defaults when absent or zero."""
+    key = (manufacturer, model)
+    cached = _PHYSICAL_RANGES_CACHE.get(key)
+    if cached is not None:
+        return cached
     try:
         from utils.fixture_library import get_definition
         defn = get_definition(manufacturer, model)
         pan = float(getattr(defn, "pan_max", 0.0) or 0.0)
         tilt = float(getattr(defn, "tilt_max", 0.0) or 0.0)
-        return (pan or 540.0, tilt or 270.0)
     except Exception:
         return (540.0, 270.0)
+    result = (pan or 540.0, tilt or 270.0)
+    if defn is not None:
+        _PHYSICAL_RANGES_CACHE[key] = result
+    return result
+
+
+_physical_ranges.cache_clear = _PHYSICAL_RANGES_CACHE.clear
 
 
 def physical_ranges(manufacturer: str, model: str) -> Tuple[float, float]:

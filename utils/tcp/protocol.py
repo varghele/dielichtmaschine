@@ -25,6 +25,12 @@ class MessageType(Enum):
 # Cache for parsed fixture definitions
 _fixture_definition_cache: Dict[Tuple[str, str], Dict] = {}
 
+
+def clear_visualizer_definition_cache() -> None:
+    """Drop the parsed visualizer data (utils.fixture_library.
+    invalidate_fixture_caches calls this when fixture files change)."""
+    _fixture_definition_cache.clear()
+
 # Gobo pattern keyword mapping
 # Maps keywords found in gobo capability text to procedural pattern IDs
 GOBO_PATTERN_KEYWORDS = {

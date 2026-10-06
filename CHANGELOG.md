@@ -83,6 +83,37 @@ verbatim as the GitHub Release notes (see [docs/releasing.md](docs/releasing.md)
   Exports of shows using these effects change accordingly: all five
   demo shows (`demos/shows/`) export differently, while the demo rigs
   checked by `scripts/export_hash_check.py` (no shows) are unchanged.
+- **New fixture definitions are picked up without a restart.** Changing
+  a fixture library folder in Settings, downloading from GDTF Share or
+  the automatic GDTF fetch on load refreshed the fixture library, but
+  several places that remember what they read from it did not: fixture
+  capabilities in the 3D view, the pan/tilt conversion and travel range
+  used on the wire and in the export, and the fixture data sent to the
+  visualizer kept the old answer, including "fixture not found", until
+  the app was restarted. All of them are now refreshed together. The
+  pan/tilt conversion also no longer remembers "not found" at all, so a
+  mover whose definition arrives mid-session aims correctly as soon as
+  it is there.
+- **A group only offers what its fixtures' patched mode can do.** The
+  colour, movement, dimmer and special sublanes a group gets, and the
+  colour wheel offered in the colour editor, were worked out from every
+  channel the fixture definition declares in any mode. A Hero Spot 60
+  in 8 Channel mode (no colour wheel) offered a colour sublane whose
+  values went nowhere, and an RGB edit on a 6 channel par was stored as
+  a colour wheel pick because the par's 8 channel mode has a wheel
+  (harmless until the par was re-patched to that mode, when the block
+  silently switched to the wheel colour). Both now read the channels of
+  the mode the fixture is patched in, the same channels the app drives
+  on the wire; a mode name the definition does not know keeps the old
+  whole-definition behaviour. In the `.qxw` export this removes the
+  colour preset scenes (nine empty colour scenes plus a blackout) and
+  their Colors buttons in the virtual console for groups whose mode has
+  no colour channel: the `band_midsize`, `festival_mainstage` and
+  `dj_edm` demo rigs and demo shows export differently because their
+  LED Matrix Blinder group is patched in the dimmer-only 26-Channel
+  mode. That group's console frame shrinks to its dimmer slider, and
+  later function IDs and frame positions shift with it; show tracks
+  are unchanged.
 
 ## [1.5.0] - 2026-08-09
 
