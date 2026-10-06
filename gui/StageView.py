@@ -4,7 +4,7 @@ from PyQt6 import QtWidgets, QtGui, QtCore
 from PyQt6.QtCore import pyqtProperty
 from PyQt6.QtGui import QColor
 from gui.stage_items import FixtureItem, SpotItem
-from config.models import Spot
+from config.models import Spot, primary_group
 
 
 # Fallback colours used only when QSS hasn't supplied a value yet (e.g.
@@ -298,8 +298,8 @@ class StageView(QtWidgets.QGraphicsView):
             for fixture in self.config.fixtures:
                 group_color = '#808080'
                 group = None
-                if fixture.group and hasattr(self.config, 'groups'):
-                    group = self.config.groups.get(fixture.group)
+                if hasattr(self.config, 'groups'):
+                    group = primary_group(self.config, fixture)
                     if group:
                         group_color = group.color
 
@@ -333,7 +333,10 @@ class StageView(QtWidgets.QGraphicsView):
                 fixture_item.address = fixture.address
                 fixture_item.manufacturer = fixture.manufacturer
                 fixture_item.model = fixture.model
-                fixture_item.group = fixture.group
+                fixture_item.group = fixture.group  # primary, for display
+                # Full membership (primary first): group selection on
+                # the plan must reach secondary members too.
+                fixture_item.groups = list(fixture.groups)
                 fixture_item.current_mode = fixture.current_mode
                 fixture_item.available_modes = fixture.available_modes
                 fixture_item.layer = fixture.layer
@@ -1385,7 +1388,10 @@ class StageView(QtWidgets.QGraphicsView):
         self.scene.clearSelection()
         selected = []
         for fixture_item in self.fixtures.values():
-            if getattr(fixture_item, 'group', "") != group_name:
+            groups = getattr(fixture_item, 'groups', None)
+            if groups is None:
+                groups = [getattr(fixture_item, 'group', "")]
+            if group_name not in groups:
                 continue
             if not fixture_item.isVisible() or fixture_item.ghosted:
                 continue

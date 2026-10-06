@@ -154,6 +154,25 @@ verbatim as the GitHub Release notes (see [docs/releasing.md](docs/releasing.md)
   Disconnecting and reconnecting quickly could let the old connection's
   receiver, still shutting down, close the new connection and report
   the visualizer as disconnected although it had just connected.
+- **Saving can no longer destroy the project file.** Save and Save As
+  emptied the file before writing the new contents, so a crash, a full
+  disk or an error part way through the write left a truncated or empty
+  project behind (the crash-recovery autosave already wrote safely).
+  Saving now writes a temporary file next to the project and swaps it
+  in only once it is complete; if anything goes wrong the previous file
+  is untouched. A project saved through a symlink keeps the link, an
+  existing file keeps its permissions, and a read-only file is still
+  refused rather than replaced.
+- **A project saved by a newer version opens.** A fixture, mark, stage
+  layer, stage element, MIDI device or pause-show entry carrying a
+  setting this version does not know made the whole load fail. Unknown
+  settings are now skipped and listed once per kind in Help > Warnings;
+  everything else loads as before.
+- **Selecting a group on the Stage tab selects all of its fixtures.**
+  Clicking a group in the Stage tab's library selected only the fixtures
+  that have it as their first group, so a fixture that is also in a
+  second group stayed unselected when you clicked that second group,
+  although the row counted it.
 
 ## [1.5.0] - 2026-08-09
 

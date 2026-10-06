@@ -7,7 +7,7 @@ from enum import Enum
 
 logger = logging.getLogger("visualizer.protocol")
 from typing import Dict, List, Any, Optional, Tuple
-from config.models import Configuration, Fixture, FixtureGroup
+from config.models import Configuration, Fixture, FixtureGroup, primary_group
 from utils import user_warnings
 from utils.fixture_capabilities import get_capabilities_for_fixture
 
@@ -637,7 +637,7 @@ class VisualizerProtocol:
             )
 
             # Get group for effective orientation and z values
-            group = config.groups.get(fixture.group) if fixture.group else None
+            group = primary_group(config, fixture)
             mounting, yaw, pitch, roll = fixture.get_effective_orientation(group)
             fixture_z = fixture.get_effective_z(group)
 

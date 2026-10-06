@@ -39,6 +39,7 @@ streams through (the arbiter rules, docs/output-sync-plan.md).
 
 from typing import Callable, Dict, Optional, Tuple
 
+from config.models import primary_group
 from utils.orientation import calculate_pan_tilt, pan_tilt_to_dmx16
 
 from .arbiter import Frame
@@ -226,8 +227,7 @@ class PreflightRigLayer:
             16-bit encoding with the fines claimed."""
             if not (fixture_map.pan_channels or fixture_map.tilt_channels):
                 return
-            primary = config.groups.get(fixture.group) \
-                if fixture.group else None
+            primary = primary_group(config, fixture)
             mounting, yaw, pitch, roll = \
                 fixture.get_effective_orientation(primary)
             pan_deg, tilt_deg = calculate_pan_tilt(

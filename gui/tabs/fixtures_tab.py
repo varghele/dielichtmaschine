@@ -44,7 +44,9 @@ from PyQt6.QtWidgets import (
 )
 from PyQt6.QtGui import QFont
 from PyQt6.QtCore import Qt
-from config.models import Configuration, Fixture, FixtureMode, FixtureGroup
+from config.models import (
+    Configuration, Fixture, FixtureMode, FixtureGroup, primary_group,
+)
 from utils.fixture_utils import get_cached_fixture_definitions
 from utils.dmx_conflicts import (
     AddressConflict,
@@ -1361,7 +1363,7 @@ class FixturesTab(BaseTab):
             self.insp_group.blockSignals(False)
 
         if not self.insp_role.hasFocus():
-            group = self.config.groups.get(fixture.group)
+            group = primary_group(self.config, fixture)
             role = getattr(group, "lighting_role", "") if group else ""
             self.insp_role.blockSignals(True)
             index = self.insp_role.findText(role or "")
@@ -1369,7 +1371,7 @@ class FixturesTab(BaseTab):
             self.insp_role.blockSignals(False)
             self.insp_role.setEnabled(bool(fixture.group))
 
-        group = self.config.groups.get(fixture.group)
+        group = primary_group(self.config, fixture)
         z = fixture.get_effective_z(group)
         self.insp_position.setText(
             f"X {fixture.x:.2f}   Y {fixture.y:.2f}   Z {z:.2f} m")
@@ -1550,7 +1552,7 @@ class FixturesTab(BaseTab):
         self._refresh_groups_panel()
         self._update_status_strip()
         # Role editor follows the (possibly new) group.
-        group = self.config.groups.get(fixture.group)
+        group = primary_group(self.config, fixture)
         role = getattr(group, "lighting_role", "") if group else ""
         self.insp_role.blockSignals(True)
         index = self.insp_role.findText(role or "")
@@ -1565,7 +1567,7 @@ class FixturesTab(BaseTab):
         if row < 0 or self._is_rebuilding:
             return
         fixture = self.config.fixtures[row]
-        group = self.config.groups.get(fixture.group)
+        group = primary_group(self.config, fixture)
         if group is None or group.lighting_role == text:
             return
         group.lighting_role = text

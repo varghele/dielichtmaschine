@@ -64,6 +64,7 @@ timeline/Auto playback too.
 
 from typing import Callable, Dict, Optional, Tuple
 
+from config.models import primary_group
 from utils.orientation import calculate_pan_tilt, pan_tilt_to_dmx16
 from utils.position_presets import (
     compute_presets, group_has_movers, resolve_position_target,
@@ -168,7 +169,7 @@ def aim_fixture_at_position(write, config, presets_by_id, position_id,
     # Orientation comes from the PRIMARY group (groups[0] drives
     # orientation - locked first-group-wins), same as the playback
     # layer's spot targeting.
-    primary = config.groups.get(fixture.group) if fixture.group else None
+    primary = primary_group(config, fixture)
     mounting, yaw, pitch, roll = fixture.get_effective_orientation(primary)
     fixture_z = fixture.get_effective_z(primary)
     pan_deg, tilt_deg = calculate_pan_tilt(

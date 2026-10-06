@@ -4,7 +4,7 @@
 import time
 import math
 from typing import Dict, List, Optional, Tuple, Any
-from config.models import Configuration, Fixture, LightBlock, DimmerBlock, ColourBlock, MovementBlock, SpecialBlock
+from config.models import Configuration, Fixture, LightBlock, DimmerBlock, ColourBlock, MovementBlock, SpecialBlock, primary_group
 from utils import user_warnings
 from utils.effects_utils import get_channels_by_property
 from utils.orientation import calculate_pan_tilt, pan_tilt_to_dmx
@@ -865,8 +865,7 @@ class DMXManager:
         target_point path and the dangling-spot-name fall-through
         (2026-07-16)."""
         fixture = fixture_map.fixture
-        group = self.config.groups.get(fixture.group) \
-            if fixture.group else None
+        group = primary_group(self.config, fixture)
         mounting, yaw, pitch, roll = \
             fixture.get_effective_orientation(group)
         fixture_z = fixture.get_effective_z(group)
@@ -959,7 +958,7 @@ class DMXManager:
 
             # Convert world target to pan/tilt for this fixture
             fixture = fixture_map.fixture
-            group = self.config.groups.get(fixture.group) if fixture.group else None
+            group = primary_group(self.config, fixture)
             mounting, yaw, pitch, roll = fixture.get_effective_orientation(group)
             fixture_z = fixture.get_effective_z(group)
 
@@ -983,7 +982,7 @@ class DMXManager:
                 spot = self.config.spots.get(block.target_spot_name)
                 if spot:
                     fixture = fixture_map.fixture
-                    group = self.config.groups.get(fixture.group) if fixture.group else None
+                    group = primary_group(self.config, fixture)
                     mounting, yaw, pitch, roll = fixture.get_effective_orientation(group)
                     fixture_z = fixture.get_effective_z(group)
 

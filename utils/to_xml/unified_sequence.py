@@ -5,6 +5,7 @@ import hashlib
 import math
 import xml.etree.ElementTree as ET
 from typing import List, Dict, Any, Optional, Tuple
+from config.models import primary_group
 from utils.effects_utils import get_channels_by_property, find_closest_color_dmx
 from utils.yoke import export_aim_dmx  # noqa: F401 (aiming moved to the yoke helper)
 from utils.to_xml.step_compaction import compact_step_values
@@ -367,7 +368,7 @@ def sample_dimmer_at_time(
 def _solver_aim(config, fixture, target):
     """Solver-convention 8-bit aim at a world target, real ranges."""
     from utils.yoke import export_solver_aim_dmx
-    group = config.groups.get(fixture.group) if fixture.group else None
+    group = primary_group(config, fixture)
     mounting, yaw, pitch, roll = fixture.get_effective_orientation(group)
     fixture_z = fixture.get_effective_z(group)
     return export_solver_aim_dmx(fixture, fixture_z, target,

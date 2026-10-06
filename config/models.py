@@ -4,7 +4,13 @@ from dataclasses import dataclass, field, asdict, InitVar
 from typing import Dict, List, Optional, Tuple
 import yaml
 import xml.etree.ElementTree as ET
+import errno
+import inspect
 import os
+import stat
+import sys
+import tempfile
+import time
 import uuid
 
 # Prefer libyaml's C emitter/parser when the extension is present: the
@@ -162,6 +168,16 @@ def fixture_asdict(fixture: Fixture) -> dict:
     d = asdict(fixture)
     d['group'] = fixture.group
     return d
+
+
+def primary_group(config, fixture) -> Optional['FixtureGroup']:
+    """The fixture's PRIMARY group object (groups[0], "first group
+    wins": data colour, orientation defaults, role, export intensity),
+    or None when the fixture is ungrouped or its primary group name is
+    not in ``config.groups``. The one lookup every consumer shares;
+    only reads ``config.groups``, so duck-typed configs work too."""
+    name = fixture.group
+    return config.groups.get(name) if name else None
 
 
 @dataclass
@@ -1682,6 +1698,86 @@ class UniverseOutput:
 
 
 
+def _process_umask() -> int:
+    # os.umask can only be read by setting it; done once at import (on
+    # the main thread) because the autosave worker also saves configs.
+    current = os.umask(0)
+    os.umask(current)
+    return current
+
+
+_UMASK = _process_umask()
+
+
+def _atomic_write_yaml(filename: str, data) -> None:
+    """Dump ``data`` to ``filename`` atomically: temp file in the same
+    directory, fsync, then os.replace. A crash or exception mid-dump
+    leaves the previous file untouched (a plain open('w') truncates
+    it first). Symlinks are followed so the link survives; an existing
+    file keeps its permission bits, a new one gets the umask default
+    (mkstemp would otherwise leave it private)."""
+    target = os.path.realpath(filename)
+    directory = os.path.dirname(target)
+    # The rename would happily replace a read-only file (only the
+    # directory's permissions matter); refuse like open('w') did.
+    if os.path.exists(target) and not os.access(target, os.W_OK):
+        raise PermissionError(errno.EACCES, os.strerror(errno.EACCES),
+                              filename)
+    fd, tmp = tempfile.mkstemp(
+        prefix='.' + os.path.basename(target) + '.', suffix='.tmp',
+        dir=directory)
+    try:
+        with os.fdopen(fd, 'w') as f:
+            yaml.dump(data, f, Dumper=_YAML_DUMPER,
+                      default_flow_style=False)
+            f.flush()
+            os.fsync(f.fileno())
+        try:
+            mode = stat.S_IMODE(os.stat(target).st_mode)
+        except FileNotFoundError:
+            mode = 0o666 & ~_UMASK
+        os.chmod(tmp, mode)
+        _replace_with_retry(tmp, target)
+    except BaseException:
+        try:
+            os.unlink(tmp)
+        except OSError:
+            pass
+        raise
+
+
+def _replace_with_retry(src: str, dst: str) -> None:
+    # Windows refuses the rename while another process (indexer, virus
+    # scanner, a sync client) briefly holds the target open; retry a
+    # few times before giving up.
+    attempts = 5 if sys.platform == 'win32' else 1
+    for attempt in range(attempts):
+        try:
+            os.replace(src, dst)
+            return
+        except PermissionError:
+            if attempt == attempts - 1:
+                raise
+            time.sleep(0.1)
+
+
+def _from_known_keys(cls, data: dict, label: str, unknown: Dict[str, set]):
+    """``cls(**data)`` minus the keys ``cls`` does not accept.
+
+    A file written by a newer build can carry fields this one does not
+    know; they are dropped (collected into ``unknown[label]`` for one
+    warning per kind) instead of crashing the whole load with a
+    TypeError. InitVars such as Fixture's legacy ``group`` count as
+    known: they are constructor parameters."""
+    accepted = inspect.signature(cls).parameters
+    extra = [key for key in data if key not in accepted]
+    if extra:
+        unknown.setdefault(label, set()).update(extra)
+        data = {key: value for key, value in data.items()
+                if key in accepted}
+    return cls(**data)
+
+
 @dataclass
 class Configuration:
     fixtures: List[Fixture] = field(default_factory=list)
@@ -1864,9 +1960,7 @@ class Configuration:
         from config.compact_serializer import compact_serialize
         data = compact_serialize(data)
 
-        with open(filename, 'w') as f:
-            yaml.dump(data, f, Dumper=_YAML_DUMPER,
-                      default_flow_style=False)
+        _atomic_write_yaml(filename, data)
 
         # Track save location so audio_bundle_dir resolves correctly after
         # Save As (file moved relative to where audio was last written).
@@ -1889,6 +1983,10 @@ class Configuration:
         from config.compact_serializer import expand_compact
         data = expand_compact(data)
 
+        # Keys a newer build wrote that this one does not know, per
+        # kind; dropped on construction, reported once below.
+        unknown_keys: Dict[str, set] = {}
+
         # Convert dictionary back to Configuration object
         fixtures = []
         for f_data in data.get('fixtures', []):
@@ -1906,7 +2004,8 @@ class Configuration:
             f_data.pop('direction', None)
             f_data.pop('rotation', None)
 
-            fixtures.append(Fixture(**f_data))
+            fixtures.append(
+                _from_known_keys(Fixture, f_data, 'Fixtures', unknown_keys))
 
         # Reconcile stored mode names against the resolved definitions.
         # A GDTF definition can shadow a same-identity .qxf and carry
@@ -2004,17 +2103,22 @@ class Configuration:
         spots = {}
         if 'spots' in data:
             for spot_name, spot_data in data['spots'].items():
-                spots[spot_name] = Spot(**spot_data)
+                spots[spot_name] = _from_known_keys(
+                    Spot, spot_data, 'Marks', unknown_keys)
 
         # Handle MIDI input devices
         midi_input_devices = []
         if 'midi_input_devices' in data and data['midi_input_devices']:
             for dev_data in data['midi_input_devices']:
-                midi_input_devices.append(MidiInputDevice(**dev_data))
+                midi_input_devices.append(_from_known_keys(
+                    MidiInputDevice, dev_data, 'MIDI input devices',
+                    unknown_keys))
 
         # Handle pause show config
         pause_show_data = data.get('pause_show')
-        pause_show = PauseShowConfig(**pause_show_data) if pause_show_data else PauseShowConfig()
+        pause_show = _from_known_keys(
+            PauseShowConfig, pause_show_data, 'Pause show', unknown_keys) \
+            if pause_show_data else PauseShowConfig()
 
         config = cls(
             fixtures=fixtures,
@@ -2033,11 +2137,13 @@ class Configuration:
             stage_height=data.get('stage_height', 6.0),
             grid_size=data.get('grid_size', 0.5),
             stage_layers=[
-                StageLayer(**layer_data)
+                _from_known_keys(StageLayer, layer_data, 'Stage layers',
+                                 unknown_keys)
                 for layer_data in data.get('stage_layers', [])
             ],
             stage_elements=[
-                StageElement(**element_data)
+                _from_known_keys(StageElement, element_data,
+                                 'Stage elements', unknown_keys)
                 for element_data in data.get('stage_elements', [])
             ],
         )
@@ -2047,6 +2153,13 @@ class Configuration:
         # by filename land under <config_dir>/audiofiles/ regardless of where
         # the user copied the config from.
         config._loaded_from = os.path.abspath(filename)
+
+        for label, keys in unknown_keys.items():
+            user_warnings.warn(
+                f"{label}: ignored keys this version does not know "
+                f"(file written by a newer build?): "
+                f"{', '.join(sorted(keys))}",
+                category="config-load")
 
         # Heal a shows_directory that travelled from another machine:
         # the field stores an ABSOLUTE path verbatim, so a hand-copied

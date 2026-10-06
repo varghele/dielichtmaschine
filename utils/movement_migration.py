@@ -34,6 +34,7 @@ from typing import List, Optional, Tuple
 
 import numpy as np
 
+from config.models import primary_group
 from utils import user_warnings
 from utils.orientation import fixture_rotation_matrix
 
@@ -216,7 +217,7 @@ def _trace_block(song_name: str, lane, block, fixtures, bounds,
     hits = []       # (point, face)
     misses = []     # reasons
     for fixture in fixtures:
-        group = config.groups.get(fixture.group) if fixture.group else None
+        group = primary_group(config, fixture)
         _, yaw, pitch, roll = fixture.get_effective_orientation(group)
         fixture_z = fixture.get_effective_z(group)
         pan_range, tilt_range = physical_ranges(fixture.manufacturer,

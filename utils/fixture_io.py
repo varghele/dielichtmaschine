@@ -29,7 +29,9 @@ import json
 import os
 from typing import Dict, List, Optional, Tuple
 
-from config.models import Fixture, FixtureGroup, FixtureMode, StageLayer
+from config.models import (
+    Fixture, FixtureGroup, FixtureMode, StageLayer, primary_group,
+)
 from utils.dmx_conflicts import fixture_channel_count
 
 CSV_FIELDNAMES = [
@@ -76,7 +78,7 @@ def write_fixture_list_csv(path: str, config) -> None:
         writer = csv.DictWriter(f, fieldnames=CSV_FIELDNAMES)
         writer.writeheader()
         for fixture in config.fixtures:
-            group = config.groups.get(fixture.group) if fixture.group else None
+            group = primary_group(config, fixture)
             mounting, yaw, pitch, roll = fixture.get_effective_orientation(group)
             writer.writerow({
                 'name': fixture.name,
