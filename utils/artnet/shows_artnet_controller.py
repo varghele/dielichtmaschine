@@ -257,11 +257,13 @@ class ShowsArtNetController(QObject):
     def update_position(self, position: float):
         """Update current playback position (from ShowsTab). With a
         position callback set, block processing happens in render()
-        with fresh audio position instead."""
-        self.current_time = position
-        if self.light_lanes and not self._position_callback:
-            with self._render_lock:
-                self._process_lane_blocks()
+        with fresh audio position instead. The write takes the render
+        lock: render() runs on the arbiter thread and must see ONE time
+        for the whole frame."""
+        with self._render_lock:
+            self.current_time = position
+            if self.light_lanes and not self._position_callback:
+                self._process_lane_blocks(position)
 
     def cleanup(self):
         """Cleanup resources. A private arbiter is shut down (socket
@@ -288,6 +290,12 @@ class ShowsArtNetController(QObject):
         frames, re-sent so the wire keeps refreshing. Playing: pull
         fresh audio position, process lane blocks, recompute DMX and
         return per-universe (values, mask) pairs.
+
+        Runs on the ARBITER thread while the UI keeps editing the same
+        lanes and config: every collection it walks is copied first
+        (an atomic C-level copy under the GIL), so a block, lane or
+        universe added or removed mid-frame can neither raise "changed
+        size during iteration" nor shift a list iteration past a block.
         """
         with self._render_lock:
             if self._state == _STOPPED:
@@ -301,13 +309,14 @@ class ShowsArtNetController(QObject):
                 except Exception:
                     pass  # keep last known position
 
+            now_t = self.current_time
             if self.light_lanes:
-                self._process_lane_blocks()
+                self._process_lane_blocks(now_t)
 
-            self.dmx_manager.update_dmx(self.current_time)
+            self.dmx_manager.update_dmx(now_t)
 
             frames: Frame = {}
-            for universe_id in self.config.universes.keys():
+            for universe_id in list(self.config.universes):
                 universe_int = int(universe_id)
                 frames[universe_int] = self.dmx_manager.get_frame(universe_int)
             self._last_frames = frames
@@ -319,7 +328,7 @@ class ShowsArtNetController(QObject):
         """Resolved and sorted fixtures for a lane, cached per targets."""
         lane_id = id(lane)
 
-        targets = getattr(lane, 'fixture_targets', [])
+        targets = list(getattr(lane, 'fixture_targets', None) or [])
         if not targets and hasattr(lane, 'fixture_group') and lane.fixture_group:
             targets = [lane.fixture_group]
 
@@ -335,9 +344,14 @@ class ShowsArtNetController(QObject):
         self._resolved_fixtures_cache[lane_id] = (targets_tuple, resolved, sorted_fixtures)
         return resolved, sorted_fixtures
 
-    def _process_lane_blocks(self):
-        """Process blocks for all lanes at current time."""
-        for lane in self.light_lanes:
+    def _process_lane_blocks(self, current_time: Optional[float] = None):
+        """Process blocks for all lanes at ``current_time`` (default:
+        the controller's current time). Lanes and blocks are iterated
+        over copies - the UI edits them while this runs on the arbiter
+        thread (see render())."""
+        if current_time is None:
+            current_time = self.current_time
+        for lane in tuple(self.light_lanes):
             if lane.muted:
                 continue
 
@@ -345,7 +359,7 @@ class ShowsArtNetController(QObject):
             if not resolved_fixtures:
                 continue
 
-            targets = getattr(lane, 'fixture_targets', [])
+            targets = list(getattr(lane, 'fixture_targets', None) or [])
             if not targets and hasattr(lane, 'fixture_group') and lane.fixture_group:
                 targets = [lane.fixture_group]
 
@@ -363,23 +377,23 @@ class ShowsArtNetController(QObject):
                 'movement': set(), 'special': set(),
             }
 
-            for light_block in lane.light_blocks:
+            for light_block in tuple(lane.light_blocks):
                 for sublane_type, sub_blocks in (
                     ('dimmer', light_block.dimmer_blocks),
                     ('colour', light_block.colour_blocks),
                     ('movement', light_block.movement_blocks),
                     ('special', light_block.special_blocks),
                 ):
-                    for sub_block in sub_blocks:
+                    for sub_block in tuple(sub_blocks):
                         block_id = id(sub_block)
-                        if sub_block.start_time <= self.current_time < sub_block.end_time:
+                        if sub_block.start_time <= current_time < sub_block.end_time:
                             currently_active[sublane_type].add(block_id)
                             if block_id not in self.active_block_ids[lane_key][sublane_type]:
                                 if DEBUG_PRINTS:
-                                    print(f"[{self.current_time:.2f}s] Starting {sublane_type} block on lane {lane.name}")
+                                    print(f"[{current_time:.2f}s] Starting {sublane_type} block on lane {lane.name}")
                                 self.dmx_manager.block_started(
                                     lane_key, resolved_fixtures, sub_block,
-                                    sublane_type, self.current_time)
+                                    sublane_type, current_time)
                                 self.active_block_ids[lane_key][sublane_type].add(block_id)
 
             # End blocks that are no longer active (granular per sublane)
@@ -388,6 +402,6 @@ class ShowsArtNetController(QObject):
                 if ended_blocks:
                     if not currently_active[sublane_type]:
                         if DEBUG_PRINTS:
-                            print(f"[{self.current_time:.2f}s] Ending {sublane_type} blocks on lane {lane.name}")
+                            print(f"[{current_time:.2f}s] Ending {sublane_type} blocks on lane {lane.name}")
                         self.dmx_manager.block_ended(lane_key, sublane_type)
                     self.active_block_ids[lane_key][sublane_type] = currently_active[sublane_type]

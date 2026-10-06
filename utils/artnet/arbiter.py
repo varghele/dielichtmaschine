@@ -47,6 +47,11 @@ IDLE_BLACKOUT = "blackout"
 
 TICK_HZ = 44  # ArtNet ceiling; the two legacy senders looped at 30.
 
+# How long stop() waits for the loop thread before giving up on it. A
+# loop that overruns this (a stuck layer render) is abandoned: its stop
+# event stays set, so it exits on its own and never sends again.
+STOP_JOIN_TIMEOUT = 1.0
+
 BROADCAST_IP = "255.255.255.255"
 
 
@@ -294,7 +299,13 @@ class OutputArbiter:
             None
 
         self._thread: Optional[threading.Thread] = None
+        # One stop event PER RUN: a loop that outlives stop()'s join
+        # keeps its own (set) event, so a restart cannot revive it.
         self._stop_event = threading.Event()
+        # Serialises every socket use (frame sends, the blackout, close)
+        # so a late frame from an abandoned loop can neither follow the
+        # blackout onto the wire nor hit a closed socket.
+        self._send_lock = threading.Lock()
 
         # Monotonic frame counter for status displays (the Live tab's
         # OUT chip polls it to light its activity dot).
@@ -445,18 +456,34 @@ class OutputArbiter:
         with self._lock:
             if self.running:
                 return
-            self._stop_event.clear()
+            self._stop_event = threading.Event()
             self._thread = threading.Thread(
-                target=self._loop, name="OutputArbiter", daemon=True)
+                target=self._loop, args=(self._stop_event,),
+                name="OutputArbiter", daemon=True)
             self._thread.start()
 
     def stop(self, blackout: bool = True) -> None:
         """Stop the loop; by default send one forced blackout so the
-        rig (and any visualizer) does not hold the last frame."""
+        rig (and any visualizer) does not hold the last frame.
+
+        A loop that does not finish within STOP_JOIN_TIMEOUT is
+        abandoned rather than waited for: its stop event is set, so a
+        frame it is still rendering is dropped instead of being sent
+        after the blackout (or into the sockets shutdown() closes)."""
+        # No arbiter lock around the join: an overrunning render holds
+        # it. (The blackout below still waits for that render to finish,
+        # as before; the dropped late frame is what keeps it last.)
         thread = self._thread
-        self._stop_event.set()
-        if thread is not None and thread.is_alive():
-            thread.join(timeout=1.0)
+        stop_event = self._stop_event
+        stop_event.set()
+        if thread is not None and thread.is_alive() \
+                and thread is not threading.current_thread():
+            thread.join(timeout=STOP_JOIN_TIMEOUT)
+            if thread.is_alive():
+                logger.warning(
+                    "OutputArbiter loop did not stop within %.1f s; "
+                    "abandoning it (its late frame is dropped)",
+                    STOP_JOIN_TIMEOUT)
         self._thread = None
         if blackout:
             self._send_blackout()
@@ -464,15 +491,16 @@ class OutputArbiter:
     def shutdown(self) -> None:
         """stop() + close the sockets. The arbiter is done after this."""
         self.stop(blackout=True)
-        self._sender.close()
-        if self._mirror_sender is not None:
-            self._mirror_sender.close()
+        with self._send_lock:
+            self._sender.close()
+            if self._mirror_sender is not None:
+                self._mirror_sender.close()
 
-    def _loop(self) -> None:
-        while not self._stop_event.is_set():
+    def _loop(self, stop_event: threading.Event) -> None:
+        while not stop_event.is_set():
             frame_start = time.perf_counter()
             try:
-                self.tick_once(time.monotonic())
+                self._tick(time.monotonic(), stop_event)
             except Exception:
                 logger.exception("OutputArbiter tick failed")
             elapsed = time.perf_counter() - frame_start
@@ -484,6 +512,12 @@ class OutputArbiter:
         """Render, merge and send exactly one frame. Public so tests
         (and the e2e workflow) can drive deterministic single frames.
         Returns the merged buffers keyed by config universe id."""
+        return self._tick(now, None)
+
+    def _tick(self, now: float,
+              stop_event: Optional[threading.Event]) -> Dict[int, bytearray]:
+        """tick_once's body. The send loop passes its run's stop event:
+        a frame whose run was stopped while it rendered is not sent."""
         with self._lock:
             frames: List[Frame] = []
             # Bottom-up: pause look, playback, live.
@@ -510,17 +544,24 @@ class OutputArbiter:
         # the 3D view agree. Every mover with a definition is converted.
         hw = self._hardware_frame(merged, fixture_maps)
 
-        for universe in sorted(merged):
-            wire_universe = mapping.get(universe, universe - 1)
-            self._sender.send_dmx(wire_universe, hw[universe],
-                                  force=True)
-            if mirror is not None:
-                try:
-                    mirror.send_dmx(wire_universe, merged[universe],
-                                    force=True)
-                except Exception:
-                    logger.exception("broadcast mirror send failed")
-            if callback is not None:
+        with self._send_lock:
+            if stop_event is not None and stop_event.is_set():
+                return merged   # stopped mid-render: never after blackout
+            for universe in sorted(merged):
+                wire_universe = mapping.get(universe, universe - 1)
+                self._sender.send_dmx(wire_universe, hw[universe],
+                                      force=True)
+                if mirror is not None:
+                    try:
+                        mirror.send_dmx(wire_universe, merged[universe],
+                                        force=True)
+                    except Exception:
+                        logger.exception("broadcast mirror send failed")
+        # The local visualizer hook runs outside the send lock (a slow
+        # callback must not hold up stop()'s blackout), same stop gate.
+        if callback is not None and not (
+                stop_event is not None and stop_event.is_set()):
+            for universe in sorted(merged):
                 try:
                     callback(universe, bytes(merged[universe]))
                 except Exception:
@@ -586,10 +627,12 @@ class OutputArbiter:
             # mirroring was toggled off mid-show (kept from Auto mode).
             mirror = self._mirror_sender
         blackout = bytearray(512)
-        for wire_universe in mapping.values():
-            try:
-                self._sender.send_dmx(wire_universe, blackout, force=True)
-                if mirror is not None:
-                    mirror.send_dmx(wire_universe, blackout, force=True)
-            except Exception:
-                logger.exception("blackout send failed")
+        with self._send_lock:
+            for wire_universe in mapping.values():
+                try:
+                    self._sender.send_dmx(wire_universe, blackout,
+                                          force=True)
+                    if mirror is not None:
+                        mirror.send_dmx(wire_universe, blackout, force=True)
+                except Exception:
+                    logger.exception("blackout send failed")

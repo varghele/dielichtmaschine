@@ -105,6 +105,54 @@ def _hex_to_rgb(hex_color: str) -> Tuple[int, int, int]:
         return (0, 0, 0)
 
 
+def level_local(submasters, flash, blackout, group: str) -> float:
+    """The PRE-GRANDMASTER 0..1 busk level of ``group``: unknown groups
+    0, a held flash forces full, the soft blackout zeroes, else the
+    submaster. The one copy of the rule - LiveState.group_level_local
+    delegates here. A single ``get`` (never "in" then "[...]") so a
+    submaster table rebuilt mid-call cannot raise KeyError."""
+    level = submasters.get(group)
+    if level is None:
+        return 0.0
+    if group in flash:
+        return 1.0
+    if blackout:
+        return 0.0
+    return level / 100.0
+
+
+class BuskStateSnapshot:
+    """One frame's copy of the LiveState fields the busk layer reads.
+
+    render() runs on the arbiter thread while the Live tab mutates the
+    state on the UI thread (a swatch released, RELEASE ALL, a config
+    sync rebuilding the tables). Reading the live object meant a key
+    could vanish between an "in" check and the lookup after it - a
+    KeyError that cost the busk layer its whole frame. Each container
+    is copied once here (``dict()``/``frozenset()`` of str-keyed
+    containers is one atomic C-level copy under the GIL) and the frame
+    renders from the copies.
+    """
+
+    __slots__ = ("scene", "colours", "colour_fx", "flash", "positions",
+                 "submasters", "blackout", "strobe_on", "strobe_rate")
+
+    def __init__(self, state) -> None:
+        self.scene = getattr(state, "scene", None)
+        self.colours = dict(getattr(state, "colours", None) or {})
+        self.colour_fx = dict(getattr(state, "colour_fx", None) or {})
+        self.flash = frozenset(getattr(state, "flash", None) or ())
+        self.positions = dict(getattr(state, "positions", None) or {})
+        self.submasters = dict(getattr(state, "submasters", None) or {})
+        self.blackout = bool(getattr(state, "blackout", False))
+        self.strobe_on = bool(getattr(state, "strobe_on", False))
+        self.strobe_rate = getattr(state, "strobe_rate", 50)
+
+    def group_level_local(self, group: str) -> float:
+        return level_local(self.submasters, self.flash, self.blackout,
+                           group)
+
+
 def aim_fixture_at_position(write, config, presets_by_id, position_id,
                             fixture, fixture_map) -> None:
     """Aim one mover at a POSITION-pool id, writing through ``write``
@@ -198,7 +246,9 @@ class LiveBuskLayer:
     # -- the arbiter layer contract -----------------------------------------
 
     def render(self, now: float) -> Frame:
-        state = self._state
+        # Render from a per-frame copy: the UI thread mutates LiveState
+        # while this runs on the arbiter thread (BuskStateSnapshot).
+        state = BuskStateSnapshot(self._state)
         config = self._config_provider()
         # The engine's slot frame (running riffs/intensity FX/shapes)
         # is the layer's BASE: explicit busk writes below overlay it,
@@ -246,8 +296,9 @@ class LiveBuskLayer:
 
         claimed_groups = []
         position_groups = []
-        colour_fx = getattr(state, "colour_fx", None) or {}
-        for group_name, group in getattr(config, "groups", {}).items():
+        colour_fx = state.colour_fx
+        for group_name, group in list(
+                (getattr(config, "groups", None) or {}).items()):
             has_swatch = group_name in state.colours
             has_scene = bool(scene_hex) and group_name in scene_groups
             has_flash = group_name in state.flash
@@ -383,7 +434,7 @@ class LiveBuskLayer:
         # against a closed shutter and never emit.
         claimed_names = {name for name, _g, _c in claimed_groups}
         for group_name in engine_dimmer_groups - claimed_names:
-            group = (getattr(config, "groups", {}) or {}).get(group_name)
+            group = (getattr(config, "groups", None) or {}).get(group_name)
             for fixture in (getattr(group, "fixtures", None) or []):
                 fixture_map = self._fixture_maps.get(fixture.name)
                 if fixture_map is not None:

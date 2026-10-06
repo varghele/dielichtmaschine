@@ -70,6 +70,7 @@ from PyQt6.QtWidgets import (
 from auto.bpm_detector import TapBPM
 from config.models import Configuration
 from gui.typography import DisplayLabel, MicroLabel, display_font, mono_font
+from utils.artnet.live_layer import level_local
 from utils.position_presets import (
     ELEMENT_PRESET_PREFIX, KIND_POINT, MARK_PREFIX, PRESET_PREFIX,
     compute_presets, element_preset_ids, group_has_movers, mark_id,
@@ -533,14 +534,11 @@ class LiveState(QObject):
         deliberately excluded - they live in the output arbiter's
         post-merge stage so they also cap timeline/Auto playback
         (docs/output-sync-plan.md); group_level keeps the full product
-        for consumers that want the final number."""
-        if group not in self.submasters:
-            return 0.0
-        if group in self.flash:
-            return 1.0
-        if self.blackout:
-            return 0.0
-        return self.submasters[group] / 100.0
+        for consumers that want the final number. The rule itself lives
+        in utils/artnet/live_layer.level_local (one copy, shared with
+        the layer's per-frame state snapshot)."""
+        return level_local(self.submasters, self.flash, self.blackout,
+                           group)
 
     # -- strobe ---------------------------------------------------------
     def set_strobe_on(self, on: bool) -> None:

@@ -114,6 +114,46 @@ verbatim as the GitHub Release notes (see [docs/releasing.md](docs/releasing.md)
   mode. That group's console frame shrinks to its dimmer slider, and
   later function IDs and frame positions shift with it; show tracks
   are unchanged.
+- **Editing during playback can no longer drop or restart effects on
+  the wire.** The output thread reads the timeline 44 times a second
+  while you edit it. Deleting a block during playback could make the
+  output skip the block after it for one frame, so that block's effect
+  restarted from the beginning; adding a universe mid-show could cost a
+  whole output frame; and a seek landing in the middle of a frame could
+  start blocks at one time and render them at another. Playback now
+  works from a copy of what it reads, taken at the start of each frame,
+  and a seek waits for the frame in progress.
+- **Busking while the Live tab changes no longer drops output frames.**
+  Releasing a swatch, RELEASE ALL or a project reload at the wrong
+  moment could make the Live busk layer fail for that frame, so the
+  rig briefly showed the show underneath. The busk layer now renders
+  each frame from its own copy of the Live state.
+- **Stopping or closing output cannot leave a stale frame behind.** When
+  the output loop was slow to stop (more than a second), the final
+  blackout went out first and the late frame after it, so the rig could
+  hold a lit look after OUTPUT was switched off; the late frame could
+  also be sent into an already closed socket, and switching output back
+  on could leave the old loop running next to the new one. A loop that
+  misses the stop deadline is now abandoned for good and never sends
+  again, and the blackout is always the last frame on the wire.
+- **Auto mode's riff display cannot freeze the engine.** The Auto engine
+  told the Auto tab about newly selected riffs while still holding its
+  internal lock, so a display update that asked the engine anything
+  back would hang Auto mode. The notification now goes out after the
+  lock is released.
+- **The SYNC chip cannot show a stale timecode state.** When the LTC
+  input was stopped while its reader thread was mid-update, that update
+  could arrive after the stop and leave the chip reading locked
+  (`SYNC LTC`). Status updates from the reader and the stop are now
+  ordered, so the chip ends on `SYNC LTC · NO SIG`.
+- **Help > Warnings groups warnings correctly.** A warning raised on
+  another thread (the output loop, a loader) while you exported or
+  loaded a project was listed under that export or load. Each operation
+  now collects only the warnings of the work it actually ran.
+- **Reconnecting the standalone visualizer keeps the new connection.**
+  Disconnecting and reconnecting quickly could let the old connection's
+  receiver, still shutting down, close the new connection and report
+  the visualizer as disconnected although it had just connected.
 
 ## [1.5.0] - 2026-08-09
 
