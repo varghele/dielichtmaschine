@@ -11,6 +11,34 @@ verbatim as the GitHub Release notes (see [docs/releasing.md](docs/releasing.md)
 
 ## [Unreleased]
 
+### Changed
+
+- **A hanging test fails instead of stalling the run.** Every test gets
+  a 120 second budget (new test dependency `pytest-timeout`); one that
+  blows it, for example on a modal dialog nobody closes, has every
+  thread's stack printed and its test process ended (under `-n` the run
+  carries on without that worker), where it used to sit until the CI
+  job's one-hour limit.
+- **Release builds run the full test suite first.** The release
+  workflow calls the Tests workflow and only builds and drafts a release
+  once it is green.
+- `tests/README.md` documents the end-to-end tier and the current
+  suite runtimes.
+
+### Fixed
+
+- **`conda env create -f environment.yml` solves.** The file asked
+  conda-forge for packages it does not carry under those names: `pyqt`
+  there is the Qt5 binding, and the audio libraries are published as
+  `python-sounddevice` and `pysoundfile`. PyQt6 now comes from pip (the
+  same wheel `requirements.txt` and CI use), the audio packages use
+  their conda-forge names, and `nodefaults` keeps the Anaconda channels
+  out of the solve. The README's install section explains the
+  `CondaToSNonInteractiveError` that recent Miniconda installs raise
+  before any create, and the ways around it (Miniforge needs none).
+  A test now keeps `environment.yml` and `requirements.txt` listing the
+  same packages and version floors.
+
 ## [1.5.0] - 2026-08-09
 
 ### Added

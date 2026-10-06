@@ -38,6 +38,9 @@ imageio-ffmpeg>=0.4.9
 # Development/Testing
 pytest>=7.0.0
 pytest-xdist>=3.0.0
+# Per-test hang budget (pytest.ini `timeout`); without it the suite runs,
+# pytest just warns about the unknown ini keys.
+pytest-timeout>=2.2.0
 
 # Note: On Linux, you may need system packages for audio:
 # Ubuntu/Debian: sudo apt-get install libportaudio2

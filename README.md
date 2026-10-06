@@ -55,6 +55,8 @@ conda activate lichtmaschine
 python main.py
 ```
 
+The environment uses conda-forge only, so [Miniforge](https://github.com/conda-forge/miniforge) works out of the box. Recent Miniconda and Anaconda installs stop `conda env create` (and `conda create`, which IDEs such as PyCharm run) with `CondaToSNonInteractiveError` until the Terms of Service of their own `defaults` channels are accepted, even though this environment never installs from them. Either accept them (the `conda tos accept` commands the error prints), remove the `defaults` channels from that install (the error links the instructions), or create the environment with Miniforge's `conda` instead.
+
 ### With pip
 
 ```bash

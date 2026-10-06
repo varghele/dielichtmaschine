@@ -1,15 +1,21 @@
 name: Tests
 
-# The release workflow only builds; until now the 3000-test suite ran
-# exclusively on the dev machines. This runs it on every push and PR
-# so breakage shows up between releases, not at tag time.
+# Runs the suite on every push and PR so breakage shows up between
+# releases, not at tag time; release.yml also calls it, so a red suite
+# blocks the build.
 on:
   push:
   pull_request:
+  # release.yml calls this workflow so no tag builds without a green
+  # suite.
+  workflow_call:
 
-# One run per ref; a new push cancels the older run.
+# One run per ref; a new push cancels the older run. A tag push runs
+# this workflow twice (directly, and called from release.yml); inside a
+# called workflow `github.workflow` is the CALLER's name, so keying on
+# it keeps the two runs from cancelling each other.
 concurrency:
-  group: tests-${{ github.ref }}
+  group: tests-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 env:

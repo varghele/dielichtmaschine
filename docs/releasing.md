@@ -1,9 +1,11 @@
 # Releasing
 
 Releases are cut from a git tag. The GitHub Actions workflow
-([`.github/workflows/release.yml`](../.github/workflows/release.yml)) builds the
-binaries and drafts the GitHub Release; the release notes come straight from
-[`CHANGELOG.md`](../CHANGELOG.md), so there is one place to keep current.
+([`.github/workflows/release.yml`](../.github/workflows/release.yml)) runs the
+full test suite (it calls [`tests.yml`](../.github/workflows/tests.yml)), builds
+the binaries only once that is green, and drafts the GitHub Release; the release
+notes come straight from [`CHANGELOG.md`](../CHANGELOG.md), so there is one
+place to keep current.
 
 ## Day to day
 
@@ -26,16 +28,16 @@ short and user-facing (what changed for someone using the app), not a commit log
    and commit the regenerated PNGs.
 5. **Commit** those together, e.g. `chore(release): vX.Y.Z`.
 6. *(Optional, first time / risky changes)* dry-run the build: GitHub -> **Actions**
-   -> "Release Build" -> **Run workflow**. This builds artifacts but creates no
-   release.
+   -> "Release Build" -> **Run workflow**. This runs the tests and builds
+   artifacts but creates no release.
 7. **Tag and push:**
    ```sh
    git push
    git tag vX.Y.Z
    git push origin vX.Y.Z
    ```
-8. The workflow builds Windows + Linux, then drafts a GitHub Release whose notes
-   are the `## [X.Y.Z]` changelog section (via
+8. The workflow runs the test suite, builds Windows + Linux, then drafts a
+   GitHub Release whose notes are the `## [X.Y.Z]` changelog section (via
    [`scripts/changelog_release_notes.py`](../scripts/changelog_release_notes.py)).
 9. **Publish:** GitHub -> **Releases** -> open the `vX.Y.Z` draft -> review -> **Publish**.
 
