@@ -1,12 +1,17 @@
 # unified_sequence.py
 # Functions for creating unified QLC+ sequences that combine all effect types
 
+import hashlib
 import math
 import xml.etree.ElementTree as ET
 from typing import List, Dict, Any, Optional, Tuple
 from utils.effects_utils import get_channels_by_property, find_closest_color_dmx
 from utils.yoke import export_aim_dmx  # noqa: F401 (aiming moved to the yoke helper)
 from utils.to_xml.step_compaction import compact_step_values
+from effects import (
+    DIMMER_REGISTRY, MOVEMENT_REGISTRY, DimmerContext, DimmerResult,
+    MovementContext, parse_speed,
+)
 from effects.timing import movement_total_cycles
 
 
@@ -118,13 +123,7 @@ def calculate_unified_step_grid(
     ms_per_beat = 60000 / bpm
 
     for block in dimmer_blocks:
-        # Parse speed multiplier
-        speed = block.effect_speed
-        if '/' in speed:
-            num, denom = map(int, speed.split('/'))
-            speed_mult = num / denom
-        else:
-            speed_mult = float(speed)
+        speed_mult = parse_speed(block.effect_speed)
 
         # Calculate the step interval needed for this effect type
         if block.effect_type == "static":
@@ -135,8 +134,8 @@ def calculate_unified_step_grid(
             # Strobe needs fast steps - half beat per toggle
             step_interval = (ms_per_beat / speed_mult) / 2
             min_step_interval_ms = min(min_step_interval_ms, step_interval)
-        elif block.effect_type == "stroke":
-            # Stroke effects need fine steps to show exponential decay
+        elif block.effect_type in ("stroke", "throb"):
+            # Stroke and throb need fine steps to show the per-beat decay
             # At minimum, 8 steps per stroke cycle for decent decay curve
             stroke_cycle_ms = ms_per_beat / speed_mult  # one beat per stroke
             step_interval = stroke_cycle_ms / 8  # 8 steps per stroke for smooth decay
@@ -149,9 +148,10 @@ def calculate_unified_step_grid(
             step_interval = beat_ms / 10  # 10 steps per beat for smooth animation
             step_interval = max(step_interval, MIN_STEP_DURATION_MS)
             min_step_interval_ms = min(min_step_interval_ms, step_interval)
-        elif block.effect_type in ("pulse", "wave", "heartbeat"):
+        elif block.effect_type in ("pulse", "wave", "heartbeat", "fade", "cascade"):
             # Smooth animated effects need fine steps for visual quality
-            # Use ~16 steps per bar for smooth sine waves and heartbeat pattern
+            # Use ~16 steps per bar for smooth sine waves, the heartbeat
+            # pattern and the fade / cascade ramps
             bar_ms = ms_per_beat * 4  # Assuming 4/4 time
             cycle_ms = bar_ms / speed_mult
             step_interval = cycle_ms / 16  # 16 steps per cycle
@@ -205,6 +205,98 @@ def calculate_unified_step_grid(
     return step_times_ms, step_duration_ms
 
 
+def _dimmer_context(
+    active_block,
+    time_s: float,
+    fixture_idx: int,
+    total_fixtures: int,
+    bpm: float,
+    fixture_name: str,
+    num_segments: int = 1,
+    is_segmented: bool = False
+) -> DimmerContext:
+    """The DimmerContext the native renderer builds for the same block
+    and instant (utils/artnet/dmx_manager._apply_dimmer_block), so the
+    export samples the very effect functions that go on the wire."""
+    return DimmerContext(
+        time_in_block=time_s - active_block.start_time,
+        block_duration=active_block.end_time - active_block.start_time,
+        intensity=active_block.intensity,
+        speed_multiplier=parse_speed(active_block.effect_speed),
+        bpm=bpm,
+        fixture_index=fixture_idx,
+        total_fixtures=total_fixtures,
+        num_segments=num_segments,
+        fixture_name=fixture_name,
+        block_start_time=active_block.start_time,
+        is_segmented=is_segmented,
+        direction=getattr(active_block, 'direction', 'down'),
+        chase_scope=getattr(active_block, 'chase_scope', 'fixture'),
+        phase_offset_per_fixture=getattr(
+            active_block, 'phase_offset_per_fixture', False),
+        build_fraction=getattr(active_block, 'build_fraction', 0.7),
+    )
+
+
+def _run_dimmer_effect(ctx: DimmerContext, effect_type: str) -> DimmerResult:
+    """Dispatch like the native renderer: unknown effects are static."""
+    effect_fn = DIMMER_REGISTRY.get(effect_type, DIMMER_REGISTRY["static"])
+    return effect_fn(ctx)
+
+
+def _cross_fixture_waterfall_multiplier(
+    time_s: float,
+    active_block,
+    fixture_idx: int,
+    total_fixtures: int,
+    bpm: float
+) -> float:
+    """Export-only waterfall for NON-segmented fixtures: the light
+    cascades across the fixtures of the lane. The native renderer
+    draws a non-segmented waterfall static (the rudiment cascades
+    through segments); this historical export behaviour is kept until
+    that product decision is made (tests/unit/test_export_live_parity.py
+    pins both sides)."""
+    if total_fixtures <= 1:
+        return 1.0
+
+    time_in_block = time_s - active_block.start_time
+
+    # Each fixture gets one beat at speed 1
+    seconds_per_beat = 60.0 / bpm
+    time_per_step = seconds_per_beat / parse_speed(active_block.effect_speed)
+
+    # Per-fixture offset (no fixture name here), slowly drifting
+    seed_str = f"waterfall_fixture_{fixture_idx}"
+    name_hash = int(hashlib.md5(seed_str.encode()).hexdigest()[:8], 16)
+    base_offset = (name_hash % 1000) / 1000.0  # 0.0 to 1.0
+
+    drift_period = 30.0
+    drift_phase = (time_s / drift_period) * 2 * math.pi
+    drift_seed = (name_hash % 997) / 997.0 * 2 * math.pi
+    drift_amount = 0.3 * math.sin(drift_phase + drift_seed)  # +/- 0.3 cycle drift
+
+    total_offset = base_offset + drift_amount
+
+    # Full cycle time = total_fixtures beats (one per fixture)
+    cycle_time = time_per_step * total_fixtures
+    cycle_progress = (time_in_block / cycle_time + total_offset) % 1.0
+    head_position = cycle_progress * total_fixtures
+
+    # "down": head moves from the last fixture to the first, "up" the reverse
+    direction = getattr(active_block, 'direction', 'down')
+    if direction == "down":
+        head_position = (total_fixtures - 1) - head_position
+        raw_distance = fixture_idx - head_position
+    else:
+        raw_distance = head_position - fixture_idx
+
+    # Wrapped distance for a seamless loop, exponential tail
+    circular_distance = raw_distance % total_fixtures
+    normalized_dist = circular_distance / total_fixtures
+    return math.exp(-1.5 * normalized_dist)
+
+
 def sample_dimmer_at_time(
     time_s: float,
     dimmer_blocks: List,
@@ -213,10 +305,16 @@ def sample_dimmer_at_time(
     step_idx: int,
     total_steps: int,
     bpm: float = 120.0,
-    max_intensity: int = 255
+    max_intensity: int = 255,
+    fixture_name: Optional[str] = None
 ) -> Optional[int]:
     """
     Sample the dimmer intensity at a given time.
+
+    The effect itself comes from effects.DIMMER_REGISTRY, the same
+    functions the native renderer puts on the wire, evaluated for a
+    non-segmented fixture (pixel-bar segments are handled in
+    build_unified_step).
 
     Args:
         time_s: Time in seconds
@@ -227,6 +325,8 @@ def sample_dimmer_at_time(
         total_steps: Total number of steps
         bpm: Beats per minute for timing calculations
         max_intensity: Maximum intensity for this group (0-255), scales proportionally
+        fixture_name: Fixture name; seeds the random effects (sparkle)
+            exactly like native playback. Falls back to the index.
 
     Returns:
         Intensity value (0-255) or None if no dimmer block at this time
@@ -244,479 +344,24 @@ def sample_dimmer_at_time(
     base_intensity = int(int(active_block.intensity) * max_intensity / 255)
     effect_type = active_block.effect_type
 
-    # Calculate relative position within the block
-    block_duration = active_block.end_time - active_block.start_time
-    relative_time = (time_s - active_block.start_time) / block_duration if block_duration > 0 else 0
-
-    if effect_type == "static":
-        return base_intensity
-
-    elif effect_type == "strobe":
-        # Alternate between intensity and 0
-        # Parse speed
-        speed = active_block.effect_speed
-        if '/' in speed:
-            num, denom = map(int, speed.split('/'))
-            speed_mult = num / denom
-        else:
-            speed_mult = float(speed)
-
-        # Calculate strobe phase using BPM timing (matches ArtNet implementation)
-        time_in_block = time_s - active_block.start_time
-        strobe_hz = 2.0 * speed_mult  # Strobe at 2Hz * speed_mult
-        phase = (time_in_block * strobe_hz) % 1.0
-        # 50% duty cycle
-        if phase < 0.5:
-            return base_intensity
-        else:
-            return 0
-
-    elif effect_type == "sparkle":
-        # Sparkle effect: smooth random intensity variations per fixture
-        # Matches ArtNet implementation in dmx_manager.py
-        import random
-        import hashlib
-
-        # Parse speed multiplier
-        speed = active_block.effect_speed
-        if '/' in speed:
-            num, denom = map(int, speed.split('/'))
-            speed_mult = num / denom
-        else:
-            speed_mult = float(speed)
-
-        time_in_block = time_s - active_block.start_time
-
-        # Time per "twinkle step" - how often a new random target is chosen
-        # 200ms base, adjusted by speed (matches ArtNet)
-        twinkle_step_duration = 0.2 / speed_mult
-
-        # Calculate current and next step for interpolation
-        step_float = time_in_block / twinkle_step_duration
-        current_twinkle_step = int(step_float)
-        next_twinkle_step = current_twinkle_step + 1
-        # How far through the transition (0.0 to 1.0)
-        transition_progress = step_float - current_twinkle_step
-
-        # Get current target intensity (deterministic random based on fixture + step)
-        seed_str = f"fixture_{fixture_idx}_{current_twinkle_step}"
-        seed_hash = int(hashlib.md5(seed_str.encode()).hexdigest()[:8], 16)
-        current_variation = random.Random(seed_hash).random() * 0.7 + 0.3  # 30% to 100%
-
-        # Get next target intensity
-        seed_str = f"fixture_{fixture_idx}_{next_twinkle_step}"
-        seed_hash = int(hashlib.md5(seed_str.encode()).hexdigest()[:8], 16)
-        next_variation = random.Random(seed_hash).random() * 0.7 + 0.3  # 30% to 100%
-
-        # Smooth interpolation using smoothstep function
-        t = transition_progress
-        smooth_t = t * t * (3 - 2 * t)
-        variation = current_variation + (next_variation - current_variation) * smooth_t
-
-        return int(base_intensity * variation)
-
-    elif effect_type == "ping_pong":
-        # Ping pong: one fixture lights up at a time, bouncing back and forth
-        # INSTANT attack (on the beat), smooth fade out until next fixture
-        speed = active_block.effect_speed
-        if '/' in speed:
-            num, denom = map(int, speed.split('/'))
-            speed_mult = num / denom
-        else:
-            speed_mult = float(speed)
-
-        time_in_block = time_s - active_block.start_time
-
-        if total_fixtures <= 1:
-            # Single fixture - just stay on
-            return base_intensity
-
-        # Calculate timing based on BPM: each fixture gets one beat at speed 1
-        seconds_per_beat = 60.0 / bpm
-        time_per_fixture = seconds_per_beat / speed_mult
-
-        # Total time for one full ping-pong cycle (0→N-1→0)
-        # For N fixtures: N-1 steps forward, N-1 steps back = 2*(N-1) beats
-        steps_in_cycle = (total_fixtures - 1) * 2
-        cycle_time = time_per_fixture * steps_in_cycle
-
-        # Get current time within the cycle
-        time_in_cycle = time_in_block % cycle_time
-
-        # Which "step" are we on? (each step = one fixture's turn)
-        current_step = time_in_cycle / time_per_fixture
-        step_index = int(current_step)
-        time_within_step = (current_step - step_index) * time_per_fixture
-
-        # Convert step index to fixture index (ping-pong pattern)
-        # Steps 0,1,2,...,N-2 go forward (fixtures 0,1,2,...,N-1)
-        # Steps N-1,N,...,2N-3 go backward (fixtures N-2,N-3,...,1)
-        if step_index < (total_fixtures - 1):
-            # Going forward
-            active_fixture = step_index
-        else:
-            # Going backward
-            active_fixture = steps_in_cycle - step_index
-
-        # Calculate intensity multiplier for this fixture
-        if fixture_idx == active_fixture:
-            # This is the active fixture - instant full brightness
-            # with smooth decay over the beat
-            # Decay: start at 100%, end at ~20% by end of beat
-            decay_progress = time_within_step / time_per_fixture if time_per_fixture > 0 else 0
-            # Use exponential decay for smooth falloff
-            intensity_multiplier = 0.2 + 0.8 * math.exp(-decay_progress * 3)
-        elif fixture_idx == (active_fixture - 1) or fixture_idx == (active_fixture + 1):
-            # Adjacent fixture - might have residual glow from previous beat
-            # Determine which direction we're going to find the "previous" fixture
-            if step_index < (total_fixtures - 1):
-                # Going forward, previous is active_fixture - 1
-                prev_fixture = active_fixture - 1
-            else:
-                # Going backward, previous is active_fixture + 1
-                prev_fixture = active_fixture + 1
-
-            if fixture_idx == prev_fixture and time_within_step < time_per_fixture * 0.3:
-                # Short tail from previous fixture (first 30% of beat only)
-                tail_progress = time_within_step / (time_per_fixture * 0.3) if time_per_fixture > 0 else 1
-                intensity_multiplier = 0.3 * (1.0 - tail_progress)
-            else:
-                intensity_multiplier = 0.0
-        else:
-            # Not active, not adjacent - off
-            intensity_multiplier = 0.0
-
-        return int(base_intensity * intensity_multiplier)
-
-    elif effect_type == "random_stroke":
-        # Random stroke: one fixture lights up at a time in shuffled order
-        # When all fixtures have been lit, reshuffle (like a deck of cards)
-        import random
-
-        speed = active_block.effect_speed
-        if '/' in speed:
-            num, denom = map(int, speed.split('/'))
-            speed_mult = num / denom
-        else:
-            speed_mult = float(speed)
-
-        time_in_block = time_s - active_block.start_time
-
-        if total_fixtures <= 1:
-            # Single fixture - just stay on
-            return base_intensity
-
-        # Calculate timing based on BPM: each fixture gets one beat at speed 1
-        seconds_per_beat = 60.0 / bpm
-        time_per_fixture = seconds_per_beat / speed_mult
-
-        # Time for one full cycle (all fixtures once)
-        cycle_time = time_per_fixture * total_fixtures
-
-        # Which cycle are we in?
-        cycle_number = int(time_in_block / cycle_time)
-
-        # Time within current cycle
-        time_in_cycle = time_in_block % cycle_time
-
-        # Which step within the cycle?
-        current_step = time_in_cycle / time_per_fixture
-        step_index = int(current_step)
-        time_within_step = (current_step - step_index) * time_per_fixture
-
-        # Generate shuffled order deterministically based on block start time + cycle
-        seed = int(active_block.start_time * 1000) + cycle_number
-        rng = random.Random(seed)
-        shuffled_indices = list(range(total_fixtures))
-        rng.shuffle(shuffled_indices)
-
-        # Which fixture is active at this step?
-        active_fixture = shuffled_indices[step_index % total_fixtures]
-
-        # Calculate intensity multiplier for this fixture
-        if fixture_idx == active_fixture:
-            # This is the active fixture - instant full brightness with smooth decay
-            decay_progress = time_within_step / time_per_fixture if time_per_fixture > 0 else 0
-            intensity_multiplier = 0.2 + 0.8 * math.exp(-decay_progress * 3)
-        else:
-            # Not active - off
-            intensity_multiplier = 0.0
-
-        return int(base_intensity * intensity_multiplier)
-
-    elif effect_type == "chase":
-        # Chase effect: a light with fading tail moves through fixtures, bouncing back and forth
-        # chase_scope="fixture" (was snake): runs per fixture group
-        # chase_scope="global" (was zigzag): treats ALL fixtures as one continuous chain
-        # 4 beats = full cycle (forward + backward)
-        # Tail spans approximately half the fixtures
-        speed = active_block.effect_speed
-        if '/' in speed:
-            num, denom = map(int, speed.split('/'))
-            speed_mult = num / denom
-        else:
-            speed_mult = float(speed)
-
-        time_in_block = time_s - active_block.start_time
-
-        if total_fixtures <= 1:
-            return base_intensity
-
-        # Tail spans half the fixtures
-        tail_length = max(1, total_fixtures // 2)
-
-        # 4 beats = full cycle (forward + backward)
-        seconds_per_beat = 60.0 / bpm
-        time_per_pass = (seconds_per_beat * 2) / speed_mult  # 2 beats per pass
-        cycle_time = time_per_pass * 2  # Full cycle
-
-        # Current position in cycle
-        time_in_cycle = time_in_block % cycle_time
-
-        # Calculate head position (0 to total_fixtures-1, bouncing)
-        if time_in_cycle < time_per_pass:
-            # Forward pass
-            progress = time_in_cycle / time_per_pass
-            head_position = progress * (total_fixtures - 1)
-            going_forward = True
-        else:
-            # Backward pass
-            progress = (time_in_cycle - time_per_pass) / time_per_pass
-            head_position = (total_fixtures - 1) * (1.0 - progress)
-            going_forward = False
-
-        # Calculate distance from head for this fixture (considering direction)
-        if going_forward:
-            distance = head_position - fixture_idx
-        else:
-            distance = fixture_idx - head_position
-
-        # Calculate intensity based on distance
-        if distance < -0.5:
-            # Ahead of head - off
-            intensity_multiplier = 0.0
-        elif distance < 0.5:
-            # At head - full intensity
-            intensity_multiplier = 1.0
-        elif distance <= tail_length:
-            # In tail - fade based on distance
-            fade_factor = 1.0 - (distance / (tail_length + 1))
-            intensity_multiplier = fade_factor * 0.8  # Max 80% for tail
-        else:
-            # Beyond tail - off
-            intensity_multiplier = 0.0
-
-        return int(base_intensity * intensity_multiplier)
-
-    elif effect_type == "waterfall":
-        # Waterfall effect: light cascades through fixtures with smooth tail
-        # Uses block.direction ("down" or "up") to determine cascade direction
-        # Matches ArtNet implementation in dmx_manager.py
-        import hashlib
-
-        speed = active_block.effect_speed
-        if '/' in speed:
-            num, denom = map(int, speed.split('/'))
-            speed_mult = num / denom
-        else:
-            speed_mult = float(speed)
-
-        time_in_block = time_s - active_block.start_time
-
-        if total_fixtures <= 1:
-            return base_intensity
-
-        # Calculate timing based on BPM: each fixture gets one beat at speed 1
-        seconds_per_beat = 60.0 / bpm
-        time_per_step = seconds_per_beat / speed_mult
-
-        # Calculate random offset for this fixture (slowly drifting)
-        # Use fixture_idx as seed since we don't have fixture name here
-        seed_str = f"waterfall_fixture_{fixture_idx}"
-        name_hash = int(hashlib.md5(seed_str.encode()).hexdigest()[:8], 16)
-        base_offset = (name_hash % 1000) / 1000.0  # 0.0 to 1.0
-
-        # Slowly drifting component (changes over ~30 seconds)
-        drift_period = 30.0
-        drift_phase = (time_s / drift_period) * 2 * math.pi
-        drift_seed = (name_hash % 997) / 997.0 * 2 * math.pi
-        drift_amount = 0.3 * math.sin(drift_phase + drift_seed)  # +/- 0.3 cycle drift
-
-        total_offset = base_offset + drift_amount
-
-        # Full cycle time = total_fixtures beats (one per fixture)
-        cycle_time = time_per_step * total_fixtures
-
-        # Current position in cycle (0 to total_fixtures), with offset
-        cycle_progress = (time_in_block / cycle_time + total_offset) % 1.0
-        head_position = cycle_progress * total_fixtures  # 0 to total_fixtures
-
-        # For direction="down": head moves from last fixture (N-1) to first (0)
-        # For direction="up": head moves from first fixture (0) to last (N-1)
-        direction = getattr(active_block, 'direction', 'down')
-        if direction == "down":
-            head_position = (total_fixtures - 1) - head_position
-        # For direction="up", head_position is already 0 to N-1
-
-        # Calculate distance from head using circular/wrapped distance
-        # This creates a continuous seamless loop where the tail wraps around
-        if direction == "down":
-            raw_distance = fixture_idx - head_position
-        else:  # direction="up"
-            raw_distance = head_position - fixture_idx
-
-        # Use modulo to wrap the distance for continuous effect
-        circular_distance = raw_distance % total_fixtures
-
-        # Normalize and apply exponential decay
-        normalized_dist = circular_distance / total_fixtures
-        intensity_multiplier = math.exp(-1.5 * normalized_dist)
-
-        return int(base_intensity * intensity_multiplier)
-
-    elif effect_type == "stroke":
-        # Stroke effect: instant attack, decay over the beat duration
-        # One stroke per beat at speed 1, decay takes the full beat
-        speed = active_block.effect_speed
-        if '/' in speed:
-            num, denom = map(int, speed.split('/'))
-            speed_mult = num / denom
-        else:
-            speed_mult = float(speed)
-
-        time_in_block = time_s - active_block.start_time
-
-        seconds_per_beat = 60.0 / bpm
-
-        # Time between strokes (one beat at speed 1)
-        time_per_stroke = seconds_per_beat / speed_mult
-
-        # Decay takes the full beat duration
-        decay_time = time_per_stroke
-
-        # Calculate position within current stroke cycle
-        time_in_cycle = time_in_block % time_per_stroke
-
-        # Calculate intensity based on decay (full beat duration)
-        decay_progress = time_in_cycle / decay_time
-        # Exponential decay: e^(-3) ≈ 0.05
-        intensity_multiplier = math.exp(-decay_progress * 3)
-
-        return int(base_intensity * intensity_multiplier)
-
-    elif effect_type == "pulse":
-        # Pulse effect: all fixtures fade in/out together smoothly in a sine curve
-        # One full pulse cycle per bar at speed 1
-        speed = active_block.effect_speed
-        if '/' in speed:
-            num, denom = map(int, speed.split('/'))
-            speed_mult = num / denom
-        else:
-            speed_mult = float(speed)
-
-        time_in_block = time_s - active_block.start_time
-
-        # Calculate timing: one breath cycle per bar at speed 1
-        seconds_per_beat = 60.0 / bpm
-        seconds_per_bar = seconds_per_beat * 4  # Assuming 4/4 time
-        cycle_time = seconds_per_bar / speed_mult
-
-        # Calculate phase in the breathing cycle (0 to 2*pi)
-        phase = (time_in_block / cycle_time) * 2 * math.pi
-
-        # Minimum intensity floor (30% of base)
-        floor = 0.3
-
-        # Sine wave for smooth breathing: floor + (1-floor) * (sin(phase) + 1) / 2
-        # This gives a smooth oscillation between floor and 1.0
-        brightness = floor + (1 - floor) * (math.sin(phase) + 1) / 2
-
-        return int(base_intensity * brightness)
-
-    elif effect_type == "wave":
-        # Wave effect: intensity wave travels across fixtures like a stadium wave
-        # One wave cycle per bar at speed 1
-        speed = active_block.effect_speed
-        if '/' in speed:
-            num, denom = map(int, speed.split('/'))
-            speed_mult = num / denom
-        else:
-            speed_mult = float(speed)
-
-        time_in_block = time_s - active_block.start_time
-
-        if total_fixtures <= 1:
-            # Single fixture - just use breathing pattern
-            seconds_per_beat = 60.0 / bpm
-            seconds_per_bar = seconds_per_beat * 4
-            cycle_time = seconds_per_bar / speed_mult
-            phase = (time_in_block / cycle_time) * 2 * math.pi
-            brightness = (math.sin(phase) + 1) / 2
-            return int(base_intensity * brightness)
-
-        # Calculate timing: one wave cycle per bar at speed 1
-        seconds_per_beat = 60.0 / bpm
-        seconds_per_bar = seconds_per_beat * 4
-        cycle_time = seconds_per_bar / speed_mult
-
-        # Wavelength: how many fixtures the wave spans (half the fixtures)
-        wavelength = max(2, total_fixtures / 2)
-
-        # Calculate wave position for this fixture at this time
-        # Wave moves from left to right (direction = "right")
-        time_progress = time_in_block / cycle_time
-        wave_pos = 2 * math.pi * (fixture_idx / wavelength - time_progress)
-
-        # Sine wave intensity (0 to 1)
-        brightness = (math.sin(wave_pos) + 1) / 2
-
-        return int(base_intensity * brightness)
-
-    elif effect_type == "heartbeat":
-        # Heartbeat effect: double-pulse pattern (bump-bump... pause... bump-bump)
-        # One heartbeat cycle per bar at speed 1
-        # Timing: Beat1 up (10%), Beat1 down (10%), Beat2 up (10%), Beat2 down (20%), Rest (50%)
-        speed = active_block.effect_speed
-        if '/' in speed:
-            num, denom = map(int, speed.split('/'))
-            speed_mult = num / denom
-        else:
-            speed_mult = float(speed)
-
-        time_in_block = time_s - active_block.start_time
-
-        # Calculate timing: one heartbeat cycle per bar at speed 1
-        seconds_per_beat = 60.0 / bpm
-        seconds_per_bar = seconds_per_beat * 4
-        cycle_time = seconds_per_bar / speed_mult
-
-        # Position within current cycle (0 to 1)
-        cycle_pos = (time_in_block % cycle_time) / cycle_time
-
-        # Minimum intensity floor (20% of base)
-        floor = 0.2
-
-        # Calculate beat level based on position in cycle
-        if cycle_pos < 0.10:
-            # Beat 1 up: quick fade up to 100%
-            beat_level = floor + (1.0 - floor) * (cycle_pos / 0.10)
-        elif cycle_pos < 0.20:
-            # Beat 1 down: quick fade to 60%
-            beat_level = 1.0 - (1.0 - 0.6) * ((cycle_pos - 0.10) / 0.10)
-        elif cycle_pos < 0.30:
-            # Beat 2 up: quick fade up to 80%
-            beat_level = 0.6 + (0.8 - 0.6) * ((cycle_pos - 0.20) / 0.10)
-        elif cycle_pos < 0.50:
-            # Beat 2 down: fade down to floor
-            beat_level = 0.8 - (0.8 - floor) * ((cycle_pos - 0.30) / 0.20)
-        else:
-            # Rest: stay at floor
-            beat_level = floor
-
-        return int(base_intensity * beat_level)
-
-    # Default: static
-    return base_intensity
+    if effect_type == "waterfall":
+        multiplier = _cross_fixture_waterfall_multiplier(
+            time_s, active_block, fixture_idx, total_fixtures, bpm)
+        return int(base_intensity * multiplier)
+
+    if fixture_name is None:
+        fixture_name = f"fixture_{fixture_idx}"
+    ctx = _dimmer_context(active_block, time_s, fixture_idx, total_fixtures,
+                          bpm, fixture_name)
+    result = _run_dimmer_effect(ctx, effect_type)
+    # A non-segmented fixture with one dimmer channel: the native
+    # renderer uses the first per-channel intensity when an effect
+    # (sparkle) returns a list.
+    if result.segment_intensities:
+        multiplier = result.segment_intensities[0]
+    else:
+        multiplier = result.intensity_multiplier
+    return int(base_intensity * multiplier)
 
 
 def _solver_aim(config, fixture, target):
@@ -745,97 +390,27 @@ def _stage_planes_for(config):
     return cache
 
 
-def _solver_shape_position(effect_type, t, progress, total_cycles,
-                           active_block, center_pan, center_tilt,
-                           pan_amplitude, tilt_amplitude):
-    """The movement shape chain in solver DMX space (shared by the
-    centre-based paths and, normalized, by the world-plane path)."""
-    if effect_type == "static":
-        pan = center_pan
-        tilt = center_tilt
-
-    elif effect_type == "circle":
-        pan = center_pan + pan_amplitude * math.cos(t)
-        tilt = center_tilt + tilt_amplitude * math.sin(t)
-
-    elif effect_type == "diamond":
-        phase = (progress * total_cycles * 4) % 4
-        corner = int(phase)
-        local_t = phase - corner
-        corners = [
-            (center_pan, center_tilt - tilt_amplitude),
-            (center_pan + pan_amplitude, center_tilt),
-            (center_pan, center_tilt + tilt_amplitude),
-            (center_pan - pan_amplitude, center_tilt),
-        ]
-        start = corners[corner % 4]
-        end = corners[(corner + 1) % 4]
-        pan = start[0] + local_t * (end[0] - start[0])
-        tilt = start[1] + local_t * (end[1] - start[1])
-
-    elif effect_type == "square":
-        phase = (progress * total_cycles * 4) % 4
-        corner = int(phase)
-        local_t = phase - corner
-        corners = [
-            (center_pan - pan_amplitude, center_tilt - tilt_amplitude),
-            (center_pan + pan_amplitude, center_tilt - tilt_amplitude),
-            (center_pan + pan_amplitude, center_tilt + tilt_amplitude),
-            (center_pan - pan_amplitude, center_tilt + tilt_amplitude),
-        ]
-        start = corners[corner % 4]
-        end = corners[(corner + 1) % 4]
-        pan = start[0] + local_t * (end[0] - start[0])
-        tilt = start[1] + local_t * (end[1] - start[1])
-
-    elif effect_type == "triangle":
-        phase = (progress * total_cycles * 3) % 3
-        corner = int(phase)
-        local_t = phase - corner
-        corners = [
-            (center_pan, center_tilt - tilt_amplitude),
-            (center_pan + pan_amplitude * 0.866, center_tilt + tilt_amplitude * 0.5),
-            (center_pan - pan_amplitude * 0.866, center_tilt + tilt_amplitude * 0.5),
-        ]
-        start = corners[corner % 3]
-        end = corners[(corner + 1) % 3]
-        pan = start[0] + local_t * (end[0] - start[0])
-        tilt = start[1] + local_t * (end[1] - start[1])
-
-    elif effect_type == "figure_8":
-        pan = center_pan + pan_amplitude * math.sin(t)
-        tilt = center_tilt + tilt_amplitude * math.sin(2 * t)
-
-    elif effect_type == "lissajous":
-        try:
-            ratio_parts = active_block.lissajous_ratio.split(':')
-            freq_pan = int(ratio_parts[0])
-            freq_tilt = int(ratio_parts[1])
-        except (ValueError, IndexError):
-            freq_pan, freq_tilt = 1, 2
-        pan = center_pan + pan_amplitude * math.sin(freq_pan * t)
-        tilt = center_tilt + tilt_amplitude * math.sin(freq_tilt * t)
-
-    elif effect_type == "random":
-        pan = center_pan + pan_amplitude * (
-            0.5 * math.sin(3 * t) + 0.3 * math.sin(7 * t) + 0.2 * math.sin(11 * t)
-        )
-        tilt = center_tilt + tilt_amplitude * (
-            0.5 * math.sin(5 * t) + 0.3 * math.sin(11 * t) + 0.2 * math.sin(13 * t)
-        )
-
-    elif effect_type == "bounce":
-        bounce_t = progress * total_cycles * 4
-        pan_t = abs((bounce_t % 2) - 1)
-        tilt_t = abs(((bounce_t + 0.5) % 2) - 1)
-        pan = center_pan - pan_amplitude + 2 * pan_amplitude * pan_t
-        tilt = center_tilt - tilt_amplitude + 2 * tilt_amplitude * tilt_t
-
-    else:
-        pan = center_pan
-        tilt = center_tilt
-
-    return pan, tilt
+def _solver_shape_position(t, progress, total_cycles, active_block,
+                           center_pan, center_tilt,
+                           pan_amplitude, tilt_amplitude,
+                           fixture_idx, total_fixtures):
+    """The movement shape in solver DMX space (shared by the
+    centre-based paths and, normalized, by the world-plane path):
+    effects.MOVEMENT_REGISTRY, the same shape functions the native
+    renderer puts on the wire. Unknown shapes park on the centre."""
+    ctx = MovementContext(
+        t=t, progress=progress, total_cycles=total_cycles,
+        center_pan=center_pan, center_tilt=center_tilt,
+        pan_amplitude=pan_amplitude, tilt_amplitude=tilt_amplitude,
+        fixture_index=fixture_idx, total_fixtures=total_fixtures,
+        phase_offset_enabled=active_block.phase_offset_enabled,
+        phase_offset_degrees=active_block.phase_offset_degrees,
+        lissajous_ratio=active_block.lissajous_ratio,
+    )
+    shape_fn = MOVEMENT_REGISTRY.get(active_block.effect_type,
+                                     MOVEMENT_REGISTRY["static"])
+    result = shape_fn(ctx)
+    return result.pan, result.tilt
 
 
 def sample_movement_at_time(
@@ -878,34 +453,32 @@ def sample_movement_at_time(
     if not active_block:
         return None
 
-    effect_type = active_block.effect_type
-
     # Check if we have a target spot - if so, calculate pan/tilt to point at it
+    spot = None
     if active_block.target_spot_name and config and fixture and hasattr(config, 'spots'):
         spot = config.spots.get(active_block.target_spot_name)
-        if spot:
-            # Aim with the solver at the definition's real ranges,
-            # UNCONVERTED: the shape math below runs in solver DMX
-            # space (exactly like the native renderer), and the WHOLE
-            # step converts to the real yoke at the end
-            # (convert_solver_dmx) - so QLC+ playback traces the same
-            # figure the app and the rig do. Before 2026-07-13 only
-            # the centre was converted and the pattern oscillated in
-            # solver space around it, a mixed frame that traced the
-            # wrong figure on a real head.
-            pan_dmx, tilt_dmx = _solver_aim(
-                config, fixture, (spot.x, spot.y, spot.z))
+    point = getattr(active_block, 'target_point', None)
+    if spot:
+        # Aim with the solver at the definition's real ranges,
+        # UNCONVERTED: the shape math below runs in solver DMX
+        # space (exactly like the native renderer), and the WHOLE
+        # step converts to the real yoke at the end
+        # (convert_solver_dmx) - so QLC+ playback traces the same
+        # figure the app and the rig do. Before 2026-07-13 only
+        # the centre was converted and the pattern oscillated in
+        # solver space around it, a mixed frame that traced the
+        # wrong figure on a real head.
+        pan_dmx, tilt_dmx = _solver_aim(
+            config, fixture, (spot.x, spot.y, spot.z))
 
-            # Use calculated values as center position
-            center_pan = float(pan_dmx)
-            center_tilt = float(tilt_dmx)
-        else:
-            # Spot not found, fall back to manual values
-            center_pan = active_block.pan
-            center_tilt = active_block.tilt
-    elif getattr(active_block, 'target_point', None) and config and fixture:
-        # Ad-hoc world point (v1.5a): a spot without a name.
-        point = active_block.target_point
+        # Use calculated values as center position
+        center_pan = float(pan_dmx)
+        center_tilt = float(tilt_dmx)
+    elif point and config and fixture:
+        # Ad-hoc world point (v1.5a): a spot without a name. A spot
+        # NAME this config does not know (a morphed show carrying rig
+        # A's names) falls through to here too, like the native
+        # renderer (plane > spot > point > manual).
         pan_dmx, tilt_dmx = _solver_aim(
             config, fixture, (point[0], point[1], point[2]))
         center_pan = float(pan_dmx)
@@ -921,13 +494,7 @@ def sample_movement_at_time(
     tilt_min = active_block.tilt_min
     tilt_max = active_block.tilt_max
 
-    # Parse speed
-    speed = active_block.effect_speed
-    if '/' in speed:
-        num, denom = map(int, speed.split('/'))
-        speed_mult = num / denom
-    else:
-        speed_mult = float(speed)
+    speed_mult = parse_speed(active_block.effect_speed)
 
     # Calculate timing based on BPM (matches ArtNet implementation)
     seconds_per_beat = 60.0 / bpm
@@ -945,8 +512,9 @@ def sample_movement_at_time(
     # Shared movement rate (matches ArtNet preview + shows_to_xml export).
     total_cycles = movement_total_cycles(block_duration, seconds_per_bar, speed_mult)
 
-    # Calculate phase offset for this fixture
-    if active_block.phase_offset_enabled:
+    # Calculate phase offset for this fixture (t-based shapes; the
+    # polygon shapes apply it from progress inside the registry)
+    if active_block.phase_offset_enabled and total_fixtures > 1:
         fixture_phase = (fixture_idx * active_block.phase_offset_degrees) * math.pi / 180.0
     else:
         fixture_phase = 0.0
@@ -964,8 +532,8 @@ def sample_movement_at_time(
         plane = _stage_planes_for(config).get(active_block.target_plane_name)
     if plane is not None:
         norm_pan, norm_tilt = _solver_shape_position(
-            effect_type, t, progress, total_cycles, active_block,
-            127.5, 127.5, 50.0, 50.0)
+            t, progress, total_cycles, active_block,
+            127.5, 127.5, 50.0, 50.0, fixture_idx, total_fixtures)
         u_offset = (norm_pan - 127.5) / 50.0
         v_offset = (norm_tilt - 127.5) / 50.0
         # Same DMX-units -> metres convention as the native renderer.
@@ -978,8 +546,9 @@ def sample_movement_at_time(
         pan, tilt = (float(v) for v in _solver_aim(config, fixture, target))
     else:
         pan, tilt = _solver_shape_position(
-            effect_type, t, progress, total_cycles, active_block,
-            center_pan, center_tilt, pan_amplitude, tilt_amplitude)
+            t, progress, total_cycles, active_block,
+            center_pan, center_tilt, pan_amplitude, tilt_amplitude,
+            fixture_idx, total_fixtures)
 
     # Apply clipping to boundaries (solver DMX space, like the native
     # renderer's clamp).
@@ -1165,7 +734,7 @@ def build_unified_step(
         # Sample all effect types at this time
         # Use global_fixture_idx and total_fixtures_for_effects for cross-group effects
         _max_intensity = export_overrides.get('group_max_intensity', 255) if export_overrides else 255
-        dimmer_value = sample_dimmer_at_time(time_s, dimmer_blocks, global_fixture_idx, total_fixtures_for_effects, step_idx, total_steps, bpm, max_intensity=_max_intensity)
+        dimmer_value = sample_dimmer_at_time(time_s, dimmer_blocks, global_fixture_idx, total_fixtures_for_effects, step_idx, total_steps, bpm, max_intensity=_max_intensity, fixture_name=fixture.name)
         movement_values = sample_movement_at_time(time_s, movement_blocks, global_fixture_idx, total_fixtures_for_effects, step_idx, total_steps, bpm, signature, config, fixture)
         colour_values = sample_colour_at_time(time_s, colour_blocks)
         special_values = sample_special_at_time(time_s, special_blocks)
@@ -1290,123 +859,28 @@ def build_unified_step(
                     ("IntensityUV", colour_values.get('uv', 0)),
                 ]
 
-                # For pixelbar twinkle, each segment gets an independent random intensity
-                if is_pixelbar_sparkle:
-                    # Calculate per-segment twinkle intensities (matches ArtNet implementation)
-                    import random
-                    import hashlib
+                # Pixel bars running sparkle or waterfall: each segment
+                # gets its own intensity from the same registry effect the
+                # native renderer uses, seeded by the fixture name.
+                if is_pixelbar_sparkle or is_pixelbar_waterfall:
+                    num_segments = max(
+                        len(channels_dict.get(preset, []))
+                        for preset in ("IntensityRed", "IntensityGreen",
+                                       "IntensityBlue", "IntensityWhite"))
+                    seg_ctx = _dimmer_context(
+                        active_dimmer_block, time_s, global_fixture_idx,
+                        total_fixtures_for_effects, bpm, fixture.name,
+                        num_segments=num_segments, is_segmented=True)
+                    segment_intensities = _run_dimmer_effect(
+                        seg_ctx, active_dimmer_block.effect_type
+                    ).segment_intensities or []
 
-                    speed = active_dimmer_block.effect_speed
-                    if '/' in speed:
-                        num, denom = map(int, speed.split('/'))
-                        speed_mult = num / denom
-                    else:
-                        speed_mult = float(speed)
-
-                    time_in_block = time_s - active_dimmer_block.start_time
-                    twinkle_step_duration = 0.2 / speed_mult
-                    step_float = time_in_block / twinkle_step_duration
-                    current_twinkle_step = int(step_float)
-                    next_twinkle_step = current_twinkle_step + 1
-                    transition_progress = step_float - current_twinkle_step
-
-                    segment_intensities = []
-                    for seg_idx in range(num_rgb_segments):
-                        # Current target intensity
-                        seed_str = f"fixture_{fixture_idx}_seg{seg_idx}_{current_twinkle_step}"
-                        seed_hash = int(hashlib.md5(seed_str.encode()).hexdigest()[:8], 16)
-                        current_variation = random.Random(seed_hash).random() * 0.7 + 0.3
-
-                        # Next target intensity
-                        seed_str = f"fixture_{fixture_idx}_seg{seg_idx}_{next_twinkle_step}"
-                        seed_hash = int(hashlib.md5(seed_str.encode()).hexdigest()[:8], 16)
-                        next_variation = random.Random(seed_hash).random() * 0.7 + 0.3
-
-                        # Smooth interpolation
-                        t = transition_progress
-                        smooth_t = t * t * (3 - 2 * t)
-                        variation = current_variation + (next_variation - current_variation) * smooth_t
-                        segment_intensities.append(variation)
-
-                    # Apply per-segment color values with twinkle
+                    # Scale every segment's colour by its intensity
                     for preset, base_value in color_mappings:
                         if preset in channels_dict:
                             for seg_idx, ch in enumerate(channels_dict[preset]):
-                                # Scale color value by segment's twinkle intensity
-                                twinkle_factor = segment_intensities[seg_idx] if seg_idx < len(segment_intensities) else 1.0
-                                scaled_value = int(base_value * twinkle_factor)
-                                channel_values.append(f"{ch['channel']},{scaled_value}")
-                                total_channel_count += 1
-
-                elif is_pixelbar_waterfall:
-                    # Calculate per-segment waterfall intensities (matches ArtNet implementation)
-                    import hashlib
-
-                    speed = active_dimmer_block.effect_speed
-                    if '/' in speed:
-                        num, denom = map(int, speed.split('/'))
-                        speed_mult = num / denom
-                    else:
-                        speed_mult = float(speed)
-
-                    time_in_block = time_s - active_dimmer_block.start_time
-                    effect_type = active_dimmer_block.effect_type
-
-                    # Calculate timing based on BPM: each segment gets one beat at speed 1
-                    seconds_per_beat = 60.0 / bpm
-                    time_per_step = seconds_per_beat / speed_mult
-
-                    # Calculate random offset for this fixture (slowly drifting)
-                    seed_str = f"waterfall_fixture_{global_fixture_idx}"
-                    name_hash = int(hashlib.md5(seed_str.encode()).hexdigest()[:8], 16)
-                    base_offset = (name_hash % 1000) / 1000.0  # 0.0 to 1.0
-
-                    # Slowly drifting component (changes over ~30 seconds)
-                    drift_period = 30.0
-                    drift_phase = (time_s / drift_period) * 2 * math.pi
-                    drift_seed = (name_hash % 997) / 997.0 * 2 * math.pi
-                    drift_amount = 0.3 * math.sin(drift_phase + drift_seed)  # +/- 0.3 cycle drift
-
-                    total_offset = base_offset + drift_amount
-
-                    # Full cycle time = num_segments beats
-                    cycle_time = time_per_step * num_rgb_segments
-
-                    # Current position in cycle (0 to num_segments), with offset
-                    cycle_progress = (time_in_block / cycle_time + total_offset) % 1.0
-                    head_position = cycle_progress * num_rgb_segments  # 0 to num_segments
-
-                    # For direction="down": head moves from last segment (N-1) to first (0)
-                    # For direction="up": head moves from first segment (0) to last (N-1)
-                    direction = getattr(active_dimmer_block, 'direction', 'down')
-                    if direction == "down":
-                        head_position = (num_rgb_segments - 1) - head_position
-                    # For direction="up", head_position is already 0 to N-1
-
-                    # Calculate intensity for each segment using circular/wrapped distance
-                    segment_intensities = []
-                    for seg_idx in range(num_rgb_segments):
-                        # Calculate distance from head to this segment
-                        if direction == "down":
-                            raw_distance = seg_idx - head_position
-                        else:  # direction="up"
-                            raw_distance = head_position - seg_idx
-
-                        # Use modulo to wrap the distance for continuous effect
-                        circular_distance = raw_distance % num_rgb_segments
-
-                        # Normalize and apply exponential decay
-                        normalized_dist = circular_distance / num_rgb_segments
-                        intensity_factor = math.exp(-1.5 * normalized_dist)
-                        segment_intensities.append(intensity_factor)
-
-                    # Apply per-segment color values with waterfall
-                    for preset, base_value in color_mappings:
-                        if preset in channels_dict:
-                            for seg_idx, ch in enumerate(channels_dict[preset]):
-                                # Scale color value by segment's waterfall intensity
-                                waterfall_factor = segment_intensities[seg_idx] if seg_idx < len(segment_intensities) else 1.0
-                                scaled_value = int(base_value * waterfall_factor)
+                                factor = segment_intensities[seg_idx] if seg_idx < len(segment_intensities) else 1.0
+                                scaled_value = int(base_value * factor)
                                 channel_values.append(f"{ch['channel']},{scaled_value}")
                                 total_channel_count += 1
 

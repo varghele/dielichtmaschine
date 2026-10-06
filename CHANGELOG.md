@@ -62,6 +62,27 @@ verbatim as the GitHub Release notes (see [docs/releasing.md](docs/releasing.md)
   The demo export hashes are unchanged: the new seed reproduces what the
   hash check used to get by seeding the shared generator itself, which
   it no longer needs to do.
+- **The `.qxw` export plays the effects the app plays.** The exporter
+  kept its own copy of every dimmer and movement effect, and the copies
+  had drifted from what the app sends to the rig. Fade, cascade, fill
+  and throb exported as a static look; linear sweep and fan exported as
+  a parked head; pulse ignored "phase offset per fixture"; diamond,
+  square, triangle and bounce ignored the movement phase offset; a
+  single-fixture wave ran in the opposite phase; and sparkle (on any
+  fixture) and the pixel-bar waterfall drew their randomness from the
+  fixture's position in a list, so the exported twinkle was a different
+  one from the app's and two groups' bars could twinkle in lockstep. The
+  export now evaluates the same effect functions as native playback, at
+  each QLC+ step, and throb, fade and cascade get enough steps to show
+  their shape. A movement block whose spot name the project does not
+  know now aims at its target point in the export too, as it already
+  did in the app. One difference is kept on purpose for now: a
+  waterfall on fixtures without segments still cascades across the
+  fixtures in the export, where the app shows it static. A new test
+  compares the export against native playback effect by effect.
+  Exports of shows using these effects change accordingly: all five
+  demo shows (`demos/shows/`) export differently, while the demo rigs
+  checked by `scripts/export_hash_check.py` (no shows) are unchanged.
 
 ## [1.5.0] - 2026-08-09
 

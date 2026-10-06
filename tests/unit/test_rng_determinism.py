@@ -104,16 +104,20 @@ class TestExportSparkle:
         sample_dimmer_at_time(1.37, [self._block()], 2, 4, 5, 40)
         assert random.getstate() == seeded_global
 
-    def test_values_unchanged(self):
-        time_s, fixture_idx = 1.37, 2
+    def test_values_follow_the_live_seed(self):
+        # Since G4 the export samples the registry sparkle, seeded by
+        # the fixture name like native playback
+        # (tests/unit/test_export_live_parity.py).
+        time_s = 1.37
         step_float = time_s / 0.2
         cur = int(step_float)
         t = step_float - cur
         smooth = t * t * (3 - 2 * t)
-        a = _md5_variation(f"fixture_{fixture_idx}_{cur}")
-        b = _md5_variation(f"fixture_{fixture_idx}_{cur + 1}")
+        a = _md5_variation(f"Bar 1_seg0_{cur}")
+        b = _md5_variation(f"Bar 1_seg0_{cur + 1}")
         expected = int(255 * (a + (b - a) * smooth))
-        got = sample_dimmer_at_time(time_s, [self._block()], fixture_idx, 4, 5, 40)
+        got = sample_dimmer_at_time(time_s, [self._block()], 2, 4, 5, 40,
+                                    fixture_name="Bar 1")
         assert got == expected
 
 
