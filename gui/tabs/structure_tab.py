@@ -927,6 +927,10 @@ class StructureTab(BaseTab):
         # Generation report from this tab's own autogen run (the sibling
         # Shows tab's report is used when we have none of our own).
         self._autogen_report = None
+        # This tab's own running autogen worker and the AutogenJob it
+        # was launched for (see _open_autogen_dialog).
+        self._autogen_worker = None
+        self._autogen_job = None
 
         # Playback state
         self.is_playing = False
@@ -2248,6 +2252,8 @@ class StructureTab(BaseTab):
         for widget_name in ("add_part_tile", "autogen_btn",
                             "load_audio_btn"):
             widget = getattr(self, widget_name, None)
+            if widget_name == "autogen_btn" and self._autogen_running():
+                continue           # stays GENERATING... until the run ends
             if widget is not None:
                 widget.setEnabled(not locked)
         if not has_song:
@@ -2636,6 +2642,24 @@ class StructureTab(BaseTab):
             return shows_tab
         return None
 
+    def _autogen_running(self) -> bool:
+        """A run is in flight: its worker is still running, or its
+        result is queued but not handled yet."""
+        if getattr(self, "_autogen_job", None) is not None:
+            return True
+        worker = getattr(self, "_autogen_worker", None)
+        return worker is not None and worker.isRunning()
+
+    def _on_autogen_thread_done(self):
+        """QThread.finished of the autogen worker: the safety net for a
+        run that ended without delivering a result or an error, so the
+        button never stays stuck on GENERATING..."""
+        if self.sender() is not self._autogen_worker:
+            return
+        if self._autogen_job is not None:
+            self._autogen_job = None
+            self._reset_autogen_button()
+
     def _on_autogenerate(self):
         """Run the same AutogenDialog flow the Timeline tab exposes.
 
@@ -2646,6 +2670,10 @@ class StructureTab(BaseTab):
         """
         if self._locked():
             self._flash_locked()
+            return
+        if self._autogen_running():
+            # One run at a time: replacing the worker reference would
+            # let Python destroy a QThread that is still running.
             return
         if not self.current_show:
             QMessageBox.warning(self, "No Song Selected",
@@ -2681,7 +2709,8 @@ class StructureTab(BaseTab):
         Timeline tab, result written into ``show.timeline_data.lanes``
         (the Timeline tab picks them up on its next refresh)."""
         from PyQt6.QtWidgets import QDialog
-        from gui.dialogs.autogen_dialog import AutogenDialog, AutogenWorker
+        from gui.dialogs.autogen_dialog import (
+            AutogenDialog, AutogenJob, AutogenWorker)
 
         show = self.current_show
         if not show.parts:
@@ -2708,51 +2737,73 @@ class StructureTab(BaseTab):
 
         self.autogen_btn.setEnabled(False)
         self.autogen_btn.setText("GENERATING...")
+        # Bound to THIS song, reading a snapshot: the user may switch
+        # songs or edit the rig while the worker runs.
+        self._autogen_job = AutogenJob(self.config, show)
         self._autogen_worker = AutogenWorker(
-            audio_path, song_structure, self.config, dialog.result_config,
-            dialog.result_key_signature, dialog.result_palette,
+            audio_path, song_structure, self._autogen_job.snapshot,
+            dialog.result_config, dialog.result_key_signature,
+            dialog.result_palette,
         )
-        self._autogen_worker.finished.connect(self._on_autogen_finished)
+        self._autogen_worker.generated.connect(self._on_autogen_finished)
         self._autogen_worker.error.connect(self._on_autogen_error)
+        self._autogen_worker.finished.connect(self._on_autogen_thread_done)
         self._autogen_worker.start()
 
     def _reset_autogen_button(self):
-        self.autogen_btn.setEnabled(True)
+        """Back from GENERATING... on every exit path of a run."""
         self.autogen_btn.setText("AUTOGENERATE SONG...")
+        self.autogen_btn.setEnabled(not self._locked())
 
     def _on_autogen_finished(self, lanes, report=None):
-        """Store generated lanes on the show (the Timeline tab renders
-        them) and keep the report for the AUDIO ANALYSIS rows."""
-        if self._locked():
+        """Store generated lanes on the song the run was launched for
+        (the Timeline tab renders them) and keep the report for the
+        AUDIO ANALYSIS rows when that song is the open one."""
+        job, self._autogen_job = self._autogen_job, None
+        self._reset_autogen_button()
+        song_name = job.song_name(self.config) if job is not None else None
+        if song_name is None:
+            QMessageBox.information(
+                self, "Auto-Generate",
+                "The song this generation was started for is no longer "
+                "in the project. The result was discarded.")
+            return
+        song = job.song
+        if getattr(song, "locked", False):
             self._flash_locked()
             return
         from config.models import LightLane
 
-        self._reset_autogen_button()
-        self._autogen_report = report
+        is_current = song is self.current_show
+        if is_current:
+            self._autogen_report = report
         if not lanes:
             QMessageBox.information(self, "Auto-Generate",
                                     "No lanes were generated. Check fixture "
                                     "groups and song structure.")
             return
-        if self.current_show.timeline_data is None:
-            self.current_show.timeline_data = TimelineData()
+        if song.timeline_data is None:
+            song.timeline_data = TimelineData()
         new_lanes = []
         for lane_data in lanes:
             lane = LightLane(lane_data.name)
             lane.fixture_targets = lane_data.fixture_targets
             lane.light_blocks = lane_data.light_blocks
             new_lanes.append(lane)
-        self.current_show.timeline_data.lanes = new_lanes
+        song.timeline_data.lanes = new_lanes
+        job.adopt_new_spots()
         self._auto_save()
-        self._refresh_inspector()
-        self._update_audio_readout()
+        if is_current:
+            self._refresh_inspector()
+            self._update_audio_readout()
+        where = "" if is_current else f" for \"{song_name}\""
         QMessageBox.information(
             self, "Auto-Generate",
-            f"Generated {len(new_lanes)} lanes. Open the Timeline tab to "
-            "review them.")
+            f"Generated {len(new_lanes)} lanes{where}. Open the Timeline "
+            "tab to review them.")
 
     def _on_autogen_error(self, error_msg):
+        self._autogen_job = None
         self._reset_autogen_button()
         QMessageBox.critical(self, "Auto-Generate Error",
                              f"Generation failed:\n{error_msg}")

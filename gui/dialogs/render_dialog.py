@@ -14,9 +14,15 @@ from utils.render.camera_presets import CAMERA_PRESETS
 
 
 class RenderWorker(QThread):
-    """Background thread for rendering a show to video."""
+    """Background thread for rendering a show to video.
+
+    ``render_done`` reports the outcome on every exit path of run(),
+    including a renderer that raises. It used to be called ``finished``,
+    which shadowed QThread.finished: a crashing render then never
+    reported back and the dialog sat in its rendering state forever.
+    """
     progress = pyqtSignal(int, int, str)  # current, total, message
-    finished = pyqtSignal(str, bool)  # show_name, success
+    render_done = pyqtSignal(str, bool)  # show_name, success
 
     def __init__(self, config, show, fixture_definitions, camera_preset,
                  output_path, parent=None):
@@ -27,21 +33,30 @@ class RenderWorker(QThread):
         self.camera_preset = camera_preset
         self.output_path = output_path
         self._renderer = None
+        self._cancel_requested = False
 
     def run(self):
-        from utils.render.offline_renderer import OfflineRenderer
-        self._renderer = OfflineRenderer(
-            config=self.config,
-            show=self.show,
-            fixture_definitions=self.fixture_definitions,
-            camera_preset_name=self.camera_preset,
-            output_path=self.output_path,
-            progress_callback=lambda cur, tot, msg: self.progress.emit(cur, tot, msg),
-        )
-        success = self._renderer.render()
-        self.finished.emit(self.show.name, success)
+        success = False
+        try:
+            from utils.render.offline_renderer import OfflineRenderer
+            self._renderer = OfflineRenderer(
+                config=self.config,
+                show=self.show,
+                fixture_definitions=self.fixture_definitions,
+                camera_preset_name=self.camera_preset,
+                output_path=self.output_path,
+                progress_callback=lambda cur, tot, msg: self.progress.emit(cur, tot, msg),
+            )
+            if self._cancel_requested:
+                # cancel() arrived before the renderer existed
+                self._renderer.cancel()
+            success = bool(self._renderer.render())
+        except Exception as e:
+            self.progress.emit(0, 0, f"Render error: {e}")
+        self.render_done.emit(self.show.name, success)
 
     def cancel(self):
+        self._cancel_requested = True
         if self._renderer:
             self._renderer.cancel()
 
@@ -54,6 +69,8 @@ class RenderDialog(QDialog):
         self.config = config
         self.fixture_definitions = fixture_definitions
         self._worker = None
+        self._cancelled = False
+        self._queue_camera_preset = None
         self._render_queue = []
         self._current_render_idx = 0
 
@@ -221,6 +238,7 @@ class RenderDialog(QDialog):
             self._render_queue.append((show, output_path))
 
         self._current_render_idx = 0
+        self._cancelled = False
 
         # UI state
         self._render_btn.setEnabled(False)
@@ -235,6 +253,12 @@ class RenderDialog(QDialog):
         self._render_next(camera_preset)
 
     def _render_next(self, camera_preset: str):
+        if self._cancelled:
+            self._log.append("\nRender cancelled.")
+            self._progress_label.setText("Cancelled")
+            self._render_btn.setEnabled(True)
+            self._cancel_btn.setVisible(False)
+            return
         if self._current_render_idx >= len(self._render_queue):
             # All done
             self._log.append("\nAll renders complete!")
@@ -250,14 +274,19 @@ class RenderDialog(QDialog):
         )
         self._log.append(f"\n--- {show.name} ---")
 
+        # Parented to the dialog so Python never owns (and garbage
+        # collects) a thread that is still running; each worker deletes
+        # itself once its thread has really ended.
         self._worker = RenderWorker(
             self.config, show, self.fixture_definitions,
-            camera_preset, output_path
+            camera_preset, output_path, parent=self,
         )
         self._worker.progress.connect(self._on_progress)
-        self._worker.finished.connect(
-            lambda name, success: self._on_render_finished(name, success, camera_preset)
-        )
+        # A bound method, not a lambda: Qt drops a result still queued
+        # for a dialog that has since been destroyed.
+        self._queue_camera_preset = camera_preset
+        self._worker.render_done.connect(self._on_worker_render_done)
+        self._worker.finished.connect(self._worker.deleteLater)
         self._worker.start()
 
     def _on_progress(self, current: int, total: int, message: str):
@@ -268,6 +297,10 @@ class RenderDialog(QDialog):
         # Auto-scroll
         scrollbar = self._log.verticalScrollBar()
         scrollbar.setValue(scrollbar.maximum())
+
+    def _on_worker_render_done(self, show_name: str, success: bool):
+        self._on_render_finished(show_name, success,
+                                 self._queue_camera_preset)
 
     def _on_render_finished(self, show_name: str, success: bool, camera_preset: str):
         if success:
@@ -280,7 +313,34 @@ class RenderDialog(QDialog):
 
     def _cancel_render(self):
         if self._worker:
+            self._cancelled = True
             self._worker.cancel()
             self._log.append("Cancelling...")
-            self._render_btn.setEnabled(True)
+            # Render re-enables once the running worker has reported
+            # back (_render_next), so a second render cannot start on
+            # top of the one still winding down.
             self._cancel_btn.setVisible(False)
+
+    def _stop_worker(self):
+        """Cancel a running render and wait for its thread to end. The
+        dialog owns the worker, so closing the dialog while a render
+        runs would otherwise destroy a running QThread (a fatal abort)."""
+        worker = self._worker
+        self._cancelled = True
+        try:
+            running = worker is not None and worker.isRunning()
+        except RuntimeError:            # C++ side already deleted
+            running = False
+        if running:
+            worker.cancel()
+            worker.wait()
+
+    def done(self, result):
+        """Every close path (Close button, Escape, the window's close
+        box) ends here before exec() returns."""
+        self._stop_worker()
+        super().done(result)
+
+    def closeEvent(self, event):
+        self._stop_worker()
+        super().closeEvent(event)

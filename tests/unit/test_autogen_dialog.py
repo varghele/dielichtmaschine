@@ -180,7 +180,7 @@ def test_worker_signature_and_signals():
     worker = AutogenWorker("a.wav", object(), Configuration(),
                            AutogenConfig(), None, None)
     assert worker.audio_path == "a.wav"
-    for signal in ("finished", "error", "progress"):
+    for signal in ("generated", "finished", "error", "progress"):
         assert hasattr(worker, signal)
 
 

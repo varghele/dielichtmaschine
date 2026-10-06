@@ -345,6 +345,26 @@ def _footprints_for_identity(config, manufacturer: str, model: str) -> set:
     return footprints
 
 
+def autopull_snapshot(config):
+    """The part of ``config`` that pull_missing_gdtf reads (each
+    fixture's identity and patched mode footprint), copied for the
+    auto-pull worker thread. The pull runs for seconds over the
+    network while the user keeps editing the live project; walking the
+    live fixture list from that thread could skip, double or crash on a
+    fixture added, removed or re-moded mid-pull."""
+    from types import SimpleNamespace
+    return SimpleNamespace(fixtures=[
+        SimpleNamespace(
+            manufacturer=f.manufacturer,
+            model=f.model,
+            current_mode=f.current_mode,
+            available_modes=[SimpleNamespace(name=m.name, channels=m.channels)
+                             for m in (f.available_modes or [])],
+        )
+        for f in list(config.fixtures)
+    ])
+
+
 def pull_missing_gdtf(config, dest_dir: str, client=None) -> list:
     """Download exact-identity GDTFs for the config's non-GDTF
     fixtures. Returns the file paths KEPT.

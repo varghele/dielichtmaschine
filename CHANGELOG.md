@@ -24,6 +24,11 @@ verbatim as the GitHub Release notes (see [docs/releasing.md](docs/releasing.md)
   once it is green.
 - `tests/README.md` documents the end-to-end tier and the current
   suite runtimes.
+- **Importing part of the audio package no longer loads the GUI.** The
+  `audio` package imported its Qt waveform widget, the audio device
+  layer and everything else up front, so the headless `morph` command
+  and autogen pulled in Qt widgets just to analyse a song. The package's
+  names now load on first use; `from audio import ...` works as before.
 
 ### Fixed
 
@@ -173,6 +178,53 @@ verbatim as the GitHub Release notes (see [docs/releasing.md](docs/releasing.md)
   that have it as their first group, so a fixture that is also in a
   second group stayed unselected when you clicked that second group,
   although the row counted it.
+- **Autogenerate writes to the song you started it on.** Generation runs
+  for a while in the background, and its lanes used to land on whichever
+  song was open when it finished: switch songs mid-run and the new song
+  got the other song's light show (on the Timeline tab next to its own
+  lanes, or replacing them). The result now always goes to the song the
+  run was started for, even if you renamed it meanwhile; when that song
+  is not open the lanes are written into it and the confirmation names
+  it, and a song deleted mid-run (or a project loaded) discards the
+  result with a message. The generator also works from its own copy of
+  the rig instead of the live project, and the default Crowd and Stage
+  spots it creates for a project without spots are added only when you
+  keep the result. The lock is checked on that song, not the open one.
+  On the Structure tab, AUTOGENERATE SONG... no longer stays stuck on
+  GENERATING... when the song was locked mid-run or the run ended
+  without a result, and switching songs mid-run no longer re-enables it
+  (a second click could start a second run over the first, which could
+  crash the app). After an error the Timeline tab's AUTOGEN button
+  stays disabled on a locked song.
+- **Closing Render to Video mid-render no longer crashes the app.**
+  Closing the dialog while a video rendered could destroy the render
+  thread while it was still running, which ends the process. Closing
+  now cancels the render and waits for it to stop. Cancel also stops
+  the rest of the queue instead of moving on to the next song (Render
+  becomes clickable again once the cancelled render has wound down), a
+  cancel clicked just as a render starts is no longer lost, and a
+  render that fails with an error is reported as failed instead of
+  leaving the dialog stuck in its rendering state.
+- **Adding a fixture whose definition fails to load no longer hangs.**
+  The "Loading ..." dialog waited for a signal the background load sent
+  only when it succeeded, so an error while loading the definition left
+  the app waiting forever. It now closes either way, and the error is
+  listed in Help > Warnings.
+- **Switching songs while audio loads is safe and does not freeze.**
+  Loading a song's audio while the previous song's file was still
+  decoding froze the window until that decode finished, and the
+  previous file then still arrived. Opening a song without audio while
+  another song's audio was loading let that audio land on the new song.
+  The old load is now left to finish in the background and its result
+  ignored. The same applies to the waveform analysis, where a second
+  analysis started over a running one could crash the app. Quitting
+  the app now also waits for such a background load, and for an
+  autogenerate run still in progress, instead of crashing on exit.
+- **The automatic GDTF fetch on project load works from a snapshot.**
+  It read the project's fixture list from a background thread for the
+  whole length of the download, so adding, removing or re-patching a
+  fixture meanwhile could make it skip a fixture, check the wrong mode
+  or fail. It now reads a copy taken when it starts.
 
 ## [1.5.0] - 2026-08-09
 

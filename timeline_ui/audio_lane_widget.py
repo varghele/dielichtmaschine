@@ -11,13 +11,18 @@ from .timeline_widget import TimelineWidget, HEADER_COLUMN_WIDTH
 # Try to import audio components - may not be available in all installations
 try:
     from audio.audio_file import AudioFile
-    from audio.audio_waveform_widget import AudioWaveformWidget, AudioLoaderThread
+    from audio.audio_waveform_widget import (AudioWaveformWidget,
+                                             AudioLoaderThread,
+                                             park_running_thread)
     AUDIO_AVAILABLE = True
 except ImportError:
     AUDIO_AVAILABLE = False
     AudioFile = None
     AudioWaveformWidget = None
     AudioLoaderThread = None
+
+    def park_running_thread(thread):
+        pass
 
 
 class AudioTimelineWidget(TimelineWidget):
@@ -399,10 +404,10 @@ class AudioLaneWidget(QFrame):
                 self._is_loading_audio or self.audio_file is not None):
             return
 
-        # Cancel any ongoing load
-        if self.audio_loader_thread and self.audio_loader_thread.isRunning():
-            self.audio_loader_thread.quit()
-            self.audio_loader_thread.wait()
+        # Abandon any ongoing load: it cannot be interrupted, and
+        # waiting for it would freeze the UI for the rest of its decode.
+        # Its result is ignored by the handlers below.
+        park_running_thread(self.audio_loader_thread)
 
         self.audio_file_path = file_path
         self._is_loading_audio = True
@@ -414,9 +419,24 @@ class AudioLaneWidget(QFrame):
 
         # Load audio file in background thread
         self.audio_loader_thread = AudioLoaderThread(file_path)
-        self.audio_loader_thread.audio_loaded.connect(self._on_audio_loaded)
-        self.audio_loader_thread.error_occurred.connect(self._on_audio_load_error)
+        self.audio_loader_thread.audio_loaded.connect(self._on_loader_audio_loaded)
+        self.audio_loader_thread.error_occurred.connect(self._on_loader_error)
         self.audio_loader_thread.start()
+
+    def _from_current_loader(self) -> bool:
+        """The delivering loader is the current one. A load superseded
+        by a newer load or by clear_audio still delivers its queued
+        result later; it must not land on whatever song is open now."""
+        sender = self.sender()
+        return sender is not None and sender is self.audio_loader_thread
+
+    def _on_loader_audio_loaded(self, audio_file):
+        if self._from_current_loader():
+            self._on_audio_loaded(audio_file)
+
+    def _on_loader_error(self, error_message: str):
+        if self._from_current_loader():
+            self._on_audio_load_error(error_message)
 
     def _on_audio_loaded(self, audio_file: AudioFile):
         """Handle audio file loaded successfully"""
@@ -440,6 +460,11 @@ class AudioLaneWidget(QFrame):
 
     def clear_audio(self):
         """Clear the current audio file and reset the display."""
+        # A load still in flight belongs to the previous song.
+        park_running_thread(self.audio_loader_thread)
+        self.audio_loader_thread = None
+        self._is_loading_audio = False
+        self.load_button.setEnabled(True)
         self.audio_file = None
         self.audio_file_path = ""
         self.file_path_edit.setText("")
@@ -506,9 +531,9 @@ class AudioLaneWidget(QFrame):
 
     def cleanup(self):
         """Clean up audio resources."""
-        # Stop any running audio loader thread
+        # Let a running audio loader thread end (it cannot be
+        # interrupted; quit() is a no-op without an event loop)
         if self.audio_loader_thread and self.audio_loader_thread.isRunning():
-            self.audio_loader_thread.quit()
             self.audio_loader_thread.wait()
 
         self.timeline_widget.cleanup()

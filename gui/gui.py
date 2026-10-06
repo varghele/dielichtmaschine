@@ -1594,8 +1594,8 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         land in the project gdtf_fixtures/ dir (machine-local, never
         committed - Share terms); the definition cache invalidates so
         the next visualizer open renders the native models."""
-        from utils.gdtf_share import auto_pull_enabled, stored_password, \
-            stored_username
+        from utils.gdtf_share import auto_pull_enabled, autopull_snapshot, \
+            stored_password, stored_username
         if not auto_pull_enabled():
             return
         user = stored_username()
@@ -1624,7 +1624,9 @@ class MainWindow(QMainWindow, Ui_MainWindow):
                 except Exception:
                     self.pulled.emit([])
 
-        worker = _Puller(self.config, parent=self)
+        # A snapshot, never the live config: the worker walks the
+        # fixtures for the length of a network pull.
+        worker = _Puller(autopull_snapshot(self.config), parent=self)
         worker.pulled.connect(self._on_gdtf_autopull_done)
         self._gdtf_autopull_worker = worker
         worker.start()
@@ -2557,6 +2559,16 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         worker = getattr(self, "_autosave_worker", None)
         if worker is not None and worker.isRunning():
             worker.wait(10000)
+        # Same for the workers that cannot be interrupted: an autogen
+        # run and superseded audio decodes / waveform analyses.
+        for tab_name in ("shows_tab", "structure_tab"):
+            tab = getattr(self, tab_name, None)
+            worker = getattr(tab, "_autogen_worker", None)
+            if worker is not None and worker.isRunning():
+                worker.wait(10000)
+        waveform_module = sys.modules.get("audio.audio_waveform_widget")
+        if waveform_module is not None:
+            waveform_module.wait_parked_threads(10000)
 
         # Clean up shows tab audio resources
         if hasattr(self.shows_tab, 'cleanup'):

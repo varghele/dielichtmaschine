@@ -108,6 +108,30 @@ GROUP_PALETTE = (
 LIGHTING_ROLES = ("", "wash", "key", "texture", "accent")
 
 
+class DefinitionCacheWorker(QtCore.QThread):
+    """Parses one fixture definition into the cache off the UI thread
+    (the add-fixture loading dialog waits on it).
+
+    Waiters connect QThread's own ``finished``, which fires on every
+    exit path of run(). The worker used to redeclare ``finished`` and
+    emit it as run()'s last line, which shadowed the real signal: an
+    exception while loading the definition skipped it and the loading
+    dialog's wait loop hung forever.
+    """
+
+    def __init__(self, manufacturer, model, parent=None):
+        super().__init__(parent)
+        self.manufacturer = manufacturer
+        self.model = model
+        self.error = None
+
+    def run(self):
+        try:
+            get_cached_fixture_definitions({(self.manufacturer, self.model)})
+        except Exception as e:
+            self.error = e
+
+
 # ---------------------------------------------------------------------------
 # Pure helpers (unit-tested in tests/unit/test_fixture_capabilities_chips.py)
 # ---------------------------------------------------------------------------
@@ -2055,21 +2079,7 @@ class FixturesTab(BaseTab):
             QtWidgets.QApplication.processEvents()
 
             # Run caching in a background thread
-            from PyQt6.QtCore import QThread, pyqtSignal
-
-            class CacheWorker(QThread):
-                finished = pyqtSignal()
-
-                def __init__(self, mfr, mdl):
-                    super().__init__()
-                    self.mfr = mfr
-                    self.mdl = mdl
-
-                def run(self):
-                    get_cached_fixture_definitions({(self.mfr, self.mdl)})
-                    self.finished.emit()
-
-            worker = CacheWorker(manufacturer, model)
+            worker = DefinitionCacheWorker(manufacturer, model)
             worker.finished.connect(loading_dialog.accept)
             # A loading dialog is a progress indicator, not a question, so
             # never QDialog.exec() - the test suite's modal guard bans it
@@ -2082,6 +2092,10 @@ class FixturesTab(BaseTab):
             worker.start()
             wait_loop.exec()
             worker.wait()  # Ensure thread is fully done
+            if worker.error is not None:
+                user_warnings.warn(
+                    f"Loading the definition of {manufacturer} {model} "
+                    f"failed: {worker.error}", category="fixture-library")
         else:
             # Already cached, no need for loading dialog
             get_cached_fixture_definitions({(manufacturer, model)})
