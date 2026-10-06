@@ -7,8 +7,8 @@ two files; identical hashes prove the export pipeline's output is unchanged.
 Determinism requirements (the script enforces what it can):
 - PYTHONHASHSEED must be pinned in the environment (set iteration order
   leaks into fixture-definition load order): PYTHONHASHSEED=0 python ...
-- The global RNG is re-seeded per rig here because one export path
-  (preset_scenes_to_xml's bright-fixture sampling) draws from it unseeded.
+- The global RNG needs no seeding: export code draws only from local
+  random.Random instances (v1.5.5, tests/unit/test_rng_determinism.py).
 
 Usage:
     PYTHONHASHSEED=0 python scripts/export_hash_check.py before.txt
@@ -20,7 +20,6 @@ Used as the Phase 0 acceptance gate of docs/gdtf-integration-plan.md.
 """
 import hashlib
 import os
-import random
 import sys
 
 REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
@@ -52,7 +51,6 @@ def main(out_path):
         config = Configuration.load(
             os.path.join(REPO_ROOT, "demos", "rigs", f"{rig}.lms"))
         try:
-            random.seed(0)
             create_qlc_workspace(config, VC_OPTIONS)
             with open(WORKSPACE_OUT, "rb") as f:
                 digest = hashlib.sha256(f.read()).hexdigest()

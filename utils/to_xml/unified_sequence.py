@@ -301,14 +301,12 @@ def sample_dimmer_at_time(
         # Get current target intensity (deterministic random based on fixture + step)
         seed_str = f"fixture_{fixture_idx}_{current_twinkle_step}"
         seed_hash = int(hashlib.md5(seed_str.encode()).hexdigest()[:8], 16)
-        random.seed(seed_hash)
-        current_variation = random.random() * 0.7 + 0.3  # 30% to 100%
+        current_variation = random.Random(seed_hash).random() * 0.7 + 0.3  # 30% to 100%
 
         # Get next target intensity
         seed_str = f"fixture_{fixture_idx}_{next_twinkle_step}"
         seed_hash = int(hashlib.md5(seed_str.encode()).hexdigest()[:8], 16)
-        random.seed(seed_hash)
-        next_variation = random.random() * 0.7 + 0.3  # 30% to 100%
+        next_variation = random.Random(seed_hash).random() * 0.7 + 0.3  # 30% to 100%
 
         # Smooth interpolation using smoothstep function
         t = transition_progress
@@ -1317,14 +1315,12 @@ def build_unified_step(
                         # Current target intensity
                         seed_str = f"fixture_{fixture_idx}_seg{seg_idx}_{current_twinkle_step}"
                         seed_hash = int(hashlib.md5(seed_str.encode()).hexdigest()[:8], 16)
-                        random.seed(seed_hash)
-                        current_variation = random.random() * 0.7 + 0.3
+                        current_variation = random.Random(seed_hash).random() * 0.7 + 0.3
 
                         # Next target intensity
                         seed_str = f"fixture_{fixture_idx}_seg{seg_idx}_{next_twinkle_step}"
                         seed_hash = int(hashlib.md5(seed_str.encode()).hexdigest()[:8], 16)
-                        random.seed(seed_hash)
-                        next_variation = random.random() * 0.7 + 0.3
+                        next_variation = random.Random(seed_hash).random() * 0.7 + 0.3
 
                         # Smooth interpolation
                         t = transition_progress

@@ -48,6 +48,20 @@ verbatim as the GitHub Release notes (see [docs/releasing.md](docs/releasing.md)
   the way the app does at startup, and a new test checks that the clock
   and wordmark really resolve to IBM Plex Mono and Barlow Condensed. The
   screensaver itself is unchanged.
+- **Sparkle no longer reseeds Python's shared random generator.** The
+  live sparkle effect, which runs on the output thread 44 times a
+  second, and the sparkle paths of the `.qxw` export reset the global
+  random generator for every value they drew, so any other code drawing
+  random numbers at the same time got a predictable, constantly reset
+  sequence. Each draw now uses its own generator; the sparkle pattern
+  itself is the same value for value.
+- **A `.qxw` export is the same file every time.** The Sparkle master
+  preset picked its bright fixtures from the shared random generator
+  without seeding it, so exporting the same project twice could produce
+  two different workspaces. It now uses its own fixed-seed generator.
+  The demo export hashes are unchanged: the new seed reproduces what the
+  hash check used to get by seeding the shared generator itself, which
+  it no longer needs to do.
 
 ## [1.5.0] - 2026-08-09
 

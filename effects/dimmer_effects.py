@@ -332,17 +332,17 @@ def sparkle(ctx: DimmerContext) -> DimmerResult:
     next_step = current_step + 1
     transition_progress = step_float - current_step
 
+    # Local Random instances: this runs on the arbiter thread and must
+    # never reseed the global RNG other code draws from.
     segment_intensities = []
     for seg_idx in range(ctx.num_segments):
         seed_str = f"{ctx.fixture_name}_seg{seg_idx}_{current_step}"
         seed_hash = int(hashlib.md5(seed_str.encode()).hexdigest()[:8], 16)
-        random.seed(seed_hash)
-        current_variation = random.random() * 0.7 + 0.3
+        current_variation = random.Random(seed_hash).random() * 0.7 + 0.3
 
         seed_str = f"{ctx.fixture_name}_seg{seg_idx}_{next_step}"
         seed_hash = int(hashlib.md5(seed_str.encode()).hexdigest()[:8], 16)
-        random.seed(seed_hash)
-        next_variation = random.random() * 0.7 + 0.3
+        next_variation = random.Random(seed_hash).random() * 0.7 + 0.3
 
         t = transition_progress
         smooth_t = t * t * (3 - 2 * t)
