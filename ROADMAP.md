@@ -185,6 +185,12 @@ A fixes-only release on `v1.5.5-hardening`, cut from `v1.5-focus-morphing` at `3
 
 - [ ] **Non-segmented waterfall in the export.** On fixtures without segments the export still cascades a waterfall across the fixtures while native playback shows it static. Needs a product decision on which one is right; both behaviours are pinned in `tests/unit/test_export_live_parity.py`.
 - [ ] **Per-segment export of the other effects on bars and sunstrips.** Only sparkle and waterfall export per segment; the rest export per fixture (documented in the same parity test).
+- [ ] **Movement time signature.** Export scales movement cycles to the song's bar length, native playback hardcodes 4 beats per bar; fixing native changes live output for non-4/4 songs.
+- [ ] **Colour dialog wheel mode.** A fixture whose patched mode has RGB and a wheel gets switched to Wheel on accept; strict xfail in `tests/unit/test_fixture_caches.py`, entry in `docs/bug-reports.md`.
+- [ ] **GDTF auto-pull on quit** can destroy a running thread; needs a cancellable Share client.
+- [ ] **Visualizer feed socket writes** from two threads at once; per-client send lock in `utils/tcp/server.py`.
+- [ ] **Drag during playback** can render one frame with a half-edited block interval; needs UI-side snapshots.
+- [ ] **Smaller leftovers** (orientation preview VBO leak per fixture-type change, CSV rig sheet drops secondary groups, dead export code, drifted shader constants, verification steps for the Windows machine): full list in `docs/v1.5.5-hardening-plan.md` "Handover".
 
 **Deferred structural work** (planned, not done in the hardening pass: each needs a desk or a screen to verify, or moves pixels):
 
