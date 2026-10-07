@@ -240,6 +240,33 @@ verbatim as the GitHub Release notes (see [docs/releasing.md](docs/releasing.md)
   on quit and when the graphics context goes away, and the orientation
   preview builds the shape for a newly picked fixture type in its own
   context too. What the previews show is unchanged.
+- **The visualizer feed notices when its port is taken.** When port
+  9000 could not be opened (typically another program already listening
+  on it), the feed failed silently but still counted as running, so the
+  VISUALIZER button opened a viewer with nothing to connect to and the
+  next press "stopped" a feed that never started. The failure is now
+  known before the button decides anything: no viewer is launched, the
+  feed reports as not running, the reason is listed in Help > Warnings,
+  and pressing the button again retries.
+- **The audio engine reports its position about every 100 ms, as
+  intended.** It only reported when the frame counter happened to land
+  on an exact multiple of 4410, which with the usual 512-frame audio
+  blocks meant once every 25 seconds, and never after a seek to an odd
+  position. Playback itself was not affected.
+- **The Generation Inspector no longer shows stale match scores.**
+  Moving into a section where the selected group made no decision, or
+  clicking such a group, left the previous section's scores on screen.
+  The panel now shows its empty state instead. Section and group names
+  containing `&` or `<` also show correctly in the section info panel.
+- **A song without timeline lanes is reported correctly on export.**
+  Help > Warnings said the song was left out of the `.qxw`, but it is
+  exported as an empty show (and its Virtual Console button works); the
+  warning now says so. Demo export hashes are unchanged.
+- New smoke tests cover the previously untested Generation Inspector,
+  the song to Show export, the audio engine and its playback
+  synchronizer, the rudiment registry, the mesh builder, the
+  visualizer feed server, and the shader, axis gizmo and depth-mask
+  code of the 3D view.
 
 ## [1.5.0] - 2026-08-09
 

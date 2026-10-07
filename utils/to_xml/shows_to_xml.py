@@ -1080,9 +1080,11 @@ def create_shows(engine, config: Configuration, fixture_id_map: dict, fixture_de
             )
             print(f"Successfully created show from timeline: {show_name}")
         else:
+            # The Show function above is already in the workspace (VC
+            # show buttons point at it), so say what really happens.
             user_warnings.warn(
-                f"Song '{show_name}' has no timeline data and was left "
-                f"out of the workspace",
+                f"Song '{show_name}' has no timeline lanes; it exports "
+                f"as an empty show",
                 category="export")
 
     return function_id_counter

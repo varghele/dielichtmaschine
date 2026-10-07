@@ -196,24 +196,33 @@ class AudioEngine:
                 self._execute_seek()
                 self._seek_pending = False
 
-            if not self._is_playing or not self.mixer:
+            # Snapshot under the lock: set_mixer() may swap it meanwhile.
+            mixer = self.mixer
+            if not self._is_playing or not mixer:
                 outdata[:] = 0
                 return
 
         # Mix audio from all lanes
         try:
-            mixed_audio = self.mixer.mix_frames(frames)
+            mixed_audio = mixer.mix_frames(frames)
 
             with self._lock:
+                frame_before = self._current_frame
                 self._current_frame += frames
+                frame_now = self._current_frame
 
             # Write mixed audio to output buffer
             outdata[:] = mixed_audio
 
-            # Periodically report position (every ~100ms)
-            if self._position_callback and self._current_frame % 4410 == 0:
+            # Periodically report position (every ~100ms). Report when a
+            # block CROSSES a 100 ms boundary: the old "frame % 4410 == 0"
+            # test only hit when the block size divided into it, which for
+            # the default 512-frame blocks meant once every ~25 s.
+            report_every = max(1, int(self.sample_rate) // 10)
+            if (self._position_callback
+                    and frame_now // report_every != frame_before // report_every):
                 try:
-                    position = self._current_frame / self.sample_rate
+                    position = frame_now / self.sample_rate
                     self._position_callback(position)
                 except Exception:
                     pass  # Don't let callback errors crash audio thread

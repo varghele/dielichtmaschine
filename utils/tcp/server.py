@@ -7,6 +7,7 @@ import time
 from typing import List, Optional, Set
 from PyQt6.QtCore import QObject, pyqtSignal
 from config.models import Configuration
+from utils import user_warnings
 from .protocol import VisualizerProtocol
 
 
@@ -54,8 +55,36 @@ class VisualizerTCPServer(QObject):
             print("TCP Server already running")
             return
 
+        # Bind HERE, on the caller's thread: a port that cannot be
+        # opened (taken by another program or a second Lichtmaschine)
+        # must leave is_running() False BEFORE start() returns. The
+        # VISUALIZER toggle reads it right after the call to decide
+        # whether to launch the viewer, and the status chip reads it
+        # too; a stale True also made the next press "stop" a server
+        # that never existed instead of retrying.
+        server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        try:
+            server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            server_socket.bind((self.host, self.port))
+            server_socket.listen(5)
+            server_socket.settimeout(1.0)  # Timeout for accept()
+        except Exception as e:
+            try:
+                server_socket.close()
+            except Exception:
+                pass
+            print(f"Server error: {e}")
+            user_warnings.warn(
+                f"Visualizer feed could not listen on port {self.port}: {e}",
+                category="output")
+            self.error_occurred.emit(str(e))
+            return
+
+        print(f"TCP Server listening on {self.host}:{self.port}")
+        self.server_socket = server_socket
         self.running = True
-        self.server_thread = threading.Thread(target=self._run_server, daemon=True)
+        self.server_thread = threading.Thread(
+            target=self._run_server, args=(server_socket,), daemon=True)
         self.server_thread.start()
         print(f"TCP Server started on {self.host}:{self.port}")
 
@@ -90,22 +119,18 @@ class VisualizerTCPServer(QObject):
 
         print("TCP Server stopped")
 
-    def _run_server(self):
+    def _run_server(self, server_socket: socket.socket):
         """Main server loop (runs in background thread)."""
+        # The listening socket is passed in, not read from the
+        # attribute: after a stop() + start() the attribute belongs to
+        # the NEXT server thread, and this one must neither close that
+        # socket nor keep looping on it.
+        me = threading.current_thread()
         try:
-            # Create server socket
-            self.server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            self.server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-            self.server_socket.bind((self.host, self.port))
-            self.server_socket.listen(5)
-            self.server_socket.settimeout(1.0)  # Timeout for accept()
-
-            print(f"TCP Server listening on {self.host}:{self.port}")
-
-            while self.running:
+            while self.running and self.server_thread is me:
                 try:
                     # Accept client connection (with timeout)
-                    client_socket, client_address = self.server_socket.accept()
+                    client_socket, client_address = server_socket.accept()
                     client_addr_str = f"{client_address[0]}:{client_address[1]}"
 
                     print(f"Client connected: {client_addr_str}")
@@ -129,7 +154,7 @@ class VisualizerTCPServer(QObject):
                     # Normal timeout, continue loop
                     continue
                 except Exception as e:
-                    if self.running:
+                    if self.running and self.server_thread is me:
                         print(f"Error accepting connection: {e}")
                         self.error_occurred.emit(str(e))
 
@@ -137,11 +162,10 @@ class VisualizerTCPServer(QObject):
             print(f"Server error: {e}")
             self.error_occurred.emit(str(e))
         finally:
-            if self.server_socket:
-                try:
-                    self.server_socket.close()
-                except Exception:
-                    pass
+            try:
+                server_socket.close()
+            except Exception:
+                pass
 
     def _handle_client(self, client_socket: socket.socket, client_addr: str):
         """

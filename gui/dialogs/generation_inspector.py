@@ -1,6 +1,7 @@
 # gui/dialogs/generation_inspector.py
 # Live dashboard showing auto-generation decisions during playback
 
+import html
 import math
 import colorsys
 from typing import Optional, List
@@ -1081,8 +1082,9 @@ class GenerationInspector(QWidget):
             )
             self._selected_group = group_name
 
-        if group_name:
-            self._update_scores_for_group(section, group_name)
+        # Always refresh: a section without group reports must clear the
+        # previous section's bars, not leave them under the new section.
+        self._update_scores_for_group(section, group_name)
 
         # Update info panel
         self._update_info(section)
@@ -1095,25 +1097,36 @@ class GenerationInspector(QWidget):
             self._update_scores_for_group(section, group_name)
 
     def _update_scores_for_group(self, section: SectionReport, group_name: str):
-        gr = section.group_reports.get(group_name)
+        gr = section.group_reports.get(group_name) if group_name else None
         if gr:
             self.scores_widget.set_data(
                 gr.match_scores, gr.groove_rudiment, group_name
             )
+        else:
+            # No decision for this group here (inactive in this section,
+            # or no group at all): show the empty state rather than the
+            # previous group's or section's scores.
+            self.scores_widget.set_data([], "", group_name or "")
 
     def _update_info(self, section: SectionReport):
         """Build the section info text panel."""
         lines = []
-        lines.append(f"<b>{section.name}</b>")
+        # Names are user text rendered as rich text: escape them so a
+        # "Front & Back" or "<Wash>" group neither vanishes nor breaks
+        # the table markup. str() first: a None field rendered as
+        # "None" before and must not crash the panel now.
+        def esc(value) -> str:
+            return html.escape(str(value))
+        lines.append(f"<b>{esc(section.name)}</b>")
         lines.append(f"Energy: <b>{section.relative_energy:.2f}</b> | "
                       f"Flux: {section.spectral_flux:.2f} | "
                       f"Transient: {section.transient_sharpness:.2f}")
         lines.append(f"Richness: {section.spectral_richness:.2f} | "
                       f"Vocal: {section.vocal_presence:.2f} | "
                       f"Centroid: {section.spectral_centroid:.0f}")
-        lines.append(f"Movement: <b>{section.movement_shape}</b> "
+        lines.append(f"Movement: <b>{esc(section.movement_shape)}</b> "
                       f"(amp={section.movement_amplitude:.0f}, "
-                      f"target={section.movement_target or 'none'})")
+                      f"target={esc(section.movement_target or 'none')})")
         lines.append("")
         lines.append("<table cellspacing='2' style='font-size:8pt'>")
         lines.append("<tr><td><b>Group</b></td><td><b>Groove</b></td>"
@@ -1125,15 +1138,15 @@ class GenerationInspector(QWidget):
                 role_str = "<span style='color:#666'>off</span>"
             else:
                 role_color = {"full": "#4b4", "groove": "#48c", "fill": "#e84"}.get(gr.role, "#888")
-                role_str = f"<span style='color:{role_color}'>{gr.role}</span>"
+                role_str = f"<span style='color:{role_color}'>{esc(gr.role)}</span>"
 
             lines.append(
-                f"<tr><td>{name[:10]}</td>"
-                f"<td>{gr.groove_rudiment} <span style='color:#888'>({gr.groove_category})</span></td>"
-                f"<td>{gr.fill_rudiment}</td>"
+                f"<tr><td>{esc(name[:10])}</td>"
+                f"<td>{esc(gr.groove_rudiment)} <span style='color:#888'>({esc(gr.groove_category)})</span></td>"
+                f"<td>{esc(gr.fill_rudiment)}</td>"
                 f"<td>{role_str}</td>"
                 f"<td>{gr.weight:.1f}</td>"
-                f"<td>{gr.effect_speed}</td></tr>"
+                f"<td>{esc(gr.effect_speed)}</td></tr>"
             )
 
         lines.append("</table>")
