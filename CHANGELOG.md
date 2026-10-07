@@ -24,6 +24,13 @@ verbatim as the GitHub Release notes (see [docs/releasing.md](docs/releasing.md)
   once it is green.
 - `tests/README.md` documents the end-to-end tier and the current
   suite runtimes.
+- **The roadmap is current again.** `ROADMAP.md` gains a v1.5.5
+  section listing what this release fixes and the structural work it
+  leaves for later, its release-plan banner and branch note describe
+  where things actually stand, and it quotes the 1.5.0 release date the
+  changelog carries. The docs no longer claim the export hash check
+  needs Python's random generator seeded. A test keeps the quoted
+  release dates in line with the changelog.
 - **Importing part of the audio package no longer loads the GUI.** The
   `audio` package imported its Qt waveform widget, the audio device
   layer and everything else up front, so the headless `morph` command

@@ -98,11 +98,23 @@ ArtNet playback, PyQt6 + ModernGL, developed primarily on Windows.
 
 ## Current state (update when it changes)
 
-As of 2026-07-06: **v1.1 "Stage tab and rig data" is reopened.** All 8
-items shipped a first pass on branch `v1.1-stage-rig-data` (894 tests
-green, nothing pushed), but stage plot export and stage layers have
-gaps in real-world use and are un-ticked in ROADMAP.md until a
-follow-up lands. No v1.1.0 tag yet.
+As of 2026-10-07: **v1.5.5 hardening** on branch `v1.5.5-hardening`,
+cut from `v1.5-focus-morphing` at `32dbd1e` (2026-10-06), nothing
+pushed. Fixes only: correctness, thread-safety and lifetime bugs plus
+test/env infra, eleven groups G1-G11, one commit each; plan, gate rules
+and commit hashes in `docs/v1.5.5-hardening-plan.md`, done-notes and
+the deferred structural items in ROADMAP.md v1.5.5. Its ground rules
+still apply to any follow-up here: no rendered-pixel changes (win32
+goldens cannot be regenerated on Linux), export hash changes are named
+in the CHANGELOG. v1.5.0 is prepped but NOT tagged (last two gate
+checks need rig access) and `_version.py` still reads `1.5.0`. The
+dated notes below are history, oldest first; where one disagrees with
+a later note or the code, the later one wins.
+
+**v1.1 reopened (2026-07-06):** all 8 items shipped a first pass on
+branch `v1.1-stage-rig-data`, but stage plot export and stage layers
+had gaps in real-world use. Closed 2026-07-14 with those follow-ups
+moved to v1.6 "Stage refinement".
 
 **Direction change (July 2026):** the QLC+ extension route was
 rejected upstream; the app continues as a standalone tool. Native
@@ -126,9 +138,10 @@ and demo `.gdtf` files are authored in-repo.
 all fixture-definition discovery/parsing/caching unified in
 `utils/fixture_library.py` (canonical `FixtureDefinition`, byte-identical
 export proven via `scripts/export_hash_check.py`; needs PYTHONHASHSEED=0
-+ seeded RNG because `preset_scenes_to_xml` samples the global RNG
-unseeded). Phase 1 - `utils/gdtf_loader.py` transpiles .gdtf (pygdtf)
-into the same canonical model; `gdtf_fixtures/` scanned first so GDTF
+only - the export draws from its own `random.Random` instances since
+v1.5.5 G3, `tests/unit/test_rng_determinism.py`). Phase 1 -
+`utils/gdtf_loader.py` transpiles .gdtf (pygdtf) into the same
+canonical model; `gdtf_fixtures/` scanned first so GDTF
 wins identity clashes. Phase 2 - `Fixture.definition_source` +
 `gdtf_fixture_type_id` (YAML schema bump, defaults keep old configs
 loading), companion .qxf generation on export for fixtures QLC+ lacks.

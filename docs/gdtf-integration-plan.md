@@ -239,6 +239,8 @@ round-trips.
       plus a pinned RNG seed, because set order affects definition load
       order and `preset_scenes_to_xml` samples the global RNG unseeded);
       no test regressions (948 unit/integration + 33 visual green).
+      Since v1.5.5 the export uses its own generators and the check
+      needs `PYTHONHASHSEED=0` only (`tests/unit/test_rng_determinism.py`).
 
 ### Phase 1: GDTF definition import (includes the spike deliverable)
 
