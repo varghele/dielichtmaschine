@@ -98,12 +98,15 @@ ArtNet playback, PyQt6 + ModernGL, developed primarily on Windows.
 
 ## Current state (update when it changes)
 
-As of 2026-10-07: **v1.5.5 hardening** on branch `v1.5.5-hardening`,
-cut from `v1.5-focus-morphing` at `32dbd1e` (2026-10-06), nothing
-pushed. Fixes only: correctness, thread-safety and lifetime bugs plus
-test/env infra, eleven groups G1-G11, one commit each; plan, gate rules
-and commit hashes in `docs/v1.5.5-hardening-plan.md`, done-notes and
-the deferred structural items in ROADMAP.md v1.5.5. Its ground rules
+As of 2026-10-12: **v1.5.5 hardening** on branch `v1.5.5-hardening`,
+cut from `v1.5-focus-morphing` at `32dbd1e` (2026-10-06), PUSHED to
+origin and CI green on both jobs. Fixes only: correctness,
+thread-safety and lifetime bugs plus test/env infra, eleven groups
+G1-G11 (Linux run, 2026-10-07) and a Windows follow-up (2026-10-12, see
+the last dated note); plan, gate rules, commit hashes and the open
+handover checklist (desk checks, five product decisions, unfixed bugs)
+in `docs/v1.5.5-hardening-plan.md`, done-notes and the deferred
+structural items in ROADMAP.md v1.5.5. Its ground rules
 still apply to any follow-up here: no rendered-pixel changes (win32
 goldens cannot be regenerated on Linux), export hash changes are named
 in the CHANGELOG. v1.5.0 is prepped but NOT tagged (last two gate
@@ -734,3 +737,32 @@ tilt ~7 degrees against a +/-106 degree sweep at default amplitude, so
 it just looks unchanged; and Tools > Convert Movement to World Targets
 finds nothing to convert in ANY project we have (all blocks already
 carry a target), so that gate item is closed as not-exercisable.
+
+**v1.5.5 Windows follow-up (2026-10-12, same branch, pushed):** the
+handover's Windows checks passed (unit, e2e, visual with every win32
+golden matching; demo export hashes changed exactly as G5 predicted)
+and four leftovers were fixed: per-client send lock in the visualizer
+feed (`utils/tcp/server.py`, a client registers under its lock so its
+config precedes any update), the orientation preview releasing every
+buffer + VAO of its fixture geometry on a type change, capabilities no
+longer caching the not-found default, and ~720 lines of dead code out
+of `shows_to_xml.py`. CI was red on the branch since 2026-10-07 and is
+green now. Traps learned: (1) the Windows OFFSCREEN platform hands back
+a QOpenGLContext wrapper but never initialises a QOpenGLWidget
+(`isValid()` False, initializeGL never runs) - GL widget tests must
+skip on that, not on `context() is None`; this desk DOES have a real
+standalone moderngl context (GL 3.3) for real-GL tests. (2) Compare
+export hashes base vs head on ONE machine: the desk's user GDTF dir and
+gitignored `gdtf_fixtures/` shadow definitions, so absolute hashes
+differ from Linux, and a git worktree lacks `gdtf_fixtures/` (swap the
+old file into the main tree instead). (3) On Mesa (Ubuntu CI) moderngl's
+`simple_framebuffer` leaves GL_INVALID_OPERATION behind; drain
+`ctx.error` before asserting on the code under test. (4) Python locks
+are not fair: a concurrency test whose writers spin on a lock starves
+the other thread on a slow runner - bound the writers. (5) Running
+several GL test processes at once can crash the Windows GL driver
+inside `create_standalone_context` (access violation); normal `-n auto`
+runs never hit it. Open: one Windows e2e run died silently after four
+`test_dirty_marker.py` tests (exit 1, no traceback; rerun and 12 local
+runs green); the Windows e2e step now runs `-v` so a repeat names the
+test.
