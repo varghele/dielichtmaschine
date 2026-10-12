@@ -3,7 +3,7 @@ Synchronization bridge between Qt PlaybackEngine and sounddevice AudioEngine.
 Ensures sample-accurate audio playback synchronized with UI timeline.
 """
 
-from PyQt6.QtCore import QObject, pyqtSignal, QTimer
+from PyQt6.QtCore import QObject, pyqtSignal
 from typing import List
 from .audio_engine import AudioEngine
 from .audio_mixer import AudioMixer
@@ -28,11 +28,13 @@ class PlaybackSynchronizer(QObject):
         # Set position callback from audio engine
         self.audio_engine.set_position_callback(self._on_audio_position_update)
 
-        # Drift compensation
-        self._last_qt_position = 0.0
-        self._drift_check_timer = QTimer()
-        self._drift_check_timer.timeout.connect(self._check_drift)
-        self._drift_check_timer.setInterval(500)  # Check every 500ms
+        # No drift compensation: the Shows and Structure tabs read the
+        # playhead from the audio engine (get_accurate_position) on every
+        # UI tick, so the audio clock is the only clock. The old 500 ms
+        # "drift" check compared the audio position with its own reading
+        # half a second earlier, fired on every tick and fed a signal
+        # nothing listened to; removed 2026-10-12. A real audio vs
+        # wall-clock drift monitor belongs to the v1.8 conductor clock.
 
         # Playback state
         self._is_playing = False
@@ -48,8 +50,6 @@ class PlaybackSynchronizer(QObject):
                 print(f"Audio engine failed to start playback at position {position}")
                 return False
             self._is_playing = True
-            self._last_qt_position = position
-            self._drift_check_timer.start()
             return True
 
         except Exception as e:
@@ -61,7 +61,6 @@ class PlaybackSynchronizer(QObject):
         try:
             self.audio_engine.pause_playback()
             self._is_playing = False
-            self._drift_check_timer.stop()
 
         except Exception as e:
             print(f"Error pausing audio playback: {e}")
@@ -71,8 +70,6 @@ class PlaybackSynchronizer(QObject):
         try:
             self.audio_engine.stop_playback()
             self._is_playing = False
-            self._last_qt_position = 0.0
-            self._drift_check_timer.stop()
 
         except Exception as e:
             print(f"Error stopping audio playback: {e}")
@@ -81,7 +78,6 @@ class PlaybackSynchronizer(QObject):
         """Handle seek request from PlaybackEngine"""
         try:
             self.audio_engine.seek(position)
-            self._last_qt_position = position
 
         except Exception as e:
             print(f"Error seeking audio: {e}")
@@ -150,26 +146,3 @@ class PlaybackSynchronizer(QObject):
         This emits a Qt signal to safely update the UI thread
         """
         self.position_updated.emit(position)
-
-    def _check_drift(self):
-        """Check for drift between audio and Qt timers"""
-        if not self._is_playing:
-            return
-
-        try:
-            audio_position = self.audio_engine.get_current_position()
-
-            # Calculate drift
-            drift = abs(audio_position - self._last_qt_position)
-
-            # If drift is significant (> 50ms), report it
-            if drift > 0.05:
-                # Audio position is authoritative
-                # Emit signal to update Qt position
-                self.position_updated.emit(audio_position)
-
-            # Update last known Qt position
-            self._last_qt_position = audio_position
-
-        except Exception as e:
-            print(f"Error checking drift: {e}")

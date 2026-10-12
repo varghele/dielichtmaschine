@@ -13,6 +13,12 @@ verbatim as the GitHub Release notes (see [docs/releasing.md](docs/releasing.md)
 
 ### Changed
 
+- **Audio playback no longer runs a pointless drift timer.** The audio
+  synchronizer checked every half second for "drift" by comparing the
+  audio position with its own reading from half a second earlier, which
+  always looked like drift and fed a signal nothing listened to. The
+  playhead already follows the audio clock directly, so the check and
+  its timer are gone; playback is unchanged.
 - **A hanging test fails instead of stalling the run.** Every test gets
   a 120 second budget (new test dependency `pytest-timeout`); one that
   blows it, for example on a modal dialog nobody closes, has every

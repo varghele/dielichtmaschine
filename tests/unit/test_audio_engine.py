@@ -198,26 +198,32 @@ class TestPlaybackSynchronizer:
         from audio.playback_synchronizer import PlaybackSynchronizer
         sync = PlaybackSynchronizer(engine, AudioMixer())
         yield sync
-        sync._drift_check_timer.stop()
+        sync.on_stop_requested()
 
     def test_wires_mixer_and_position_callback_into_the_engine(self, sync, engine):
         assert engine.mixer is sync.audio_mixer
         assert engine._position_callback == sync._on_audio_position_update
 
-    def test_play_pause_stop_drive_engine_and_drift_timer(self, sync, engine):
+    def test_play_pause_stop_drive_the_engine(self, sync, engine):
         assert sync.on_play_requested(1.5)
         assert engine.is_playing()
-        assert sync._drift_check_timer.isActive()
         assert sync.get_accurate_position() == pytest.approx(1.5)
 
         sync.on_pause_requested()
         assert not engine.is_playing()
-        assert not sync._drift_check_timer.isActive()
 
         sync.on_play_requested(0.0)
         sync.on_stop_requested()
         assert sync.get_accurate_position() == 0.0
-        assert not sync._drift_check_timer.isActive()
+
+    def test_no_drift_timer_runs_during_playback(self, sync, engine):
+        """The drift check is gone (2026-10-12): the playhead reads the
+        audio clock directly, so nothing ticks besides the engine."""
+        from PyQt6.QtCore import QTimer
+        assert sync.on_play_requested(0.0)
+        assert not hasattr(sync, "_check_drift")
+        assert sync.findChildren(QTimer) == []
+        assert not any(isinstance(v, QTimer) for v in vars(sync).values())
 
     def test_play_reports_failure_when_engine_cannot_start(self, qapp, fake_sd):
         from audio.audio_mixer import AudioMixer
@@ -225,7 +231,6 @@ class TestPlaybackSynchronizer:
         uninitialised = AudioEngine()
         sync = PlaybackSynchronizer(uninitialised, AudioMixer())
         assert sync.on_play_requested(0.0) is False
-        assert not sync._drift_check_timer.isActive()
 
     def test_seek_forwards_to_the_engine(self, sync, engine):
         sync.on_play_requested(0.0)
