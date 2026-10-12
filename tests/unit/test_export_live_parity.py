@@ -27,10 +27,6 @@ Intentional differences, NOT covered here:
   tests run in 4/4.
 - Export intensity overrides (group_max_intensity) scale the export
   only; the tests run at the default 255.
-- Waterfall on a NON-segmented fixture: native renders it static (the
-  rudiment cascades through segments), the export keeps its historical
-  cross-fixture cascade. Which one is right is an open product
-  decision, so both behaviours are pinned below.
 - Segmented fixtures: the export renders per-segment sparkle and
   waterfall on RGB pixel bars only. Other effects on bars, and every
   effect on dimmer-only segment fixtures (sunstrips), get one value per
@@ -120,8 +116,11 @@ N_FIXTURES = 5
 
 DIMMER_CASES = [
     dict(effect_type=name) for name in sorted(DIMMER_REGISTRY)
-    if name != "waterfall"   # documented divergence, pinned below
 ] + [
+    # Non-segmented waterfall cascades across the fixtures on both
+    # sides (decision 2026-10-12; native used to render it static).
+    dict(effect_type="waterfall", direction="up"),
+    dict(effect_type="waterfall", effect_speed="2"),
     dict(effect_type="pulse", phase_offset_per_fixture=True),
     dict(effect_type="fade", direction="out"),
     dict(effect_type="cascade", build_fraction=0.4),
@@ -214,24 +213,22 @@ def test_unknown_effect_exports_static_like_native(dimmer_lane):
     assert _native_dimmer(manager, fixtures[0], block, 1.0, 0, 5) == 200
 
 
-class TestNonSegmentedWaterfallDivergence:
-    """Pinned both ways until the product decision lands (see the
-    module docstring): native renders a non-segmented waterfall
-    static, the export keeps its cross-fixture cascade."""
+class TestNonSegmentedWaterfall:
+    """Decision 2026-10-12: a waterfall on fixtures without segments
+    sweeps across the lane's fixtures, natively AND in the export (the
+    parity cases above compare them value for value). Native used to
+    render it static while the export cascaded with a pseudo-random
+    phase per fixture."""
 
-    def test_native_is_static(self, dimmer_lane):
+    def test_native_cascades_across_fixtures(self, dimmer_lane):
         fixtures, manager, _, _ = dimmer_lane
         block = _dimmer_block(effect_type="waterfall")
-        for time_s in TIMES[:4]:
-            for idx, fixture in enumerate(fixtures):
-                assert _native_dimmer(manager, fixture, block, time_s,
-                                      idx, len(fixtures)) == 200
-
-    def test_export_cascades_across_fixtures(self):
-        block = _dimmer_block(effect_type="waterfall")
-        values = {sample_dimmer_at_time(1.0, [block], idx, 5, 0, 1)
-                  for idx in range(5)}
-        assert len(values) > 1
+        levels = [_native_dimmer(manager, fixture, block, 0.0, idx,
+                                 len(fixtures))
+                  for idx, fixture in enumerate(fixtures)]
+        # direction "down" starts on the last fixture at full level.
+        assert levels[-1] == 200
+        assert len(set(levels)) == len(levels)
 
 
 # ── dimmer: segmented pixel bars (sparkle + waterfall) ───────────────

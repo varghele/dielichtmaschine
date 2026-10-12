@@ -43,6 +43,17 @@ verbatim as the GitHub Release notes (see [docs/releasing.md](docs/releasing.md)
 
 ### Fixed
 
+- **Waterfall now cascades on pars, washes and movers.** On fixtures
+  without segments the app played a waterfall as a plain static look,
+  although the Waterfall riff promises a cascade across the group and
+  autogen puts it on par groups too; the `.qxw` export did cascade, but
+  with a jumbled, per-fixture offset instead of a sweep. Both now run
+  one clean sweep across the lane's fixtures, one beat per fixture at
+  speed 1, with the same fading tail as on a pixel bar ("down" starts
+  at the last fixture of the lane, "up" at the first). Live output
+  changes wherever a waterfall sits on fixtures without segments, and
+  so do exports of shows that use one; the demo shows and rigs do not,
+  their exports are unchanged. Pixel bars are unchanged.
 - **`conda env create -f environment.yml` solves.** The file asked
   conda-forge for packages it does not carry under those names: `pyqt`
   there is the Qt5 binding, and the audio libraries are published as
@@ -92,10 +103,8 @@ verbatim as the GitHub Release notes (see [docs/releasing.md](docs/releasing.md)
   each QLC+ step, and throb, fade and cascade get enough steps to show
   their shape. A movement block whose spot name the project does not
   know now aims at its target point in the export too, as it already
-  did in the app. One difference is kept on purpose for now: a
-  waterfall on fixtures without segments still cascades across the
-  fixtures in the export, where the app shows it static. A new test
-  compares the export against native playback effect by effect.
+  did in the app. A new test compares the export against native
+  playback effect by effect.
   Exports of shows using these effects change accordingly: all five
   demo shows (`demos/shows/`) export differently, while the demo rigs
   checked by `scripts/export_hash_check.py` (no shows) are unchanged.

@@ -1,7 +1,6 @@
 # unified_sequence.py
 # Functions for creating unified QLC+ sequences that combine all effect types
 
-import hashlib
 import math
 import xml.etree.ElementTree as ET
 from typing import List, Dict, Any, Optional, Tuple
@@ -245,59 +244,6 @@ def _run_dimmer_effect(ctx: DimmerContext, effect_type: str) -> DimmerResult:
     return effect_fn(ctx)
 
 
-def _cross_fixture_waterfall_multiplier(
-    time_s: float,
-    active_block,
-    fixture_idx: int,
-    total_fixtures: int,
-    bpm: float
-) -> float:
-    """Export-only waterfall for NON-segmented fixtures: the light
-    cascades across the fixtures of the lane. The native renderer
-    draws a non-segmented waterfall static (the rudiment cascades
-    through segments); this historical export behaviour is kept until
-    that product decision is made (tests/unit/test_export_live_parity.py
-    pins both sides)."""
-    if total_fixtures <= 1:
-        return 1.0
-
-    time_in_block = time_s - active_block.start_time
-
-    # Each fixture gets one beat at speed 1
-    seconds_per_beat = 60.0 / bpm
-    time_per_step = seconds_per_beat / parse_speed(active_block.effect_speed)
-
-    # Per-fixture offset (no fixture name here), slowly drifting
-    seed_str = f"waterfall_fixture_{fixture_idx}"
-    name_hash = int(hashlib.md5(seed_str.encode()).hexdigest()[:8], 16)
-    base_offset = (name_hash % 1000) / 1000.0  # 0.0 to 1.0
-
-    drift_period = 30.0
-    drift_phase = (time_s / drift_period) * 2 * math.pi
-    drift_seed = (name_hash % 997) / 997.0 * 2 * math.pi
-    drift_amount = 0.3 * math.sin(drift_phase + drift_seed)  # +/- 0.3 cycle drift
-
-    total_offset = base_offset + drift_amount
-
-    # Full cycle time = total_fixtures beats (one per fixture)
-    cycle_time = time_per_step * total_fixtures
-    cycle_progress = (time_in_block / cycle_time + total_offset) % 1.0
-    head_position = cycle_progress * total_fixtures
-
-    # "down": head moves from the last fixture to the first, "up" the reverse
-    direction = getattr(active_block, 'direction', 'down')
-    if direction == "down":
-        head_position = (total_fixtures - 1) - head_position
-        raw_distance = fixture_idx - head_position
-    else:
-        raw_distance = head_position - fixture_idx
-
-    # Wrapped distance for a seamless loop, exponential tail
-    circular_distance = raw_distance % total_fixtures
-    normalized_dist = circular_distance / total_fixtures
-    return math.exp(-1.5 * normalized_dist)
-
-
 def sample_dimmer_at_time(
     time_s: float,
     dimmer_blocks: List,
@@ -344,11 +290,6 @@ def sample_dimmer_at_time(
 
     base_intensity = int(int(active_block.intensity) * max_intensity / 255)
     effect_type = active_block.effect_type
-
-    if effect_type == "waterfall":
-        multiplier = _cross_fixture_waterfall_multiplier(
-            time_s, active_block, fixture_idx, total_fixtures, bpm)
-        return int(base_intensity * multiplier)
 
     if fixture_name is None:
         fixture_name = f"fixture_{fixture_idx}"
