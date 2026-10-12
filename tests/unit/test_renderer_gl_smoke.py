@@ -111,23 +111,36 @@ def test_set_depth_mask_reaches_gl(ctx):
         fbo.release()
 
 
+def _drain_gl_errors(ctx) -> None:
+    """Clear pending GL error flags. The context is shared by the whole
+    module, and ``ctx.error`` (glGetError) reports a flag left by ANY
+    earlier call, so a check must start from a clean state."""
+    for _ in range(16):  # glGetError returns one flag per call
+        if ctx.error == "GL_NO_ERROR":
+            return
+
+
 class TestGizmo:
     def test_builds_draws_and_releases(self, ctx):
         from visualizer.renderer.gizmo import CoordinateGizmo
         size = 96
+        _drain_gl_errors(ctx)
         fbo = ctx.simple_framebuffer((size, size))
         fbo.use()
         fbo.clear(0.0, 0.0, 0.0, 1.0)
+        assert ctx.error == "GL_NO_ERROR", "framebuffer setup"
         gizmo = CoordinateGizmo(ctx)
         try:
+            assert ctx.error == "GL_NO_ERROR", "gizmo build"
             assert set(gizmo.letter_vaos) == {"X", "Y", "Z"}
             view = glm.lookAt(glm.vec3(3, 3, 3), glm.vec3(0), glm.vec3(0, 1, 0))
             gizmo.render(view, size, size)
+            assert ctx.error == "GL_NO_ERROR", "gizmo render"
             pixels = np.frombuffer(fbo.read(components=3), dtype=np.uint8)
             assert (pixels.reshape(-1, 3).max(axis=1) > 0).any()
             # Degenerate viewport (minimised window) must not raise.
             gizmo.render(view, size, 0)
-            assert ctx.error == "GL_NO_ERROR"
+            assert ctx.error == "GL_NO_ERROR", "degenerate-viewport render"
         finally:
             gizmo.release()
             fbo.release()
