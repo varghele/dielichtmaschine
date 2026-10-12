@@ -115,9 +115,13 @@ def _drain_gl_errors(ctx) -> None:
     """Clear pending GL error flags. The context is shared by the whole
     module, and ``ctx.error`` (glGetError) reports a flag left by ANY
     earlier call, so a check must start from a clean state."""
+    seen = []
     for _ in range(16):  # glGetError returns one flag per call
-        if ctx.error == "GL_NO_ERROR":
+        error = ctx.error
+        if error == "GL_NO_ERROR":
             return
+        seen.append(error)
+    raise AssertionError(f"GL error flag does not clear: {seen[:4]}")
 
 
 class TestGizmo:
@@ -126,9 +130,11 @@ class TestGizmo:
         size = 96
         _drain_gl_errors(ctx)
         fbo = ctx.simple_framebuffer((size, size))
+        assert ctx.error == "GL_NO_ERROR", "framebuffer create"
         fbo.use()
+        assert ctx.error == "GL_NO_ERROR", "framebuffer use"
         fbo.clear(0.0, 0.0, 0.0, 1.0)
-        assert ctx.error == "GL_NO_ERROR", "framebuffer setup"
+        assert ctx.error == "GL_NO_ERROR", "framebuffer clear"
         gizmo = CoordinateGizmo(ctx)
         try:
             assert ctx.error == "GL_NO_ERROR", "gizmo build"
