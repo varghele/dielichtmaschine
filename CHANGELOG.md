@@ -106,6 +106,8 @@ verbatim as the GitHub Release notes (see [docs/releasing.md](docs/releasing.md)
   pan/tilt conversion also no longer remembers "not found" at all, so a
   mover whose definition arrives mid-session aims correctly as soon as
   it is there.
+  Fixture capabilities now follow the pan/tilt conversion in never
+  remembering "not found" either.
 - **A group only offers what its fixtures' patched mode can do.** The
   colour, movement, dimmer and special sublanes a group gets, and the
   colour wheel offered in the colour editor, were worked out from every

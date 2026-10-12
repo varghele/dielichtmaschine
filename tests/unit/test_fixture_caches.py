@@ -131,6 +131,37 @@ class TestInvalidateFixtureCaches:
 
 
 # ---------------------------------------------------------------------------
+# get_capabilities_for_fixture never memoizes its safe default
+# (v1.5.5 handover: it cached the "not found" default, so only the full
+# invalidation could heal it)
+# ---------------------------------------------------------------------------
+
+class TestCapabilitiesFailureCaching:
+    def test_unresolved_definition_is_not_cached(self, library):
+        from utils.fixture_capabilities import (
+            Chassis, get_capabilities_for_fixture)
+        fixture = _fx(MH, "14 Channel")
+        assert get_capabilities_for_fixture(fixture).chassis == Chassis.OTHER
+
+        # Only the LIBRARY cache drops: capabilities must pick the
+        # definition up on their own, like the yoke below.
+        library.publish()
+        fl.clear_library_cache()
+
+        assert get_capabilities_for_fixture(fixture).chassis == Chassis.MOVING_YOKE
+
+    def test_resolved_result_is_cached(self, bundled_only, monkeypatch):
+        from utils import fixture_capabilities as fc
+        fixture = _fx(MH, "14 Channel")
+        first = fc.get_capabilities_for_fixture(fixture)
+        calls = []
+        monkeypatch.setattr(fc, "_find_and_parse_qxf",
+                            lambda *a: calls.append(a))
+        assert fc.get_capabilities_for_fixture(fixture) is first
+        assert calls == [], "a resolved fixture is a pure cache hit"
+
+
+# ---------------------------------------------------------------------------
 # fixture_yoke never memoizes an unresolved definition
 # ---------------------------------------------------------------------------
 
