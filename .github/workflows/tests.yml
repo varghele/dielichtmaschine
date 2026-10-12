@@ -108,7 +108,9 @@ jobs:
         run: python -m pytest tests/unit -n auto -q
 
       - name: End-to-end suite
-        run: python -m pytest tests/e2e -q
+        # -v names each test, so a silent native crash (seen once,
+        # 2026-10-12) shows which test it hit.
+        run: python -m pytest tests/e2e -v
 
       # tests/visual is deliberately NOT run here: the win32 goldens
       # pin the dev machine's exact Qt raster output, and requirements
