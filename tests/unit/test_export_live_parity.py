@@ -22,9 +22,6 @@ Intentional differences, NOT covered here:
   steps (calculate_unified_step_grid), so between two steps the export
   holds a value the native renderer keeps animating. Parity is checked
   at the sample instants only.
-- Time signature: the exporter scales movement cycles to the song's
-  bar length (signature-aware), the native renderer assumes 4/4. The
-  tests run in 4/4.
 - Export intensity overrides (group_max_intensity) scale the export
   only; the tests run at the default 255.
 - Sparkle on a NON-segmented fixture with several dimmer channels:
@@ -403,6 +400,36 @@ def test_exported_movement_matches_native(mover_lane, case):
             exported = sample_movement_at_time(
                 time_s, [block], idx, len(fixtures), 0, 1, bpm=120.0,
                 signature="4/4")
+            if tuple(exported) != tuple(native):
+                mismatches.append((time_s, idx, exported, native))
+    assert not mismatches, f"(t, fixture, export, native): {mismatches[:6]}"
+
+
+@pytest.mark.parametrize("signature", ["2/4", "3/4", "6/8", "7/8"])
+@pytest.mark.parametrize("effect", ["circle", "fan", "figure_8"])
+def test_exported_movement_ignores_the_meter_like_native(
+        mover_lane, signature, effect):
+    """Decision 2026-10-12: movement counts in beats (4 per bar unit)
+    whatever the part's time signature, as native playback always did.
+    The export used to measure the bar in the part's meter, so a 2/4
+    part exported its movement twice as fast as the rig played it."""
+    fixtures, manager = mover_lane
+    block = _movement_block(effect_type=effect)
+    mismatches = []
+    for time_s in TIMES:
+        for idx, fixture in enumerate(fixtures):
+            fmap = manager.fixture_maps[fixture.name]
+            manager.clear_all_dmx()
+            manager._apply_movement_block(fmap, block, time_s, idx,
+                                          len(fixtures))
+            pan_u, pan_ch = fmap.get_absolute_address(fmap.pan_channels[0])
+            tilt_u, tilt_ch = fmap.get_absolute_address(
+                fmap.tilt_channels[0])
+            native = (manager.dmx_state[pan_u][pan_ch],
+                      manager.dmx_state[tilt_u][tilt_ch])
+            exported = sample_movement_at_time(
+                time_s, [block], idx, len(fixtures), 0, 1, bpm=120.0,
+                signature=signature)
             if tuple(exported) != tuple(native):
                 mismatches.append((time_s, idx, exported, native))
     assert not mismatches, f"(t, fixture, export, native): {mismatches[:6]}"

@@ -43,6 +43,15 @@ verbatim as the GitHub Release notes (see [docs/releasing.md](docs/releasing.md)
 
 ### Fixed
 
+- **Movement in the `.qxw` export keeps the rig's speed in any time
+  signature.** A movement's speed counts in beats on the rig (4 beats
+  per bar unit, whatever the meter), but the export measured the bar in
+  the song part's time signature, so in a 2/4 part the exported circle,
+  fan or figure-8 ran twice as fast as on the rig (and 3/4, 6/8 or 7/8
+  parts were off too). The export now counts beats the same way. Only
+  shows with movement in parts that are not 4/4 export differently; the
+  demo shows and rigs are all 4/4 and unchanged. Live output is
+  unchanged.
 - **Pixel bars and sunstrips animate their cells in the `.qxw` export.**
   The app runs every dimmer effect along a bar's or sunstrip's cells (a
   chase runs down the bar, a fill fills it, a pulse ripples along it),

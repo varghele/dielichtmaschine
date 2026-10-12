@@ -27,6 +27,20 @@ def parse_speed(speed: str) -> float:
 MOVEMENT_CYCLES_PER_BAR = 0.25
 
 
+# Movement counts time in BEATS: one "bar" of the cycle rate above is
+# always 4 beats, whatever the song part's time signature (decision
+# 2026-10-12). Native playback always worked this way; the export used
+# to measure the bar in the part's meter, so a 2/4 part exported its
+# movement twice as fast as the rig played it. Dimmer effects count in
+# beats too.
+MOVEMENT_BEATS_PER_BAR = 4
+
+
+def movement_seconds_per_bar(bpm: float) -> float:
+    """Length of the movement cycle-rate "bar" at ``bpm`` (4 beats)."""
+    return 60.0 / bpm * MOVEMENT_BEATS_PER_BAR
+
+
 def movement_total_cycles(block_duration: float, seconds_per_bar: float, speed_multiplier: float) -> float:
     """Number of full movement-shape cycles across a movement block.
 

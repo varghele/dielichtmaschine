@@ -12,7 +12,7 @@ from effects import (
     DIMMER_REGISTRY, MOVEMENT_REGISTRY, DimmerContext, DimmerResult,
     MovementContext, parse_speed,
 )
-from effects.timing import movement_total_cycles
+from effects.timing import movement_seconds_per_bar, movement_total_cycles
 
 
 def _map_rgb_to_color_wheel(r: int, g: int, b: int) -> int:
@@ -498,11 +498,10 @@ def sample_movement_at_time(
 
     speed_mult = parse_speed(active_block.effect_speed)
 
-    # Calculate timing based on BPM (matches ArtNet implementation)
-    seconds_per_beat = 60.0 / bpm
-    numerator, denominator = map(int, signature.split('/'))
-    beats_per_bar = (numerator * 4) / denominator
-    seconds_per_bar = seconds_per_beat * beats_per_bar
+    # Movement counts in beats (4 per bar unit) whatever the meter, the
+    # same rule native playback uses (effects.timing); ``signature`` no
+    # longer changes the cycle rate.
+    seconds_per_bar = movement_seconds_per_bar(bpm)
 
     # Calculate time within block
     block_duration = active_block.end_time - active_block.start_time

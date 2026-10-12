@@ -11,6 +11,7 @@ from utils.orientation import calculate_pan_tilt, pan_tilt_to_dmx
 from effects import (
     DimmerContext, DimmerResult, MovementContext, MovementResult,
     DIMMER_REGISTRY, MOVEMENT_REGISTRY, parse_speed, get_bpm, movement_total_cycles,
+    movement_seconds_per_bar,
 )
 
 # Debug flag - set to False to disable verbose prints (improves performance significantly)
@@ -903,8 +904,7 @@ class DMXManager:
         speed_multiplier = parse_speed(block.effect_speed)
         bpm = get_bpm(self.song_structure, current_time)
 
-        seconds_per_beat = 60.0 / bpm
-        seconds_per_bar = seconds_per_beat * 4
+        seconds_per_bar = movement_seconds_per_bar(bpm)
         total_cycles = movement_total_cycles(block_duration, seconds_per_bar, speed_multiplier)
 
         if block_duration > 0:
