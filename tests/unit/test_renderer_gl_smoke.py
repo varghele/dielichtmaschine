@@ -130,11 +130,13 @@ class TestGizmo:
         size = 96
         _drain_gl_errors(ctx)
         fbo = ctx.simple_framebuffer((size, size))
-        assert ctx.error == "GL_NO_ERROR", "framebuffer create"
+        # On Mesa (the Ubuntu CI job) moderngl's own framebuffer creation
+        # leaves GL_INVALID_OPERATION behind (pinned by splitting this
+        # setup per call on CI, 2026-10-12). That is test scaffolding, not
+        # the gizmo: clear it, then hold every gizmo call to a clean flag.
         fbo.use()
-        assert ctx.error == "GL_NO_ERROR", "framebuffer use"
         fbo.clear(0.0, 0.0, 0.0, 1.0)
-        assert ctx.error == "GL_NO_ERROR", "framebuffer clear"
+        _drain_gl_errors(ctx)
         gizmo = CoordinateGizmo(ctx)
         try:
             assert ctx.error == "GL_NO_ERROR", "gizmo build"

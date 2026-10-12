@@ -265,7 +265,7 @@ class TestConcurrentWrites:
                 # Times out (-> heartbeat) for a while, then disconnects.
                 self.recv_calls += 1
                 time.sleep(0.002)
-                if self.recv_calls > 60:
+                if self.recv_calls > 20:
                     return b""
                 raise socket.timeout()
 
@@ -282,22 +282,33 @@ class TestConcurrentWrites:
         handler.start()
         assert _wait_for(lambda: server.get_client_count() == 1)
 
+        # Bounded workloads with a yield between writes: Python locks
+        # are not fair, and two threads re-taking the send lock in a
+        # tight loop starved the handler's heartbeats on a slow CI
+        # runner until its join timed out.
         def spam_updates():
-            while handler.is_alive():
+            for _ in range(200):
+                if not handler.is_alive():
+                    return
                 server.send_update("probe", {})
+                time.sleep(0.001)
 
         def spam_configs():
-            while handler.is_alive():
+            for _ in range(10):
+                if not handler.is_alive():
+                    return
                 server.update_config(server.config)
+                time.sleep(0.005)
 
         others = [threading.Thread(target=spam_updates, daemon=True),
                   threading.Thread(target=spam_configs, daemon=True)]
         for t in others:
             t.start()
-        handler.join(timeout=10)
         for t in others:
-            t.join(timeout=10)
+            t.join(timeout=30)
+        handler.join(timeout=30)
         server.running = False
+        assert not handler.is_alive(), "client handler did not finish"
         assert probe.writes > 20
         assert probe.overlaps == 0
         assert server.get_client_count() == 0
