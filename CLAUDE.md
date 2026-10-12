@@ -102,10 +102,10 @@ As of 2026-10-12: **v1.5.5 hardening** on branch `v1.5.5-hardening`,
 cut from `v1.5-focus-morphing` at `32dbd1e` (2026-10-06), PUSHED to
 origin and CI green on both jobs. Fixes only: correctness,
 thread-safety and lifetime bugs plus test/env infra, eleven groups
-G1-G11 (Linux run, 2026-10-07) and a Windows follow-up (2026-10-12, see
-the last dated note); plan, gate rules, commit hashes and the open
-handover checklist (desk checks, five product decisions, unfixed bugs)
-in `docs/v1.5.5-hardening-plan.md`, done-notes and the deferred
+G1-G11 (Linux run, 2026-10-07) and a Windows follow-up plus the five
+product decisions (2026-10-12, see the last dated note); plan, gate
+rules, commit hashes and the open handover checklist (desk checks,
+unfixed bugs, cleanup) in `docs/v1.5.5-hardening-plan.md`, done-notes and the deferred
 structural items in ROADMAP.md v1.5.5. Its ground rules
 still apply to any follow-up here: no rendered-pixel changes (win32
 goldens cannot be regenerated on Linux), export hash changes are named
@@ -766,3 +766,35 @@ runs never hit it. Open: one Windows e2e run died silently after four
 `test_dirty_marker.py` tests (exit 1, no traceback; rerun and 12 local
 runs green); the Windows e2e step now runs `-v` so a repeat names the
 test.
+
+**v1.5.5 product decisions (2026-10-12, same branch, pushed, CI green
+at `5ae1b3b`):** all five handover decisions were made and shipped
+(done-notes in ROADMAP v1.5.5 and the handover): (1) a waterfall on
+segment-less fixtures is a coherent sweep across the lane, natively
+and in the export (the export's hash-jitter multiplier is gone); (2)
+the export runs every dimmer effect per segment on pixel bars and
+sunstrips, classified like native (`_segmented_dimmer_plan` in
+`utils/to_xml/unified_sequence.py`; four demo show exports changed,
+named in the CHANGELOG); (3) movement counts in beats whatever the
+meter (`effects.timing.movement_seconds_per_bar`, export now matches
+native); (4) the colour editor has an explicit RGB / WHEEL output
+switch, locked to WHEEL for groups without RGB
+(`utils/fixture_utils.group_has_rgb`); (5) the playback
+synchronizer's self-comparing drift check is removed (a real drift
+monitor is a v1.8 item). Also: `FluxPlot3DWidget` is kept unwired on
+purpose (`docs/autofuture.md`, v1.10), and `docs/bug-reports.md` now
+holds ONE open bug, the CSV rig sheet dropping secondary groups
+(strict xfail in `test_fixture_io.py`). Second open CI intermittent:
+Ubuntu `test_screensaver.py::test_grid_and_corner_marks_are_painted`
+once read a light-grey (239) background instead of SCREENSAVER_BG
+(run 38260792643 attempt 1; passes alone on both platforms, rerun
+green, cause unknown, likely xdist order). The Ubuntu unit step now
+runs `-v` so a repeat shows what ran before it on that worker. NEXT,
+from the handover checklist: the desk checks (G9 real-GL, VISUALIZER
+OPEN port flow, release.yml, merge/tag decision), then the unfixed
+bugs (GDTF auto-pull on quit, drag during playback, GL context
+recreation, CSV rig sheet, lime + default-white export gaps) and the
+cleanup items. New PC: `pip install -r requirements.txt` (pytest-timeout is in it
+and the suite's 120 s timeout needs it); the
+two untracked files in the repo root and `demos/rigs/` are scratch
+from this desk, not needed.
