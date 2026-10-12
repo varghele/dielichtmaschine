@@ -164,8 +164,10 @@ def test_engine_releases_gl_when_qt_context_is_destroyed(qapp):
             qapp.processEvents()
         e.render_timer.stop()
         context = e.context()
-        if context is None:
-            pytest.skip("platform created no Qt OpenGL context")
+        if context is None or not e.isValid():
+            # Windows offscreen hands back a context wrapper but never
+            # initialises the widget, so initializeGL (and the hook) never ran.
+            pytest.skip("platform created no usable Qt OpenGL context")
         order, mocks = _record_release_order(e, ENGINE_GL_ATTRS)
         context.aboutToBeDestroyed.emit()
         for attr, mock in mocks.items():
@@ -316,8 +318,8 @@ def test_preview_releases_gl_when_qt_context_is_destroyed(qapp):
             qapp.processEvents()
         w.render_timer.stop()
         context = w.context()
-        if context is None:
-            pytest.skip("platform created no Qt OpenGL context")
+        if context is None or not w.isValid():
+            pytest.skip("platform created no usable Qt OpenGL context")
         order, mocks = _record_release_order(w, ("beam_vao", "ctx"))
         context.aboutToBeDestroyed.emit()
         assert all(m.release.called for m in mocks.values())
