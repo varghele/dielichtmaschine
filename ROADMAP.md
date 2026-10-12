@@ -188,9 +188,9 @@ A fixes-only release on `v1.5.5-hardening`, cut from `v1.5-focus-morphing` at `3
 - [ ] **Movement time signature.** Export scales movement cycles to the song's bar length, native playback hardcodes 4 beats per bar; fixing native changes live output for non-4/4 songs.
 - [ ] **Colour dialog wheel mode.** A fixture whose patched mode has RGB and a wheel gets switched to Wheel on accept; strict xfail in `tests/unit/test_fixture_caches.py`, entry in `docs/bug-reports.md`.
 - [ ] **GDTF auto-pull on quit** can destroy a running thread; needs a cancellable Share client.
-- [ ] **Visualizer feed socket writes** from two threads at once; per-client send lock in `utils/tcp/server.py`.
+- [x] **Visualizer feed socket writes** from two threads at once; per-client send lock in `utils/tcp/server.py`. Done (`1459eab`): every write to a client holds its send lock and a new client gets its config before any update (`tests/unit/test_tcp_server.py`).
 - [ ] **Drag during playback** can render one frame with a half-edited block interval; needs UI-side snapshots.
-- [ ] **Smaller leftovers** (orientation preview VBO leak per fixture-type change, CSV rig sheet drops secondary groups, dead export code, drifted shader constants, verification steps for the Windows machine): full list in `docs/v1.5.5-hardening-plan.md` "Handover".
+- [ ] **Smaller leftovers** (CSV rig sheet drops secondary groups, drifted shader constants, the unused `FluxPlot3DWidget`, the remaining desk checks): full list in `docs/v1.5.5-hardening-plan.md` "Handover". Done so far: the Windows suite + export hash verification, the orientation preview leak (`99d2935`), the cached capabilities default (`3b9a65e`) and the dead export code (`31e913a`).
 
 **Deferred structural work** (planned, not done in the hardening pass: each needs a desk or a screen to verify, or moves pixels):
 
