@@ -194,6 +194,32 @@ def detect_fixture_group_capabilities(fixtures, fixture_definitions=None):
     return capabilities
 
 
+_RGB_PRESETS = ("IntensityRed", "IntensityGreen", "IntensityBlue")
+
+
+def group_has_rgb(fixtures, fixture_definitions=None) -> bool:
+    """True when any fixture's PATCHED mode has an RGB channel (preset
+    IntensityRed / Green / Blue). Unknown definitions count as RGB, so a
+    fixture the library cannot resolve never locks the colour editor."""
+    if fixture_definitions is None:
+        models_in_config = {(f.manufacturer, f.model) for f in fixtures}
+        fixture_definitions = get_cached_fixture_definitions(models_in_config)
+    known = False
+    for fixture in fixtures:
+        fixture_key = f"{fixture.manufacturer}_{fixture.model}"
+        if fixture_key not in fixture_definitions:
+            fixture_key = f"{fixture.manufacturer}_{fixture.model.replace(' ', '_')}"
+        fixture_def = fixture_definitions.get(fixture_key)
+        if not fixture_def:
+            continue
+        known = True
+        for channel in _mode_channels(fixture_def,
+                                      getattr(fixture, 'current_mode', None)):
+            if (channel.get('preset') or '') in _RGB_PRESETS:
+                return True
+    return not known
+
+
 def get_color_wheel_options(fixtures, fixture_definitions=None):
     """
     Extract color wheel options from fixtures that have a color wheel channel.

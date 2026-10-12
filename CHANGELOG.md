@@ -43,6 +43,16 @@ verbatim as the GitHub Release notes (see [docs/releasing.md](docs/releasing.md)
 
 ### Fixed
 
+- **The colour editor has an explicit RGB / WHEEL switch.** On a fixture
+  with both RGB and a colour wheel or macro channel (a Stairville par in
+  8-channel mode, say) the editor stored every colour as a wheel colour,
+  even when you only moved the RGB sliders, so the rig played the
+  macro's colour instead of your mix. The Color Wheel section now has an
+  Output switch: RGB drives the colour mix and leaves the wheel alone,
+  WHEEL sends the chosen slot. New blocks start on RGB; fixtures without
+  RGB channels (wheel-only movers) are locked to WHEEL as before. Blocks
+  saved as wheel colours keep that until you flip the switch, so check
+  colour blocks on RGB fixtures with a macro channel in existing shows.
 - **Movement in the `.qxw` export keeps the rig's speed in any time
   signature.** A movement's speed counts in beats on the rig (4 beats
   per bar unit, whatever the meter), but the export measured the bar in

@@ -2242,7 +2242,8 @@ class LightBlockWidget(QWidget):
             dialog = ColourBlockDialog(sublane_block,
                                        color_wheel_options=color_wheel_options,
                                        parent=self,
-                                       song=self._find_owning_song())
+                                       song=self._find_owning_song(),
+                                       has_rgb=self._group_has_rgb())
         elif sublane_type == "movement":
             from .movement_block_dialog import MovementBlockDialog
             # Pass config for spot selection
@@ -2297,6 +2298,21 @@ class LightBlockWidget(QWidget):
         blocks not (yet) in a song - e.g. mid-construction - are open."""
         song = self._find_owning_song()
         return bool(song is not None and getattr(song, "locked", False))
+
+    def _group_has_rgb(self) -> bool:
+        """Whether the lane's fixtures have RGB channels (True when the
+        group cannot be resolved, so the colour editor never locks)."""
+        try:
+            if not self.lane_widget or not self.lane_widget.config:
+                return True
+            group_name = self.lane_widget.lane.fixture_group
+            group = self.lane_widget.config.groups.get(group_name)
+            if group is None:
+                return True
+            from utils.fixture_utils import group_has_rgb
+            return group_has_rgb(group.fixtures)
+        except Exception:
+            return True
 
     def _get_color_wheel_options(self):
         """Get color wheel options from fixture group if available.

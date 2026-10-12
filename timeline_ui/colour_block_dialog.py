@@ -2,7 +2,7 @@
 # Dialog for editing colour sublane block parameters
 # Simplified version with presets, hex picker, RGBW sliders, and optional color wheel
 
-from PyQt6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QFormLayout,
+from PyQt6.QtWidgets import (QDialog, QButtonGroup, QVBoxLayout, QHBoxLayout, QFormLayout,
                              QGroupBox, QSlider, QSpinBox, QLabel,
                              QDialogButtonBox, QWidget, QPushButton,
                              QComboBox, QFrame, QGridLayout, QLineEdit,
@@ -242,7 +242,7 @@ class ColourBlockDialog(QDialog):
     ]
 
     def __init__(self, block: ColourBlock, color_wheel_options: list = None,
-                 parent=None, song=None):
+                 parent=None, song=None, has_rgb: bool = True):
         """Create the colour block dialog.
 
         Args:
@@ -253,11 +253,15 @@ class ColourBlockDialog(QDialog):
             song: Optional Song owning this block (v1.5 palette roles).
                   Provides the role list and enables EDIT PALETTE...;
                   without it, only literal + free-text roles work.
+            has_rgb: Whether the fixtures have RGB channels. Without
+                  them (wheel-only movers) the RGB / WHEEL switch is
+                  locked to WHEEL.
         """
         super().__init__(parent)
         self.block = block
         self.song = song
         self.color_wheel_options = color_wheel_options or []
+        self.has_rgb = has_rgb
 
         self.setWindowTitle("Edit Colour Block")
         self.setMinimumWidth(500)
@@ -363,6 +367,34 @@ class ColourBlockDialog(QDialog):
         if self.color_wheel_options:
             wheel_group = QGroupBox("Color Wheel")
             wheel_layout = QFormLayout()
+
+            # Explicit output mode (decision 2026-10-12): RGB drives the
+            # colour mix and leaves the wheel / macro channel alone, WHEEL
+            # sends the chosen slot. It used to be inferred (any wheel
+            # option meant WHEEL), so an RGB edit on a par with a colour
+            # macro played the macro colour instead.
+            mode_row = QWidget()
+            mode_layout = QHBoxLayout(mode_row)
+            mode_layout.setContentsMargins(0, 0, 0, 0)
+            mode_layout.setSpacing(0)
+            self.mode_group = QButtonGroup(self)
+            self.mode_group.setExclusive(True)
+            self.mode_rgb_btn = QPushButton("RGB")
+            self.mode_wheel_btn = QPushButton("WHEEL")
+            for idx, btn in enumerate((self.mode_rgb_btn, self.mode_wheel_btn)):
+                btn.setCheckable(True)
+                btn.setProperty("role", "segment")
+                btn.setProperty("divider", "true" if idx else "false")
+                btn.setFont(mono_font(8))
+                self.mode_group.addButton(btn)
+                mode_layout.addWidget(btn)
+            mode_layout.addStretch()
+            if not self.has_rgb:
+                self.mode_rgb_btn.setEnabled(False)
+                self.mode_rgb_btn.setToolTip(
+                    "These fixtures have no RGB channels")
+            self.mode_wheel_btn.setChecked(True)
+            wheel_layout.addRow("Output:", mode_row)
 
             self.wheel_combo = QComboBox()
             for name, dmx_value, hex_color in self.color_wheel_options:
@@ -630,6 +662,10 @@ class ColourBlockDialog(QDialog):
                 if dmx_value == self.block.color_wheel_position:
                     self.wheel_combo.setCurrentIndex(i)
                     break
+            wheel_mode = (self.block.color_mode == "Wheel"
+                          or not self.has_rgb)
+            (self.mode_wheel_btn if wheel_mode
+             else self.mode_rgb_btn).setChecked(True)
 
     def accept(self):
         """Save parameters to block and close."""
@@ -652,11 +688,13 @@ class ColourBlockDialog(QDialog):
             self.block.red, self.block.green, self.block.blue = (
                 float(rgb[0]), float(rgb[1]), float(rgb[2]))
 
-        # Determine color mode
+        # Colour mode: the explicit RGB / WHEEL switch decides. The slot
+        # is kept either way, so switching back to WHEEL later finds it.
         if self.color_wheel_options and hasattr(self, 'wheel_combo'):
             dmx_value, _ = self.wheel_combo.currentData()
             self.block.color_wheel_position = dmx_value
-            self.block.color_mode = "Wheel"
+            self.block.color_mode = (
+                "Wheel" if self.mode_wheel_btn.isChecked() else "RGB")
         else:
             self.block.color_mode = "RGB"
 

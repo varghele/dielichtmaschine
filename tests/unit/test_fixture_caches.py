@@ -316,16 +316,18 @@ class TestModeAwareColourWheel:
 
 
 class TestColourDialogWheelMode:
-    """The colour editor stores color_mode from the wheel options it is
-    given. Since G5 a wheel-less patched mode yields no options, so the
-    block stays RGB; the dialog half of docs/bug-reports.md entry 2
-    (a fixture WITH a wheel records 'Wheel' even after an RGB-only edit)
-    is still open and pinned as a strict xfail."""
+    """The colour editor's output mode. Since G5 a wheel-less patched
+    mode yields no wheel options, so the block stays RGB. For fixtures
+    WITH a wheel the mode used to be inferred (any wheel option meant
+    'Wheel', even after an RGB-only edit, so a par with a colour macro
+    played the macro); since 2026-10-12 an explicit RGB / WHEEL switch
+    decides, locked to WHEEL for fixtures without RGB channels."""
 
     def _dialog(self, block, fixtures):
         from timeline_ui.colour_block_dialog import ColourBlockDialog
-        from utils.fixture_utils import get_color_wheel_options
-        return ColourBlockDialog(block, get_color_wheel_options(fixtures))
+        from utils.fixture_utils import get_color_wheel_options, group_has_rgb
+        return ColourBlockDialog(block, get_color_wheel_options(fixtures),
+                                 has_rgb=group_has_rgb(fixtures))
 
     def test_wheel_less_mode_records_rgb(self, qapp, bundled_only):
         from config.models import ColourBlock
@@ -335,16 +337,78 @@ class TestColourDialogWheelMode:
         dlg.accept()
         assert block.color_mode == "RGB"
 
-    @pytest.mark.xfail(
-        strict=True,
-        reason="BUG (docs/bug-reports.md #2): ColourBlockDialog.accept() "
-               "sets color_mode='Wheel' whenever wheel options exist, even "
-               "when only the RGB sliders were touched.")
     def test_rgb_only_edit_on_a_wheel_mode_records_rgb(self, qapp,
                                                        bundled_only):
         from config.models import ColourBlock
         block = ColourBlock(start_time=0, end_time=4)
         dlg = self._dialog(block, [_fx(PAR, "8 Channel")])
+        assert dlg.mode_rgb_btn.isChecked()
         dlg.sliders["red"][1].setValue(255)
         dlg.accept()
         assert block.color_mode == "RGB"
+
+    def test_switching_to_wheel_records_the_slot(self, qapp, bundled_only):
+        from config.models import ColourBlock
+        block = ColourBlock(start_time=0, end_time=4)
+        dlg = self._dialog(block, [_fx(PAR, "8 Channel")])
+        dlg.wheel_combo.setCurrentIndex(dlg.wheel_combo.count() - 1)
+        slot, _ = dlg.wheel_combo.currentData()
+        dlg.mode_wheel_btn.click()
+        dlg.accept()
+        assert block.color_mode == "Wheel"
+        assert block.color_wheel_position == slot
+
+    def test_picking_a_slot_alone_does_not_switch_the_mode(self, qapp,
+                                                           bundled_only):
+        """Explicit means explicit: the slot is kept for later, the
+        output stays where the switch is."""
+        from config.models import ColourBlock
+        block = ColourBlock(start_time=0, end_time=4)
+        dlg = self._dialog(block, [_fx(PAR, "8 Channel")])
+        dlg.wheel_combo.setCurrentIndex(dlg.wheel_combo.count() - 1)
+        slot, _ = dlg.wheel_combo.currentData()
+        dlg.accept()
+        assert block.color_mode == "RGB"
+        assert block.color_wheel_position == slot
+
+    def test_existing_wheel_block_keeps_wheel_on_an_untouched_ok(
+            self, qapp, bundled_only):
+        from config.models import ColourBlock
+        dlg0 = self._dialog(ColourBlock(start_time=0, end_time=4),
+                            [_fx(PAR, "8 Channel")])
+        slot, _ = dlg0.wheel_combo.itemData(1)
+        block = ColourBlock(start_time=0, end_time=4, color_mode="Wheel",
+                            color_wheel_position=slot)
+        dlg = self._dialog(block, [_fx(PAR, "8 Channel")])
+        assert dlg.mode_wheel_btn.isChecked()
+        dlg.accept()
+        assert block.color_mode == "Wheel"
+        assert block.color_wheel_position == slot
+
+    def test_wheel_only_mover_is_locked_to_wheel(self, qapp, bundled_only):
+        from config.models import ColourBlock
+        block = ColourBlock(start_time=0, end_time=4)
+        dlg = self._dialog(block, [_fx(MH, "14 Channel")])
+        assert not dlg.mode_rgb_btn.isEnabled()
+        assert dlg.mode_wheel_btn.isChecked()
+        dlg.sliders["red"][1].setValue(255)
+        dlg.accept()
+        assert block.color_mode == "Wheel"
+
+
+class TestGroupHasRgb:
+    def test_par_has_rgb(self, bundled_only):
+        from utils.fixture_utils import group_has_rgb
+        assert group_has_rgb([_fx(PAR, "8 Channel")])
+
+    def test_wheel_only_mover_has_none(self, bundled_only):
+        from utils.fixture_utils import group_has_rgb
+        assert not group_has_rgb([_fx(MH, "14 Channel")])
+
+    def test_mixed_group_has_rgb(self, bundled_only):
+        from utils.fixture_utils import group_has_rgb
+        assert group_has_rgb([_fx(MH, "14 Channel"), _fx(PAR, "8 Channel")])
+
+    def test_unknown_definition_never_locks(self, bundled_only):
+        from utils.fixture_utils import group_has_rgb
+        assert group_has_rgb([_fx(("Nobody", "Nothing"), "Standard")])

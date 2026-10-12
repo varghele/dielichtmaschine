@@ -131,11 +131,11 @@ class TestCsvRoundTrip:
 
 
 class TestCsvSecondaryGroups:
-    """docs/bug-reports.md #2: the CSV sheet writes only the primary
+    """docs/bug-reports.md #1: the CSV sheet writes only the primary
     group, so a fixture in two groups comes back in one. JSON keeps both
     (TestJsonRoundTrip covers it)."""
 
-    @pytest.mark.xfail(strict=True, reason="docs/bug-reports.md #2: CSV "
+    @pytest.mark.xfail(strict=True, reason="docs/bug-reports.md #1: CSV "
                        "rig sheet drops secondary groups")
     def test_csv_round_trip_keeps_every_group(self, tmp_path):
         both = make_fixture("Wash 1", group="Front")
