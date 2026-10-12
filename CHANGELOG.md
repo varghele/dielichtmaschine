@@ -255,6 +255,14 @@ verbatim as the GitHub Release notes (see [docs/releasing.md](docs/releasing.md)
   known before the button decides anything: no viewer is launched, the
   feed reports as not running, the reason is listed in Help > Warnings,
   and pressing the button again retries.
+- **The visualizer feed no longer garbles messages under load.** A
+  viewer's own connection thread (its initial setup and the heartbeat)
+  and the app (show and config updates) could write to the viewer at
+  the same moment, mixing two messages into one unreadable line, and a
+  viewer that had just connected could get an update before the setup
+  it refers to. Writes to each viewer now take turns, a new viewer gets
+  its setup before anything else, and one slow viewer no longer holds up
+  the others.
 - **The audio engine reports its position about every 100 ms, as
   intended.** It only reported when the frame counter happened to land
   on an exact multiple of 4410, which with the usual 512-frame audio

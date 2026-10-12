@@ -208,3 +208,96 @@ class TestListenFailure:
         finally:
             srv.stop()
             blocker.close()
+
+
+# ── Concurrent writes (v1.5.5 handover) ───────────────────────────────
+#
+# A client's own thread (initial config, heartbeat) and the UI thread
+# (send_update, update_config) wrote the same socket with no common
+# lock, and the client joined the set before its config was sent, so an
+# update could arrive first or interleave mid-config.
+
+
+class TestConcurrentWrites:
+    def test_updates_never_precede_the_initial_config(self, server):
+        update = VisualizerProtocol.create_update_message("probe", {})
+        update_type = json.loads(update)["type"]
+        expected = len(VisualizerProtocol.serialize_full_config(server.config))
+        server.start()
+        client = _connect(server.port)
+        try:
+            # Fire updates for as long as the config can be in flight.
+            assert _wait_for(lambda: server.get_client_count() == 1)
+            deadline = time.monotonic() + 0.5
+            while time.monotonic() < deadline:
+                server.send_update("probe", {})
+                time.sleep(0.001)
+            types = [m["type"] for m in _read_messages(client, expected)]
+            assert update_type not in types[:expected]
+        finally:
+            client.close()
+
+    def test_writes_to_one_client_never_overlap(self, server):
+        """Heartbeats from the client thread, updates and full configs
+        from other threads: every sendall finishes before the next one
+        on the same socket starts."""
+        import threading
+
+        class Probe:
+            def __init__(self):
+                self.active = 0
+                self.overlaps = 0
+                self.writes = 0
+                self.recv_calls = 0
+                self.guard = threading.Lock()
+
+            def sendall(self, data):
+                with self.guard:
+                    self.active += 1
+                    if self.active > 1:
+                        self.overlaps += 1
+                time.sleep(0.002)
+                with self.guard:
+                    self.active -= 1
+                    self.writes += 1
+
+            def recv(self, _n):
+                # Times out (-> heartbeat) for a while, then disconnects.
+                self.recv_calls += 1
+                time.sleep(0.002)
+                if self.recv_calls > 60:
+                    return b""
+                raise socket.timeout()
+
+            def settimeout(self, _t):
+                pass
+
+            def close(self):
+                pass
+
+        probe = Probe()
+        server.running = True  # the handler loops only while running
+        handler = threading.Thread(
+            target=server._handle_client, args=(probe, "probe"), daemon=True)
+        handler.start()
+        assert _wait_for(lambda: server.get_client_count() == 1)
+
+        def spam_updates():
+            while handler.is_alive():
+                server.send_update("probe", {})
+
+        def spam_configs():
+            while handler.is_alive():
+                server.update_config(server.config)
+
+        others = [threading.Thread(target=spam_updates, daemon=True),
+                  threading.Thread(target=spam_configs, daemon=True)]
+        for t in others:
+            t.start()
+        handler.join(timeout=10)
+        for t in others:
+            t.join(timeout=10)
+        server.running = False
+        assert probe.writes > 20
+        assert probe.overlaps == 0
+        assert server.get_client_count() == 0

@@ -4,7 +4,7 @@
 import socket
 import threading
 import time
-from typing import List, Optional, Set
+from typing import Dict, List, Optional, Set, Tuple
 from PyQt6.QtCore import QObject, pyqtSignal
 from config.models import Configuration
 from utils import user_warnings
@@ -43,8 +43,13 @@ class VisualizerTCPServer(QObject):
         self.running = False
         self.server_thread: Optional[threading.Thread] = None
 
-        # Connected clients
+        # Connected clients. Every write to a client socket holds that
+        # client's send lock: the client's own thread (initial config,
+        # heartbeat) and the UI thread (send_update, update_config) both
+        # write, and two sendall() calls on one socket can interleave
+        # their bytes mid-message.
         self.clients: Set[socket.socket] = set()
+        self._send_locks: Dict[socket.socket, threading.Lock] = {}
         self.clients_lock = threading.Lock()
 
         print(f"TCP Server initialized on port {port}")
@@ -104,6 +109,7 @@ class VisualizerTCPServer(QObject):
                 except Exception:
                     pass
             self.clients.clear()
+            self._send_locks.clear()
 
         # Close server socket
         if self.server_socket:
@@ -135,9 +141,9 @@ class VisualizerTCPServer(QObject):
 
                     print(f"Client connected: {client_addr_str}")
 
-                    # Add to clients set
-                    with self.clients_lock:
-                        self.clients.add(client_socket)
+                    # The client joins self.clients in _handle_client,
+                    # under its send lock, so no update can reach it
+                    # before its initial config.
 
                     # Emit signal
                     self.client_connected.emit(client_addr_str)
@@ -176,8 +182,20 @@ class VisualizerTCPServer(QObject):
             client_addr: Client address string
         """
         try:
-            # Send initial configuration
-            self._send_config_to_client(client_socket)
+            # Register and send the initial configuration under the
+            # client's send lock: a send_update() from the UI thread
+            # finds the client only once the lock is taken, waits for
+            # the config, and lands after it.
+            send_lock = threading.Lock()
+            with send_lock:
+                with self.clients_lock:
+                    if not self.running:
+                        # stop() ran between accept() and here and has
+                        # already swept the client set.
+                        return
+                    self.clients.add(client_socket)
+                    self._send_locks[client_socket] = send_lock
+                self._write_config(client_socket)
 
             # Keep connection alive and handle incoming data
             while self.running:
@@ -202,7 +220,8 @@ class VisualizerTCPServer(QObject):
                     # Send heartbeat to keep connection alive
                     try:
                         heartbeat = VisualizerProtocol.create_heartbeat_message()
-                        client_socket.sendall(heartbeat.encode('utf-8'))
+                        with send_lock:
+                            client_socket.sendall(heartbeat.encode('utf-8'))
                     except Exception:
                         break
                 except Exception as e:
@@ -214,8 +233,8 @@ class VisualizerTCPServer(QObject):
         finally:
             # Remove from clients set
             with self.clients_lock:
-                if client_socket in self.clients:
-                    self.clients.remove(client_socket)
+                self.clients.discard(client_socket)
+                self._send_locks.pop(client_socket, None)
 
             # Close socket
             try:
@@ -226,9 +245,17 @@ class VisualizerTCPServer(QObject):
             print(f"Client disconnected: {client_addr}")
             self.client_disconnected.emit(client_addr)
 
-    def _send_config_to_client(self, client_socket: socket.socket):
+    def _client_snapshot(self) -> List[Tuple[socket.socket, threading.Lock]]:
+        """The connected clients with their send locks. Writes happen
+        outside clients_lock, so one slow client does not hold up
+        registration, disconnects or the other clients."""
+        with self.clients_lock:
+            return [(s, self._send_locks[s]) for s in self.clients]
+
+    def _write_config(self, client_socket: socket.socket):
         """
-        Send complete configuration to a client.
+        Send complete configuration to a client. The caller holds the
+        client's send lock.
 
         Args:
             client_socket: Client socket to send to
@@ -259,14 +286,15 @@ class VisualizerTCPServer(QObject):
         if not self.clients:
             return
 
-        message = VisualizerProtocol.create_update_message(update_type, data)
+        payload = VisualizerProtocol.create_update_message(
+            update_type, data).encode('utf-8')
 
-        with self.clients_lock:
-            for client_socket in list(self.clients):
-                try:
-                    client_socket.sendall(message.encode('utf-8'))
-                except Exception as e:
-                    print(f"Error sending update to client: {e}")
+        for client_socket, send_lock in self._client_snapshot():
+            try:
+                with send_lock:
+                    client_socket.sendall(payload)
+            except Exception as e:
+                print(f"Error sending update to client: {e}")
 
     def update_config(self, config: Configuration):
         """
@@ -278,12 +306,12 @@ class VisualizerTCPServer(QObject):
         self.config = config
 
         # Send full config to all connected clients
-        with self.clients_lock:
-            for client_socket in list(self.clients):
-                try:
-                    self._send_config_to_client(client_socket)
-                except Exception as e:
-                    print(f"Error updating client config: {e}")
+        for client_socket, send_lock in self._client_snapshot():
+            try:
+                with send_lock:
+                    self._write_config(client_socket)
+            except Exception as e:
+                print(f"Error updating client config: {e}")
 
     def get_client_count(self) -> int:
         """
