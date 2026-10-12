@@ -72,7 +72,10 @@ jobs:
       # probe + render tests exercise mesa's software rasterizer
       # instead of skipping.
       - name: Unit suite (parallel)
-        run: xvfb-run -a python -m pytest tests/unit -n auto -q
+        # -v logs each test with its xdist worker, so an order-dependent
+        # flake (screensaver background, seen once 2026-10-12) shows what
+        # ran before it on that worker.
+        run: xvfb-run -a python -m pytest tests/unit -n auto -v
 
       - name: End-to-end suite
         run: xvfb-run -a python -m pytest tests/e2e -q
