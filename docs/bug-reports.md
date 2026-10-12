@@ -24,3 +24,22 @@ user-visible effect, and a fix sketch.
   actually the active input (track which colour control the user last
   changed). Mind wheel-only movers, whose RGB picks are synced to the
   nearest wheel slot today.
+
+## 2. The CSV rig sheet drops secondary groups
+
+- **Test:** `tests/unit/test_fixture_io.py::TestCsvSecondaryGroups::test_csv_round_trip_keeps_every_group` (xfail, strict)
+- **Where:** `utils/fixture_io.py`, `write_fixture_list_csv` (writes
+  `fixture.group`, the primary only) and `read_fixture_list_csv` (reads
+  one name from the `group` column).
+- **Root cause:** the CSV sheet predates multi-group fixtures and was
+  never given a way to carry more than one group per row.
+- **Effect:** exporting the rig as CSV and importing it again puts every
+  fixture in its first group only; secondary memberships (and the lanes
+  and indexed targets that depend on them) are lost without a warning.
+  The JSON rig keeps them (`groups` list).
+- **Fix sketch:** needs a file-format choice that hand-written sheets
+  can live with: either a separator inside the `group` column (e.g.
+  `Front;Side`, first = primary) or an extra `groups` column next to
+  `group`, read when present. Either way an old single-group sheet must
+  keep importing unchanged, and the CSV import wizard
+  (`utils/csv_table_import.py`) should accept the same convention.

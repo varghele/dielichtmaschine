@@ -130,6 +130,28 @@ class TestCsvRoundTrip:
             read_fixture_list_csv(str(path))
 
 
+class TestCsvSecondaryGroups:
+    """docs/bug-reports.md #2: the CSV sheet writes only the primary
+    group, so a fixture in two groups comes back in one. JSON keeps both
+    (TestJsonRoundTrip covers it)."""
+
+    @pytest.mark.xfail(strict=True, reason="docs/bug-reports.md #2: CSV "
+                       "rig sheet drops secondary groups")
+    def test_csv_round_trip_keeps_every_group(self, tmp_path):
+        both = make_fixture("Wash 1", group="Front")
+        both.groups = ["Front", "Side"]
+        config = Configuration(
+            fixtures=[both],
+            groups={"Front": FixtureGroup("Front", [both]),
+                    "Side": FixtureGroup("Side", [both])},
+            universes={1: Universe(id=1, name="Universe 1", output={})},
+        )
+        path = str(tmp_path / "rig.csv")
+        write_fixture_list_csv(path, config)
+        (fixture,) = read_fixture_list_csv(path)
+        assert fixture.groups == ["Front", "Side"]
+
+
 class TestJsonRoundTrip:
 
     def test_full_fidelity(self, rig_config, tmp_path):

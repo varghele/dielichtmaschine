@@ -190,7 +190,8 @@ A fixes-only release on `v1.5.5-hardening`, cut from `v1.5-focus-morphing` at `3
 - [ ] **GDTF auto-pull on quit** can destroy a running thread; needs a cancellable Share client.
 - [x] **Visualizer feed socket writes** from two threads at once; per-client send lock in `utils/tcp/server.py`. Done (`1459eab`): every write to a client holds its send lock and a new client gets its config before any update (`tests/unit/test_tcp_server.py`).
 - [ ] **Drag during playback** can render one frame with a half-edited block interval; needs UI-side snapshots.
-- [ ] **Smaller leftovers** (CSV rig sheet drops secondary groups, drifted shader constants, the unused `FluxPlot3DWidget`, the remaining desk checks): full list in `docs/v1.5.5-hardening-plan.md` "Handover". Done so far: the Windows suite + export hash verification, the orientation preview leak (`99d2935`), the cached capabilities default (`3b9a65e`) and the dead export code (`31e913a`).
+- [ ] **CSV rig sheet drops secondary groups.** Exporting the rig as CSV and importing it again keeps only each fixture's first group (JSON keeps all). Needs fixing; the format choice (separator in `group` vs an extra `groups` column, old sheets must keep importing) is in `docs/bug-reports.md` #2, pinned by a strict xfail in `tests/unit/test_fixture_io.py`.
+- [ ] **Smaller leftovers** (drifted shader constants, the remaining desk checks): full list in `docs/v1.5.5-hardening-plan.md` "Handover". Done so far: the Windows suite + export hash verification, the orientation preview leak (`99d2935`), the cached capabilities default (`3b9a65e`) and the dead export code (`31e913a`).
 
 **Deferred structural work** (planned, not done in the hardening pass: each needs a desk or a screen to verify, or moves pixels):
 
@@ -320,7 +321,7 @@ The v1.8 Live tab watches an authored show run. This milestone adds the hands-on
 The automatic show generator runs end-to-end today, but the matcher is a black box. This milestone makes it *legible* so the algorithm can be tuned with evidence rather than guesswork. Source: `docs/autofuture.md`.
 
 - [ ] **Decision logging system.** Every rudiment considered, its score breakdown, why one was picked, why iterative selection stabilised. Exportable as a Markdown report alongside the generated show.
-- [ ] **Generation Inspector UI pass.** The dialog exists and the `GenerationReport` already carries the data; the work here is to make it interactive (click a generated block, see why), surface the colour palette decisions, and add a side-by-side "what changed when I tweaked this parameter" view.
+- [ ] **Generation Inspector UI pass.** The dialog exists and the `GenerationReport` already carries the data; the work here is to make it interactive (click a generated block, see why), surface the colour palette decisions, and add a side-by-side "what changed when I tweaked this parameter" view. Also wire up the already-built 3D flux / transient plot (`FluxPlot3DWidget`, kept unshown on purpose; `docs/autofuture.md`).
 - [ ] **Colour palette presets** in the autogen dialog. The API supports preset palettes but the UI only exposes the audio-derived path.
 - [ ] **Matcher tuning.** Once the inspector exists, revisit the scoring weights for envelope similarity vs. repetition rate fit vs. coherence.
 - [ ] **Per-section overrides.** Let the user lock a specific rudiment or role for a named section before re-running generation, instead of editing the output.
