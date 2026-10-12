@@ -92,6 +92,10 @@ class OrientationPreviewWidget(QOpenGLWidget):
         self.yoke_vao = None
         self.head_vao = None
         self.indicator_vao = None
+        # Every buffer and VAO the fixture-type builders create, released
+        # together on a fixture-type change. Releasing a VAO does not free
+        # the buffers it reads, so dropping only the VAOs leaked them.
+        self._fixture_gl = []
         self.ring_program = None
         self.ring_vao = None
         self.floor_program = None
@@ -203,20 +207,44 @@ class OrientationPreviewWidget(QOpenGLWidget):
                     self.doneCurrent()
             self.update()
 
+    _FIXTURE_VAO_ATTRS = (
+        'fixture_vao', 'indicator_vao', 'segment_vao', 'lens_vao',
+        'base_vao', 'yoke_vao', 'head_vao', 'lamp_vao',
+        'mh_x_axis_vao', 'mh_y_axis_vao', 'mh_z_axis_vao',
+        'bar_x_axis_vao', 'bar_y_axis_vao', 'bar_z_axis_vao',
+        'par_x_axis_vao', 'par_y_axis_vao', 'par_z_axis_vao',
+        'wash_x_axis_vao', 'wash_y_axis_vao', 'wash_z_axis_vao',
+    )
+
+    def _fixture_buffer(self, data):
+        buf = self.ctx.buffer(data)
+        self._fixture_gl.append(buf)
+        return buf
+
+    def _fixture_vertex_array(self, program, content):
+        vao = self.ctx.vertex_array(program, content)
+        self._fixture_gl.append(vao)
+        return vao
+
     def _release_fixture_vaos(self, release: bool = True):
-        """Release all fixture-related VAOs (``release=False`` only drops
-        the references, for a context that cannot be made current)."""
-        vao_attrs = ['fixture_vao', 'indicator_vao', 'segment_vao', 'lens_vao',
-                     'base_vao', 'yoke_vao', 'head_vao', 'lamp_vao']
-        for attr in vao_attrs:
-            if hasattr(self, attr):
-                vao = getattr(self, attr)
-                if vao and release:
-                    try:
-                        vao.release()
-                    except:
-                        pass
-                setattr(self, attr, None)
+        """Release the fixture-type geometry: every VAO and the buffers
+        behind them (``release=False`` only drops the references, for a
+        context that cannot be made current)."""
+        objects, self._fixture_gl = self._fixture_gl, []
+        for attr in self._FIXTURE_VAO_ATTRS:
+            vao = getattr(self, attr, None)
+            if vao is not None and not any(vao is o for o in objects):
+                objects.append(vao)
+        if release:
+            # VAOs before the buffers they read.
+            objects.sort(key=lambda o: 0 if hasattr(o, 'render') else 1)
+            for obj in objects:
+                try:
+                    obj.release()
+                except Exception:
+                    pass
+        for attr in self._FIXTURE_VAO_ATTRS:
+            setattr(self, attr, None)
 
     def _update_fixture_geometry(self):
         """Create/update fixture geometry based on the current chassis.
@@ -262,9 +290,9 @@ class OrientationPreviewWidget(QOpenGLWidget):
 
         # Create bar body
         body_verts, body_norms = GeometryBuilder.create_box(width, height, depth)
-        vbo = self.ctx.buffer(body_verts.tobytes())
-        nbo = self.ctx.buffer(body_norms.tobytes())
-        self.fixture_vao = self.ctx.vertex_array(
+        vbo = self._fixture_buffer(body_verts.tobytes())
+        nbo = self._fixture_buffer(body_norms.tobytes())
+        self.fixture_vao = self._fixture_vertex_array(
             self.fixture_program,
             [(vbo, '3f', 'in_position'), (nbo, '3f', 'in_normal')]
         )
@@ -291,9 +319,9 @@ class OrientationPreviewWidget(QOpenGLWidget):
 
         segment_verts = np.array(segment_verts, dtype='f4')
         segment_norms = np.array(segment_norms, dtype='f4')
-        seg_vbo = self.ctx.buffer(segment_verts.tobytes())
-        seg_nbo = self.ctx.buffer(segment_norms.tobytes())
-        self.segment_vao = self.ctx.vertex_array(
+        seg_vbo = self._fixture_buffer(segment_verts.tobytes())
+        seg_nbo = self._fixture_buffer(segment_norms.tobytes())
+        self.segment_vao = self._fixture_vertex_array(
             self.fixture_program,
             [(seg_vbo, '3f', 'in_position'), (seg_nbo, '3f', 'in_normal')]
         )
@@ -322,9 +350,9 @@ class OrientationPreviewWidget(QOpenGLWidget):
 
         # Create bar body
         body_verts, body_norms = GeometryBuilder.create_box(width, height, depth)
-        vbo = self.ctx.buffer(body_verts.tobytes())
-        nbo = self.ctx.buffer(body_norms.tobytes())
-        self.fixture_vao = self.ctx.vertex_array(
+        vbo = self._fixture_buffer(body_verts.tobytes())
+        nbo = self._fixture_buffer(body_norms.tobytes())
+        self.fixture_vao = self._fixture_vertex_array(
             self.fixture_program,
             [(vbo, '3f', 'in_position'), (nbo, '3f', 'in_normal')]
         )
@@ -359,9 +387,9 @@ class OrientationPreviewWidget(QOpenGLWidget):
 
         lamp_verts = np.array(lamp_verts, dtype='f4')
         lamp_norms = np.array(lamp_norms, dtype='f4')
-        lamp_vbo = self.ctx.buffer(lamp_verts.tobytes())
-        lamp_nbo = self.ctx.buffer(lamp_norms.tobytes())
-        self.lamp_vao = self.ctx.vertex_array(
+        lamp_vbo = self._fixture_buffer(lamp_verts.tobytes())
+        lamp_nbo = self._fixture_buffer(lamp_norms.tobytes())
+        self.lamp_vao = self._fixture_vertex_array(
             self.fixture_program,
             [(lamp_vbo, '3f', 'in_position'), (lamp_nbo, '3f', 'in_normal')]
         )
@@ -398,9 +426,9 @@ class OrientationPreviewWidget(QOpenGLWidget):
 
         body_verts = np.array(body_verts, dtype='f4')
         body_norms = np.array(body_norms, dtype='f4')
-        vbo = self.ctx.buffer(body_verts.tobytes())
-        nbo = self.ctx.buffer(body_norms.tobytes())
-        self.fixture_vao = self.ctx.vertex_array(
+        vbo = self._fixture_buffer(body_verts.tobytes())
+        nbo = self._fixture_buffer(body_norms.tobytes())
+        self.fixture_vao = self._fixture_vertex_array(
             self.fixture_program,
             [(vbo, '3f', 'in_position'), (nbo, '3f', 'in_normal')]
         )
@@ -423,9 +451,9 @@ class OrientationPreviewWidget(QOpenGLWidget):
 
         lens_verts = np.array(lens_verts, dtype='f4')
         lens_norms = np.array(lens_norms, dtype='f4')
-        lens_vbo = self.ctx.buffer(lens_verts.tobytes())
-        lens_nbo = self.ctx.buffer(lens_norms.tobytes())
-        self.lens_vao = self.ctx.vertex_array(
+        lens_vbo = self._fixture_buffer(lens_verts.tobytes())
+        lens_nbo = self._fixture_buffer(lens_norms.tobytes())
+        self.lens_vao = self._fixture_vertex_array(
             self.fixture_program,
             [(lens_vbo, '3f', 'in_position'), (lens_nbo, '3f', 'in_normal')]
         )
@@ -452,9 +480,9 @@ class OrientationPreviewWidget(QOpenGLWidget):
 
         # Create main body (same as visualizer)
         body_verts, body_norms = GeometryBuilder.create_box(width, height, depth)
-        vbo = self.ctx.buffer(body_verts.tobytes())
-        nbo = self.ctx.buffer(body_norms.tobytes())
-        self.fixture_vao = self.ctx.vertex_array(
+        vbo = self._fixture_buffer(body_verts.tobytes())
+        nbo = self._fixture_buffer(body_norms.tobytes())
+        self.fixture_vao = self._fixture_vertex_array(
             self.fixture_program,
             [(vbo, '3f', 'in_position'), (nbo, '3f', 'in_normal')]
         )
@@ -468,9 +496,9 @@ class OrientationPreviewWidget(QOpenGLWidget):
             lens_width, lens_height, lens_depth,
             center=(0, 0, depth / 2 + lens_depth / 2)
         )
-        lens_vbo = self.ctx.buffer(lens_verts.tobytes())
-        lens_nbo = self.ctx.buffer(lens_norms.tobytes())
-        self.lens_vao = self.ctx.vertex_array(
+        lens_vbo = self._fixture_buffer(lens_verts.tobytes())
+        lens_nbo = self._fixture_buffer(lens_norms.tobytes())
+        self.lens_vao = self._fixture_vertex_array(
             self.fixture_program,
             [(lens_vbo, '3f', 'in_position'), (lens_nbo, '3f', 'in_normal')]
         )
@@ -517,9 +545,9 @@ class OrientationPreviewWidget(QOpenGLWidget):
             base_size, base_size, base_thickness,
             center=(0, 0, base_thickness / 2)
         )
-        base_vbo = self.ctx.buffer(base_verts.tobytes())
-        base_nbo = self.ctx.buffer(base_norms.tobytes())
-        self.base_vao = self.ctx.vertex_array(
+        base_vbo = self._fixture_buffer(base_verts.tobytes())
+        base_nbo = self._fixture_buffer(base_norms.tobytes())
+        self.base_vao = self._fixture_vertex_array(
             self.fixture_program,
             [(base_vbo, '3f', 'in_position'), (base_nbo, '3f', 'in_normal')]
         )
@@ -560,9 +588,9 @@ class OrientationPreviewWidget(QOpenGLWidget):
         x_axis_verts = np.concatenate([x_shaft_verts, x_arrow_verts])
         x_axis_norms = np.concatenate([x_shaft_norms, x_arrow_norms])
 
-        x_axis_vbo = self.ctx.buffer(x_axis_verts.tobytes())
-        x_axis_nbo = self.ctx.buffer(x_axis_norms.tobytes())
-        self.mh_x_axis_vao = self.ctx.vertex_array(
+        x_axis_vbo = self._fixture_buffer(x_axis_verts.tobytes())
+        x_axis_nbo = self._fixture_buffer(x_axis_norms.tobytes())
+        self.mh_x_axis_vao = self._fixture_vertex_array(
             self.fixture_program,
             [(x_axis_vbo, '3f', 'in_position'), (x_axis_nbo, '3f', 'in_normal')]
         )
@@ -596,9 +624,9 @@ class OrientationPreviewWidget(QOpenGLWidget):
         y_axis_verts = np.concatenate([y_shaft_verts, y_arrow_verts])
         y_axis_norms = np.concatenate([y_shaft_norms, y_arrow_norms])
 
-        y_axis_vbo = self.ctx.buffer(y_axis_verts.tobytes())
-        y_axis_nbo = self.ctx.buffer(y_axis_norms.tobytes())
-        self.mh_y_axis_vao = self.ctx.vertex_array(
+        y_axis_vbo = self._fixture_buffer(y_axis_verts.tobytes())
+        y_axis_nbo = self._fixture_buffer(y_axis_norms.tobytes())
+        self.mh_y_axis_vao = self._fixture_vertex_array(
             self.fixture_program,
             [(y_axis_vbo, '3f', 'in_position'), (y_axis_nbo, '3f', 'in_normal')]
         )
@@ -632,9 +660,9 @@ class OrientationPreviewWidget(QOpenGLWidget):
         z_axis_verts = np.concatenate([z_shaft_verts, z_arrow_verts])
         z_axis_norms = np.concatenate([z_shaft_norms, z_arrow_norms])
 
-        z_axis_vbo = self.ctx.buffer(z_axis_verts.tobytes())
-        z_axis_nbo = self.ctx.buffer(z_axis_norms.tobytes())
-        self.mh_z_axis_vao = self.ctx.vertex_array(
+        z_axis_vbo = self._fixture_buffer(z_axis_verts.tobytes())
+        z_axis_nbo = self._fixture_buffer(z_axis_norms.tobytes())
+        self.mh_z_axis_vao = self._fixture_vertex_array(
             self.fixture_program,
             [(z_axis_vbo, '3f', 'in_position'), (z_axis_nbo, '3f', 'in_normal')]
         )
@@ -651,9 +679,9 @@ class OrientationPreviewWidget(QOpenGLWidget):
         ], dtype='f4')
         indicator_norms = np.array([0, 0, 1, 0, 0, 1, 0, 0, 1], dtype='f4')
 
-        indicator_vbo = self.ctx.buffer(indicator_verts.tobytes())
-        indicator_nbo = self.ctx.buffer(indicator_norms.tobytes())
-        self.indicator_vao = self.ctx.vertex_array(
+        indicator_vbo = self._fixture_buffer(indicator_verts.tobytes())
+        indicator_nbo = self._fixture_buffer(indicator_norms.tobytes())
+        self.indicator_vao = self._fixture_vertex_array(
             self.fixture_program,
             [(indicator_vbo, '3f', 'in_position'), (indicator_nbo, '3f', 'in_normal')]
         )
@@ -673,9 +701,9 @@ class OrientationPreviewWidget(QOpenGLWidget):
         yoke_verts = np.concatenate([left_yoke_verts, right_yoke_verts])
         yoke_norms = np.concatenate([left_yoke_norms, right_yoke_norms])
 
-        yoke_vbo = self.ctx.buffer(yoke_verts.tobytes())
-        yoke_nbo = self.ctx.buffer(yoke_norms.tobytes())
-        self.yoke_vao = self.ctx.vertex_array(
+        yoke_vbo = self._fixture_buffer(yoke_verts.tobytes())
+        yoke_nbo = self._fixture_buffer(yoke_norms.tobytes())
+        self.yoke_vao = self._fixture_vertex_array(
             self.fixture_program,
             [(yoke_vbo, '3f', 'in_position'), (yoke_nbo, '3f', 'in_normal')]
         )
@@ -686,9 +714,9 @@ class OrientationPreviewWidget(QOpenGLWidget):
         head_verts, head_norms = GeometryBuilder.create_box(
             head_size_x, head_size_y, head_size_z
         )
-        head_vbo = self.ctx.buffer(head_verts.tobytes())
-        head_nbo = self.ctx.buffer(head_norms.tobytes())
-        self.head_vao = self.ctx.vertex_array(
+        head_vbo = self._fixture_buffer(head_verts.tobytes())
+        head_nbo = self._fixture_buffer(head_norms.tobytes())
+        self.head_vao = self._fixture_vertex_array(
             self.fixture_program,
             [(head_vbo, '3f', 'in_position'), (head_nbo, '3f', 'in_normal')]
         )
@@ -722,9 +750,9 @@ class OrientationPreviewWidget(QOpenGLWidget):
         lens_verts = np.array(lens_verts, dtype='f4')
         lens_norms = np.array(lens_norms, dtype='f4')
 
-        lens_vbo = self.ctx.buffer(lens_verts.tobytes())
-        lens_nbo = self.ctx.buffer(lens_norms.tobytes())
-        self.lens_vao = self.ctx.vertex_array(
+        lens_vbo = self._fixture_buffer(lens_verts.tobytes())
+        lens_nbo = self._fixture_buffer(lens_norms.tobytes())
+        self.lens_vao = self._fixture_vertex_array(
             self.fixture_program,
             [(lens_vbo, '3f', 'in_position'), (lens_nbo, '3f', 'in_normal')]
         )
@@ -746,9 +774,9 @@ class OrientationPreviewWidget(QOpenGLWidget):
         ], dtype='f4')
         indicator_norms = np.array([0, 0, 1, 0, 0, 1, 0, 0, 1], dtype='f4')
 
-        indicator_vbo = self.ctx.buffer(indicator_verts.tobytes())
-        indicator_nbo = self.ctx.buffer(indicator_norms.tobytes())
-        self.indicator_vao = self.ctx.vertex_array(
+        indicator_vbo = self._fixture_buffer(indicator_verts.tobytes())
+        indicator_nbo = self._fixture_buffer(indicator_norms.tobytes())
+        self.indicator_vao = self._fixture_vertex_array(
             self.fixture_program,
             [(indicator_vbo, '3f', 'in_position'), (indicator_nbo, '3f', 'in_normal')]
         )
@@ -790,9 +818,9 @@ class OrientationPreviewWidget(QOpenGLWidget):
         x_axis_verts = np.concatenate([x_shaft_verts, x_arrow_verts])
         x_axis_norms = np.concatenate([x_shaft_norms, x_arrow_norms])
 
-        x_axis_vbo = self.ctx.buffer(x_axis_verts.tobytes())
-        x_axis_nbo = self.ctx.buffer(x_axis_norms.tobytes())
-        self.bar_x_axis_vao = self.ctx.vertex_array(
+        x_axis_vbo = self._fixture_buffer(x_axis_verts.tobytes())
+        x_axis_nbo = self._fixture_buffer(x_axis_norms.tobytes())
+        self.bar_x_axis_vao = self._fixture_vertex_array(
             self.fixture_program,
             [(x_axis_vbo, '3f', 'in_position'), (x_axis_nbo, '3f', 'in_normal')]
         )
@@ -822,9 +850,9 @@ class OrientationPreviewWidget(QOpenGLWidget):
         y_axis_verts = np.concatenate([y_shaft_verts, y_arrow_verts])
         y_axis_norms = np.concatenate([y_shaft_norms, y_arrow_norms])
 
-        y_axis_vbo = self.ctx.buffer(y_axis_verts.tobytes())
-        y_axis_nbo = self.ctx.buffer(y_axis_norms.tobytes())
-        self.bar_y_axis_vao = self.ctx.vertex_array(
+        y_axis_vbo = self._fixture_buffer(y_axis_verts.tobytes())
+        y_axis_nbo = self._fixture_buffer(y_axis_norms.tobytes())
+        self.bar_y_axis_vao = self._fixture_vertex_array(
             self.fixture_program,
             [(y_axis_vbo, '3f', 'in_position'), (y_axis_nbo, '3f', 'in_normal')]
         )
@@ -854,9 +882,9 @@ class OrientationPreviewWidget(QOpenGLWidget):
         z_axis_verts = np.concatenate([z_shaft_verts, z_arrow_verts])
         z_axis_norms = np.concatenate([z_shaft_norms, z_arrow_norms])
 
-        z_axis_vbo = self.ctx.buffer(z_axis_verts.tobytes())
-        z_axis_nbo = self.ctx.buffer(z_axis_norms.tobytes())
-        self.bar_z_axis_vao = self.ctx.vertex_array(
+        z_axis_vbo = self._fixture_buffer(z_axis_verts.tobytes())
+        z_axis_nbo = self._fixture_buffer(z_axis_norms.tobytes())
+        self.bar_z_axis_vao = self._fixture_vertex_array(
             self.fixture_program,
             [(z_axis_vbo, '3f', 'in_position'), (z_axis_nbo, '3f', 'in_normal')]
         )
@@ -897,9 +925,9 @@ class OrientationPreviewWidget(QOpenGLWidget):
         x_axis_verts = np.concatenate([x_shaft_verts, x_arrow_verts])
         x_axis_norms = np.concatenate([x_shaft_norms, x_arrow_norms])
 
-        x_axis_vbo = self.ctx.buffer(x_axis_verts.tobytes())
-        x_axis_nbo = self.ctx.buffer(x_axis_norms.tobytes())
-        self.par_x_axis_vao = self.ctx.vertex_array(
+        x_axis_vbo = self._fixture_buffer(x_axis_verts.tobytes())
+        x_axis_nbo = self._fixture_buffer(x_axis_norms.tobytes())
+        self.par_x_axis_vao = self._fixture_vertex_array(
             self.fixture_program,
             [(x_axis_vbo, '3f', 'in_position'), (x_axis_nbo, '3f', 'in_normal')]
         )
@@ -929,9 +957,9 @@ class OrientationPreviewWidget(QOpenGLWidget):
         y_axis_verts = np.concatenate([y_shaft_verts, y_arrow_verts])
         y_axis_norms = np.concatenate([y_shaft_norms, y_arrow_norms])
 
-        y_axis_vbo = self.ctx.buffer(y_axis_verts.tobytes())
-        y_axis_nbo = self.ctx.buffer(y_axis_norms.tobytes())
-        self.par_y_axis_vao = self.ctx.vertex_array(
+        y_axis_vbo = self._fixture_buffer(y_axis_verts.tobytes())
+        y_axis_nbo = self._fixture_buffer(y_axis_norms.tobytes())
+        self.par_y_axis_vao = self._fixture_vertex_array(
             self.fixture_program,
             [(y_axis_vbo, '3f', 'in_position'), (y_axis_nbo, '3f', 'in_normal')]
         )
@@ -961,9 +989,9 @@ class OrientationPreviewWidget(QOpenGLWidget):
         z_axis_verts = np.concatenate([z_shaft_verts, z_arrow_verts])
         z_axis_norms = np.concatenate([z_shaft_norms, z_arrow_norms])
 
-        z_axis_vbo = self.ctx.buffer(z_axis_verts.tobytes())
-        z_axis_nbo = self.ctx.buffer(z_axis_norms.tobytes())
-        self.par_z_axis_vao = self.ctx.vertex_array(
+        z_axis_vbo = self._fixture_buffer(z_axis_verts.tobytes())
+        z_axis_nbo = self._fixture_buffer(z_axis_norms.tobytes())
+        self.par_z_axis_vao = self._fixture_vertex_array(
             self.fixture_program,
             [(z_axis_vbo, '3f', 'in_position'), (z_axis_nbo, '3f', 'in_normal')]
         )
@@ -1004,9 +1032,9 @@ class OrientationPreviewWidget(QOpenGLWidget):
         x_axis_verts = np.concatenate([x_shaft_verts, x_arrow_verts])
         x_axis_norms = np.concatenate([x_shaft_norms, x_arrow_norms])
 
-        x_axis_vbo = self.ctx.buffer(x_axis_verts.tobytes())
-        x_axis_nbo = self.ctx.buffer(x_axis_norms.tobytes())
-        self.wash_x_axis_vao = self.ctx.vertex_array(
+        x_axis_vbo = self._fixture_buffer(x_axis_verts.tobytes())
+        x_axis_nbo = self._fixture_buffer(x_axis_norms.tobytes())
+        self.wash_x_axis_vao = self._fixture_vertex_array(
             self.fixture_program,
             [(x_axis_vbo, '3f', 'in_position'), (x_axis_nbo, '3f', 'in_normal')]
         )
@@ -1036,9 +1064,9 @@ class OrientationPreviewWidget(QOpenGLWidget):
         y_axis_verts = np.concatenate([y_shaft_verts, y_arrow_verts])
         y_axis_norms = np.concatenate([y_shaft_norms, y_arrow_norms])
 
-        y_axis_vbo = self.ctx.buffer(y_axis_verts.tobytes())
-        y_axis_nbo = self.ctx.buffer(y_axis_norms.tobytes())
-        self.wash_y_axis_vao = self.ctx.vertex_array(
+        y_axis_vbo = self._fixture_buffer(y_axis_verts.tobytes())
+        y_axis_nbo = self._fixture_buffer(y_axis_norms.tobytes())
+        self.wash_y_axis_vao = self._fixture_vertex_array(
             self.fixture_program,
             [(y_axis_vbo, '3f', 'in_position'), (y_axis_nbo, '3f', 'in_normal')]
         )
@@ -1068,9 +1096,9 @@ class OrientationPreviewWidget(QOpenGLWidget):
         z_axis_verts = np.concatenate([z_shaft_verts, z_arrow_verts])
         z_axis_norms = np.concatenate([z_shaft_norms, z_arrow_norms])
 
-        z_axis_vbo = self.ctx.buffer(z_axis_verts.tobytes())
-        z_axis_nbo = self.ctx.buffer(z_axis_norms.tobytes())
-        self.wash_z_axis_vao = self.ctx.vertex_array(
+        z_axis_vbo = self._fixture_buffer(z_axis_verts.tobytes())
+        z_axis_nbo = self._fixture_buffer(z_axis_norms.tobytes())
+        self.wash_z_axis_vao = self._fixture_vertex_array(
             self.fixture_program,
             [(z_axis_vbo, '3f', 'in_position'), (z_axis_nbo, '3f', 'in_normal')]
         )

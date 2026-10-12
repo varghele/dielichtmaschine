@@ -247,6 +247,12 @@ verbatim as the GitHub Release notes (see [docs/releasing.md](docs/releasing.md)
   on quit and when the graphics context goes away, and the orientation
   preview builds the shape for a newly picked fixture type in its own
   context too. What the previews show is unchanged.
+- **The orientation preview no longer leaks graphics memory.** Each
+  time the Stage tab's orientation preview switched to another fixture
+  type (selecting a par after a mover, say), it freed only part of the
+  old fixture's shape and kept the rest in graphics memory for the rest
+  of the session. It now frees all of it. What the preview shows is
+  unchanged.
 - **The visualizer feed notices when its port is taken.** When port
   9000 could not be opened (typically another program already listening
   on it), the feed failed silently but still counted as running, so the

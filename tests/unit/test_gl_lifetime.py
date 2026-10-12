@@ -365,3 +365,95 @@ def test_main_window_close_cleans_up_the_stage_tab():
     MainWindow.closeEvent(fake, event)
     fake.stage_tab.cleanup.assert_called_once()
     event.accept.assert_called_once()
+
+
+# ── Orientation preview: fixture-type geometry (v1.5.5 handover) ──────
+#
+# Releasing a moderngl VAO does not free the buffers it reads. The
+# preview released only its eight body VAOs on a fixture-type change, so
+# every change leaked all the vertex/normal buffers plus the per-type
+# coordinate-axis VAOs, once per Stage tab selection of another type.
+
+FIXTURE_TYPES = ("MH", "PAR", "WASH", "BAR", "SUNSTRIP", "MH")
+
+
+def _counting_ctx():
+    """A mock moderngl context whose buffers and VAOs log releases."""
+    created, released = [], []
+
+    def make(kind):
+        def factory(*_args, **_kwargs):
+            obj = MagicMock(name=kind)
+            if kind == "buffer":
+                del obj.render  # VAOs render, buffers do not
+            obj.release.side_effect = lambda o=obj: released.append(o)
+            created.append(obj)
+            return obj
+        return factory
+
+    ctx = MagicMock(name="ctx")
+    ctx.buffer.side_effect = make("buffer")
+    ctx.vertex_array.side_effect = make("vao")
+    return ctx, created, released
+
+
+def test_preview_type_change_releases_buffers_and_vaos(preview):
+    preview.makeCurrent = lambda: None
+    preview.doneCurrent = lambda: None
+    ctx, created, released = _counting_ctx()
+    preview.ctx = ctx
+    preview.fixture_program = MagicMock(name="program")
+    preview.set_fixture_type("MH")
+    for fixture_type in FIXTURE_TYPES[1:]:
+        before = list(created)
+        preview.set_fixture_type(fixture_type)
+        leaked = [o for o in before if o not in released]
+        assert leaked == [], f"{len(leaked)} objects leaked switching to {fixture_type}"
+    assert any(not hasattr(o, "render") for o in released), "no buffer was released"
+    preview.ctx = None
+
+
+def test_preview_type_change_releases_vaos_before_their_buffers(preview):
+    preview.makeCurrent = lambda: None
+    preview.doneCurrent = lambda: None
+    ctx, created, released = _counting_ctx()
+    preview.ctx = ctx
+    preview.fixture_program = MagicMock(name="program")
+    preview.set_fixture_type("PAR")
+    preview.set_fixture_type("BAR")
+    kinds = [hasattr(o, "render") for o in released]
+    assert kinds == sorted(kinds, reverse=True)
+    preview.ctx = None
+
+
+def test_preview_type_change_with_a_real_context(preview):
+    """Same check on real moderngl objects where a standalone context is
+    available: after each change every object of the previous type is
+    really deleted (moderngl swaps in an InvalidObject), and the
+    renderable attributes point at live objects only."""
+    moderngl = pytest.importorskip("moderngl")
+    try:
+        ctx = moderngl.create_standalone_context()
+    except Exception as e:  # no libGL / no driver
+        pytest.skip(f"no standalone GL context: {e}")
+    try:
+        preview.makeCurrent = lambda: None
+        preview.doneCurrent = lambda: None
+        preview.ctx = ctx
+        preview._create_fixture_geometry()
+        for fixture_type in FIXTURE_TYPES:
+            if fixture_type == preview.fixture_type:
+                continue  # no change, nothing to release
+            before = list(preview._fixture_gl)
+            assert before
+            preview.set_fixture_type(fixture_type)
+            for obj in before:
+                assert type(obj.mglo).__name__ == "InvalidObject"
+            for attr in preview._FIXTURE_VAO_ATTRS:
+                vao = getattr(preview, attr)
+                if vao is not None:
+                    assert type(vao.mglo).__name__ != "InvalidObject", attr
+        preview._release_fixture_vaos()
+    finally:
+        preview.ctx = None
+        ctx.release()
