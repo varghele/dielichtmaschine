@@ -244,6 +244,66 @@ def _run_dimmer_effect(ctx: DimmerContext, effect_type: str) -> DimmerResult:
     return effect_fn(ctx)
 
 
+_COLOUR_SEGMENT_PRESETS = ("IntensityRed", "IntensityGreen",
+                           "IntensityBlue", "IntensityWhite")
+
+
+def _segmented_dimmer_plan(fixture, channels_dict, active_block, time_s,
+                           fixture_idx, total_fixtures, bpm, max_intensity):
+    """How a dimmer effect lands on a segmented fixture, mirroring the
+    native renderer's classification and result handling
+    (utils/artnet/dmx_manager._apply_dimmer_block / _apply_dimmer_result).
+
+    Returns ``(segment_factors, master_override, dimmer_per_channel)``:
+
+    - colour-segmented bar: ``segment_factors`` scales each segment's
+      colour channels and ``master_override`` is the dimmer value (the
+      block level); a scalar result is spread over the segments on
+      PIXELBAR / BAR only, like native;
+    - dimmer-only segments (sunstrips): ``dimmer_per_channel`` holds one
+      value per dimmer channel;
+    - anything else: all three None, the per-fixture path applies.
+    """
+    if active_block is None:
+        return None, None, None
+    fixture_type = getattr(fixture, "type", "") or ""
+    if fixture_type not in ("PIXELBAR", "BAR", "SUNSTRIP"):
+        return None, None, None
+    dimmer_channels = []
+    for preset in ("IntensityMasterDimmer", "IntensityDimmer"):
+        if preset in channels_dict:
+            dimmer_channels = channels_dict[preset]
+            break
+    has_color_segments = bool(channels_dict.get("IntensityRed")
+                              or channels_dict.get("IntensityWhite"))
+    if not (has_color_segments or len(dimmer_channels) > 1):
+        return None, None, None
+
+    if has_color_segments:
+        num_segments = max(max(len(channels_dict.get(p, []))
+                               for p in _COLOUR_SEGMENT_PRESETS), 1)
+    else:
+        num_segments = len(dimmer_channels)
+    ctx = _dimmer_context(active_block, time_s, fixture_idx, total_fixtures,
+                          bpm, fixture.name, num_segments=num_segments,
+                          is_segmented=True)
+    result = _run_dimmer_effect(ctx, active_block.effect_type)
+    base = int(int(active_block.intensity) * max_intensity / 255)
+
+    if result.segment_intensities is not None:
+        if has_color_segments:
+            return list(result.segment_intensities), base, None
+        return None, None, [int(base * f) for f in result.segment_intensities]
+    if has_color_segments and fixture_type in ("PIXELBAR", "BAR"):
+        return [result.intensity_multiplier] * num_segments, base, None
+    if has_color_segments:
+        # SUNSTRIP-typed fixture with colour cells and a scalar result:
+        # native takes the regular per-fixture path.
+        return None, None, None
+    value = int(base * result.intensity_multiplier)
+    return None, None, [value] * len(dimmer_channels)
+
+
 def sample_dimmer_at_time(
     time_s: float,
     dimmer_blocks: List,
@@ -724,35 +784,26 @@ def build_unified_step(
                         channel_values.append(f"{ch['channel']},{tilt}")
                         total_channel_count += 1
 
-        # Check if fixture has RGB channels (for pixelbar twinkle handling)
-        has_rgb_channels = any(
-            preset in channels_dict for preset in ["IntensityRed", "IntensityGreen", "IntensityBlue"]
-        )
-        num_rgb_segments = len(channels_dict.get("IntensityRed", [])) if "IntensityRed" in channels_dict else 0
-
-        # For pixelbars with sparkle or waterfall effect: set master dimmer to full intensity
-        # The effect modulation is applied to the color channels instead
-        is_pixelbar_sparkle = (
-            active_dimmer_block and
-            active_dimmer_block.effect_type == "sparkle" and
-            has_rgb_channels and
-            num_rgb_segments > 1
-        )
-        is_pixelbar_waterfall = (
-            active_dimmer_block and
-            active_dimmer_block.effect_type == "waterfall" and
-            has_rgb_channels and
-            num_rgb_segments > 1
-        )
+        # Segmented fixtures (pixel bars, sunstrips): every dimmer effect
+        # runs per segment, classified exactly like the native renderer
+        # (utils/artnet/dmx_manager._apply_dimmer_block / _apply_dimmer_result).
+        segment_factors, master_override, dimmer_per_channel = (
+            _segmented_dimmer_plan(
+                fixture, channels_dict, active_dimmer_block, time_s,
+                global_fixture_idx, total_fixtures_for_effects, bpm,
+                _max_intensity))
 
         # Dimmer
         for preset in ["IntensityMasterDimmer", "IntensityDimmer"]:
             if preset in channels_dict:
-                for ch in channels_dict[preset]:
-                    # For pixelbar twinkle/waterfall, set dimmer to block's base intensity
-                    # (effect modulation happens in color channels)
-                    if is_pixelbar_sparkle or is_pixelbar_waterfall:
-                        dimmer_to_use = int(int(active_dimmer_block.intensity) * _max_intensity / 255)
+                for seg_idx, ch in enumerate(channels_dict[preset]):
+                    if dimmer_per_channel is not None:
+                        dimmer_to_use = (dimmer_per_channel[seg_idx]
+                                         if seg_idx < len(dimmer_per_channel) else 0)
+                    elif master_override is not None:
+                        # Colour-segmented bar: the master holds the block
+                        # level, the effect modulates the colour channels.
+                        dimmer_to_use = master_override
                     else:
                         dimmer_to_use = dimmer_value
                     channel_values.append(f"{ch['channel']},{dimmer_to_use}")
@@ -801,21 +852,10 @@ def build_unified_step(
                     ("IntensityUV", colour_values.get('uv', 0)),
                 ]
 
-                # Pixel bars running sparkle or waterfall: each segment
-                # gets its own intensity from the same registry effect the
-                # native renderer uses, seeded by the fixture name.
-                if is_pixelbar_sparkle or is_pixelbar_waterfall:
-                    num_segments = max(
-                        len(channels_dict.get(preset, []))
-                        for preset in ("IntensityRed", "IntensityGreen",
-                                       "IntensityBlue", "IntensityWhite"))
-                    seg_ctx = _dimmer_context(
-                        active_dimmer_block, time_s, global_fixture_idx,
-                        total_fixtures_for_effects, bpm, fixture.name,
-                        num_segments=num_segments, is_segmented=True)
-                    segment_intensities = _run_dimmer_effect(
-                        seg_ctx, active_dimmer_block.effect_type
-                    ).segment_intensities or []
+                # Colour-segmented bars: each segment's colour is scaled by
+                # its intensity from the shared effect (see the plan above).
+                if segment_factors is not None:
+                    segment_intensities = segment_factors
 
                     # Scale every segment's colour by its intensity
                     for preset, base_value in color_mappings:

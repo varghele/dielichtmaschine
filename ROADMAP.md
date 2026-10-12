@@ -184,7 +184,7 @@ A fixes-only release on `v1.5.5-hardening`, cut from `v1.5-focus-morphing` at `3
 **Left open from the hardening pass:**
 
 - [x] **Non-segmented waterfall in the export.** On fixtures without segments the export still cascades a waterfall across the fixtures while native playback shows it static. Needs a product decision on which one is right; both behaviours are pinned in `tests/unit/test_export_live_parity.py`. Done (decision 2026-10-12): one clean cascade across the lane's fixtures on both sides, through the shared effect; tests in `test_effects.py::TestWaterfall` and the parity table.
-- [ ] **Per-segment export of the other effects on bars and sunstrips.** Only sparkle and waterfall export per segment; the rest export per fixture (documented in the same parity test).
+- [x] **Per-segment export of the other effects on bars and sunstrips.** Only sparkle and waterfall export per segment; the rest export per fixture (documented in the same parity test). Done (decision 2026-10-12): every dimmer effect exports per segment on pixel bars and sunstrips, classified like native; parity-tested effect by effect on both.
 - [ ] **Movement time signature.** Export scales movement cycles to the song's bar length, native playback hardcodes 4 beats per bar; fixing native changes live output for non-4/4 songs.
 - [ ] **Colour dialog wheel mode.** A fixture whose patched mode has RGB and a wheel gets switched to Wheel on accept; strict xfail in `tests/unit/test_fixture_caches.py`, entry in `docs/bug-reports.md`.
 - [ ] **GDTF auto-pull on quit** can destroy a running thread; needs a cancellable Share client.

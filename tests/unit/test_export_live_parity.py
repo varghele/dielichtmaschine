@@ -27,10 +27,6 @@ Intentional differences, NOT covered here:
   tests run in 4/4.
 - Export intensity overrides (group_max_intensity) scale the export
   only; the tests run at the default 255.
-- Segmented fixtures: the export renders per-segment sparkle and
-  waterfall on RGB pixel bars only. Other effects on bars, and every
-  effect on dimmer-only segment fixtures (sunstrips), get one value per
-  fixture where native modulates each segment.
 - Sparkle on a NON-segmented fixture with several dimmer channels:
   native draws one random value per dimmer channel, the export writes
   the first one to every dimmer channel (identical for the usual single
@@ -53,6 +49,7 @@ from utils.to_xml.unified_sequence import (
 
 DEF_KEY = "TestMfr_TestModel"
 BAR_KEY = "TestMfr_ParityBar"
+STRIP_KEY = "TestMfr_ParityStrip"
 BAR_SEGMENTS = 4
 
 # Sample instants: off-grid values so no effect sits on a cycle seam.
@@ -245,12 +242,21 @@ def bar_lane():
     return fixtures, manager, defs, id_map
 
 
-@pytest.mark.parametrize("case", [
-    dict(effect_type="sparkle"),
+# Every dimmer effect runs per segment on bars and sunstrips, natively
+# and in the export (decision 2026-10-12; the export used to do this for
+# sparkle and waterfall on RGB bars only).
+SEGMENT_CASES = [
+    dict(effect_type=name) for name in sorted(DIMMER_REGISTRY)
+] + [
     dict(effect_type="sparkle", effect_speed="2"),
-    dict(effect_type="waterfall"),
     dict(effect_type="waterfall", direction="up", effect_speed="1/2"),
-], ids=_case_id)
+    dict(effect_type="chase", chase_scope="global"),
+    dict(effect_type="fade", direction="out"),
+    dict(effect_type="pulse", phase_offset_per_fixture=True),
+]
+
+
+@pytest.mark.parametrize("case", SEGMENT_CASES, ids=_case_id)
 def test_exported_pixel_bar_matches_native(bar_lane, case):
     fixtures, manager, defs, id_map = bar_lane
     block = _dimmer_block(**case)
@@ -279,6 +285,71 @@ def test_exported_pixel_bar_matches_native(bar_lane, case):
                                        native))
     assert not mismatches, \
         f"(t, fixture, channel, export, native): {mismatches[:6]}"
+
+
+def _strip_def():
+    """A sunstrip: dimmer-only segments, one IntensityDimmer channel per
+    cell and nothing else (no group, so no channel is listed twice)."""
+    channels = [{"name": f"Dimmer {seg + 1}", "preset": "IntensityDimmer",
+                 "group": "", "capabilities": []}
+                for seg in range(STRIP_SEGMENTS)]
+    mode = [{"number": i, "name": c["name"]} for i, c in enumerate(channels)]
+    return {"manufacturer": "TestMfr", "model": "ParityStrip",
+            "channels": channels,
+            "modes": [{"name": "Standard", "channels": mode}]}
+
+
+STRIP_SEGMENTS = 6
+
+
+@pytest.fixture
+def strip_lane():
+    fixtures = [_mover(i, model="ParityStrip", ftype="SUNSTRIP",
+                       channels=STRIP_SEGMENTS) for i in range(3)]
+    config = _config(fixtures)
+    defs = {STRIP_KEY: _strip_def()}
+    manager = DMXManager(config, defs)
+    id_map = {(f.universe, f.address): 20 + i
+              for i, f in enumerate(fixtures)}
+    return fixtures, manager, defs, id_map
+
+
+@pytest.mark.parametrize("case", SEGMENT_CASES, ids=_case_id)
+def test_exported_sunstrip_matches_native(strip_lane, case):
+    fixtures, manager, defs, id_map = strip_lane
+    block = _dimmer_block(**case)
+    mismatches = []
+    for time_s in TIMES:
+        step = build_unified_step(
+            0, time_s, 50, fixtures, id_map, defs, [block], [], [], [],
+            1, all_lane_fixtures=fixtures, bpm=120.0)
+        exported = _parse_step(step)
+        for idx, fixture in enumerate(fixtures):
+            fmap = manager.fixture_maps[fixture.name]
+            manager.clear_all_dmx()
+            manager._apply_dimmer_block(fmap, block, time_s, idx,
+                                        len(fixtures))
+            got = exported.get(id_map[(fixture.universe, fixture.address)],
+                               {})
+            for ch in range(STRIP_SEGMENTS):
+                universe, channel = fmap.get_absolute_address(ch)
+                native = manager.dmx_state[universe][channel]
+                if got.get(ch, 0) != native:
+                    mismatches.append((time_s, idx, ch, got.get(ch, 0),
+                                       native))
+    assert not mismatches, \
+        f"(t, fixture, channel, export, native): {mismatches[:6]}"
+
+
+def test_sunstrip_effect_differs_along_the_strip(strip_lane):
+    """The export really animates the cells, not one value per strip."""
+    fixtures, manager, defs, id_map = strip_lane
+    block = _dimmer_block(effect_type="chase")
+    step = build_unified_step(
+        0, 0.37, 50, fixtures, id_map, defs, [block], [], [], [],
+        1, all_lane_fixtures=fixtures, bpm=120.0)
+    cells = _parse_step(step)[20]
+    assert len({cells.get(ch, 0) for ch in range(STRIP_SEGMENTS)}) > 1
 
 
 # ── movement ─────────────────────────────────────────────────────────

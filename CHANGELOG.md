@@ -43,6 +43,18 @@ verbatim as the GitHub Release notes (see [docs/releasing.md](docs/releasing.md)
 
 ### Fixed
 
+- **Pixel bars and sunstrips animate their cells in the `.qxw` export.**
+  The app runs every dimmer effect along a bar's or sunstrip's cells (a
+  chase runs down the bar, a fill fills it, a pulse ripples along it),
+  but the export did that only for sparkle and waterfall, and only on
+  RGB pixel bars: every other effect, and every effect on a sunstrip,
+  exported one level for the whole fixture, so in QLC+ those fixtures
+  lit up evenly. The export now treats bars and sunstrips exactly like
+  the app does, cell by cell, for every effect. Exports of shows with
+  bars or sunstrips change and can get noticeably larger (each cell
+  carries its own value): `band_midsize`, `club_band`, `dj_edm` and
+  `festival_mainstage` in `demos/shows/` export differently,
+  `theatre_static` and the demo rigs do not.
 - **Waterfall now cascades on pars, washes and movers.** On fixtures
   without segments the app played a waterfall as a plain static look,
   although the Waterfall riff promises a cascade across the group and
