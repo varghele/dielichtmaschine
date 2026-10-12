@@ -36,6 +36,10 @@ verbatim as the GitHub Release notes (see [docs/releasing.md](docs/releasing.md)
   layer and everything else up front, so the headless `morph` command
   and autogen pulled in Qt widgets just to analyse a song. The package's
   names now load on first use; `from audio import ...` works as before.
+- The song to Show exporter lost about 700 lines of code nothing called
+  any more (old step-timing helpers, an RGB conversion and a movement
+  step generator that the shared effect path replaced). All five demo
+  show exports are byte-identical before and after.
 
 ### Fixed
 
