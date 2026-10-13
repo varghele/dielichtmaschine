@@ -8,6 +8,8 @@ from PyQt6.QtGui import (
     QPainter, QColor, QPen, QBrush, QMouseEvent, QFont, QLinearGradient,
 )
 from config.models import LightBlock
+from utils import envelope_edit
+from utils.envelope_edit import EnvelopeState
 from utils.timeline_edit_lock import TIMELINE_EDIT_LOCK
 from .locking import flash_locked
 from .timeline_widget import STRIP_ZONE_HEIGHT, sublane_band_geometry
@@ -395,6 +397,8 @@ class LightBlockWidget(QWidget):
         self.dragging = False
         self.resizing_left = False
         self.resizing_right = False
+        self._envelope_drag_state = None   # EnvelopeState during an edge drag
+        self._envelope_drag_stretch = False
         self.drag_start_pos = None
         self.drag_start_time = None
         self.drag_start_duration = None
@@ -1538,14 +1542,23 @@ class LightBlockWidget(QWidget):
                 self.selected_sublane_block = None
                 self.update()
 
-                # Header zone always moves entire effect (no resize from here)
-                self.dragging = True
-                if shift_held:
-                    self.shift_drag_copying = True
+                # The header's edges trim (Alt: stretch) the effect, the
+                # rest of the header moves it.
+                edge = self._envelope_edge_at(pos)
+                if edge == "left":
+                    self.resizing_left = True
+                elif edge == "right":
+                    self.resizing_right = True
+                else:
+                    self.dragging = True
+                    if shift_held:
+                        self.shift_drag_copying = True
 
                 self.drag_start_pos = event.globalPosition().toPoint()
                 self.drag_start_time = self.block.start_time
                 self.drag_start_duration = self.block.end_time - self.block.start_time
+                self._envelope_drag_state = (
+                    EnvelopeState.capture(self.block) if edge else None)
                 return
 
             # Below header: handle sublane block interactions
@@ -1593,18 +1606,12 @@ class LightBlockWidget(QWidget):
                     self.create_start_time = click_time
                     self.create_end_time = click_time  # Will be updated in mouseMoveEvent
                 else:
-                    # Not in a sublane row - check envelope resize handles
-                    x = pos.x()
-
-                    if x <= self.RESIZE_HANDLE_WIDTH:
-                        self.resizing_left = True
-                    elif x >= self.width() - self.RESIZE_HANDLE_WIDTH:
-                        self.resizing_right = True
-                    else:
-                        self.dragging = True
-                        # Check if shift is held for copy operation
-                        if shift_held:
-                            self.shift_drag_copying = True
+                    # Not in a sublane row: move the effect (the envelope
+                    # edges live in the header, _envelope_edge_at).
+                    self.dragging = True
+                    # Check if shift is held for copy operation
+                    if shift_held:
+                        self.shift_drag_copying = True
 
             self.drag_start_pos = event.globalPosition().toPoint()
             self.drag_start_time = self.block.start_time
@@ -1651,9 +1658,8 @@ class LightBlockWidget(QWidget):
                     self.setCursor(Qt.CursorShape.SizeHorCursor)
                     return
 
-            # Check envelope edges
-            x = pos.x()
-            if x <= self.RESIZE_HANDLE_WIDTH or x >= self.width() - self.RESIZE_HANDLE_WIDTH:
+            # Envelope edges (header only, where the press honours them)
+            if self._envelope_edge_at(pos):
                 self.setCursor(Qt.CursorShape.SizeHorCursor)
             else:
                 self.setCursor(Qt.CursorShape.PointingHandCursor)
@@ -1698,36 +1704,23 @@ class LightBlockWidget(QWidget):
             self.update_position()
             self.position_changed.emit(self, new_time)
 
-        elif self.resizing_left:
-            # Resize from left edge (changes start time and duration)
-            new_start = self.drag_start_time + delta_time
-            new_duration = self.drag_start_duration - delta_time
-
+        elif (self.resizing_left or self.resizing_right) and \
+                getattr(self, "_envelope_drag_state", None) is not None:
+            # Envelope edge: plain drag TRIMS the sublane blocks at the
+            # edge, Alt-drag STRETCHES them around the opposite edge;
+            # both snap to any beat (decision 2026-10-13).
+            state = self._envelope_drag_state
+            edge = "left" if self.resizing_left else "right"
+            origin = state.start if edge == "left" else state.end
+            new_time = origin + delta_time
             if self.snap_to_grid:
-                new_start = self.timeline_widget.find_nearest_beat_time(new_start)
-                new_duration = (self.drag_start_time + self.drag_start_duration) - new_start
-
-            if new_start >= 0 and new_duration >= 0.1:
-                with TIMELINE_EDIT_LOCK:
-                    self.block.start_time = new_start
-                    self.block.duration = new_duration
-                self.update_position()
-                self.position_changed.emit(self, new_start)
-                self.duration_changed.emit(self, new_duration)
-
-        elif self.resizing_right:
-            # Resize from right edge (changes duration only)
-            new_duration = self.drag_start_duration + delta_time
-
-            if self.snap_to_grid:
-                new_end = self.block.start_time + new_duration
-                new_end = self.timeline_widget.find_nearest_beat_time(new_end)
-                new_duration = new_end - self.block.start_time
-
-            if new_duration >= 0.1:
-                self.block.duration = new_duration
-                self.update_position()
-                self.duration_changed.emit(self, new_duration)
+                new_time = self.timeline_widget.find_nearest_beat_time(new_time)
+            stretch = bool(event.modifiers() & Qt.KeyboardModifier.AltModifier)
+            with TIMELINE_EDIT_LOCK:
+                envelope_edit.apply(self.block, state, edge, new_time, stretch)
+            self._envelope_drag_stretch = stretch
+            self.update_position()
+            self.update()
 
         elif self.resizing_sublane:
             # Resize sublane block.
@@ -2024,6 +2017,8 @@ class LightBlockWidget(QWidget):
             self.dragging = False
             self.resizing_left = False
             self.resizing_right = False
+            self._envelope_drag_state = None
+            self._envelope_drag_stretch = False
             self.drag_start_pos = None
 
             # Clear sublane interaction state
@@ -2047,6 +2042,9 @@ class LightBlockWidget(QWidget):
         moved = self.dragging and not self.shift_drag_copying
         resized = self.resizing_left or self.resizing_right
         if not (moved or resized):
+            return
+        if resized:
+            self._push_envelope_edge_undo()
             return
         old_start = self.drag_start_time
         old_end = self.drag_start_time + self.drag_start_duration
@@ -2073,6 +2071,44 @@ class LightBlockWidget(QWidget):
         # set block.modified - that flag means "content diverged from
         # the riff source" and a move keeps content intact.
         self._flip_morph_provenance()
+        self.block_edited.emit()
+
+    def _envelope_edge_at(self, pos):
+        """"left" / "right" when ``pos`` is on an envelope edge handle,
+        else None. The handles sit at the ends of the header strip (below
+        it, a click belongs to the sublane rows), and a block too narrow
+        for two handles plus a grab area has none: it only moves."""
+        if pos.y() >= self.HEADER_HEIGHT:
+            return None
+        if self.width() < 3 * self.RESIZE_HANDLE_WIDTH:
+            return None
+        if pos.x() <= self.RESIZE_HANDLE_WIDTH:
+            return "left"
+        if pos.x() >= self.width() - self.RESIZE_HANDLE_WIDTH:
+            return "right"
+        return None
+
+    def _push_envelope_edge_undo(self):
+        """Finish an envelope-edge trim/stretch: ONE already-applied
+        EnvelopeEditCommand, the hand-edit marks (the sublane content
+        changed), block_edited. An edge drag that changed nothing pushes
+        nothing."""
+        before = getattr(self, "_envelope_drag_state", None)
+        if before is None:
+            return
+        after = EnvelopeState.capture(self.block)
+        if after == before:
+            return
+        stack = None
+        if hasattr(self.lane_widget, "_get_undo_stack"):
+            stack = self.lane_widget._get_undo_stack()
+        if stack is not None:
+            from .undo_commands import EnvelopeEditCommand
+            label = ("Stretch Block" if getattr(self, "_envelope_drag_stretch",
+                                                False) else "Trim Block")
+            stack.push(EnvelopeEditCommand(self.lane_widget, self.block,
+                                           before, after, label))
+        self._mark_hand_edit()
         self.block_edited.emit()
 
     def mouseDoubleClickEvent(self, event: QMouseEvent):

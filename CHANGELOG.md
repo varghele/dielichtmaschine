@@ -49,6 +49,14 @@ verbatim as the GitHub Release notes (see [docs/releasing.md](docs/releasing.md)
 
 ### Fixed
 
+- **Dragging an effect's edge trims it; Alt-drag stretches it.** The
+  edge handles on a timeline effect never changed the show: the right
+  edge did nothing, the left edge only moved the outline, and the
+  handles could hardly be grabbed. Now grab either end of the effect's
+  header strip: a plain drag trims the effect, cutting sub-blocks at the
+  new edge and removing the ones left outside; holding Alt stretches
+  every sub-block around the opposite edge, so a 4-bar build becomes an
+  8-bar one. Both snap to the beat and undo in one step.
 - **Shift-drag copying a block copies it where you drop it.** The
   original block's sub-blocks stayed at the drop position while its
   outline jumped back, and the copy's sub-blocks landed a second drag

@@ -814,6 +814,8 @@ the shift-drag copy offset bug, typed rudiment lookups, CCW cylinder,
 autosave wrap removed, legacy shaders declared divergent. Gate on this
 desk: unit 3640, e2e 48, visual 88 + 1 skipped. OPEN: the desk checks
 (G9 real-GL, VISUALIZER OPEN port flow), release.yml on first release,
-the merge/tag decision, and a new product decision: envelope edge
-resize writes the deprecated `LightBlock.duration` (right edge is a
-no-op) - clip, scale or remove the handles.
+and the merge/tag decision. Envelope edges (same day, decided): drag
+TRIMS, Alt-drag STRETCHES to any beat (`utils/envelope_edit.py`, handles
+at the header strip's ends via `_envelope_edge_at`). One e2e run on
+this desk again reported 20 errors with no traceback, then four clean
+reruns: the known Windows e2e intermittent, still unexplained.

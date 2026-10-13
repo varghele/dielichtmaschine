@@ -194,6 +194,42 @@ class MoveBlockCommand(QUndoCommand):
                 break
 
 
+class EnvelopeEditCommand(QUndoCommand):
+    """An envelope-edge trim or stretch (utils/envelope_edit): restores
+    whole EnvelopeState snapshots, so a trim's dropped sublane blocks come
+    back as the same objects on undo. Pushed already applied (the drag
+    changed the block live), so the push-time redo is skipped."""
+
+    def __init__(self, lane_widget: 'LightLaneWidget', block: LightBlock,
+                 before, after, description: str = None):
+        super().__init__(description or "Trim Block")
+        self.lane_widget = lane_widget
+        self.block = block
+        self.before = before
+        self.after = after
+        self._skip_first_redo = True
+
+    def redo(self):
+        if self._skip_first_redo:
+            self._skip_first_redo = False
+            return
+        with TIMELINE_EDIT_LOCK:
+            self.after.restore(self.block)
+        self._update_block_widget()
+
+    def undo(self):
+        with TIMELINE_EDIT_LOCK:
+            self.before.restore(self.block)
+        self._update_block_widget()
+
+    def _update_block_widget(self):
+        for widget in self.lane_widget.light_block_widgets:
+            if widget.block is self.block:
+                widget.update_position()
+                widget.update()
+                break
+
+
 class ResizeBlockCommand(QUndoCommand):
     """Command to resize a LightBlock."""
 

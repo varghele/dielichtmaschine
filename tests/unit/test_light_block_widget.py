@@ -307,3 +307,77 @@ class TestSublaneSelectionIsExclusive:
 
         clear_sublane_selection(FakeLaneWidget())
         assert clean.updated == 0
+
+
+# ── Envelope edge drag: trim, Alt = stretch (decision 2026-10-13) ────────
+
+class TestEnvelopeEdgeDrag:
+    """Drives the real press/move/release handlers on the right envelope
+    handle (header strip, last RESIZE_HANDLE_WIDTH pixels)."""
+
+    @staticmethod
+    def _event(kind, x, y, modifiers=None):
+        from PyQt6.QtCore import QEvent, QPointF, Qt
+        from PyQt6.QtGui import QMouseEvent
+        types = {"press": QEvent.Type.MouseButtonPress,
+                 "move": QEvent.Type.MouseMove,
+                 "release": QEvent.Type.MouseButtonRelease}
+        mods = modifiers if modifiers is not None else \
+            Qt.KeyboardModifier.NoModifier
+        button = Qt.MouseButton.LeftButton
+        buttons = Qt.MouseButton.NoButton if kind == "release" else button
+        point = QPointF(x, y)
+        return QMouseEvent(types[kind], point, point, point, button,
+                           buttons, mods)
+
+    def _drag_right_edge(self, widget, to_x, modifiers=None):
+        edge_x = widget.width() - 2
+        widget.mousePressEvent(self._event("press", edge_x, 2))
+        assert widget.resizing_right, "press must hit the right handle"
+        widget.mouseMoveEvent(self._event("move", to_x, 2, modifiers))
+        widget.mouseReleaseEvent(self._event("release", to_x, 2, modifiers))
+
+    def _fill(self, block):
+        block.dimmer_blocks = [DimmerBlock(start_time=0.0, end_time=6.0),
+                               DimmerBlock(start_time=6.0, end_time=10.0)]
+
+    def test_plain_drag_trims(self, widget, stub_block):
+        self._fill(stub_block)
+        widget.update_position()
+        self._drag_right_edge(widget, widget.width() - 2 - 500)   # -5 s
+        assert [(d.start_time, d.end_time) for d in stub_block.dimmer_blocks] \
+            == [(0.0, 5.0)]
+        assert stub_block.end_time == pytest.approx(5.0)
+        assert widget._envelope_drag_state is None
+
+    def test_alt_drag_stretches(self, widget, stub_block):
+        from PyQt6.QtCore import Qt
+        self._fill(stub_block)
+        widget.update_position()
+        self._drag_right_edge(widget, widget.width() - 2 + 1000,   # +10 s
+                              Qt.KeyboardModifier.AltModifier)
+        assert [(d.start_time, d.end_time) for d in stub_block.dimmer_blocks] \
+            == [(0.0, 12.0), (12.0, 20.0)]
+        assert stub_block.end_time == pytest.approx(20.0)
+
+    def test_header_middle_still_moves(self, widget, stub_block):
+        widget.update_position()
+        widget.mousePressEvent(self._event("press", widget.width() // 2, 2))
+        assert widget.dragging and not widget.resizing_right
+        assert widget._envelope_drag_state is None
+
+    def test_edges_below_the_header_are_not_handles(self, widget):
+        from PyQt6.QtCore import QPoint
+        widget.update_position()
+        below = widget.HEADER_HEIGHT + 5
+        assert widget._envelope_edge_at(QPoint(widget.width() - 2, below)) \
+            is None
+        assert widget._envelope_edge_at(QPoint(widget.width() - 2, 2)) \
+            == "right"
+        assert widget._envelope_edge_at(QPoint(2, 2)) == "left"
+
+    def test_narrow_block_has_no_handles(self, widget, stub_block):
+        from PyQt6.QtCore import QPoint
+        stub_block.end_time = 0.2            # 20 px: the minimum width
+        widget.update_position()
+        assert widget._envelope_edge_at(QPoint(1, 2)) is None
