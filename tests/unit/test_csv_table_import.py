@@ -235,6 +235,11 @@ class TestBuildFixtures:
         assert fixtures[0].group == "Front Wash"
         assert fixtures[0].layer == "FOH Truss"
 
+    def test_semicolon_group_cell_joins_every_group(self):
+        # Same convention as the rig sheet's groups column.
+        fixtures, _ = build_fixtures(self._records(group="Front; Side"))
+        assert fixtures[0].groups == ["Front", "Side"]
+
     def test_numbers_parse_including_spreadsheet_floats(self):
         fixtures, errors = build_fixtures(self._records(
             universe="2", address="10.0"))

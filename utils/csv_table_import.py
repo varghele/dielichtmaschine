@@ -37,6 +37,7 @@ from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Tuple
 
 from config.models import Fixture, FixtureMode
+from utils.fixture_io import parse_group_cells
 
 # The rig fields a foreign sheet can feed, in wizard display order.
 # ``position`` is the venue's hang position (FOH truss, LX1, boom SL);
@@ -293,7 +294,9 @@ def build_fixtures(records: List[Dict[str, str]]) -> Tuple[List[Fixture], List[s
             manufacturer=manufacturer,
             model=model,
             name=record.get("name", "") or model.strip(),
-            group=record.get("group", ""),
+            # "Front;Side" puts the fixture in both (first = primary),
+            # the rig sheet's convention (utils/fixture_io).
+            groups=parse_group_cells(record.get("group", "")),
             layer=record.get("position", ""),
             current_mode=mode,
             available_modes=[FixtureMode(name=mode, channels=1)],

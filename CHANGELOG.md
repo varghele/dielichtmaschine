@@ -49,6 +49,14 @@ verbatim as the GitHub Release notes (see [docs/releasing.md](docs/releasing.md)
 
 ### Fixed
 
+- **A CSV rig sheet keeps every group a fixture belongs to.** Exporting
+  the rig as CSV and importing it again put each fixture in its first
+  group only, losing secondary groups and the lanes that use them. The
+  sheet now has a `groups` column listing every group separated by `;`
+  (first = primary); the `group` column still carries the primary, so
+  older sheets import unchanged and older builds still read new ones.
+  A hand-written sheet or a venue table in the CSV import wizard can
+  also list several groups in its group column, `Front;Side`.
 - **The colour editor has an explicit RGB / WHEEL switch.** On a fixture
   with both RGB and a colour wheel or macro channel (a Stairville par in
   8-channel mode, say) the editor stored every colour as a wheel colour,

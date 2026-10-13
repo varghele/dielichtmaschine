@@ -12,6 +12,8 @@ Contract under test:
   group rebuild with property preservation/seeding.
 """
 
+import csv
+
 import pytest
 
 from config.models import Configuration, Fixture, FixtureGroup, FixtureMode, Universe
@@ -131,25 +133,68 @@ class TestCsvRoundTrip:
 
 
 class TestCsvSecondaryGroups:
-    """docs/bug-reports.md #1: the CSV sheet writes only the primary
-    group, so a fixture in two groups comes back in one. JSON keeps both
-    (TestJsonRoundTrip covers it)."""
+    """The CSV sheet carries every membership in a `groups` column
+    (`Front;Side`, primary first) next to the primary-only `group`
+    column, so old sheets and old readers keep working (2026-10-13,
+    was docs/bug-reports.md #1)."""
 
-    @pytest.mark.xfail(strict=True, reason="docs/bug-reports.md #1: CSV "
-                       "rig sheet drops secondary groups")
-    def test_csv_round_trip_keeps_every_group(self, tmp_path):
+    def _two_group_config(self):
         both = make_fixture("Wash 1", group="Front")
         both.groups = ["Front", "Side"]
-        config = Configuration(
+        return Configuration(
             fixtures=[both],
             groups={"Front": FixtureGroup("Front", [both]),
                     "Side": FixtureGroup("Side", [both])},
             universes={1: Universe(id=1, name="Universe 1", output={})},
         )
+
+    def test_csv_round_trip_keeps_every_group(self, tmp_path):
         path = str(tmp_path / "rig.csv")
-        write_fixture_list_csv(path, config)
+        write_fixture_list_csv(path, self._two_group_config())
         (fixture,) = read_fixture_list_csv(path)
         assert fixture.groups == ["Front", "Side"]
+
+    def test_group_column_stays_the_primary(self, tmp_path):
+        # An older build reads only `group`: it must get the primary,
+        # not a group literally named "Front;Side".
+        path = str(tmp_path / "rig.csv")
+        write_fixture_list_csv(path, self._two_group_config())
+        with open(path, newline='') as f:
+            (row,) = csv.DictReader(f)
+        assert row['group'] == "Front"
+        assert row['groups'] == "Front;Side"
+
+    def test_old_sheet_without_groups_column_imports_unchanged(self, tmp_path):
+        path = tmp_path / "old.csv"
+        path.write_text("manufacturer,model,universe,address,group\n"
+                        "Generic,Par,1,1,Front\n"
+                        "Generic,Par,1,10,\n")
+        first, second = read_fixture_list_csv(str(path))
+        assert first.groups == ["Front"]
+        assert second.groups == []
+
+    def test_hand_written_group_cell_may_list_several(self, tmp_path):
+        path = tmp_path / "hand.csv"
+        path.write_text("manufacturer,model,universe,address,group\n"
+                        "Generic,Par,1,1, Front ; Side;Front;\n")
+        (fixture,) = read_fixture_list_csv(str(path))
+        assert fixture.groups == ["Front", "Side"]
+
+    def test_filled_groups_column_wins_over_group(self, tmp_path):
+        path = tmp_path / "both.csv"
+        path.write_text("manufacturer,model,universe,address,group,groups\n"
+                        "Generic,Par,1,1,Front,Back;Front\n")
+        (fixture,) = read_fixture_list_csv(str(path))
+        assert fixture.groups == ["Back", "Front"]
+
+    def test_apply_creates_every_group(self, tmp_path):
+        path = str(tmp_path / "rig.csv")
+        write_fixture_list_csv(path, self._two_group_config())
+        target = Configuration(
+            universes={1: Universe(id=1, name="Universe 1", output={})})
+        apply_fixture_list(target, read_fixture_list_csv(path))
+        assert sorted(target.groups) == ["Front", "Side"]
+        assert [f.name for f in target.groups["Side"].fixtures] == ["Wash 1"]
 
 
 class TestJsonRoundTrip:
