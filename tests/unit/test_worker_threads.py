@@ -160,6 +160,9 @@ class TestGdtfAutopullQuit:
 
             def _on_gdtf_autopull_done(self, kept):
                 self.done.append(kept)
+
+            def wait_for_background_workers(self, timeout_ms=10000):
+                pass
         return Shell()
 
     def test_worker_is_a_daemon_thread_not_a_qthread(
@@ -203,3 +206,34 @@ class TestGdtfAutopullQuit:
         qapp.processEvents()
         assert seen_cancel == [True]
         assert shell.done == []                # a cancelled pull reports nothing
+
+
+class TestWaitForBackgroundWorkers:
+    """MainWindow.wait_for_background_workers is closeEvent's wait AND
+    what the e2e fixture calls before destroying an unclosed window: an
+    autosave write still running at teardown aborted the e2e process."""
+
+    def test_waits_for_a_running_autosave_write(self, qapp):
+        import threading
+        from PyQt6.QtCore import QThread
+        from types import SimpleNamespace
+        from gui.gui import MainWindow
+
+        release = threading.Event()
+
+        class Writer(QThread):
+            def run(self):
+                release.wait(5)
+        writer = Writer()
+        writer.start()
+        shell = SimpleNamespace(_autosave_worker=writer, shows_tab=None,
+                                structure_tab=None)
+        threading.Timer(0.2, release.set).start()
+        MainWindow.wait_for_background_workers(shell)
+        assert writer.isFinished()
+
+    def test_close_event_uses_it(self):
+        import inspect
+        from gui.gui import MainWindow
+        assert "MainWindow.wait_for_background_workers(self)" in \
+            inspect.getsource(MainWindow.closeEvent)
