@@ -1991,7 +1991,7 @@ class LightBlockWidget(QWidget):
                     self.block.start_time = self.drag_start_time
                     self.block.end_time = self.drag_start_time + self.drag_start_duration
                     # Update sublane blocks back to original times
-                    self._restore_sublane_times()
+                    self._restore_sublane_times(new_start_time)
                 self.update_position()
 
                 # Create copy at new position via lane widget
@@ -2454,21 +2454,19 @@ class LightBlockWidget(QWidget):
         self.update()
         self.block_edited.emit()
 
-    def _restore_sublane_times(self):
-        """Restore all sublane block times to match the original envelope position.
+    def _restore_sublane_times(self, dragged_start: float):
+        """Shift every sublane block back from the dragged envelope
+        position ``dragged_start`` to the drag's starting position.
 
-        Used when cancelling a shift+drag copy to reset the visual dragging.
+        Used when finishing a shift+drag copy: the live drag moved the
+        envelope AND its sublane blocks, and the original must return
+        whole before it is copied. The caller resets the envelope first,
+        so the offset comes from ``dragged_start`` (computing it from the
+        already-reset envelope gave 0 and left the sublane blocks at the
+        drop position, which the paste then shifted a second time).
         """
-        # Calculate the time offset that was applied during dragging
-        current_duration = self.block.end_time - self.block.start_time
-        original_duration = self.drag_start_duration
+        time_delta = self.drag_start_time - dragged_start
 
-        # The blocks were dragged with the envelope, so we need to restore them
-        # to match the original start time
-        time_delta = self.drag_start_time - self.block.start_time
-
-        # Since we already reset self.block.start_time and end_time,
-        # we need to adjust all sublane blocks to match
         for dimmer_block in self.block.dimmer_blocks:
             dimmer_block.start_time += time_delta
             dimmer_block.end_time += time_delta

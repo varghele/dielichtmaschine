@@ -49,6 +49,10 @@ verbatim as the GitHub Release notes (see [docs/releasing.md](docs/releasing.md)
 
 ### Fixed
 
+- **Shift-drag copying a block copies it where you drop it.** The
+  original block's sub-blocks stayed at the drop position while its
+  outline jumped back, and the copy's sub-blocks landed a second drag
+  distance further along. Both now end up where they belong.
 - **Dragging a block during playback no longer glitches the output.**
   Moving or resizing a block while the show played could send one frame
   in which the block was half moved, which often restarted its effect

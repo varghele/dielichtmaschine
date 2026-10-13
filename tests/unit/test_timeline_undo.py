@@ -260,3 +260,22 @@ class TestEnvelopeDragPush:
         stub.shift_drag_copying = True
         self._push(stub)
         assert stack.count() == 0
+
+
+class TestShiftDragCopyRestore:
+    """A shift+drag copy returns the original block whole before the
+    copy is pasted. The sublane offset used to be computed after the
+    envelope was reset, so it was 0: the original's sublane blocks stayed
+    at the drop position and the paste shifted the copy's twice."""
+
+    def test_sublane_blocks_return_with_the_envelope(self):
+        from types import SimpleNamespace
+        from config.models import DimmerBlock, LightBlock
+        from timeline_ui.light_block_widget import LightBlockWidget
+
+        dimmer = DimmerBlock(start_time=14.0, end_time=16.0)  # dragged +10
+        block = LightBlock(start_time=4.0, end_time=8.0,      # already reset
+                           effect_name="test.static", dimmer_blocks=[dimmer])
+        stub = SimpleNamespace(block=block, drag_start_time=4.0)
+        LightBlockWidget._restore_sublane_times(stub, 14.0)
+        assert (dimmer.start_time, dimmer.end_time) == (4.0, 6.0)
