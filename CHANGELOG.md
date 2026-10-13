@@ -11,7 +11,328 @@ verbatim as the GitHub Release notes (see [docs/releasing.md](docs/releasing.md)
 
 ## [Unreleased]
 
+## [1.5.5] - 2026-10-13
+
+Version 1.5.0 never shipped as a final release: its alpha went out on
+2026-07-27 and the release stalled on two hardware checks. This release
+folds the finished 1.5 work (focus geometry and world-space aiming, show
+morphing to a new venue, the pre-flight screen, palette roles, marks)
+together with the 1.5.5 hardening pass (correctness, thread-safety and
+lifetime fixes, export / native playback parity). Coming from 1.4.0,
+everything below is new.
+
+### Added
+
+- **The patch cable follows your cursor.** Pulling a wire in Morph to
+  Venue used to show nothing until you had already dropped it; now the
+  cable is drawn from the source chip to the cursor for the whole drag,
+  so you can see what you are about to connect.
+
+- **Four ways to un-patch, three of them new.** Removing a connection
+  was only possible by right-clicking an edge chip, which nobody found.
+  Every patch now carries a visible **×**; a patch can be focused and
+  removed with Delete or Backspace; the wire itself can be clicked to
+  select it (it highlights) and removed with Delete; and a patch can be
+  dragged off its row to pull it out, the way you would unplug a cable.
+  The right-click menu is unchanged.
+
+- **Unpatch everything, at three scopes.** An **Unpatch all** button
+  beside Auto-suggest clears the whole plan (handy when a suggestion
+  prefills wiring you did not want); each target group that has
+  incoming patches grows an **UNPATCH** button that clears just that
+  row; and right-clicking a source group offers to unpatch everything
+  it feeds, however many targets it fans out to. Removing more than one
+  patch at a time asks first.
+
+- **Undo and redo in the patchbay.** Every patch edit can be taken back:
+  wiring, unpatching, auto-suggest, unpatch-all, locks, modes,
+  transforms and priorities. Undo and Redo buttons sit in the patchbay
+  header (with Ctrl+Z / Ctrl+Y while the patchbay has focus), and each
+  button says what it will undo. Actions that feel like one gesture undo
+  as one step: a fan-out that took one drop takes one Ctrl+Z, and an
+  auto-suggest that wired thirty patches comes back in a single press.
+  This is the patchbay's own history, separate from the timeline's.
+
+- **The morph preview scrubs the whole song.** RENDER SCRUB now renders
+  a frame every 2 seconds across the selected song for both rigs, and
+  the slider flips through them instantly instead of showing the single
+  moment you happened to render. This costs barely more than the old
+  single frame did: rendering walks the song to the frame you asked
+  for, so one late frame already paid for all of them. A 4:39 song
+  renders both rigs in about 18 seconds, once.
+
+- **Marks, one job per place.** The Stage tab's AIM button became
+  **PLACE MARK**: click the plan and ONE mark lands there, ready to
+  rename, and the mode disarms so the next click does not drop another
+  one. Shift-click to keep placing a row of them. Placement follows
+  Snap to grid, like everything else you position on the plan. That is all it does now - marks are the rig's geometry, so
+  the Stage tab places and moves them, the movement block dialog picks
+  which mark a block aims at, and the Live tab's POSITION pool points
+  real movers at one. Aiming used to create an invisible one-off
+  coordinate AND assign it to whatever was selected in the timeline,
+  which meant selecting a block in one tab and clicking in another.
+  Clicking an existing mark selects it instead of stacking a duplicate
+  on top. Shows authored with the old coordinates keep working
+  unchanged.
+
+- **Marks reach the Live tab straight away.** A mark added while the
+  app is running used to be invisible in the POSITION pool until the
+  project was reloaded. Now dropping a mark and pointing the movers at
+  it is a two-step pre-show rig check, with no show running.
+
+- **The Live tab owns the SMPTE chase now: input, arm and watch.**
+  The fade row's SYNC cluster grew the sync INPUT picker (moved off
+  the Structure rail - the physical input is a venue concern that
+  changes with the rig, not show structure; the choice still saves
+  with the project, and a saved device shows even when its interface
+  is not attached), an ARM chip (the same chase the Structure tab
+  arms; both stay in sync) and an inline timecode readout: while
+  armed, the last received SMPTE timecode shows next to SYNC LTC in
+  the LED readout voice, with LOCKED / FREEWHEEL / NO SIG at a
+  glance. Arming without the setlist in SMPTE sync mode explains
+  itself in the status bar instead of silently failing. Render Show
+  to Video moved from its one-action Render menu into Tools.
+
+- **Every Live pool is per-group now - a full look per group.** The
+  INTENSITY FX and MOVEMENT SHAPES pools work like the POSITION pool:
+  touching a key applies it to the selected groups, each group runs
+  its own dimmer pattern/shape simultaneously (own loop length, own
+  pause), and everything keeps running on its group after deselection
+  - build a complete individual configuration per group (colour,
+  position, intensity, shape); scenes stay the one whole-rig
+  override. Touching a key every selected group already runs releases
+  it there. Each group tile reads its running look, the ACTIVE
+  PLAYBACKS rows tag their group set (PAUSE freezes exactly that
+  key's groups, KILL releases only them), the programmer bar lists
+  the selection's keys, and a group joining an already-running
+  pattern starts in phase with it instead of restarting anyone. The
+  riff-backed pools scroll instead of overflowing their column when
+  the library grows.
+
+- **The EFFECTS pool fires composite looks; a COLOUR FX pool cycles
+  the colour.** Each EFFECTS cell is now a COMPOSITE macro - one grab
+  sets a coordinated intensity FX and movement shape on the selected
+  groups at once (colour stays with the swatch), so you build a look
+  without touching three pools. Ten composites split into LOOPS
+  (sustained) and HITS (short and punchy); firing one shows up in the
+  running stack as its intensity + shape parts, and each group tile
+  names the composite it holds. New below the colour palettes: a
+  COLOUR FX subsection whose RAINBOW look cycles a moving hue across
+  the selected groups (overriding the static swatch), the same
+  per-group, touch-to-release contract as the swatches.
+
+- **Finished songs can be locked against accidental edits.** A LOCK
+  chip on the Structure tab's song header (next to RENAME SONG and
+  DELETE) and on the Timeline toolbar - where it replaces the SAVE
+  button, which had been a relic since edits started syncing to the
+  project automatically. While locked, every timeline and structure
+  edit refuses -
+  blocks cannot be added, moved, resized, renamed, deleted or edited
+  (keyboard shortcuts, drag, context menus, Ctrl+wheel speed and the
+  block dialogs included), lanes cannot be added, removed, renamed or
+  retargeted, parts and song rename/delete grey out, autogenerate and
+  the movement-to-world-targets conversion skip the song. Playback,
+  export, morphing, the setlist and the lane mute/solo toggles stay
+  fully live, and copy/save-as-riff keep working - the lock protects
+  content, not operation. The Shows tab shows a LOCKED tag in its
+  footer and refuses with a statusbar note; the flag persists in the
+  project file (older files load unlocked, unlocked songs stay
+  byte-identical), and a morphed copy of a locked song starts
+  unlocked - it is new work.
+
+- **Auto mode shows what the microphone hears - and can turn it up.**
+  A live INPUT LEVEL meter on the Auto screen (dB scale, -60 to 0)
+  runs as soon as the tab opens, engine started or not, so "does it
+  react to sound" is a glance instead of a full engine start. Beside
+  it a GAIN slider (-20 to +20 dB, centre 0) amplifies or dampens the
+  signal before analysis - a too-quiet source becomes usable by the
+  engine - and AUTO measures the last two seconds and sets the gain
+  once, aiming peaks at -12 dBFS (it refuses on silence rather than
+  amplifying an empty room). The gain persists with the Auto settings;
+  the meter reads the true input, not the analyzer's self-normalizing
+  energy, and timecode input is untouched. The device is released
+  whenever the tab is out of sight.
+
+- **Pause lights between songs (minimal pause-look engine).** While
+  the LTC chase is armed and no song is playing, the output arbiter's
+  pause slot renders the current setlist entry's pause look - and the
+  next timecode-fired song simply covers it (the pause merges below
+  playback), so "hold until the next trigger" needs no teardown.
+  Rendered modes: a SceneLibrary look by key (new PauseLook mode
+  "scene", with the scene's colour, groups and mover aims, scaled by
+  the level percent), warm white, and blackout (a claim to zero, so
+  it beats the editor's full-white idle floor too). "Hold last" and
+  "ambient loop" stay data-only until the full conductor lands. The
+  Structure tab's pause rows and mode menu know the new mode.
+- **Scenes can aim the movers.** A Scene optionally carries per-group
+  positions in the Live POSITION pool's namespace ("mark:<spot>",
+  "preset:cross", ...): staging the scene colours its groups AND aims
+  their heads in one tap, an explicitly held position still wins on
+  its group, and the aim releases with the scene. The pause-look
+  engine renders scene aims through the exact same code path as the
+  busk layer, so a pause scene points the rig identically.
+- **Movement blocks can aim at the world, and old shows can convert.**
+  Three authoring surfaces for the new world-space movement targets:
+  the movement block editor's target picker now offers, besides named
+  spots, the stage's bounding planes and a read-only display of an
+  ad-hoc world point; the Stage tab gained an AIM toggle - click the
+  stage plan to point the movement block selected in the Show timeline
+  at that exact spot (Shift keeps the current target height); and
+  Tools > Convert Movement to World Targets... traces where every
+  legacy pan/tilt movement block's beam actually lands on the stage
+  and writes that point as the block's world target, after showing a
+  full per-block report (skipped blocks - e.g. beams pointing at the
+  sky - and groups whose fixtures land far apart are called out).
+  Pan/tilt values stay as fallback in all three paths.
+- **Morph to Venue: take a show to another rig.** Tools > Morph to
+  Venue... opens a full-window screen (not a dialog: the shell nav
+  stays usable, so you can check the Stage tab or the timeline
+  mid-morph and come back - leaving keeps the in-progress plan, and
+  the menu resumes it) that adapts the open show to a different
+  venue's rig: pick the venue project, wire the patchbay by dragging a
+  source chip onto a target capability or by click-then-click (each
+  source lane stream docks onto target groups of the same capability -
+  INTENSITY, COLOUR, POSITION, BEAM - incompatible targets grey out
+  while a wire is pending - with per-wire transforms like mirror,
+  phase offset, intensity scale and stage-half subsets, plus
+  regenerated movement for rigs that gained movers), review the
+  coverage table and the full morph report from a dry run, then commit
+  and save the morphed show as a new project. Patch plans save as
+  reusable `*.morphplan.yaml` files per venue - reload one to re-morph
+  after fixing the master show, with locked target lanes left untouched
+  and any hand-edited blocks listed before they are replaced. An
+  auto-suggest button prefills the wiring by lighting role; nothing
+  routes without confirmation, and discarding the screen changes
+  nothing. The review step also carries a side-by-side preview: pick a
+  song, scrub to any moment, and RENDER PREVIEW shows the original
+  show on the source rig next to the morphed show on the venue rig as
+  two stills (rendered on demand in the background; a side without a
+  usable GL context or an empty song shows a placeholder instead of
+  failing).
+- **Colour palette roles are editable.** The colour block editor gained
+  a ROLE picker: tag a block with a palette role ("primary", "accent",
+  or any name you type) instead of leaving it a hard-coded literal, and
+  EDIT PALETTE... manages the song's role-to-colour table with swatch
+  pickers. Changing a role's colour re-skins every block tagged with it
+  across the song immediately - the indirection that also lets the
+  venue morph route colour as intent instead of copying literal values.
+- **Venue pre-flight: a checklist that drives the rig.** Tools > Venue
+  Pre-Flight... (also offered right after a morph commit) generates the
+  on-site checklist from the show itself - flash tests per patched
+  group, aim checks per mover group and spot, focus capture, RGB colour
+  sanity, gobo steps, a final scrub-through - and DRIVE puts the rig
+  into each test state over ArtNet (full-white flash, movers aimed at
+  the real spot, stepped pure colours) while a playing show keeps the
+  output for itself. CORRECT ticks and advances; INCORRECT opens the
+  fix (the orientation editor for aim problems, pointers to the right
+  tab for patch/colour problems) and re-tests the same item; CAPTURE
+  stores trimmed focus/zoom into the fixtures' calibration in the
+  project - never into the show. The checklist saves next to the
+  project and resumes after interruptions, and exporting a `.qxw`
+  while it is incomplete (or completed before the last config change)
+  now warns hard - in the app with Continue Anyway / Cancel, on the
+  headless export CLI as a stderr warning.
+
+- **Six house-rig fixture definitions joined the bundled library**,
+  hand-authored from the official manufacturer manuals (committable
+  and portable, unlike GDTF Share downloads): Expolite TourLED 42CM
+  (Ar1.S), Litecraft LED StudioPAR 25x3W (3ch), Cameo Q-Spot 15 RGBW
+  (9CH), Cameo ROOT PAR 6 (D12CH), Cameo ROOT PAR 4 (D10CH), and the
+  Cameo HydraBeam 4000 RGBW as a per-head definition - one 56-channel
+  bar patches as four independent 14-channel moving heads, so each
+  head aims from its own stage position (PAN 540 / TILT 270 from the
+  manual drive the solver and the export).
+
+- **GDTF definitions fetch themselves.** After a project loads, the
+  app quietly pulls GDTF files from GDTF Share for the fixtures the
+  project uses (so the visualizer renders native 3D models instead of
+  procedural chassis) - when the machine is online and a Share account
+  is stored, and never otherwise: an offline venue laptop behaves
+  exactly as before. Only exact-identity matches are taken, and a
+  downloaded file is kept only when its internal identity matches and
+  it offers the channel footprint the fixtures are patched with - a
+  GDTF swap changes the fixture's whole definition, so anything less
+  strict could silently re-map the DMX wire.
+
 ### Changed
+
+- **Morph to Venue patches group to group, once for the whole setlist.**
+  The patchbay used to list every song's lanes separately, so the same
+  wire had to be drawn again for each song: a real 12-song gig needed
+  293 edges to express 39 actual wires. Edges now key on the fixture
+  group itself, so the source column is one row per group and a single
+  wire covers every song in the set. Per-song overrides remain for a
+  song that genuinely differs. Existing plans are converted on load and
+  say what they collapsed. Note that a converted plan can render MORE
+  than it used to: where the old per-song wiring left a song out, that
+  song now follows the same routing as the rest.
+
+- **Help > About is a branded card now.** The generic message box
+  became a real dialog: rotor glyph and wordmark with the slogan, a
+  short body paragraph, the rating plate (the same verifiable facts
+  as the README banner - protocols, sync, compatibility, version,
+  license, platforms - from one shared source, shipped items in full
+  text colour and outstanding ones dimmed), and the domain as a
+  clickable link.
+- **Live pool cells read like names, not file keys.** Riff and scene
+  names double as library keys ("intensity_crescendo_8bar"), and the
+  Live pools displayed them verbatim - underscored, unwrappable and
+  clipped mid-word. Every operator-facing label (pool cells, running
+  playback rows, the queue, the programmer bar) now reads underscores
+  as spaces, the cell text word-wraps onto extra lines, and the cell
+  font dropped a point so long single words fit the cell width. Keys
+  stay raw everywhere - staging, resolution and lookups are untouched.
+- **The README banner speaks facts now.** The banner's side column
+  became a rating plate - protocols (ArtNet / E1.31 / DMX at 44 Hz,
+  LTC/SMPTE chase), compatibility (GDTF / DIN SPEC 15800, QLC+),
+  version, license and platforms - instead of adjectives. Both the
+  banner and the GitHub social preview render from
+  `scripts/render_brand_assets.py` using the bundled brand fonts, with
+  the version stamped at render time.
+- **The bundled demo rigs and shows now ship in the native `.lms`
+  format** (the content stays YAML; the files carry the current
+  schema: `songs:` + `setlist:`, compact block tables, stable lane
+  ids, group fixture order). Exports from the converted demos are
+  byte-identical to before, and legacy `.yaml` projects keep loading
+  everywhere - a legacy-format copy of the mid-size demo is preserved
+  as the loader's regression fixture.
+
+- **The Live surface can start the show it busks over.** A SHOW strip
+  on the busk screen: pick a song (setlist order, same list as the
+  Shows tab), PLAY/STOP, and a position readout showing where the
+  show is - so busking over a running timeline no longer needs a trip
+  to the Shows tab. The strip is a remote for the Shows tab's own
+  transport: PLAY contends for the playback slot exactly like the
+  Shows tab's Play button, and STOP is the operator's STOP (it also
+  disarms an armed LTC chase).
+
+- **Playback no longer saturates the UI thread.** During playback the
+  ~30 FPS visual tick fully repainted every timeline stripe's canvas -
+  measured at 4.1 seconds of paint work demanded per second on a real
+  project. Four fixes: moving the playhead now invalidates only narrow
+  strips around the old and new line; the grid painters cull to the
+  exposed region (parts and steps are time-ordered, so a 9 px strip
+  costs a handful of lines); the audio waveform renders its peak
+  polygon once into a cached pixmap and ticks just blit the exposed
+  slice; and the waveform peak cache moved from a multi-second,
+  non-atomic JSON blob (an interrupted write corrupted it forever,
+  forcing re-analysis on every song load) to an atomic binary format
+  that round-trips in milliseconds. Net: the per-tick paint cost
+  dropped about 6.5x, and song loads with a warm cache skip analysis
+  entirely.
+- **Real-sized projects stopped stuttering.** Three UI-thread costs
+  that scale with project size ran on timers and made everything feel
+  laggy on real projects (a 400 KB show froze the UI for ~1 s every
+  15 s while editing, plus a ~50 ms hitch every 5 s even idle):
+  project files now parse and write through PyYAML's libyaml C
+  extension when present (identical file format, several times
+  faster - opening a big project drops from ~1.5 s to ~0.4 s), the
+  crash-recovery autosave moved off the UI thread (the UI only takes
+  a ~10 ms snapshot; serializing and the atomic write happen on a
+  worker), and the unsaved-changes marker fingerprints the project
+  via pickle instead of a Python-level full-content walk (~6x). On
+  machines whose PyYAML lacks libyaml everything keeps working on the
+  old path, just slower.
 
 - **Audio playback no longer runs a pointless drift timer.** The audio
   synchronizer checked every half second for "drift" by comparing the
@@ -48,6 +369,198 @@ verbatim as the GitHub Release notes (see [docs/releasing.md](docs/releasing.md)
   show exports are byte-identical before and after.
 
 ### Fixed
+
+- **Tagging a colour block with a palette role now colours it.** Picking
+  a role only recorded the intent: the block kept its old colour until
+  the palette editor happened to be opened and accepted again, so
+  tagging a white block "secondary" left it white and read as the role
+  doing nothing. The role's colour is applied on OK, and the sliders
+  show it the moment you pick the role. A role the palette has no entry
+  for yet leaves the colour alone.
+
+- **Selecting a sub-block deselects the previous one.** Clicking a
+  colour or dimmer block inside one clip left the previously selected
+  sub-block highlighted in another clip, so several looked selected at
+  once, and Escape did not clear them.
+
+- **Editing a colour palette re-skins every tagged block on screen.**
+  Changing a role's colour updated all its blocks, but only the one
+  whose dialog was open repainted - the others kept showing the old
+  colour until a scroll or a song switch.
+
+- **Delete removes a mark selected on the stage plan.** It only worked
+  while the MARKS list itself had keyboard focus, so selecting a mark
+  on the plan and pressing Delete did nothing. Fixtures are left alone
+  deliberately - the stage plan has no undo.
+
+- **A saved pre-flight no longer breaks New from Template.** Saving a
+  venue pre-flight next to a rig put a sidecar file in the templates
+  folder, which then listed as an empty starter project.
+
+- **The morph review page's coverage table looks like the rest of the
+  app.** The area below the last row painted white under the dark
+  theme, and the columns left dead space instead of filling the width.
+
+- **The test suite no longer leaks every widget tree it builds.** The
+  standard UI-fixture teardown (`deleteLater()` followed by
+  `processEvents()`) freed nothing: `processEvents()` does not deliver
+  `DeferredDelete` when no event loop is running, so every tab and
+  dialog a worker ever built stayed alive. Since applying a theme
+  re-polishes every widget in the application, each later theme apply
+  walked a bigger pile of dead widgets until it crashed - the CI
+  access violations in the Live tab tests, and the earlier
+  offscreen-Linux segfaults. There is now a suite-wide flush.
+  Side effect: the unit suite runs in 34 s instead of 193 s.
+
+- **Audio inputs that refuse 44.1 kHz work now.** Arming the SMPTE
+  chase (or Auto mode) on an onboard microphone input failed with
+  "Invalid sample rate" - many Windows inputs only accept their
+  native mixer rate. Audio capture now falls back to the device's
+  native rate (then 48 kHz), and the LTC decoder and the Auto
+  analyzer follow the rate the stream actually runs at. The failure
+  message, when everything is refused, names the rates it tried.
+- **"Build the show" can finally be crossed off.** The Home
+  checklist's last step read a lane list attribute that does not
+  exist on the timeline model, so it silently saw every project as
+  empty and never checked - no matter how many shows were built. It
+  now reads the real attribute; loading a project with timeline
+  blocks completes the checklist 5 / 5.
+- **The Auto screen's SETUP button no longer collapses.** Opening the
+  SETUP disclosure into a right-column splitter pane without room
+  (easy to reach - the pane split is remembered per machine) crushed
+  the toggle to a thin unlabelled bar and left no space for the
+  settings themselves. The button now carries a hard height floor, and
+  the toggle grows the lower pane to fit the disclosure (borrowing
+  from the collapsible 3D preview) and puts the split back the way it
+  was on close.
+- **Visiting the Structure tab no longer re-decodes the song's
+  audio.** Every tab activation re-ran the whole song load, which
+  re-decoded the current audio file and re-analyzed its waveform on
+  two background threads - wasted work on every visit, and on a brief
+  visit the waveform row was still stuck in its loading paint. The
+  audio lane now skips a load whose file is already loaded or loading;
+  the explicit LOAD buttons still always reload (the file on disk may
+  have changed).
+- **Startup stopped narrating itself.** The console printed a pair of
+  "RenderEngine: Updating stage size" lines for every redundant
+  stage-size application (three embedded 3D views x construction,
+  config rebind and song load - six-plus pairs before the window was
+  up), plus per-fixture colour-wheel parse counts and per-song audio
+  resolution traces. Unchanged stage sizes now return without doing
+  or saying anything (each engine's GL init re-applies its size, so
+  nothing can miss an update), and the remaining traces moved to the
+  debug log per the silent-fallback audit's taxonomy - audio
+  resolution FAILURES still surface in Help > Warnings as before.
+- **The app fits a 720p screen.** The Live tab's palette pools and
+  the Structure tab's centre column demanded so much minimum space
+  that the window's enforced minimum grew to 1462x1020 - on a small
+  laptop the window simply hung off the display. Explicit small-
+  screen floors on those two containers let them compress instead;
+  every tab is now pinned at 1280x720 by per-tab fit checks, golden
+  screenshots of the squeezed layouts, and a window-level "fits a
+  720p display" test.
+- **The packaged app starts on double-click.** The windowed build has
+  no console, so sys.stderr is None - and faulthandler.enable() at
+  the top of main.py raised RuntimeError before any window appeared.
+  Launching from a shell inherits console handles, which is why every
+  CLI check passed while a plain double-click died. Without a stderr
+  the native-crash dumps now go to a file in the app log directory.
+- **Exporting a rig with an unconfigured universe no longer crashes.**
+  A universe whose output was never set in the Setup tab (script-built
+  rigs carry an empty output dict) killed the whole .qxw export with
+  KeyError 'plugin'; it now exports the Universe without an Output
+  element - a normal QLC+ workspace state, outputs get patched on the
+  desk. Configured universes are byte-identical.
+- **The packaged app ships the scene library.** scenes/ was missing
+  from the PyInstaller bundle, so a frozen build had an empty SCENES
+  pool - which would also have silenced a scene-mode pause look.
+- **Moving heads no longer twitch in the visualizer when output
+  broadcasts.** With no universe Target IP the arbiter broadcasts the
+  yoke-converted hardware frame, and its always-on loopback mirror
+  carries the solver-convention frame for the local viewer - a viewer
+  on the same machine received BOTH and rendered whichever packet
+  arrived last, flipping every mover between two poses of the same
+  aim 44 times a second (pan 170 vs 127, tilt 42 vs 127 at the idle
+  floor). The viewer's ArtNet listener now locks each universe to one
+  sender: loopback preferred (the mirror is the authoritative feed
+  for a local viewer), anything else first-come with a 1.5 s silence
+  failover, so following QLC+ or a remote desk still works.
+- **Plane-targeted movement blocks now play natively.** The movement
+  editor has offered the stage's bounding planes as targets since the
+  world-target work, and export and Auto mode rendered them - but
+  timeline playback never handed the planes to its renderer, so a
+  plane-targeted block silently fell back down the priority chain on
+  the wire. The playback controller now feeds the stage planes at
+  startup, on song switch and on fixture rebuilds, keeping all three
+  consumers of a plane target in parity.
+- **Morph provenance survives saving.** The .lms serializer dropped
+  LightBlock.provenance ("morphed:...", "hand_edited"), so after a
+  save/load a re-morph could no longer list which hand-edited blocks a
+  replace would destroy. Provenance now rides on each block's compact
+  entry (it is per-instance state and can never live in the dedup
+  template); files written before this change load as authored, and
+  projects without morph provenance are byte-identical.
+- **A project's shows_directory heals when it moved machines.** The
+  field stores an absolute path verbatim, so a hand-copied project
+  carried the other PC's user directory forever. Loading now points a
+  non-existent stored directory at the config file's own directory;
+  an existing directory is kept (legacy layouts point it elsewhere on
+  purpose).
+- **Loading an audio file no longer crashes on a project from another
+  machine.** The Shows tab copied freshly loaded audio into
+  `<shows_directory>/audiofiles/` - but a project that travelled by
+  hand carries the OTHER machine's absolute `shows_directory`, and
+  creating it walked the missing parents into a PermissionError
+  (`C:\Users\<other user>`). The copy now goes through the config's
+  audio bundle dir (`<config dir>/audiofiles/`, the same place loading
+  already resolves from), and any bundle failure downgrades to a
+  Help > Warnings entry while the show keeps referencing the original
+  file.
+- **Dimmer-only lanes no longer crush their controls.** A lane whose
+  fixtures render only intensity (e.g. Sunstrips) draws a single
+  50 px sublane band, and the timeline grid took that as the whole
+  row height - the lane name and the mute/solo chips were clipped
+  beyond reach. Grid rows now reserve the header's minimum control
+  height; the sublane band keeps its geometry at the top of the row.
+- **The setlist morphs with the show.** A venue target without its own
+  setlist ended up with all the morphed songs but no running order -
+  no triggers, nothing for the LTC chase to fire. The morph now adopts
+  the source setlist (order, triggers, pause looks) filtered to the
+  morphed songs; a target that already has a setlist keeps it, since
+  venue-local running order wins over the master's.
+- **Spot-anchored movement survives the morph.** Movement blocks that
+  aim at a NAMED spot (marks, drum riser, solo positions) carried the
+  spot name onto the venue rig, where no such spot exists - and a
+  dangling spot name fell back to the raw pan/tilt authored for the
+  OLD rig's movers, pointing the venue heads anywhere but the stage
+  (and sometimes straight up, since those raw values are meaningless
+  on a different mount). Two fixes: the morph now bakes the source
+  spot's position into a world point when the target rig lacks the
+  spot (a same-named target spot still wins, so venue re-aiming keeps
+  working), and playback's target resolution follows its documented
+  priority chain - a spot name that does not resolve continues to the
+  world point instead of jumping to manual values.
+- **Morphed songs keep their audio.** The morph rebuilt each song's
+  timeline with fresh lanes and silently dropped the audio file
+  reference - a morphed show arrived at the venue with silent
+  timelines. The reference now carries over (fresh lanes, same
+  music).
+- **The morph patchbay's capability gating now works on real
+  projects.** Group capabilities were only honoured when a config
+  carried them pre-stored - which no loaded project does - so every
+  target group offered all four capabilities (a static PAR group
+  happily accepted POSITION wires). Capabilities are now detected from
+  the fixture definitions; fixtures whose definitions cannot be found
+  keep the conservative assume-everything fallback.
+- **Morphing a multi-song project no longer drowns in errors.**
+  Timeline lanes belong to one song each, but the morph compile
+  treated every edge as applying to every song and reported "source
+  lane not in this song" for each cross-song combination - a 12-song
+  project produced over a thousand bogus errors and the commit stayed
+  disabled. Edges for another song's lanes now skip that song
+  silently; an edge whose lane exists in no song at all still fails
+  plan validation loudly. (The bundled demo shows have a single song
+  each, which is why this never surfaced before.)
 
 - **Dragging an effect's edge trims it; Alt-drag stretches it.** The
   edge handles on a timeline effect never changed the show: the right
@@ -379,515 +892,6 @@ verbatim as the GitHub Release notes (see [docs/releasing.md](docs/releasing.md)
   synchronizer, the rudiment registry, the mesh builder, the
   visualizer feed server, and the shader, axis gizmo and depth-mask
   code of the 3D view.
-
-## [1.5.0] - 2026-08-09
-
-### Added
-
-- **The patch cable follows your cursor.** Pulling a wire in Morph to
-  Venue used to show nothing until you had already dropped it; now the
-  cable is drawn from the source chip to the cursor for the whole drag,
-  so you can see what you are about to connect.
-
-- **Four ways to un-patch, three of them new.** Removing a connection
-  was only possible by right-clicking an edge chip, which nobody found.
-  Every patch now carries a visible **×**; a patch can be focused and
-  removed with Delete or Backspace; the wire itself can be clicked to
-  select it (it highlights) and removed with Delete; and a patch can be
-  dragged off its row to pull it out, the way you would unplug a cable.
-  The right-click menu is unchanged.
-
-- **Unpatch everything, at three scopes.** An **Unpatch all** button
-  beside Auto-suggest clears the whole plan (handy when a suggestion
-  prefills wiring you did not want); each target group that has
-  incoming patches grows an **UNPATCH** button that clears just that
-  row; and right-clicking a source group offers to unpatch everything
-  it feeds, however many targets it fans out to. Removing more than one
-  patch at a time asks first.
-
-- **Undo and redo in the patchbay.** Every patch edit can be taken back:
-  wiring, unpatching, auto-suggest, unpatch-all, locks, modes,
-  transforms and priorities. Undo and Redo buttons sit in the patchbay
-  header (with Ctrl+Z / Ctrl+Y while the patchbay has focus), and each
-  button says what it will undo. Actions that feel like one gesture undo
-  as one step: a fan-out that took one drop takes one Ctrl+Z, and an
-  auto-suggest that wired thirty patches comes back in a single press.
-  This is the patchbay's own history, separate from the timeline's.
-
-- **The morph preview scrubs the whole song.** RENDER SCRUB now renders
-  a frame every 2 seconds across the selected song for both rigs, and
-  the slider flips through them instantly instead of showing the single
-  moment you happened to render. This costs barely more than the old
-  single frame did: rendering walks the song to the frame you asked
-  for, so one late frame already paid for all of them. A 4:39 song
-  renders both rigs in about 18 seconds, once.
-
-- **Marks, one job per place.** The Stage tab's AIM button became
-  **PLACE MARK**: click the plan and ONE mark lands there, ready to
-  rename, and the mode disarms so the next click does not drop another
-  one. Shift-click to keep placing a row of them. Placement follows
-  Snap to grid, like everything else you position on the plan. That is all it does now - marks are the rig's geometry, so
-  the Stage tab places and moves them, the movement block dialog picks
-  which mark a block aims at, and the Live tab's POSITION pool points
-  real movers at one. Aiming used to create an invisible one-off
-  coordinate AND assign it to whatever was selected in the timeline,
-  which meant selecting a block in one tab and clicking in another.
-  Clicking an existing mark selects it instead of stacking a duplicate
-  on top. Shows authored with the old coordinates keep working
-  unchanged.
-
-- **Marks reach the Live tab straight away.** A mark added while the
-  app is running used to be invisible in the POSITION pool until the
-  project was reloaded. Now dropping a mark and pointing the movers at
-  it is a two-step pre-show rig check, with no show running.
-
-- **The Live tab owns the SMPTE chase now: input, arm and watch.**
-  The fade row's SYNC cluster grew the sync INPUT picker (moved off
-  the Structure rail - the physical input is a venue concern that
-  changes with the rig, not show structure; the choice still saves
-  with the project, and a saved device shows even when its interface
-  is not attached), an ARM chip (the same chase the Structure tab
-  arms; both stay in sync) and an inline timecode readout: while
-  armed, the last received SMPTE timecode shows next to SYNC LTC in
-  the LED readout voice, with LOCKED / FREEWHEEL / NO SIG at a
-  glance. Arming without the setlist in SMPTE sync mode explains
-  itself in the status bar instead of silently failing. Render Show
-  to Video moved from its one-action Render menu into Tools.
-
-- **Every Live pool is per-group now - a full look per group.** The
-  INTENSITY FX and MOVEMENT SHAPES pools work like the POSITION pool:
-  touching a key applies it to the selected groups, each group runs
-  its own dimmer pattern/shape simultaneously (own loop length, own
-  pause), and everything keeps running on its group after deselection
-  - build a complete individual configuration per group (colour,
-  position, intensity, shape); scenes stay the one whole-rig
-  override. Touching a key every selected group already runs releases
-  it there. Each group tile reads its running look, the ACTIVE
-  PLAYBACKS rows tag their group set (PAUSE freezes exactly that
-  key's groups, KILL releases only them), the programmer bar lists
-  the selection's keys, and a group joining an already-running
-  pattern starts in phase with it instead of restarting anyone. The
-  riff-backed pools scroll instead of overflowing their column when
-  the library grows.
-
-- **The EFFECTS pool fires composite looks; a COLOUR FX pool cycles
-  the colour.** Each EFFECTS cell is now a COMPOSITE macro - one grab
-  sets a coordinated intensity FX and movement shape on the selected
-  groups at once (colour stays with the swatch), so you build a look
-  without touching three pools. Ten composites split into LOOPS
-  (sustained) and HITS (short and punchy); firing one shows up in the
-  running stack as its intensity + shape parts, and each group tile
-  names the composite it holds. New below the colour palettes: a
-  COLOUR FX subsection whose RAINBOW look cycles a moving hue across
-  the selected groups (overriding the static swatch), the same
-  per-group, touch-to-release contract as the swatches.
-
-- **Finished songs can be locked against accidental edits.** A LOCK
-  chip on the Structure tab's song header (next to RENAME SONG and
-  DELETE) and on the Timeline toolbar - where it replaces the SAVE
-  button, which had been a relic since edits started syncing to the
-  project automatically. While locked, every timeline and structure
-  edit refuses -
-  blocks cannot be added, moved, resized, renamed, deleted or edited
-  (keyboard shortcuts, drag, context menus, Ctrl+wheel speed and the
-  block dialogs included), lanes cannot be added, removed, renamed or
-  retargeted, parts and song rename/delete grey out, autogenerate and
-  the movement-to-world-targets conversion skip the song. Playback,
-  export, morphing, the setlist and the lane mute/solo toggles stay
-  fully live, and copy/save-as-riff keep working - the lock protects
-  content, not operation. The Shows tab shows a LOCKED tag in its
-  footer and refuses with a statusbar note; the flag persists in the
-  project file (older files load unlocked, unlocked songs stay
-  byte-identical), and a morphed copy of a locked song starts
-  unlocked - it is new work.
-
-- **Auto mode shows what the microphone hears - and can turn it up.**
-  A live INPUT LEVEL meter on the Auto screen (dB scale, -60 to 0)
-  runs as soon as the tab opens, engine started or not, so "does it
-  react to sound" is a glance instead of a full engine start. Beside
-  it a GAIN slider (-20 to +20 dB, centre 0) amplifies or dampens the
-  signal before analysis - a too-quiet source becomes usable by the
-  engine - and AUTO measures the last two seconds and sets the gain
-  once, aiming peaks at -12 dBFS (it refuses on silence rather than
-  amplifying an empty room). The gain persists with the Auto settings;
-  the meter reads the true input, not the analyzer's self-normalizing
-  energy, and timecode input is untouched. The device is released
-  whenever the tab is out of sight.
-
-- **Pause lights between songs (minimal pause-look engine).** While
-  the LTC chase is armed and no song is playing, the output arbiter's
-  pause slot renders the current setlist entry's pause look - and the
-  next timecode-fired song simply covers it (the pause merges below
-  playback), so "hold until the next trigger" needs no teardown.
-  Rendered modes: a SceneLibrary look by key (new PauseLook mode
-  "scene", with the scene's colour, groups and mover aims, scaled by
-  the level percent), warm white, and blackout (a claim to zero, so
-  it beats the editor's full-white idle floor too). "Hold last" and
-  "ambient loop" stay data-only until the full conductor lands. The
-  Structure tab's pause rows and mode menu know the new mode.
-- **Scenes can aim the movers.** A Scene optionally carries per-group
-  positions in the Live POSITION pool's namespace ("mark:<spot>",
-  "preset:cross", ...): staging the scene colours its groups AND aims
-  their heads in one tap, an explicitly held position still wins on
-  its group, and the aim releases with the scene. The pause-look
-  engine renders scene aims through the exact same code path as the
-  busk layer, so a pause scene points the rig identically.
-- **Movement blocks can aim at the world, and old shows can convert.**
-  Three authoring surfaces for the new world-space movement targets:
-  the movement block editor's target picker now offers, besides named
-  spots, the stage's bounding planes and a read-only display of an
-  ad-hoc world point; the Stage tab gained an AIM toggle - click the
-  stage plan to point the movement block selected in the Show timeline
-  at that exact spot (Shift keeps the current target height); and
-  Tools > Convert Movement to World Targets... traces where every
-  legacy pan/tilt movement block's beam actually lands on the stage
-  and writes that point as the block's world target, after showing a
-  full per-block report (skipped blocks - e.g. beams pointing at the
-  sky - and groups whose fixtures land far apart are called out).
-  Pan/tilt values stay as fallback in all three paths.
-- **Morph to Venue: take a show to another rig.** Tools > Morph to
-  Venue... opens a full-window screen (not a dialog: the shell nav
-  stays usable, so you can check the Stage tab or the timeline
-  mid-morph and come back - leaving keeps the in-progress plan, and
-  the menu resumes it) that adapts the open show to a different
-  venue's rig: pick the venue project, wire the patchbay by dragging a
-  source chip onto a target capability or by click-then-click (each
-  source lane stream docks onto target groups of the same capability -
-  INTENSITY, COLOUR, POSITION, BEAM - incompatible targets grey out
-  while a wire is pending - with per-wire transforms like mirror,
-  phase offset, intensity scale and stage-half subsets, plus
-  regenerated movement for rigs that gained movers), review the
-  coverage table and the full morph report from a dry run, then commit
-  and save the morphed show as a new project. Patch plans save as
-  reusable `*.morphplan.yaml` files per venue - reload one to re-morph
-  after fixing the master show, with locked target lanes left untouched
-  and any hand-edited blocks listed before they are replaced. An
-  auto-suggest button prefills the wiring by lighting role; nothing
-  routes without confirmation, and discarding the screen changes
-  nothing. The review step also carries a side-by-side preview: pick a
-  song, scrub to any moment, and RENDER PREVIEW shows the original
-  show on the source rig next to the morphed show on the venue rig as
-  two stills (rendered on demand in the background; a side without a
-  usable GL context or an empty song shows a placeholder instead of
-  failing).
-- **Colour palette roles are editable.** The colour block editor gained
-  a ROLE picker: tag a block with a palette role ("primary", "accent",
-  or any name you type) instead of leaving it a hard-coded literal, and
-  EDIT PALETTE... manages the song's role-to-colour table with swatch
-  pickers. Changing a role's colour re-skins every block tagged with it
-  across the song immediately - the indirection that also lets the
-  venue morph route colour as intent instead of copying literal values.
-- **Venue pre-flight: a checklist that drives the rig.** Tools > Venue
-  Pre-Flight... (also offered right after a morph commit) generates the
-  on-site checklist from the show itself - flash tests per patched
-  group, aim checks per mover group and spot, focus capture, RGB colour
-  sanity, gobo steps, a final scrub-through - and DRIVE puts the rig
-  into each test state over ArtNet (full-white flash, movers aimed at
-  the real spot, stepped pure colours) while a playing show keeps the
-  output for itself. CORRECT ticks and advances; INCORRECT opens the
-  fix (the orientation editor for aim problems, pointers to the right
-  tab for patch/colour problems) and re-tests the same item; CAPTURE
-  stores trimmed focus/zoom into the fixtures' calibration in the
-  project - never into the show. The checklist saves next to the
-  project and resumes after interruptions, and exporting a `.qxw`
-  while it is incomplete (or completed before the last config change)
-  now warns hard - in the app with Continue Anyway / Cancel, on the
-  headless export CLI as a stderr warning.
-
-- **Six house-rig fixture definitions joined the bundled library**,
-  hand-authored from the official manufacturer manuals (committable
-  and portable, unlike GDTF Share downloads): Expolite TourLED 42CM
-  (Ar1.S), Litecraft LED StudioPAR 25x3W (3ch), Cameo Q-Spot 15 RGBW
-  (9CH), Cameo ROOT PAR 6 (D12CH), Cameo ROOT PAR 4 (D10CH), and the
-  Cameo HydraBeam 4000 RGBW as a per-head definition - one 56-channel
-  bar patches as four independent 14-channel moving heads, so each
-  head aims from its own stage position (PAN 540 / TILT 270 from the
-  manual drive the solver and the export).
-
-- **GDTF definitions fetch themselves.** After a project loads, the
-  app quietly pulls GDTF files from GDTF Share for the fixtures the
-  project uses (so the visualizer renders native 3D models instead of
-  procedural chassis) - when the machine is online and a Share account
-  is stored, and never otherwise: an offline venue laptop behaves
-  exactly as before. Only exact-identity matches are taken, and a
-  downloaded file is kept only when its internal identity matches and
-  it offers the channel footprint the fixtures are patched with - a
-  GDTF swap changes the fixture's whole definition, so anything less
-  strict could silently re-map the DMX wire.
-
-### Changed
-
-- **Morph to Venue patches group to group, once for the whole setlist.**
-  The patchbay used to list every song's lanes separately, so the same
-  wire had to be drawn again for each song: a real 12-song gig needed
-  293 edges to express 39 actual wires. Edges now key on the fixture
-  group itself, so the source column is one row per group and a single
-  wire covers every song in the set. Per-song overrides remain for a
-  song that genuinely differs. Existing plans are converted on load and
-  say what they collapsed. Note that a converted plan can render MORE
-  than it used to: where the old per-song wiring left a song out, that
-  song now follows the same routing as the rest.
-
-- **Help > About is a branded card now.** The generic message box
-  became a real dialog: rotor glyph and wordmark with the slogan, a
-  short body paragraph, the rating plate (the same verifiable facts
-  as the README banner - protocols, sync, compatibility, version,
-  license, platforms - from one shared source, shipped items in full
-  text colour and outstanding ones dimmed), and the domain as a
-  clickable link.
-- **Live pool cells read like names, not file keys.** Riff and scene
-  names double as library keys ("intensity_crescendo_8bar"), and the
-  Live pools displayed them verbatim - underscored, unwrappable and
-  clipped mid-word. Every operator-facing label (pool cells, running
-  playback rows, the queue, the programmer bar) now reads underscores
-  as spaces, the cell text word-wraps onto extra lines, and the cell
-  font dropped a point so long single words fit the cell width. Keys
-  stay raw everywhere - staging, resolution and lookups are untouched.
-- **The README banner speaks facts now.** The banner's side column
-  became a rating plate - protocols (ArtNet / E1.31 / DMX at 44 Hz,
-  LTC/SMPTE chase), compatibility (GDTF / DIN SPEC 15800, QLC+),
-  version, license and platforms - instead of adjectives. Both the
-  banner and the GitHub social preview render from
-  `scripts/render_brand_assets.py` using the bundled brand fonts, with
-  the version stamped at render time.
-- **The bundled demo rigs and shows now ship in the native `.lms`
-  format** (the content stays YAML; the files carry the current
-  schema: `songs:` + `setlist:`, compact block tables, stable lane
-  ids, group fixture order). Exports from the converted demos are
-  byte-identical to before, and legacy `.yaml` projects keep loading
-  everywhere - a legacy-format copy of the mid-size demo is preserved
-  as the loader's regression fixture.
-
-- **The Live surface can start the show it busks over.** A SHOW strip
-  on the busk screen: pick a song (setlist order, same list as the
-  Shows tab), PLAY/STOP, and a position readout showing where the
-  show is - so busking over a running timeline no longer needs a trip
-  to the Shows tab. The strip is a remote for the Shows tab's own
-  transport: PLAY contends for the playback slot exactly like the
-  Shows tab's Play button, and STOP is the operator's STOP (it also
-  disarms an armed LTC chase).
-
-- **Playback no longer saturates the UI thread.** During playback the
-  ~30 FPS visual tick fully repainted every timeline stripe's canvas -
-  measured at 4.1 seconds of paint work demanded per second on a real
-  project. Four fixes: moving the playhead now invalidates only narrow
-  strips around the old and new line; the grid painters cull to the
-  exposed region (parts and steps are time-ordered, so a 9 px strip
-  costs a handful of lines); the audio waveform renders its peak
-  polygon once into a cached pixmap and ticks just blit the exposed
-  slice; and the waveform peak cache moved from a multi-second,
-  non-atomic JSON blob (an interrupted write corrupted it forever,
-  forcing re-analysis on every song load) to an atomic binary format
-  that round-trips in milliseconds. Net: the per-tick paint cost
-  dropped about 6.5x, and song loads with a warm cache skip analysis
-  entirely.
-- **Real-sized projects stopped stuttering.** Three UI-thread costs
-  that scale with project size ran on timers and made everything feel
-  laggy on real projects (a 400 KB show froze the UI for ~1 s every
-  15 s while editing, plus a ~50 ms hitch every 5 s even idle):
-  project files now parse and write through PyYAML's libyaml C
-  extension when present (identical file format, several times
-  faster - opening a big project drops from ~1.5 s to ~0.4 s), the
-  crash-recovery autosave moved off the UI thread (the UI only takes
-  a ~10 ms snapshot; serializing and the atomic write happen on a
-  worker), and the unsaved-changes marker fingerprints the project
-  via pickle instead of a Python-level full-content walk (~6x). On
-  machines whose PyYAML lacks libyaml everything keeps working on the
-  old path, just slower.
-
-### Fixed
-
-- **Tagging a colour block with a palette role now colours it.** Picking
-  a role only recorded the intent: the block kept its old colour until
-  the palette editor happened to be opened and accepted again, so
-  tagging a white block "secondary" left it white and read as the role
-  doing nothing. The role's colour is applied on OK, and the sliders
-  show it the moment you pick the role. A role the palette has no entry
-  for yet leaves the colour alone.
-
-- **Selecting a sub-block deselects the previous one.** Clicking a
-  colour or dimmer block inside one clip left the previously selected
-  sub-block highlighted in another clip, so several looked selected at
-  once, and Escape did not clear them.
-
-- **Editing a colour palette re-skins every tagged block on screen.**
-  Changing a role's colour updated all its blocks, but only the one
-  whose dialog was open repainted - the others kept showing the old
-  colour until a scroll or a song switch.
-
-- **Delete removes a mark selected on the stage plan.** It only worked
-  while the MARKS list itself had keyboard focus, so selecting a mark
-  on the plan and pressing Delete did nothing. Fixtures are left alone
-  deliberately - the stage plan has no undo.
-
-- **A saved pre-flight no longer breaks New from Template.** Saving a
-  venue pre-flight next to a rig put a sidecar file in the templates
-  folder, which then listed as an empty starter project.
-
-- **The morph review page's coverage table looks like the rest of the
-  app.** The area below the last row painted white under the dark
-  theme, and the columns left dead space instead of filling the width.
-
-- **The test suite no longer leaks every widget tree it builds.** The
-  standard UI-fixture teardown (`deleteLater()` followed by
-  `processEvents()`) freed nothing: `processEvents()` does not deliver
-  `DeferredDelete` when no event loop is running, so every tab and
-  dialog a worker ever built stayed alive. Since applying a theme
-  re-polishes every widget in the application, each later theme apply
-  walked a bigger pile of dead widgets until it crashed - the CI
-  access violations in the Live tab tests, and the earlier
-  offscreen-Linux segfaults. There is now a suite-wide flush.
-  Side effect: the unit suite runs in 34 s instead of 193 s.
-
-- **Audio inputs that refuse 44.1 kHz work now.** Arming the SMPTE
-  chase (or Auto mode) on an onboard microphone input failed with
-  "Invalid sample rate" - many Windows inputs only accept their
-  native mixer rate. Audio capture now falls back to the device's
-  native rate (then 48 kHz), and the LTC decoder and the Auto
-  analyzer follow the rate the stream actually runs at. The failure
-  message, when everything is refused, names the rates it tried.
-- **"Build the show" can finally be crossed off.** The Home
-  checklist's last step read a lane list attribute that does not
-  exist on the timeline model, so it silently saw every project as
-  empty and never checked - no matter how many shows were built. It
-  now reads the real attribute; loading a project with timeline
-  blocks completes the checklist 5 / 5.
-- **The Auto screen's SETUP button no longer collapses.** Opening the
-  SETUP disclosure into a right-column splitter pane without room
-  (easy to reach - the pane split is remembered per machine) crushed
-  the toggle to a thin unlabelled bar and left no space for the
-  settings themselves. The button now carries a hard height floor, and
-  the toggle grows the lower pane to fit the disclosure (borrowing
-  from the collapsible 3D preview) and puts the split back the way it
-  was on close.
-- **Visiting the Structure tab no longer re-decodes the song's
-  audio.** Every tab activation re-ran the whole song load, which
-  re-decoded the current audio file and re-analyzed its waveform on
-  two background threads - wasted work on every visit, and on a brief
-  visit the waveform row was still stuck in its loading paint. The
-  audio lane now skips a load whose file is already loaded or loading;
-  the explicit LOAD buttons still always reload (the file on disk may
-  have changed).
-- **Startup stopped narrating itself.** The console printed a pair of
-  "RenderEngine: Updating stage size" lines for every redundant
-  stage-size application (three embedded 3D views x construction,
-  config rebind and song load - six-plus pairs before the window was
-  up), plus per-fixture colour-wheel parse counts and per-song audio
-  resolution traces. Unchanged stage sizes now return without doing
-  or saying anything (each engine's GL init re-applies its size, so
-  nothing can miss an update), and the remaining traces moved to the
-  debug log per the silent-fallback audit's taxonomy - audio
-  resolution FAILURES still surface in Help > Warnings as before.
-- **The app fits a 720p screen.** The Live tab's palette pools and
-  the Structure tab's centre column demanded so much minimum space
-  that the window's enforced minimum grew to 1462x1020 - on a small
-  laptop the window simply hung off the display. Explicit small-
-  screen floors on those two containers let them compress instead;
-  every tab is now pinned at 1280x720 by per-tab fit checks, golden
-  screenshots of the squeezed layouts, and a window-level "fits a
-  720p display" test.
-- **The packaged app starts on double-click.** The windowed build has
-  no console, so sys.stderr is None - and faulthandler.enable() at
-  the top of main.py raised RuntimeError before any window appeared.
-  Launching from a shell inherits console handles, which is why every
-  CLI check passed while a plain double-click died. Without a stderr
-  the native-crash dumps now go to a file in the app log directory.
-- **Exporting a rig with an unconfigured universe no longer crashes.**
-  A universe whose output was never set in the Setup tab (script-built
-  rigs carry an empty output dict) killed the whole .qxw export with
-  KeyError 'plugin'; it now exports the Universe without an Output
-  element - a normal QLC+ workspace state, outputs get patched on the
-  desk. Configured universes are byte-identical.
-- **The packaged app ships the scene library.** scenes/ was missing
-  from the PyInstaller bundle, so a frozen build had an empty SCENES
-  pool - which would also have silenced a scene-mode pause look.
-- **Moving heads no longer twitch in the visualizer when output
-  broadcasts.** With no universe Target IP the arbiter broadcasts the
-  yoke-converted hardware frame, and its always-on loopback mirror
-  carries the solver-convention frame for the local viewer - a viewer
-  on the same machine received BOTH and rendered whichever packet
-  arrived last, flipping every mover between two poses of the same
-  aim 44 times a second (pan 170 vs 127, tilt 42 vs 127 at the idle
-  floor). The viewer's ArtNet listener now locks each universe to one
-  sender: loopback preferred (the mirror is the authoritative feed
-  for a local viewer), anything else first-come with a 1.5 s silence
-  failover, so following QLC+ or a remote desk still works.
-- **Plane-targeted movement blocks now play natively.** The movement
-  editor has offered the stage's bounding planes as targets since the
-  world-target work, and export and Auto mode rendered them - but
-  timeline playback never handed the planes to its renderer, so a
-  plane-targeted block silently fell back down the priority chain on
-  the wire. The playback controller now feeds the stage planes at
-  startup, on song switch and on fixture rebuilds, keeping all three
-  consumers of a plane target in parity.
-- **Morph provenance survives saving.** The .lms serializer dropped
-  LightBlock.provenance ("morphed:...", "hand_edited"), so after a
-  save/load a re-morph could no longer list which hand-edited blocks a
-  replace would destroy. Provenance now rides on each block's compact
-  entry (it is per-instance state and can never live in the dedup
-  template); files written before this change load as authored, and
-  projects without morph provenance are byte-identical.
-- **A project's shows_directory heals when it moved machines.** The
-  field stores an absolute path verbatim, so a hand-copied project
-  carried the other PC's user directory forever. Loading now points a
-  non-existent stored directory at the config file's own directory;
-  an existing directory is kept (legacy layouts point it elsewhere on
-  purpose).
-- **Loading an audio file no longer crashes on a project from another
-  machine.** The Shows tab copied freshly loaded audio into
-  `<shows_directory>/audiofiles/` - but a project that travelled by
-  hand carries the OTHER machine's absolute `shows_directory`, and
-  creating it walked the missing parents into a PermissionError
-  (`C:\Users\<other user>`). The copy now goes through the config's
-  audio bundle dir (`<config dir>/audiofiles/`, the same place loading
-  already resolves from), and any bundle failure downgrades to a
-  Help > Warnings entry while the show keeps referencing the original
-  file.
-- **Dimmer-only lanes no longer crush their controls.** A lane whose
-  fixtures render only intensity (e.g. Sunstrips) draws a single
-  50 px sublane band, and the timeline grid took that as the whole
-  row height - the lane name and the mute/solo chips were clipped
-  beyond reach. Grid rows now reserve the header's minimum control
-  height; the sublane band keeps its geometry at the top of the row.
-- **The setlist morphs with the show.** A venue target without its own
-  setlist ended up with all the morphed songs but no running order -
-  no triggers, nothing for the LTC chase to fire. The morph now adopts
-  the source setlist (order, triggers, pause looks) filtered to the
-  morphed songs; a target that already has a setlist keeps it, since
-  venue-local running order wins over the master's.
-- **Spot-anchored movement survives the morph.** Movement blocks that
-  aim at a NAMED spot (marks, drum riser, solo positions) carried the
-  spot name onto the venue rig, where no such spot exists - and a
-  dangling spot name fell back to the raw pan/tilt authored for the
-  OLD rig's movers, pointing the venue heads anywhere but the stage
-  (and sometimes straight up, since those raw values are meaningless
-  on a different mount). Two fixes: the morph now bakes the source
-  spot's position into a world point when the target rig lacks the
-  spot (a same-named target spot still wins, so venue re-aiming keeps
-  working), and playback's target resolution follows its documented
-  priority chain - a spot name that does not resolve continues to the
-  world point instead of jumping to manual values.
-- **Morphed songs keep their audio.** The morph rebuilt each song's
-  timeline with fresh lanes and silently dropped the audio file
-  reference - a morphed show arrived at the venue with silent
-  timelines. The reference now carries over (fresh lanes, same
-  music).
-- **The morph patchbay's capability gating now works on real
-  projects.** Group capabilities were only honoured when a config
-  carried them pre-stored - which no loaded project does - so every
-  target group offered all four capabilities (a static PAR group
-  happily accepted POSITION wires). Capabilities are now detected from
-  the fixture definitions; fixtures whose definitions cannot be found
-  keep the conservative assume-everything fallback.
-- **Morphing a multi-song project no longer drowns in errors.**
-  Timeline lanes belong to one song each, but the morph compile
-  treated every edge as applying to every song and reported "source
-  lane not in this song" for each cross-song combination - a 12-song
-  project produced over a thousand bogus errors and the commit stayed
-  disabled. Edges for another song's lanes now skip that song
-  silently; an edge whose lane exists in no song at all still fails
-  plan validation loudly. (The bundled demo shows have a single song
-  each, which is why this never surfaced before.)
 
 ## [1.4.0] - 2026-07-15
 
@@ -2120,8 +2124,8 @@ The first beta (~137 commits since the alpha).
 
 Initial public alpha - proof-of-concept timeline + export pipeline.
 
-[Unreleased]: https://github.com/varghele/dielichtmaschine/compare/v1.5.0...HEAD
-[1.5.0]: https://github.com/varghele/dielichtmaschine/releases/tag/v1.5.0
+[Unreleased]: https://github.com/varghele/dielichtmaschine/compare/v1.5.5...HEAD
+[1.5.5]: https://github.com/varghele/dielichtmaschine/releases/tag/v1.5.5
 [1.4.0]: https://github.com/varghele/dielichtmaschine/releases/tag/v1.4.0
 [1.0.0]: https://github.com/varghele/dielichtmaschine/releases/tag/v1.0.0
 [0.9.5-beta]: https://github.com/varghele/dielichtmaschine/releases/tag/v0.9.5-beta

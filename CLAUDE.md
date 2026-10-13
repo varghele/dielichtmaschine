@@ -109,8 +109,14 @@ unfixed bugs, cleanup) in `docs/v1.5.5-hardening-plan.md`, done-notes and the de
 structural items in ROADMAP.md v1.5.5. Its ground rules
 still apply to any follow-up here: no rendered-pixel changes (win32
 goldens cannot be regenerated on Linux), export hash changes are named
-in the CHANGELOG. v1.5.0 is prepped but NOT tagged (last two gate
-checks need rig access) and `_version.py` still reads `1.5.0`. The
+in the CHANGELOG. **v1.5.0 is SKIPPED (decision 2026-10-13):** its
+alpha shipped 2026-07-27, the final never did, and **v1.5.5 carries
+the 1.5 work plus the hardening.** The release commit is prepped on
+this branch (`_version.py` 1.5.5, CHANGELOG `[1.5.0]` + `[Unreleased]`
+folded into `[1.5.5] - 2026-10-13`, banner + About golden regenerated);
+the user merges `--no-ff` to `main`, tags `v1.5.5` and publishes. The
+rig-blocked gate checks moved to the post-release hardware list in
+ROADMAP. The v1.4.0 GitHub release is still an unpublished DRAFT. The
 dated notes below are history, oldest first; where one disagrees with
 a later note or the code, the later one wins.
 
