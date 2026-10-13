@@ -34,6 +34,10 @@ USE_COMPOSABLE_RENDERER = FIXTURE_RENDERER_MODE == 'composable'
 WARM_WHITE_COLOR = (1.0, 0.85, 0.6)  # RGB approximation of warm white
 
 
+# Legacy-renderer shaders (FIXTURE_RENDERER=legacy). The composable
+# renderer draws with visualizer/renderer/shaders.py; the two sets have
+# diverged on purpose and are NOT kept in sync (see that module's header).
+
 # Shared shader for fixture body rendering
 FIXTURE_VERTEX_SHADER = """
 #version 330

@@ -1,9 +1,13 @@
 """GLSL shader constants for the composable fixture renderer.
 
-Phase B of the fixture-rewrite. These strings are duplicated from
-``visualizer/renderer/fixtures.py`` (left intact until Phase D) — keep
-them in sync if either side changes. Phase D will delete the originals
-and route all renderers through this module.
+Phase B of the fixture-rewrite. These strings started as copies of the
+ones in ``visualizer/renderer/fixtures.py`` and have since DIVERGED on
+purpose: this module is what the default composable renderer draws
+with, and the copies there serve only the legacy renderer
+(``FIXTURE_RENDERER=legacy``), whose Python side sets the uniforms of
+its own shader versions. Do not sync them in either direction; Phase D
+deletes the legacy renderer together with its copies (v1.5.5 review,
+2026-10-13).
 """
 
 from __future__ import annotations
