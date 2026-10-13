@@ -1602,32 +1602,48 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         if not user or not stored_password(user):
             return
         worker = getattr(self, "_gdtf_autopull_worker", None)
-        if worker is not None and worker.isRunning():
+        if worker is not None and worker.is_alive():
             return
 
-        from PyQt6.QtCore import QThread, pyqtSignal
+        import threading
+        from PyQt6.QtCore import QObject, pyqtSignal
 
-        class _Puller(QThread):
+        class _Relay(QObject):
             pulled = pyqtSignal(list)
 
-            def __init__(self, config, parent=None):
-                super().__init__(parent)
-                self._config = config
-
-            def run(self):
-                try:
-                    from utils.fixture_library import \
-                        project_gdtf_fixtures_dir
-                    from utils.gdtf_share import pull_missing_gdtf
-                    self.pulled.emit(pull_missing_gdtf(
-                        self._config, project_gdtf_fixtures_dir()))
-                except Exception:
-                    self.pulled.emit([])
-
+        # A plain DAEMON thread, not a QThread: a Share request can block
+        # for up to 180 s and cannot be interrupted, and quitting must
+        # neither wait for it nor destroy a running QThread (which aborts
+        # the process). closeEvent sets the cancel event; the pull then
+        # moves nothing into the library and the process exits without
+        # joining it. The relay lives on the UI thread, so the result
+        # arrives there as a queued signal.
+        relay = _Relay(self)
+        relay.pulled.connect(self._on_gdtf_autopull_done)
+        cancel = threading.Event()
         # A snapshot, never the live config: the worker walks the
         # fixtures for the length of a network pull.
-        worker = _Puller(autopull_snapshot(self.config), parent=self)
-        worker.pulled.connect(self._on_gdtf_autopull_done)
+        snapshot = autopull_snapshot(self.config)
+
+        def run():
+            try:
+                from utils.fixture_library import project_gdtf_fixtures_dir
+                from utils.gdtf_share import pull_missing_gdtf
+                kept = pull_missing_gdtf(
+                    snapshot, project_gdtf_fixtures_dir(), cancel=cancel)
+            except Exception:
+                kept = []
+            if cancel.is_set():
+                return
+            try:
+                relay.pulled.emit(kept)
+            except RuntimeError:
+                pass        # window already gone
+
+        worker = threading.Thread(target=run, name="gdtf-autopull",
+                                  daemon=True)
+        self._gdtf_autopull_cancel = cancel
+        self._gdtf_autopull_relay = relay
         self._gdtf_autopull_worker = worker
         worker.start()
 
@@ -2553,6 +2569,12 @@ class MainWindow(QMainWindow, Ui_MainWindow):
 
     def closeEvent(self, event):
         """Handle application close"""
+        # A GDTF auto-pull is never waited on (its requests block for up
+        # to 180 s): cancel it so it moves nothing into the library, and
+        # let the daemon thread die with the process.
+        cancel = getattr(self, "_gdtf_autopull_cancel", None)
+        if cancel is not None:
+            cancel.set()
         # Never tear down under a live autosave write (a QThread
         # destroyed while running aborts the process; the write is
         # atomic either way, but let it finish).

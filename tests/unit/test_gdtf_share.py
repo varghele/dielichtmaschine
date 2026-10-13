@@ -15,7 +15,9 @@ import types
 import pytest
 
 from utils import gdtf_share
-from utils.gdtf_share import GDTFShareClient, GDTFShareError, entry_filename
+from utils.gdtf_share import (
+    GDTFShareCancelled, GDTFShareClient, GDTFShareError, entry_filename,
+)
 
 PK = b"PK\x03\x04gdtf-bytes"
 
@@ -237,6 +239,52 @@ class TestDownload:
         with pytest.raises(GDTFShareError, match="did not return"):
             client.download(catalog_entries()[0], str(tmp_path))
         assert not list(tmp_path.glob("*.gdtf"))
+
+    def test_streams_through_a_part_file(self, tmp_path):
+        """A streamed body is joined from its chunks and lands via a
+        .part rename, so the library never sees a torn archive."""
+        class Streamed(FakeResponse):
+            def iter_content(self, size):
+                yield PK[:3]
+                yield PK[3:]
+        client, session = make_client(tmp_path, {
+            "downloadFile.php": Streamed()})
+        path = client.download(catalog_entries()[0], str(tmp_path / "d"))
+        with open(path, "rb") as f:
+            assert f.read() == PK
+        assert session.calls[0][1]["stream"] is True
+        assert os.listdir(str(tmp_path / "d")) == [os.path.basename(path)]
+
+    def test_cancel_mid_stream_leaves_no_file(self, tmp_path):
+        import threading
+        cancel = threading.Event()
+
+        class Streamed(FakeResponse):
+            def iter_content(self, size):
+                yield PK[:3]
+                cancel.set()            # quit lands mid-download
+                yield PK[3:]
+        session = FakeSession({"downloadFile.php": Streamed()})
+        client = GDTFShareClient(session=session,
+                                 cache_path=str(tmp_path / "c.json"),
+                                 cancel=cancel)
+        dest = tmp_path / "d"
+        with pytest.raises(GDTFShareCancelled):
+            client.download(catalog_entries()[0], str(dest))
+        assert not dest.exists() or os.listdir(str(dest)) == []
+
+    def test_failed_write_leaves_no_part_file(self, tmp_path, monkeypatch):
+        client, _ = make_client(tmp_path, {"downloadFile.php": FakeResponse(
+            content=PK)})
+        import utils.gdtf_share as gs
+
+        def boom(src, dst):
+            raise OSError("disk full")
+        monkeypatch.setattr(gs.os, "replace", boom)
+        dest = tmp_path / "d"
+        with pytest.raises(OSError):
+            client.download(catalog_entries()[0], str(dest))
+        assert os.listdir(str(dest)) == []
 
     def test_filename_sanitizes_hostile_names(self):
         name = entry_filename({"rid": 9, "manufacturer": "A/B:C",
@@ -636,6 +684,58 @@ class TestAutoPull:
                                            has_geometry=False)
         kept = gs.pull_missing_gdtf(cfg, str(tmp_path), client=client)
         assert kept == []
+
+    def test_pull_gates_files_outside_the_library_dir(
+            self, tmp_path, monkeypatch):
+        """The library scans dest_dir: a file still being checked (and
+        one a killed process would leave behind) must not be in it."""
+        gs, cfg, client = self._pull_setup(tmp_path, monkeypatch,
+                                           "Hero Spot 60", 14)
+        import utils.gdtf_loader as gl
+        parse = gl.parse_gdtf_file
+        seen = []
+
+        def checking_parse(path):
+            seen.append((os.path.dirname(path), os.listdir(str(tmp_path))))
+            return parse(path)
+        monkeypatch.setattr(gl, "parse_gdtf_file", checking_parse)
+        kept = gs.pull_missing_gdtf(cfg, str(tmp_path), client=client)
+        ((staging, library_during_parse),) = seen
+        assert os.path.normcase(staging) != os.path.normcase(str(tmp_path))
+        assert library_during_parse == []
+        assert [os.path.dirname(p) for p in kept] == [str(tmp_path)]
+        assert not os.path.exists(staging)
+
+    def test_cancelled_pull_moves_nothing_into_the_library(
+            self, tmp_path, monkeypatch):
+        import threading
+        gs, cfg, client = self._pull_setup(tmp_path, monkeypatch,
+                                           "Hero Spot 60", 14)
+        cancel = threading.Event()
+        import utils.gdtf_loader as gl
+        parse = gl.parse_gdtf_file
+
+        def parse_then_quit(path):
+            cancel.set()                # quit while the file is checked
+            return parse(path)
+        monkeypatch.setattr(gl, "parse_gdtf_file", parse_then_quit)
+        kept = gs.pull_missing_gdtf(cfg, str(tmp_path), client=client,
+                                    cancel=cancel)
+        assert kept == []
+        assert os.listdir(str(tmp_path)) == []
+
+    def test_pull_cancelled_up_front_never_logs_in(self, tmp_path,
+                                                   monkeypatch):
+        import threading
+        gs, cfg, client = self._pull_setup(tmp_path, monkeypatch,
+                                           "Hero Spot 60", 14)
+        calls = []
+        client.login = lambda u, p: calls.append("login")
+        cancel = threading.Event()
+        cancel.set()
+        assert gs.pull_missing_gdtf(cfg, str(tmp_path), client=client,
+                                    cancel=cancel) == []
+        assert calls == []
 
     def test_pull_without_credentials_is_quiet(self, tmp_path,
                                                monkeypatch):

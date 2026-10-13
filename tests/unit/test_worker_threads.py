@@ -8,6 +8,8 @@
   dialog's wait loop then hung forever.
 - The GDTF auto-pull worker reads a snapshot of the fixtures, never the
   live config it would otherwise walk for the length of a network pull.
+- The auto-pull runs on a daemon thread that quitting cancels and never
+  waits on (a QThread destroyed mid-download aborted the process).
 """
 
 import ast
@@ -114,8 +116,9 @@ class TestGdtfAutopullSnapshot:
         monkeypatch.setattr(gdtf_share, "auto_pull_enabled", lambda: True)
         monkeypatch.setattr(gdtf_share, "stored_username", lambda: "user")
         monkeypatch.setattr(gdtf_share, "stored_password", lambda user: "pw")
-        monkeypatch.setattr(gdtf_share, "pull_missing_gdtf",
-                            lambda config, dest: received.append(config) or [])
+        monkeypatch.setattr(
+            gdtf_share, "pull_missing_gdtf",
+            lambda config, dest, cancel=None: received.append(config) or [])
 
         class Shell(QObject):
             def __init__(self, config):
@@ -128,7 +131,75 @@ class TestGdtfAutopullSnapshot:
         shell = Shell(sample_configuration)
         MainWindow._start_gdtf_autopull(shell)
         worker = shell._gdtf_autopull_worker
-        assert worker.wait(5000)
+        worker.join(5)
+        assert not worker.is_alive()
         assert len(received) == 1
         assert received[0] is not sample_configuration
         assert [f.model for f in received[0].fixtures] == ["TestModel"]
+
+
+class TestGdtfAutopullQuit:
+    """docs/v1.5.5-hardening-plan.md handover #3: quitting mid-pull
+    destroyed a running QThread. The pull now runs on a daemon thread
+    with a cancel event that closeEvent sets."""
+
+    def _shell(self, monkeypatch, config, pull):
+        from PyQt6.QtCore import QObject
+        import utils.gdtf_share as gdtf_share
+        monkeypatch.setattr(gdtf_share, "auto_pull_enabled", lambda: True)
+        monkeypatch.setattr(gdtf_share, "stored_username", lambda: "user")
+        monkeypatch.setattr(gdtf_share, "stored_password", lambda user: "pw")
+        monkeypatch.setattr(gdtf_share, "pull_missing_gdtf", pull)
+
+        class Shell(QObject):
+            def __init__(self):
+                super().__init__()
+                self.config = config
+                self.done = []
+                self.shows_tab = None
+
+            def _on_gdtf_autopull_done(self, kept):
+                self.done.append(kept)
+        return Shell()
+
+    def test_worker_is_a_daemon_thread_not_a_qthread(
+            self, qapp, monkeypatch, sample_configuration):
+        import threading
+        from gui.gui import MainWindow
+        shell = self._shell(monkeypatch, sample_configuration,
+                            lambda config, dest, cancel=None: ["a.gdtf"])
+        MainWindow._start_gdtf_autopull(shell)
+        worker = shell._gdtf_autopull_worker
+        assert isinstance(worker, threading.Thread) and worker.daemon
+        worker.join(5)
+        qapp.processEvents()
+        assert shell.done == [["a.gdtf"]]
+
+    def test_close_cancels_without_waiting(
+            self, qapp, monkeypatch, sample_configuration):
+        import threading
+        import time
+        from unittest import mock
+        from gui.gui import MainWindow
+        started, release = threading.Event(), threading.Event()
+        seen_cancel = []
+
+        def slow_pull(config, dest, cancel=None):
+            started.set()
+            release.wait(10)            # a request blocking on the network
+            seen_cancel.append(cancel.is_set())
+            return ["late.gdtf"]
+        shell = self._shell(monkeypatch, sample_configuration, slow_pull)
+        MainWindow._start_gdtf_autopull(shell)
+        assert started.wait(5)
+
+        t0 = time.monotonic()
+        MainWindow.closeEvent(shell, mock.Mock())
+        assert time.monotonic() - t0 < 2.0     # never joins the pull
+        assert shell._gdtf_autopull_worker.is_alive()
+
+        release.set()
+        shell._gdtf_autopull_worker.join(5)
+        qapp.processEvents()
+        assert seen_cancel == [True]
+        assert shell.done == []                # a cancelled pull reports nothing

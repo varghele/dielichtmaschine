@@ -49,6 +49,14 @@ verbatim as the GitHub Release notes (see [docs/releasing.md](docs/releasing.md)
 
 ### Fixed
 
+- **Quitting during a GDTF Share auto-pull no longer crashes.** The
+  background fetch that runs after a project load could still be
+  downloading when you closed the app, and closing then tore down a
+  running thread, which ends the process abruptly. Quitting now cancels
+  the fetch and exits at once. Downloads also land in the fixture
+  folder only once complete and checked, so an interrupted fetch can no
+  longer leave a broken or unchecked definition behind for the next
+  start to load.
 - **The QLC+ export matches the rig on colour.** Fixtures with a lime
   emitter got no lime in the exported workspace, and a part with a
   dimmer block but no colour block exported RGB fixtures at full white
