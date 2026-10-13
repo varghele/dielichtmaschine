@@ -49,6 +49,12 @@ verbatim as the GitHub Release notes (see [docs/releasing.md](docs/releasing.md)
 
 ### Fixed
 
+- **The QLC+ export matches the rig on colour.** Fixtures with a lime
+  emitter got no lime in the exported workspace, and a part with a
+  dimmer block but no colour block exported RGB fixtures at full white
+  while native playback leaves them dark. The export now writes lime
+  and leaves the colour alone when no colour block is set, like the
+  rig. None of the demo rig or show exports change.
 - **A CSV rig sheet keeps every group a fixture belongs to.** Exporting
   the rig as CSV and importing it again put each fixture in its first
   group only, losing secondary groups and the lanes that use them. The

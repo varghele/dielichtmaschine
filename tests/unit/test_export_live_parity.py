@@ -506,3 +506,94 @@ def test_single_fixture_wave_matches_native(dimmer_lane):
                                          fixture_name=fixtures[0].name)
         native = _native_dimmer(manager, fixtures[0], block, time_s, 0, 1)
         assert exported == native, time_s
+
+
+# ── colour channels: lime, and a dimmer without a colour block ───────
+
+PAR_KEY = "TestMfr_ParityPar"
+PAR_CHANNELS = [
+    ("Dimmer", "IntensityMasterDimmer", ""),
+    ("Red", "IntensityRed", ""),
+    ("Green", "IntensityGreen", ""),
+    ("Blue", "IntensityBlue", ""),
+    ("White", "IntensityWhite", ""),
+    ("Amber", "IntensityAmber", ""),
+    ("UV", "IntensityUV", ""),
+    ("Lime", "IntensityLime", ""),
+    ("Colour Wheel", "ColorWheel", "Colour"),
+]
+
+
+def _par_def():
+    """A colour-mixing par with every additive colour the native map
+    knows, lime included, plus a colour wheel. The intensity channels
+    carry no group (a "Colour" group would also list them as wheel
+    channels on both sides, see tests/unit/test_dmx_masks.py)."""
+    return {
+        "manufacturer": "TestMfr", "model": "ParityPar",
+        "channels": [{"name": name, "preset": preset, "group": group,
+                      "capabilities": []}
+                     for name, preset, group in PAR_CHANNELS],
+        "modes": [{"name": "Standard", "channels": [
+            {"number": i, "name": name}
+            for i, (name, _, _) in enumerate(PAR_CHANNELS)]}],
+    }
+
+
+@pytest.fixture
+def par_lane():
+    fixtures = [_mover(i, model="ParityPar", ftype="PAR",
+                       channels=len(PAR_CHANNELS)) for i in range(2)]
+    config = _config(fixtures)
+    defs = {PAR_KEY: _par_def()}
+    manager = DMXManager(config, defs)
+    id_map = {(f.universe, f.address): 20 + i
+              for i, f in enumerate(fixtures)}
+    return fixtures, manager, defs, id_map
+
+
+def _par_mismatches(par_lane, dimmer, colour):
+    """Every channel of every par, export vs native, at TIMES."""
+    fixtures, manager, defs, id_map = par_lane
+    colour_blocks = [colour] if colour is not None else []
+    mismatches = []
+    for time_s in TIMES:
+        step = build_unified_step(
+            0, time_s, 50, fixtures, id_map, defs, [dimmer], colour_blocks,
+            [], [], 1, all_lane_fixtures=fixtures, bpm=120.0)
+        exported = _parse_step(step)
+        for idx, fixture in enumerate(fixtures):
+            fmap = manager.fixture_maps[fixture.name]
+            manager.clear_all_dmx()
+            manager._apply_dimmer_block(fmap, dimmer, time_s, idx,
+                                        len(fixtures))
+            if colour is not None:
+                manager._apply_colour_block(fmap, colour, time_s)
+            got = exported.get(id_map[(fixture.universe, fixture.address)],
+                               {})
+            for ch in range(len(PAR_CHANNELS)):
+                universe, channel = fmap.get_absolute_address(ch)
+                native = manager.dmx_state[universe][channel]
+                if got.get(ch, 0) != native:
+                    mismatches.append((time_s, idx, PAR_CHANNELS[ch][0],
+                                       got.get(ch, 0), native))
+    return mismatches
+
+
+def test_exported_colour_mix_matches_native_including_lime(par_lane):
+    """The export never wrote IntensityLime; native does."""
+    colour = ColourBlock(start_time=0.0, end_time=8.0, red=200.0,
+                         green=120.0, blue=60.0, white=30.0, amber=90.0,
+                         uv=15.0, lime=170.0)
+    mismatches = _par_mismatches(par_lane, _dimmer_block(), colour)
+    assert not mismatches, \
+        f"(t, fixture, channel, export, native): {mismatches[:6]}"
+
+
+def test_dimmer_without_colour_block_stays_dark_like_native(par_lane):
+    """Native writes no colour without a colour block; the export used
+    to light the fixture full white (decision 2026-10-13: dark)."""
+    mismatches = _par_mismatches(par_lane, _dimmer_block(), None)
+    assert not mismatches, \
+        f"(t, fixture, channel, export, native): {mismatches[:6]}"
+

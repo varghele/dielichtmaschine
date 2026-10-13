@@ -598,6 +598,7 @@ def sample_colour_at_time(
         'magenta': int(active_block.magenta),
         'yellow': int(active_block.yellow),
         'uv': int(active_block.uv),
+        'lime': int(active_block.lime),
         'color_wheel': active_block.color_wheel_position
     }
 
@@ -714,6 +715,7 @@ def build_unified_step(
             "IntensityMasterDimmer", "IntensityDimmer",
             "IntensityRed", "IntensityGreen", "IntensityBlue", "IntensityWhite",
             "IntensityAmber", "IntensityCyan", "IntensityMagenta", "IntensityYellow", "IntensityUV",
+            "IntensityLime",
             "ColorMacro", "ColorWheel", "Colour",  # Colour is group name for color wheel channels
             "GoboWheel", "Gobo", "GoboIndex",
             "GoboWheelRotation", "GoboRotation",
@@ -751,21 +753,9 @@ def build_unified_step(
         if dimmer_value is None:
             dimmer_value = 0  # Default to off
 
-        # If there's a dimmer value but no color block, default to white for RGB fixtures
-        # This ensures pixel bars show the dimmer effect even without explicit color
-        if colour_values is None and dimmer_value > 0:
-            colour_values = {
-                'red': 255,
-                'green': 255,
-                'blue': 255,
-                'white': 255,
-                'amber': 0,
-                'cyan': 0,
-                'magenta': 0,
-                'yellow': 0,
-                'uv': 0,
-                'color_wheel': 0
-            }
+        # No colour block: no colour channels, so a dimmer alone leaves an
+        # RGB fixture dark, like native playback (decision 2026-10-13;
+        # the export used to light it full white).
 
         # Build channel values
 
@@ -849,6 +839,7 @@ def build_unified_step(
                     ("IntensityMagenta", colour_values.get('magenta', 0)),
                     ("IntensityYellow", colour_values.get('yellow', 0)),
                     ("IntensityUV", colour_values.get('uv', 0)),
+                    ("IntensityLime", colour_values.get('lime', 0)),
                 ]
 
                 # Colour-segmented bars: each segment's colour is scaled by
