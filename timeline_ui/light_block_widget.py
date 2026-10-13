@@ -8,6 +8,7 @@ from PyQt6.QtGui import (
     QPainter, QColor, QPen, QBrush, QMouseEvent, QFont, QLinearGradient,
 )
 from config.models import LightBlock
+from utils.timeline_edit_lock import TIMELINE_EDIT_LOCK
 from .locking import flash_locked
 from .timeline_widget import STRIP_ZONE_HEIGHT, sublane_band_geometry
 
@@ -1672,26 +1673,28 @@ class LightBlockWidget(QWidget):
             # Calculate actual delta to apply to sublane blocks
             actual_delta = new_time - self.block.start_time
 
-            # Move entire effect (envelope + all sublane blocks) by the same delta
-            if actual_delta != 0:
-                # Move envelope
-                self.block.end_time += actual_delta
+            # Move entire effect (envelope + all sublane blocks) by the
+            # same delta, as one step for the playback thread.
+            with TIMELINE_EDIT_LOCK:
+                if actual_delta != 0:
+                    # Move envelope
+                    self.block.end_time += actual_delta
 
-                # Move all sublane blocks
-                for sublane_block in self.block.dimmer_blocks:
-                    sublane_block.start_time += actual_delta
-                    sublane_block.end_time += actual_delta
-                for sublane_block in self.block.colour_blocks:
-                    sublane_block.start_time += actual_delta
-                    sublane_block.end_time += actual_delta
-                for sublane_block in self.block.movement_blocks:
-                    sublane_block.start_time += actual_delta
-                    sublane_block.end_time += actual_delta
-                for sublane_block in self.block.special_blocks:
-                    sublane_block.start_time += actual_delta
-                    sublane_block.end_time += actual_delta
+                    # Move all sublane blocks
+                    for sublane_block in self.block.dimmer_blocks:
+                        sublane_block.start_time += actual_delta
+                        sublane_block.end_time += actual_delta
+                    for sublane_block in self.block.colour_blocks:
+                        sublane_block.start_time += actual_delta
+                        sublane_block.end_time += actual_delta
+                    for sublane_block in self.block.movement_blocks:
+                        sublane_block.start_time += actual_delta
+                        sublane_block.end_time += actual_delta
+                    for sublane_block in self.block.special_blocks:
+                        sublane_block.start_time += actual_delta
+                        sublane_block.end_time += actual_delta
 
-            self.block.start_time = new_time
+                self.block.start_time = new_time
             self.update_position()
             self.position_changed.emit(self, new_time)
 
@@ -1705,8 +1708,9 @@ class LightBlockWidget(QWidget):
                 new_duration = (self.drag_start_time + self.drag_start_duration) - new_start
 
             if new_start >= 0 and new_duration >= 0.1:
-                self.block.start_time = new_start
-                self.block.duration = new_duration
+                with TIMELINE_EDIT_LOCK:
+                    self.block.start_time = new_start
+                    self.block.duration = new_duration
                 self.update_position()
                 self.position_changed.emit(self, new_start)
                 self.duration_changed.emit(self, new_duration)
@@ -1738,9 +1742,10 @@ class LightBlockWidget(QWidget):
 
                 # Don't allow shrinking below minimum duration
                 if new_start >= 0 and (self.drag_start_sublane_end - new_start) >= 0.1:
-                    sublane_block.start_time = new_start
-                    # Update envelope bounds
-                    self.block.update_envelope_bounds()
+                    with TIMELINE_EDIT_LOCK:
+                        sublane_block.start_time = new_start
+                        # Update envelope bounds
+                        self.block.update_envelope_bounds()
                     self._mark_hand_edit()
                     self.update_position()
                     self.update()  # Redraw
@@ -1754,9 +1759,10 @@ class LightBlockWidget(QWidget):
 
                 # Don't allow shrinking below minimum duration
                 if (new_end - self.drag_start_sublane_start) >= 0.1:
-                    sublane_block.end_time = new_end
-                    # Update envelope bounds
-                    self.block.update_envelope_bounds()
+                    with TIMELINE_EDIT_LOCK:
+                        sublane_block.end_time = new_end
+                        # Update envelope bounds
+                        self.block.update_envelope_bounds()
                     self._mark_hand_edit()
                     self.update_position()
                     self.update()  # Redraw
@@ -1777,10 +1783,11 @@ class LightBlockWidget(QWidget):
 
             # Don't allow negative start time
             if new_start >= 0:
-                sublane_block.start_time = new_start
-                sublane_block.end_time = new_end
-                # Update envelope bounds
-                self.block.update_envelope_bounds()
+                with TIMELINE_EDIT_LOCK:
+                    sublane_block.start_time = new_start
+                    sublane_block.end_time = new_end
+                    # Update envelope bounds
+                    self.block.update_envelope_bounds()
                 self._mark_hand_edit()
                 self.update_position()
                 self.update()  # Redraw
@@ -1979,11 +1986,12 @@ class LightBlockWidget(QWidget):
             if self.shift_drag_copying and self.dragging:
                 # Create a copy of the effect at the new position
                 new_start_time = self.block.start_time  # Current position after drag
-                # Reset original block to its starting position
-                self.block.start_time = self.drag_start_time
-                self.block.end_time = self.drag_start_time + self.drag_start_duration
-                # Update sublane blocks back to original times
-                self._restore_sublane_times()
+                with TIMELINE_EDIT_LOCK:
+                    # Reset original block to its starting position
+                    self.block.start_time = self.drag_start_time
+                    self.block.end_time = self.drag_start_time + self.drag_start_duration
+                    # Update sublane blocks back to original times
+                    self._restore_sublane_times()
                 self.update_position()
 
                 # Create copy at new position via lane widget

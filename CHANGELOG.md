@@ -49,6 +49,11 @@ verbatim as the GitHub Release notes (see [docs/releasing.md](docs/releasing.md)
 
 ### Fixed
 
+- **Dragging a block during playback no longer glitches the output.**
+  Moving or resizing a block while the show played could send one frame
+  in which the block was half moved, which often restarted its effect
+  for a frame. The output now waits for the edit, or the edit for the
+  frame, so every frame sees the block either before or after the move.
 - **Quitting during a GDTF Share auto-pull no longer crashes.** The
   background fetch that runs after a project load could still be
   downloading when you closed the app, and closing then tore down a

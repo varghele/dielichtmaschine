@@ -3,6 +3,7 @@
 
 from PyQt6.QtGui import QUndoCommand
 from config.models import LightBlock
+from utils.timeline_edit_lock import TIMELINE_EDIT_LOCK
 from typing import List, TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -151,16 +152,18 @@ class MoveBlockCommand(QUndoCommand):
         if self._skip_first_redo:
             self._skip_first_redo = False
             return
-        self.block.start_time = self.new_start
-        self.block.end_time = self.new_end
-        self._update_sublane_times(self.old_start, self.new_start)
+        with TIMELINE_EDIT_LOCK:
+            self.block.start_time = self.new_start
+            self.block.end_time = self.new_end
+            self._update_sublane_times(self.old_start, self.new_start)
         self._update_block_widget()
 
     def undo(self):
         """Revert the move."""
-        self.block.start_time = self.old_start
-        self.block.end_time = self.old_end
-        self._update_sublane_times(self.new_start, self.old_start)
+        with TIMELINE_EDIT_LOCK:
+            self.block.start_time = self.old_start
+            self.block.end_time = self.old_end
+            self._update_sublane_times(self.new_start, self.old_start)
         self._update_block_widget()
 
     def _update_sublane_times(self, old_start: float, new_start: float):
@@ -219,14 +222,16 @@ class ResizeBlockCommand(QUndoCommand):
 
     def redo(self):
         """Apply the resize."""
-        self.block.start_time = self.new_start
-        self.block.end_time = self.new_end
+        with TIMELINE_EDIT_LOCK:
+            self.block.start_time = self.new_start
+            self.block.end_time = self.new_end
         self._update_block_widget()
 
     def undo(self):
         """Revert the resize."""
-        self.block.start_time = self.old_start
-        self.block.end_time = self.old_end
+        with TIMELINE_EDIT_LOCK:
+            self.block.start_time = self.old_start
+            self.block.end_time = self.old_end
         self._update_block_widget()
 
     def _update_block_widget(self):

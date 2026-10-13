@@ -11,6 +11,7 @@ from config.models import Configuration
 from utils.target_resolver import resolve_targets_unique
 from .arbiter import Frame, IDLE_VISIBLE, OutputArbiter
 from .dmx_manager import DMXManager
+from utils.timeline_edit_lock import TIMELINE_EDIT_LOCK
 from .sender import ArtNetSender
 
 # Debug flag - set to False to disable verbose prints
@@ -310,10 +311,14 @@ class ShowsArtNetController(QObject):
                     pass  # keep last known position
 
             now_t = self.current_time
-            if self.light_lanes:
-                self._process_lane_blocks(now_t)
+            # Block intervals are read here and again in update_dmx; the
+            # timeline UI shifts them under the same lock, so a frame
+            # never sees a half-applied drag (utils/timeline_edit_lock).
+            with TIMELINE_EDIT_LOCK:
+                if self.light_lanes:
+                    self._process_lane_blocks(now_t)
 
-            self.dmx_manager.update_dmx(now_t)
+                self.dmx_manager.update_dmx(now_t)
 
             frames: Frame = {}
             for universe_id in list(self.config.universes):

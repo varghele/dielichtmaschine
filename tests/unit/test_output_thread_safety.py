@@ -285,6 +285,93 @@ class TestShowsRenderSnapshots:
 # LiveBuskLayer.render reads LiveState on the arbiter thread
 # ---------------------------------------------------------------------------
 
+class _HookedSubBlock:
+    """A writable sub-block whose start_time read fires a hook once."""
+
+    def __init__(self, start, end):
+        self._start = start
+        self.end_time = end
+        self.on_read = None
+
+    @property
+    def start_time(self):
+        hook, self.on_read = self.on_read, None
+        if hook is not None:
+            hook()
+        return self._start
+
+    @start_time.setter
+    def start_time(self, value):
+        self._start = value
+
+
+class TestTimelineEditsDuringPlayback:
+    """docs/v1.5.5-hardening-plan.md handover #3, "drag during playback":
+    a timeline edit shifts start, end and every sub-block in separate
+    statements on the UI thread; a frame rendered in between saw a torn
+    interval. Edits and the frame now share utils/timeline_edit_lock."""
+
+    def _edit_mid_frame(self, qapp, edit):
+        """Render one frame; on the frame's first interval read another
+        thread runs ``edit(light_block)``. Returns (intervals the frame
+        saw in update_dmx, edit thread alive during the frame)."""
+        from config.models import LightBlock
+        config = Configuration(universes={1: Universe(id=1, name="U1",
+                                                      output={})})
+        controller = _playing_controller(config)
+        sub = _HookedSubBlock(0.0, 2.0)
+        light = LightBlock(start_time=0.0, end_time=2.0,
+                           effect_name="test.static", dimmer_blocks=[sub])
+        lane = SimpleNamespace(name="L", muted=False, fixture_targets=["G"],
+                               light_blocks=[light])
+        seen = {}
+
+        def start_edit():
+            editor = threading.Thread(target=edit, args=(light,))
+            editor.start()
+            editor.join(timeout=0.2)
+            seen["editor"] = editor
+            seen["alive"] = editor.is_alive()
+        sub.on_read = start_edit
+
+        real_update = controller.dmx_manager.update_dmx
+
+        def update_dmx(t):
+            seen["interval"] = (sub.start_time, sub.end_time,
+                                light.start_time, light.end_time)
+            return real_update(t)
+
+        controller.dmx_manager.block_started = lambda *a: None
+        controller.dmx_manager.block_ended = lambda *a: None
+        controller.dmx_manager.update_dmx = update_dmx
+        controller.set_light_lanes([lane])
+        controller.current_time = 1.0
+        controller.render(0.0)
+        seen["editor"].join(timeout=2.0)
+        controller.cleanup()
+        return seen, sub, light
+
+    def test_move_command_waits_for_the_frame(self, qapp):
+        from timeline_ui.undo_commands import MoveBlockCommand
+
+        def move(light):
+            MoveBlockCommand(SimpleNamespace(light_block_widgets=[]), light,
+                             0.0, 2.0, 5.0, 7.0).redo()
+        seen, sub, light = self._edit_mid_frame(qapp, move)
+        # The frame saw the whole block where it was, never half moved.
+        assert seen["interval"] == (0.0, 2.0, 0.0, 2.0)
+        assert seen["alive"]                 # blocked on the frame
+        # ...and the edit landed in full right after.
+        assert (sub.start_time, sub.end_time) == (5.0, 7.0)
+        assert (light.start_time, light.end_time) == (5.0, 7.0)
+
+    def test_lock_is_reentrant_for_nested_helpers(self):
+        from utils.timeline_edit_lock import TIMELINE_EDIT_LOCK
+        with TIMELINE_EDIT_LOCK:
+            with TIMELINE_EDIT_LOCK:
+                pass
+
+
 class _VanishingDict(dict):
     """The UI thread removes ``key`` right after the Nth successful
     membership test - the window between "in" and "[...]"."""
