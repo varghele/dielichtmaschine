@@ -235,5 +235,5 @@ class TestWaitForBackgroundWorkers:
     def test_close_event_uses_it(self):
         import inspect
         from gui.gui import MainWindow
-        assert "self.wait_for_background_workers()" in \
+        assert "MainWindow.wait_for_background_workers(self)" in \
             inspect.getsource(MainWindow.closeEvent)

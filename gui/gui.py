@@ -2595,7 +2595,8 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         cancel = getattr(self, "_gdtf_autopull_cancel", None)
         if cancel is not None:
             cancel.set()
-        self.wait_for_background_workers()
+        # Unbound on purpose: tests drive closeEvent on duck-typed shells.
+        MainWindow.wait_for_background_workers(self)
 
         # Clean up shows tab audio resources
         if hasattr(self.shows_tab, 'cleanup'):
