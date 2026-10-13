@@ -4,7 +4,7 @@ from PyQt6 import QtWidgets, QtGui, QtCore
 from PyQt6.QtCore import pyqtProperty
 from PyQt6.QtGui import QColor
 from gui.stage_items import FixtureItem, SpotItem
-from config.models import Spot
+from config.models import Spot, primary_group
 
 
 # Fallback colours used only when QSS hasn't supplied a value yet (e.g.
@@ -53,6 +53,12 @@ class StageView(QtWidgets.QGraphicsView):
     # Emitted whenever the set of stage marks (spots) changes - added,
     # removed or renamed - so the Marks list in the tab can refresh.
     spots_changed = QtCore.pyqtSignal()
+
+    # Click-to-place (v1.5a focus geometry, repurposed 2026-08-09):
+    # while the mode is on, a left click emits the clicked STAGE
+    # coordinate (x, y in centred metres) plus whether Shift was held.
+    # The tab drops a MARK there; it writes no show data.
+    aim_clicked = QtCore.pyqtSignal(float, float, bool)
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -131,6 +137,9 @@ class StageView(QtWidgets.QGraphicsView):
         # faint, locked reference. None = normal editing. UI state, not
         # persisted to the config.
         self.active_layer = None
+
+        # Click-to-aim mode (see aim_clicked). UI state, not persisted.
+        self.aim_mode = False
 
         # List to store fixture items
         self.fixtures = {}
@@ -289,8 +298,8 @@ class StageView(QtWidgets.QGraphicsView):
             for fixture in self.config.fixtures:
                 group_color = '#808080'
                 group = None
-                if fixture.group and hasattr(self.config, 'groups'):
-                    group = self.config.groups.get(fixture.group)
+                if hasattr(self.config, 'groups'):
+                    group = primary_group(self.config, fixture)
                     if group:
                         group_color = group.color
 
@@ -324,7 +333,10 @@ class StageView(QtWidgets.QGraphicsView):
                 fixture_item.address = fixture.address
                 fixture_item.manufacturer = fixture.manufacturer
                 fixture_item.model = fixture.model
-                fixture_item.group = fixture.group
+                fixture_item.group = fixture.group  # primary, for display
+                # Full membership (primary first): group selection on
+                # the plan must reach secondary members too.
+                fixture_item.groups = list(fixture.groups)
                 fixture_item.current_mode = fixture.current_mode
                 fixture_item.available_modes = fixture.available_modes
                 fixture_item.layer = fixture.layer
@@ -1036,6 +1048,16 @@ class StageView(QtWidgets.QGraphicsView):
         if event.type() == QtCore.QEvent.Type.StyleChange:
             self._on_theme_color_changed()
 
+    def set_aim_mode(self, enabled: bool) -> None:
+        """Toggle click-to-aim: left clicks report stage coordinates via
+        aim_clicked instead of selecting/rubber-banding. Space+pan and
+        the wheel zoom keep working so the user can line up the click."""
+        self.aim_mode = bool(enabled)
+        if self.aim_mode:
+            self.viewport().setCursor(QtCore.Qt.CursorShape.CrossCursor)
+        else:
+            self.viewport().unsetCursor()
+
     def mousePressEvent(self, event):
         """Handle mouse press for rubber band selection and context menu."""
         # Space + left-drag pans the view. Intercepted before any of the
@@ -1048,6 +1070,24 @@ class StageView(QtWidgets.QGraphicsView):
             self._panning = True
             self._pan_anchor = event.pos()
             self.viewport().setCursor(QtCore.Qt.CursorShape.ClosedHandCursor)
+            event.accept()
+            return
+
+        # Click-to-aim: consume the left click and report the stage
+        # coordinate (after the pan branch, so Space+drag still pans in
+        # aim mode; before item selection, so the click aims even when
+        # it lands on a fixture symbol).
+        if (event.button() == QtCore.Qt.MouseButton.LeftButton
+                and self.aim_mode):
+            # Honour Snap to grid, like dragging a fixture or a mark
+            # does - a mark placed off-grid next to snapped rig geometry
+            # is just wrong (2026-08-09).
+            scene_pos = self.snap_to_grid_position(
+                self.mapToScene(event.pos()))
+            x_m, y_m = self.pixels_to_meters(scene_pos.x(), scene_pos.y())
+            keep_z = bool(event.modifiers()
+                          & QtCore.Qt.KeyboardModifier.ShiftModifier)
+            self.aim_clicked.emit(x_m, y_m, keep_z)
             event.accept()
             return
 
@@ -1286,6 +1326,22 @@ class StageView(QtWidgets.QGraphicsView):
         for fit-view, which is owned by StageTab) fall through to the
         default handler.
         """
+        # Delete removes the MARKS selected on the plan. Marks used to be
+        # deletable only from the MARKS list, and only while that list
+        # held keyboard focus - so selecting a mark on the plan (where
+        # you placed it, and where you are looking) and pressing Delete
+        # did nothing at all (reported 2026-08-09). Fixtures are
+        # deliberately NOT deleted here: there is no undo on this tab.
+        if event.key() in (QtCore.Qt.Key.Key_Delete,
+                           QtCore.Qt.Key.Key_Backspace):
+            names = [name for name, item in self.spots.items()
+                     if item.isSelected()]
+            if names:
+                for name in names:
+                    self.remove_spot(name)
+                event.accept()
+                return
+
         if event.key() == QtCore.Qt.Key.Key_Space and not event.isAutoRepeat():
             self._space_held = True
             # OpenHand = "you can grab"; ClosedHand only shows during the
@@ -1332,7 +1388,10 @@ class StageView(QtWidgets.QGraphicsView):
         self.scene.clearSelection()
         selected = []
         for fixture_item in self.fixtures.values():
-            if getattr(fixture_item, 'group', "") != group_name:
+            groups = getattr(fixture_item, 'groups', None)
+            if groups is None:
+                groups = [getattr(fixture_item, 'group', "")]
+            if group_name not in groups:
                 continue
             if not fixture_item.isVisible() or fixture_item.ghosted:
                 continue

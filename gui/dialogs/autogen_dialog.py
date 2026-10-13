@@ -14,12 +14,16 @@
 # never clamps intensity) and the "Overwrite existing blocks" toggle
 # (replace-vs-append is asked after generation by the calling tab, not
 # configured here). The reference's "SEED 4211 . RERUN" readout is gone
-# for the same reason: generation draws from the unseeded global RNG.
+# for the same reason - and the 2026-07-16 determinism audit showed the
+# readout would be a lie anyway: the generation pipeline is fully
+# deterministic (no RNG anywhere in autogen/), so there is no seed to
+# show. (docs/focus-morphing-plan.md phase 0.)
 #
 # Public contract kept intact: AutogenDialog(parent) exec()s modally and
 # exposes result_config / result_key_signature / result_palette after
-# accept(); AutogenWorker keeps its constructor and its
-# finished/error/progress signals.
+# accept(); AutogenWorker keeps its constructor and its error/progress
+# signals. Its result signal is ``generated`` (it was ``finished``, which
+# shadowed QThread.finished and hid the real end-of-thread signal).
 
 from PyQt6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QGridLayout, QWidget,
@@ -77,8 +81,15 @@ def _active_tokens() -> dict:
 
 
 class AutogenWorker(QThread):
-    """Background worker for show generation."""
-    finished = pyqtSignal(list, object)  # (lanes, GenerationReport)
+    """Background worker for show generation.
+
+    ``generated`` carries the result; QThread's own ``finished`` stays
+    reachable and fires on every exit path of run(). Pass it a config
+    snapshot (AutogenJob.snapshot), never the live project: the
+    generator runs for seconds on this thread and writes default spots
+    into the config it is given.
+    """
+    generated = pyqtSignal(list, object)  # (lanes, GenerationReport)
     error = pyqtSignal(str)
     progress = pyqtSignal(str)
 
@@ -105,9 +116,63 @@ class AutogenWorker(QThread):
                 self.song_palette,
             )
             self.progress.emit("Done!")
-            self.finished.emit(lanes, report)
+            self.generated.emit(lanes, report)
         except Exception as e:
             self.error.emit(str(e))
+
+
+def autogen_config_snapshot(config):
+    """A private copy of what the generator reads, for the worker thread.
+
+    The fixtures, groups and spots are deep-copied together (so group
+    membership keeps pointing at the copied fixtures) and the songs are
+    left out: the generator never reads them, and copying a real
+    project's timelines would cost the UI thread for nothing. Every
+    other field is shared read-only (stage size and the like).
+    """
+    import copy
+    fixtures, groups, spots = copy.deepcopy(
+        (config.fixtures, config.groups, config.spots))
+    snapshot = copy.copy(config)
+    snapshot.fixtures = fixtures
+    snapshot.groups = groups
+    snapshot.spots = spots
+    snapshot.songs = {}
+    return snapshot
+
+
+class AutogenJob:
+    """One autogen run, bound at launch to the song it was started for.
+
+    The song is held by object, so a rename while the worker runs still
+    finds it, and a song switch cannot redirect the result onto
+    whatever song happens to be open when generation finishes. A
+    project load replaces the config, which orphans the job.
+    """
+
+    def __init__(self, config, song):
+        self.config = config
+        self.song = song
+        self.snapshot = autogen_config_snapshot(config)
+        self._launch_spots = set(config.spots)
+
+    def song_name(self, config):
+        """The launch song's current name in ``config``, or None when
+        the song was deleted or the project was replaced."""
+        if config is not self.config:
+            return None
+        for name, song in config.songs.items():
+            if song is self.song:
+                return name
+        return None
+
+    def adopt_new_spots(self):
+        """Copy the spots the generator created on the snapshot (its
+        default Crowd/Stage targets for a project without spots) into
+        the real config, so generated movement blocks resolve them."""
+        for name, spot in self.snapshot.spots.items():
+            if name not in self._launch_spots and name not in self.config.spots:
+                self.config.spots[name] = spot
 
 
 # ──────────────────────────────────────────────

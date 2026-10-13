@@ -4,13 +4,39 @@ Displays waveform envelope as semi-transparent overlay on timeline.
 """
 
 from PyQt6.QtWidgets import QWidget
-from PyQt6.QtGui import QPainter, QColor, QPen, QPolygonF
+from PyQt6.QtGui import QPainter, QColor, QPen, QPixmap, QPolygonF
 from PyQt6.QtCore import Qt, QPointF, QThread, pyqtSignal
 from typing import Optional
 import numpy as np
 
 from .audio_file import AudioFile
 from .waveform_analyzer import WaveformAnalyzer, WaveformData
+
+
+#: Worker threads whose result is no longer wanted but whose run() has
+#: not returned yet. A decode or an analysis cannot be interrupted (run()
+#: has no event loop, so QThread.quit() does nothing), and dropping the
+#: last reference to a running QThread aborts the process - so a
+#: superseded worker is parked here until it has really ended.
+_PARKED_THREADS = []
+
+
+def park_running_thread(thread) -> None:
+    """Let go of ``thread`` without blocking on it: a running thread is
+    kept alive here until it ends (finished ones are pruned on the next
+    call). Its owner must ignore the results it still delivers."""
+    _PARKED_THREADS[:] = [t for t in _PARKED_THREADS if t.isRunning()]
+    if thread is not None and thread.isRunning():
+        _PARKED_THREADS.append(thread)
+
+
+def wait_parked_threads(timeout_ms: int = 10000) -> None:
+    """Let every parked thread end (app shutdown: the list is torn down
+    with the interpreter, and a running QThread destroyed then aborts
+    the process)."""
+    for thread in list(_PARKED_THREADS):
+        thread.wait(timeout_ms)
+    _PARKED_THREADS[:] = [t for t in _PARKED_THREADS if t.isRunning()]
 
 
 class AudioLoaderThread(QThread):
@@ -105,11 +131,27 @@ class AudioWaveformWidget(QWidget):
         self.load_error = None
         self.update()
 
-        # Start background generation
+        # Start background generation. A previous analysis still
+        # running is superseded: parked (replacing the only reference
+        # to a running QThread would abort the process) and its result
+        # ignored.
+        park_running_thread(self.generator_thread)
         self.generator_thread = WaveformGeneratorThread(audio_file, self.analyzer)
-        self.generator_thread.waveform_ready.connect(self.on_waveform_ready)
-        self.generator_thread.error_occurred.connect(self.on_waveform_error)
+        self.generator_thread.waveform_ready.connect(self._on_generator_ready)
+        self.generator_thread.error_occurred.connect(self._on_generator_error)
         self.generator_thread.start()
+
+    def _from_current_generator(self) -> bool:
+        sender = self.sender()
+        return sender is not None and sender is self.generator_thread
+
+    def _on_generator_ready(self, waveform_data):
+        if self._from_current_generator():
+            self.on_waveform_ready(waveform_data)
+
+    def _on_generator_error(self, error_message: str):
+        if self._from_current_generator():
+            self.on_waveform_error(error_message)
 
     def on_waveform_ready(self, waveform_data: WaveformData):
         """Handle waveform data ready"""
@@ -165,8 +207,26 @@ class AudioWaveformWidget(QWidget):
             self.draw_no_audio_state(painter, width, height)
             return
 
-        # Draw waveform
-        self.draw_waveform(painter, width, height)
+        # Draw the waveform from the render cache: the widget spans the
+        # FULL song canvas and sits under the playhead overlay, so
+        # playback's ~30 FPS strip invalidations repaint slices of it -
+        # rebuilding the peak polygon in Python cost ~60 ms per tick on
+        # a real project (2026-07-16 lag fix). The polygon renders once
+        # per (size, zoom, scroll, data) into a pixmap; ticks just blit
+        # the exposed slice.
+        key = (width, height, self.zoom_factor, self.scroll_offset,
+               id(self.waveform_data))
+        cached = getattr(self, "_render_cache", None)
+        if cached is None or cached[0] != key:
+            pixmap = QPixmap(width, height)
+            pixmap.fill(Qt.GlobalColor.transparent)
+            cache_painter = QPainter(pixmap)
+            cache_painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+            self.draw_waveform(cache_painter, width, height)
+            cache_painter.end()
+            cached = (key, pixmap)
+            self._render_cache = cached
+        painter.drawPixmap(event.rect(), cached[1], event.rect())
 
     def draw_waveform(self, painter: QPainter, width: int, height: int):
         """Draw the actual waveform"""
@@ -262,6 +322,6 @@ class AudioWaveformWidget(QWidget):
 
     def cleanup(self):
         """Cleanup resources"""
+        # quit() cannot stop run() (no event loop): just let it end
         if self.generator_thread and self.generator_thread.isRunning():
-            self.generator_thread.quit()
             self.generator_thread.wait()

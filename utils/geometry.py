@@ -106,6 +106,9 @@ class GeometryBuilder:
         """
         Create a cylinder mesh oriented along Y axis.
 
+        Triangles are wound counter-clockwise seen from outside, like
+        the box, so the mesh is ready for back-face culling.
+
         Args:
             radius: Cylinder radius
             height: Cylinder height
@@ -133,8 +136,8 @@ class GeometryBuilder:
             # Triangle 1
             vertices.extend([
                 cx + x1, cy - hh, cz + z1,
-                cx + x2, cy - hh, cz + z2,
                 cx + x2, cy + hh, cz + z2,
+                cx + x2, cy - hh, cz + z2,
             ])
             normals.extend([
                 math.cos(angle1), 0, math.sin(angle1),
@@ -145,13 +148,13 @@ class GeometryBuilder:
             # Triangle 2
             vertices.extend([
                 cx + x1, cy - hh, cz + z1,
-                cx + x2, cy + hh, cz + z2,
                 cx + x1, cy + hh, cz + z1,
+                cx + x2, cy + hh, cz + z2,
             ])
             normals.extend([
                 math.cos(angle1), 0, math.sin(angle1),
-                math.cos(angle2), 0, math.sin(angle2),
                 math.cos(angle1), 0, math.sin(angle1),
+                math.cos(angle2), 0, math.sin(angle2),
             ])
 
         # Top cap
@@ -164,8 +167,8 @@ class GeometryBuilder:
 
             vertices.extend([
                 cx, cy + hh, cz,
-                cx + x1, cy + hh, cz + z1,
                 cx + x2, cy + hh, cz + z2,
+                cx + x1, cy + hh, cz + z1,
             ])
             normals.extend([0, 1, 0] * 3)
 
@@ -179,8 +182,8 @@ class GeometryBuilder:
 
             vertices.extend([
                 cx, cy - hh, cz,
-                cx + x2, cy - hh, cz + z2,
                 cx + x1, cy - hh, cz + z1,
+                cx + x2, cy - hh, cz + z2,
             ])
             normals.extend([0, -1, 0] * 3)
 

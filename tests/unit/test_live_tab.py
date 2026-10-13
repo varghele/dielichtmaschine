@@ -82,7 +82,22 @@ def live_tab(qapp, three_group_config):
     ThemeManager().apply(qapp, "dark")
     tab = LiveTab(three_group_config, parent=None)
     yield tab
+    # Actually FREE the widget tree, do not just schedule it: the session
+    # qapp never spins an event loop, so a bare deleteLater leaves every
+    # LiveTab's 251 widgets alive for the rest of the worker's run - and
+    # ThemeManager.apply re-polishes app.allWidgets() on every fixture
+    # setup, so the accumulation eventually takes a native access
+    # violation inside setStyleSheet.
+    #
+    # NOTE (2026-08-08): processEvents() alone does NOT deliver
+    # DeferredDelete at this nesting level - an earlier version of this
+    # comment claimed it did, and measurement showed the teardown freeing
+    # exactly nothing (widget count grew 251 per cycle, never dropped),
+    # which is why the CI Windows workers still crashed here. The explicit
+    # flush lives in the suite-wide `_flush_deferred_deletes` autouse
+    # fixture (tests/conftest.py); the deleteLater below is what feeds it.
     tab.deleteLater()
+    qapp.processEvents()
 
 
 class TestSelectTiles:
@@ -213,6 +228,67 @@ class TestColourPool:
             assert cell.isEnabled() is False
 
 
+class TestColourFXPool:
+    """The COLOUR FX subsection under the colour pool (2026-07-24):
+    procedural colour looks (Rainbow) applied per group, overriding the
+    swatch. Same selection-scoped staging + toggle-release as the
+    swatches; rendered in the busk layer, not the engine."""
+
+    def test_cells_are_the_colour_fx(self, live_tab):
+        from gui.tabs.live_tab import COLOUR_FX
+        assert set(live_tab._colour_fx_cells) == {c[0] for c in COLOUR_FX}
+
+    def test_touch_applies_fx_to_selection(self, live_tab):
+        live_tab.state.set_selection(["Front Pars", "Movers"])
+        live_tab._colour_fx_cells["rainbow"].clicked.emit("rainbow")
+        assert live_tab.state.colour_fx == {
+            "Front Pars": "rainbow", "Movers": "rainbow"}
+        assert live_tab._colour_fx_cells["rainbow"].is_active()
+
+    def test_second_touch_releases_the_fx(self, live_tab):
+        live_tab.state.toggle_group("Movers")
+        live_tab._colour_fx_cells["rainbow"].clicked.emit("rainbow")
+        assert live_tab.state.colour_fx == {"Movers": "rainbow"}
+        live_tab._colour_fx_cells["rainbow"].clicked.emit("rainbow")
+        assert live_tab.state.colour_fx == {}
+        assert not live_tab._colour_fx_cells["rainbow"].is_active()
+
+    def test_release_toggle_is_scoped_to_the_selection(self, live_tab):
+        state = live_tab.state
+        state.set_selection(["Front Pars", "Movers"])
+        assert state.stage_colour_fx("rainbow") == 2
+        state.set_selection(["Movers"])
+        assert state.stage_colour_fx("rainbow") == 1
+        assert state.colour_fx == {"Front Pars": "rainbow"}
+
+    def test_touch_with_no_selection_warns(self, live_tab):
+        live_tab._colour_fx_cells["rainbow"].clicked.emit("rainbow")
+        assert "NO GROUP SELECTED" in live_tab._programmer_label.text()
+        assert live_tab.state.colour_fx == {}
+
+    def test_active_outline_is_selection_scoped(self, live_tab):
+        state = live_tab.state
+        state.set_selection(["Movers"])
+        state.stage_colour_fx("rainbow")
+        state.set_selection(["Front Pars"])   # not holding the fx
+        live_tab._sync_from_state()
+        assert not live_tab._colour_fx_cells["rainbow"].is_active()
+
+    def test_release_all_clears_the_fx(self, live_tab):
+        state = live_tab.state
+        state.toggle_group("Movers")
+        state.stage_colour_fx("rainbow")
+        state.release_all()
+        assert state.colour_fx == {}
+
+    def test_fx_pruned_when_group_leaves_config(self, live_tab):
+        live_tab.state.toggle_group("Movers")
+        live_tab.state.stage_colour_fx("rainbow")
+        live_tab.config = _config((("Spots", "#5F86C9", 1),))
+        live_tab.update_from_config()
+        assert live_tab.state.colour_fx == {}
+
+
 class TestNoSelectionFeedback:
     """A palette touch with nothing selected changes no output; the
     programmer bar must say so instead of staying silent (phase 0 of
@@ -322,12 +398,23 @@ class TestPools:
         live_tab.state.toggle_group("Movers")
         cell = live_tab._intensity_cells["intensity/Pulse"]
         cell.clicked.emit("intensity/Pulse")
-        assert live_tab.state.intensity == "intensity/Pulse"
+        assert live_tab.state.intensities == {
+            "Movers": "intensity/Pulse"}
         assert cell.is_active()
         assert any(r["kind"] == "intensity"
                    for r in live_tab.state.running)
         cell.clicked.emit("intensity/Pulse")    # release
-        assert live_tab.state.intensity is None
+        assert live_tab.state.intensities == {}
+
+    def test_groups_hold_intensities_independently(self, live_tab):
+        self._with_bundled_riffs(live_tab)
+        live_tab.state.set_selection(["Movers"])
+        live_tab.state.stage_intensity("intensity/Pulse")
+        live_tab.state.set_selection(["Front Pars"])
+        live_tab.state.stage_intensity("intensity/Sparkle")
+        assert live_tab.state.intensities == {
+            "Movers": "intensity/Pulse",
+            "Front Pars": "intensity/Sparkle"}
 
     def test_intensity_pool_gates_on_selection(self, live_tab):
         assert live_tab._intensity_pool.isEnabled() is False
@@ -343,11 +430,12 @@ class TestPools:
 
     def test_kill_row_clears_the_intensity(self, live_tab):
         state = live_tab.state
-        state.set_intensity("intensity/Pulse")
+        state.toggle_group("Movers")
+        state.stage_intensity("intensity/Pulse")
         index = next(i for i, r in enumerate(state.running)
                      if r["kind"] == "intensity")
         state.kill_playback(index)
-        assert state.intensity is None
+        assert state.intensities == {}
 
 
 class TestFade:
@@ -467,11 +555,13 @@ class TestRightColumnActions:
         assert "EMPTY" in live_tab._programmer_label.text()
 
     def test_release_all_clears_running_and_staged_playbacks(self, live_tab):
-        live_tab.state.set_effect("custom/Riff A")
+        live_tab.state.toggle_group("Movers")
+        live_tab.state.stage_composite("pulse_sweep")
         live_tab.state.set_scene("looks/Warm Wash")
-        live_tab.state.enqueue("effect", "custom/Riff B", "Riff B")
+        live_tab.state.enqueue("composite", "ballad", "Ballad")
         live_tab._release_all_btn.click()
-        assert live_tab.state.effect is None
+        assert live_tab.state.intensities == {}
+        assert live_tab.state.shapes == {}
         assert live_tab.state.scene is None
         assert live_tab.state.running == []
         # The preloaded queue is deliberately kept (it is not output).
@@ -655,71 +745,163 @@ def _scene_library(tmp_path, scenes):
     return lib
 
 
-class TestEffectsPool:
-    def test_cells_created_per_riff(self, live_tab, tmp_path):
-        lib = _riff_library(tmp_path, [("custom", "Riff A"),
-                                       ("loops", "Riff B")])
-        live_tab.set_effect_library(lib)
-        assert set(live_tab._effect_cells) == {"custom/Riff A", "loops/Riff B"}
+class TestCompositeEffectsPool:
+    """The EFFECTS pool is COMPOSITE macros (2026-07-24): one grab
+    fires a coordinated INTENSITY FX + MOVEMENT SHAPE onto the selected
+    groups (colour stays with the swatch). Cells are the fixed
+    COMPOSITE_EFFECTS, split into Loops/Hits, keyed by composite id -
+    no riff library drives them."""
 
-    def test_click_stages_effect(self, live_tab, tmp_path):
-        lib = _riff_library(tmp_path, [("custom", "Riff A")])
-        live_tab.set_effect_library(lib)
+    def test_cells_are_the_composites(self, live_tab):
+        from gui.tabs.live_tab import COMPOSITE_BY_ID
+        assert set(live_tab._effect_cells) == set(COMPOSITE_BY_ID)
+
+    def test_click_stages_intensity_and_shape_on_selected_groups(
+            self, live_tab):
         live_tab.state.toggle_group("Movers")
-        cell = live_tab._effect_cells["custom/Riff A"]
-        cell.clicked.emit("custom/Riff A")
-        assert live_tab.state.effect == "custom/Riff A"
+        cell = live_tab._effect_cells["pulse_sweep"]
+        cell.clicked.emit("pulse_sweep")
+        # pulse_sweep = intensity/Pulse + circle.
+        assert live_tab.state.intensities == {"Movers": "intensity/Pulse"}
+        assert live_tab.state.shapes == {"Movers": "circle"}
         assert cell.is_active()
 
-    def test_click_same_cell_toggles_off(self, live_tab, tmp_path):
-        lib = _riff_library(tmp_path, [("custom", "Riff A")])
-        live_tab.set_effect_library(lib)
-        cell = live_tab._effect_cells["custom/Riff A"]
-        cell.clicked.emit("custom/Riff A")
-        assert live_tab.state.effect == "custom/Riff A"
-        cell.clicked.emit("custom/Riff A")
-        assert live_tab.state.effect is None
+    def test_click_same_cell_releases_the_selection(self, live_tab):
+        live_tab.state.toggle_group("Movers")
+        cell = live_tab._effect_cells["pulse_sweep"]
+        cell.clicked.emit("pulse_sweep")
+        assert live_tab.state.intensities == {"Movers": "intensity/Pulse"}
+        cell.clicked.emit("pulse_sweep")
+        assert live_tab.state.intensities == {}
+        assert live_tab.state.shapes == {}
         assert not cell.is_active()
 
-    def test_pool_disabled_without_selection_enabled_with(self, live_tab,
-                                                          tmp_path):
-        lib = _riff_library(tmp_path, [("custom", "Riff A")])
-        live_tab.set_effect_library(lib)
-        # Selection empty -> effects are selection-scoped -> pool greyed.
+    def test_groups_hold_composites_independently(self, live_tab):
+        """Each group runs its own composite, and deselection does not
+        stop it. Outlines are selection-scoped."""
+        live_tab.state.set_selection(["Movers"])
+        live_tab.state.stage_composite("pulse_sweep")
+        live_tab.state.set_selection(["Front Pars"])
+        live_tab.state.stage_composite("ballad")
+        assert live_tab.state.intensities == {
+            "Movers": "intensity/Pulse", "Front Pars": "intensity/Throb"}
+        assert live_tab.state.shapes == {
+            "Movers": "circle", "Front Pars": "figure_8"}
+        assert live_tab._effect_cells["ballad"].is_active()
+        assert not live_tab._effect_cells["pulse_sweep"].is_active()
+
+    def test_tiles_show_the_running_composite_name(self, live_tab):
+        live_tab.state.set_selection(["Movers"])
+        live_tab.state.stage_composite("strobe_snap")
+        tile = live_tab._select_tiles["Movers"]
+        assert tile.effect_label.text() == "STROBE SNAP"   # caps
+        other = live_tab._select_tiles["Front Pars"]
+        assert other.effect_label.text() == "-"
+
+    def test_pool_disabled_without_selection_enabled_with(self, live_tab):
+        # Selection empty -> composites are selection-scoped -> greyed.
         assert live_tab._effects_pool.isEnabled() is False
         live_tab.state.toggle_group("Movers")
         assert live_tab._effects_pool.isEnabled() is True
         live_tab.state.clear_selection()
         assert live_tab._effects_pool.isEnabled() is False
 
-    def test_empty_library_shows_marked_empty_state(self, live_tab, tmp_path):
-        live_tab.set_effect_library(_riff_library(tmp_path, []))
-        assert live_tab._effect_cells == {}
-        item = live_tab._effects_grid.itemAtPosition(0, 0)
-        assert item is not None
-        # MicroLabel renders caps; match case-insensitively.
-        assert "no effects yet" in item.widget().text().lower()
-
-    def test_cells_carry_card_role(self, live_tab, tmp_path):
-        live_tab.set_effect_library(_riff_library(tmp_path,
-                                                  [("custom", "Riff A")]))
-        cell = live_tab._effect_cells["custom/Riff A"]
+    def test_cells_carry_card_role(self, live_tab):
+        cell = live_tab._effect_cells["pulse_sweep"]
         assert cell.property("role") == "card"
 
-    def test_set_effect_emits_state_changed(self, live_tab):
+    def test_stage_composite_emits_state_changed(self, live_tab):
         hits = []
-        live_tab.state.state_changed.connect(lambda: hits.append(1))
-        live_tab.state.set_effect("custom/Riff A")
-        live_tab.state.set_effect("custom/Riff A")  # toggle off
-        assert len(hits) == 2
-        assert live_tab.state.effect is None
-
-    def test_programmer_bar_shows_effect(self, live_tab, tmp_path):
-        live_tab.set_effect_library(_riff_library(tmp_path,
-                                                  [("custom", "Riff A")]))
         live_tab.state.toggle_group("Movers")
-        live_tab.state.set_effect("custom/Riff A")
-        assert "FX: RIFF A" in live_tab._programmer_label.text()
+        live_tab.state.state_changed.connect(lambda: hits.append(1))
+        live_tab.state.stage_composite("pulse_sweep")
+        live_tab.state.stage_composite("pulse_sweep")  # release
+        assert len(hits) == 2
+        assert live_tab.state.intensities == {}
+
+    def test_category_headers_split_loops_and_hits(self, live_tab):
+        """The pool renders a header per COMPOSITE_CATEGORIES over its
+        cells (the position pool's subsection precedent)."""
+        from gui.typography import MicroLabel
+        grid = live_tab._effects_grid
+        headers = [grid.itemAt(i).widget() for i in range(grid.count())
+                   if isinstance(grid.itemAt(i).widget(), MicroLabel)]
+        assert [h.text() for h in headers] == ["LOOPS", "HITS"]
+
+    def test_no_selection_touch_warns(self, live_tab):
+        live_tab._effect_cells["pulse_sweep"].clicked.emit("pulse_sweep")
+        assert "NO GROUP SELECTED" in live_tab._programmer_label.text()
+
+    def test_programmer_bar_shows_dim_and_shape(self, live_tab):
+        live_tab.state.toggle_group("Movers")
+        live_tab.state.stage_composite("pulse_sweep")
+        text = live_tab._programmer_label.text()
+        # Composites decompose into DIM + SHAPE, both shown; no FX line.
+        assert "DIM: PULSE" in text
+        assert "SHAPE: CIRCLE" in text
+        assert "FX:" not in text
+
+
+class TestPoolLabels:
+    """Library names double as file keys ("intensity_crescendo_8bar"),
+    so every operator-facing label reads underscores as spaces (which
+    also lets the cell word-wrap long names). Keys stay raw - staging,
+    resolution and the cell dicts all keep the exact library key."""
+
+    def test_display_name_reads_underscores_as_spaces(self):
+        from gui.tabs.live_tab import _display_name
+        assert _display_name("intensity_crescendo_8bar") == \
+            "intensity crescendo 8bar"
+        assert _display_name("Pulse") == "Pulse"
+        assert _display_name("__odd__name__") == "odd name"
+        assert _display_name(None) == ""
+
+    def test_intensity_cell_label_and_raw_key(self, live_tab, tmp_path):
+        # The library-cell label behaviour now lives in the INTENSITY
+        # pool (the EFFECTS pool is fixed composites). Key stays raw;
+        # DisplayLabel renders caps with underscores read as spaces.
+        lib = _riff_library(tmp_path,
+                            [("intensity", "long_pattern_name_8bar")])
+        live_tab.set_effect_library(lib)
+        cell = live_tab._intensity_cells["intensity/long_pattern_name_8bar"]
+        assert cell.item_key == "intensity/long_pattern_name_8bar"
+        assert cell.name_label.text() == "LONG PATTERN NAME 8BAR"
+
+    def test_scene_cell_label(self, live_tab, tmp_path):
+        live_tab.set_scene_library(_scene_library(
+            tmp_path, [("red_room_wash", "looks", "#F0562E")]))
+        cell = live_tab._scene_cells["looks/red_room_wash"]
+        assert cell.name_label.text() == "RED ROOM WASH"
+
+    def test_running_row_label(self, live_tab, tmp_path):
+        lib = _riff_library(tmp_path,
+                            [("intensity", "long_pattern_name_8bar")])
+        live_tab.set_effect_library(lib)
+        live_tab.state.toggle_group("Movers")
+        live_tab.state.stage_intensity("intensity/long_pattern_name_8bar")
+        record = next(r for r in live_tab.state.running
+                      if r["kind"] == "intensity")
+        assert record["label"] == "long pattern name 8bar"
+        assert record["key"] == "intensity/long_pattern_name_8bar"
+        assert record["groups"] == ["Movers"]
+
+    def test_programmer_bar_label(self, live_tab, tmp_path):
+        lib = _riff_library(tmp_path,
+                            [("intensity", "long_pattern_name_8bar")])
+        live_tab.set_effect_library(lib)
+        live_tab.state.toggle_group("Movers")
+        live_tab.state.stage_intensity("intensity/long_pattern_name_8bar")
+        assert "DIM: LONG PATTERN NAME 8BAR" in \
+            live_tab._programmer_label.text()
+
+    def test_queued_label(self, live_tab):
+        # Latched EFFECTS touch enqueues a COMPOSITE with its display
+        # label; GO fires it apply-only.
+        live_tab._queue_latch_btn.setChecked(True)
+        live_tab._effect_cells["pulse_sweep"].clicked.emit("pulse_sweep")
+        assert live_tab.state.next_up == [{
+            "kind": "composite", "key": "pulse_sweep",
+            "label": "Pulse Sweep"}]
 
 
 class TestScenesPool:
@@ -828,7 +1010,11 @@ def position_tab(qapp):
     ThemeManager().apply(qapp, "dark")
     tab = LiveTab(_spot_config(), parent=None)
     yield tab
+    # Free the tree now (see the live_tab fixture note): a bare
+    # deleteLater accumulates widgets across the worker and segfaults
+    # ThemeManager.apply's global re-polish on offscreen Linux.
     tab.deleteLater()
+    qapp.processEvents()
 
 
 class TestMovementShapesPool:
@@ -840,14 +1026,22 @@ class TestMovementShapesPool:
         position_tab.state.toggle_group("Movers")
         cell = position_tab._movement_cells["circle"]
         cell.clicked.emit("circle")
-        assert position_tab.state.shape == "circle"
+        assert position_tab.state.shapes == {"Movers": "circle"}
         assert cell.is_active()
         assert any(r["kind"] == "shape"
                    for r in position_tab.state.running)
         cell.clicked.emit("circle")             # release
-        assert position_tab.state.shape is None
+        assert position_tab.state.shapes == {}
         assert not any(r["kind"] == "shape"
                        for r in position_tab.state.running)
+
+    def test_groups_hold_shapes_independently(self, position_tab):
+        position_tab.state.set_selection(["Movers"])
+        position_tab.state.stage_shape("circle")
+        position_tab.state.set_selection(["Front Pars"])
+        position_tab.state.stage_shape("fan")
+        assert position_tab.state.shapes == {
+            "Movers": "circle", "Front Pars": "fan"}
 
     def test_shapes_section_gates_on_movers(self, position_tab):
         assert position_tab._shapes_section.isEnabled() is False
@@ -871,17 +1065,18 @@ class TestMovementShapesPool:
     def test_kill_row_clears_the_shape(self, position_tab):
         state = position_tab.state
         state.toggle_group("Movers")
-        state.set_shape("bounce")
+        state.stage_shape("bounce")
         index = next(i for i, r in enumerate(state.running)
                      if r["kind"] == "shape")
         state.kill_playback(index)
-        assert state.shape is None
+        assert state.shapes == {}
 
     def test_release_all_clears_the_shape(self, position_tab):
         state = position_tab.state
-        state.set_shape("fan")
+        state.toggle_group("Movers")
+        state.stage_shape("fan")
         state.release_all()
-        assert state.shape is None
+        assert state.shapes == {}
 
     def test_size_chips_set_the_orbit_radius(self, position_tab):
         from gui.tabs.live_tab import DEFAULT_SHAPE_SIZE_M, SHAPE_SIZES
@@ -1001,6 +1196,7 @@ class TestPositionPool:
             assert cell.tag_label.text() == "0.0 · 1.5"
         finally:
             tab.deleteLater()
+            qapp.processEvents()
 
     def test_click_applies_and_second_click_releases(self, position_tab):
         position_tab.state.set_selection(["Movers"])
@@ -1069,6 +1265,7 @@ class TestPositionPool:
             assert tab._position_section.isEnabled() is True
         finally:
             tab.deleteLater()
+            qapp.processEvents()
 
     def test_update_from_config_prunes_removed_mark(self, position_tab):
         position_tab.state.set_selection(["Movers"])
@@ -1115,6 +1312,7 @@ class TestPositionPool:
             assert "preset:element:drums1" not in tab._position_cells
         finally:
             tab.deleteLater()
+            qapp.processEvents()
 
     def test_adding_an_element_rebuilds_the_pool(self, position_tab):
         from config.models import StageElement
@@ -1183,43 +1381,95 @@ class TestPositionPool:
 
 
 class TestLibraryStatePreserved:
-    def test_effect_and_scene_survive_group_change(self, live_tab):
-        live_tab.state.set_effect("custom/Riff A")
+    def test_scene_survives_and_effects_prune_with_groups(self,
+                                                          live_tab):
+        """Scenes are group-agnostic and survive any config change;
+        per-group intensity/shape (what a composite writes) follow their
+        group out of the config."""
+        live_tab.state.toggle_group("Movers")
+        live_tab.state.stage_composite("pulse_sweep")
         live_tab.state.set_scene("looks/Warm Wash")
         new_config = _config((("Spots", "#5F86C9", 1),))
         live_tab.config = new_config
         live_tab.update_from_config()
-        assert live_tab.state.effect == "custom/Riff A"
+        assert live_tab.state.intensities == {}   # "Movers" left the rig
+        assert live_tab.state.shapes == {}
         assert live_tab.state.scene == "looks/Warm Wash"
 
-    def test_running_and_next_up_survive_group_change(self, live_tab):
-        live_tab.state.set_effect("custom/Riff A")
-        live_tab.state.enqueue("scene", "looks/Warm Wash", "Warm Wash")
-        new_config = _config((("Spots", "#5F86C9", 1),))
+    def test_effects_survive_when_their_group_does(self, live_tab):
+        live_tab.state.toggle_group("Movers")
+        live_tab.state.stage_composite("pulse_sweep")
+        new_config = _config((("Movers", "#C95FD0", 2, "MH"),))
         live_tab.config = new_config
         live_tab.update_from_config()
-        assert [r["key"] for r in live_tab.state.running] == ["custom/Riff A"]
+        assert live_tab.state.intensities == {"Movers": "intensity/Pulse"}
+        assert live_tab.state.shapes == {"Movers": "circle"}
+
+    def test_running_and_next_up_survive_group_change(self, live_tab):
+        live_tab.state.toggle_group("Movers")
+        live_tab.state.stage_composite("pulse_sweep")
+        live_tab.state.enqueue("scene", "looks/Warm Wash", "Warm Wash")
+        new_config = _config((("Movers", "#C95FD0", 2, "MH"),))
+        live_tab.config = new_config
+        live_tab.update_from_config()
+        # The composite decomposes into an intensity + a shape record.
+        assert {r["key"] for r in live_tab.state.running} == {
+            "intensity/Pulse", "circle"}
         assert [r["key"] for r in live_tab.state.next_up] == \
             ["looks/Warm Wash"]
 
 
 class TestRunningStack:
-    def test_set_effect_creates_running_record(self, live_tab):
-        live_tab.state.set_effect("custom/Riff A")
-        assert live_tab.state.running == [{
-            "kind": "effect", "key": "custom/Riff A",
-            "label": "Riff A", "paused": False}]
+    """The running stack mirrors the per-group intensity/shape mappings
+    (one record per distinct key with its group list) plus the single
+    scene record - the mechanics composites and INTENSITY FX both rely
+    on. Exercised through the intensity path (a composite writes the
+    same records for its intensity half)."""
 
-    def test_toggle_off_removes_record(self, live_tab):
-        live_tab.state.set_effect("custom/Riff A")
-        live_tab.state.set_effect("custom/Riff A")
+    def test_stage_intensity_creates_running_record(self, live_tab):
+        live_tab.state.toggle_group("Movers")
+        live_tab.state.stage_intensity("intensity/Pulse")
+        assert live_tab.state.running == [{
+            "kind": "intensity", "key": "intensity/Pulse",
+            "label": "Pulse", "groups": ["Movers"], "paused": False}]
+
+    def test_release_touch_removes_record(self, live_tab):
+        live_tab.state.toggle_group("Movers")
+        live_tab.state.stage_intensity("intensity/Pulse")
+        live_tab.state.stage_intensity("intensity/Pulse")
         assert live_tab.state.running == []
 
-    def test_replacing_effect_swaps_record(self, live_tab):
-        live_tab.state.set_effect("custom/Riff A")
-        live_tab.state.set_effect("loops/Riff B")
-        # At most one kind=="effect" record; the newest key wins.
-        assert [r["key"] for r in live_tab.state.running] == ["loops/Riff B"]
+    def test_restaging_the_selection_swaps_its_record(self, live_tab):
+        """Staging a new key over the same selection releases the old
+        one there - one record per DISTINCT running key."""
+        live_tab.state.toggle_group("Movers")
+        live_tab.state.stage_intensity("intensity/Pulse")
+        live_tab.state.stage_intensity("intensity/Wave")
+        assert [r["key"] for r in live_tab.state.running] == \
+            ["intensity/Wave"]
+
+    def test_one_record_per_distinct_key_with_groups(self, live_tab):
+        live_tab.state.set_selection(["Movers", "Front Pars"])
+        live_tab.state.stage_intensity("intensity/Pulse")
+        live_tab.state.set_selection(["Rear Wash"])
+        live_tab.state.stage_intensity("intensity/Wave")
+        records = [r for r in live_tab.state.running
+                   if r["kind"] == "intensity"]
+        assert [(r["key"], r["groups"]) for r in records] == [
+            ("intensity/Pulse", ["Front Pars", "Movers"]),
+            ("intensity/Wave", ["Rear Wash"])]
+
+    def test_partial_release_shrinks_the_record(self, live_tab):
+        """Releasing one group of a two-group key keeps the record
+        with the remaining group (paused flag preserved)."""
+        live_tab.state.set_selection(["Movers", "Front Pars"])
+        live_tab.state.stage_intensity("intensity/Pulse")
+        live_tab.state.toggle_pause(0)
+        live_tab.state.set_selection(["Front Pars"])
+        live_tab.state.stage_intensity("intensity/Pulse")   # release Pars
+        record = live_tab.state.running[0]
+        assert record["groups"] == ["Movers"]
+        assert record["paused"] is True
 
     def test_scene_record_parallel_to_effect(self, live_tab):
         live_tab.state.set_scene("looks/Warm Wash")
@@ -1232,16 +1482,17 @@ class TestRunningStack:
         live_tab.state.set_scene("looks/Cold Snap")
         assert live_tab.state.running == []
 
-    def test_at_most_one_record_per_kind(self, live_tab):
-        live_tab.state.set_effect("custom/Riff A")
+    def test_scene_record_stays_single_beside_effects(self, live_tab):
+        live_tab.state.toggle_group("Movers")
+        live_tab.state.stage_intensity("intensity/Pulse")
         live_tab.state.set_scene("looks/Warm Wash")
-        live_tab.state.set_effect("loops/Riff B")
         live_tab.state.set_scene("looks/Cold Snap")
         kinds = [r["kind"] for r in live_tab.state.running]
-        assert sorted(kinds) == ["effect", "scene"]
+        assert sorted(kinds) == ["intensity", "scene"]
 
     def test_running_records_render_rows_with_buttons(self, live_tab):
-        live_tab.state.set_effect("custom/Riff A")
+        live_tab.state.toggle_group("Movers")
+        live_tab.state.stage_intensity("intensity/Pulse")
         live_tab.state.set_scene("looks/Warm Wash")
         assert len(live_tab._pause_buttons) == 2
         assert len(live_tab._kill_buttons) == 2
@@ -1249,23 +1500,26 @@ class TestRunningStack:
         for btn in live_tab._kill_buttons:
             assert btn.property("role") == "destructive"
 
-    def test_kill_removes_record_and_clears_effect(self, live_tab):
-        live_tab.state.set_effect("custom/Riff A")
+    def test_kill_removes_record_and_releases_its_groups(self, live_tab):
+        live_tab.state.toggle_group("Movers")
+        live_tab.state.stage_intensity("intensity/Pulse")
         live_tab._kill_buttons[0].click()
         assert live_tab.state.running == []
-        assert live_tab.state.effect is None
+        assert live_tab.state.intensities == {}
 
     def test_kill_scene_record_clears_scene(self, live_tab):
-        live_tab.state.set_effect("custom/Riff A")
+        live_tab.state.toggle_group("Movers")
+        live_tab.state.stage_intensity("intensity/Pulse")
         live_tab.state.set_scene("looks/Warm Wash")
-        # Kill the scene row (index 1); the effect keeps running.
+        # Kill the scene row (index 1); the intensity keeps running.
         live_tab.state.kill_playback(1)
         assert live_tab.state.scene is None
-        assert live_tab.state.effect == "custom/Riff A"
-        assert [r["kind"] for r in live_tab.state.running] == ["effect"]
+        assert live_tab.state.intensities == {"Movers": "intensity/Pulse"}
+        assert [r["kind"] for r in live_tab.state.running] == ["intensity"]
 
     def test_toggle_pause_flips_flag_and_row_shows_resume(self, live_tab):
-        live_tab.state.set_effect("custom/Riff A")
+        live_tab.state.toggle_group("Movers")
+        live_tab.state.stage_intensity("intensity/Pulse")
         assert live_tab._pause_buttons[0].text() == "PAUSE"
         live_tab._pause_buttons[0].click()
         assert live_tab.state.running[0]["paused"] is True
@@ -1274,24 +1528,39 @@ class TestRunningStack:
         assert live_tab.state.running[0]["paused"] is False
         assert live_tab._pause_buttons[0].text() == "PAUSE"
 
+    def test_running_row_tag_names_the_groups(self, live_tab):
+        from PyQt6.QtWidgets import QLabel
+        live_tab.state.set_selection(["Movers", "Front Pars"])
+        live_tab.state.stage_intensity("intensity/Pulse")
+        record = live_tab.state.running[0]
+        assert record["groups"] == ["Front Pars", "Movers"]
+        row = live_tab._make_running_row(0, record)
+        texts = " ".join(w.text() for w in row.findChildren(QLabel))
+        assert "FRONT PARS + MOVERS" in texts.upper()
+        row.deleteLater()
+
 
 class TestQueue:
     def test_enqueue_appends_and_allows_repeats(self, live_tab):
-        live_tab.state.enqueue("effect", "custom/Riff A", "Riff A")
-        live_tab.state.enqueue("effect", "custom/Riff A", "Riff A")
+        live_tab.state.enqueue("composite", "pulse_sweep", "Pulse Sweep")
+        live_tab.state.enqueue("composite", "pulse_sweep", "Pulse Sweep")
         live_tab.state.enqueue("scene", "looks/Warm Wash", "Warm Wash")
         assert [r["key"] for r in live_tab.state.next_up] == [
-            "custom/Riff A", "custom/Riff A", "looks/Warm Wash"]
+            "pulse_sweep", "pulse_sweep", "looks/Warm Wash"]
         # Enqueueing never touches the live staged state.
-        assert live_tab.state.effect is None
+        assert live_tab.state.intensities == {}
         assert live_tab.state.scene is None
 
     def test_fire_next_pops_head_and_applies_effect(self, live_tab):
-        live_tab.state.enqueue("effect", "custom/Riff A", "Riff A")
+        live_tab.state.toggle_group("Movers")
+        live_tab.state.enqueue("composite", "pulse_sweep", "Pulse Sweep")
         live_tab.state.enqueue("scene", "looks/Warm Wash", "Warm Wash")
         live_tab.state.fire_next()
-        assert live_tab.state.effect == "custom/Riff A"
-        assert [r["key"] for r in live_tab.state.running] == ["custom/Riff A"]
+        # A composite applies its intensity + shape to the selection.
+        assert live_tab.state.intensities == {"Movers": "intensity/Pulse"}
+        assert live_tab.state.shapes == {"Movers": "circle"}
+        assert {r["key"] for r in live_tab.state.running} == {
+            "intensity/Pulse", "circle"}
         assert [r["key"] for r in live_tab.state.next_up] == \
             ["looks/Warm Wash"]
         live_tab.state.fire_next()
@@ -1299,12 +1568,13 @@ class TestQueue:
         assert live_tab.state.next_up == []
 
     def test_fire_next_never_toggles_a_running_key_off(self, live_tab):
-        live_tab.state.set_effect("custom/Riff A")
-        live_tab.state.enqueue("effect", "custom/Riff A", "Riff A")
+        live_tab.state.toggle_group("Movers")
+        live_tab.state.stage_composite("pulse_sweep")
+        live_tab.state.enqueue("composite", "pulse_sweep", "Pulse Sweep")
         live_tab.state.fire_next()
-        # GO applies; firing the already-running key keeps it running.
-        assert live_tab.state.effect == "custom/Riff A"
-        assert [r["key"] for r in live_tab.state.running] == ["custom/Riff A"]
+        # GO applies; firing the already-running composite keeps it.
+        assert live_tab.state.intensities == {"Movers": "intensity/Pulse"}
+        assert live_tab.state.shapes == {"Movers": "circle"}
         assert live_tab.state.next_up == []
 
     def test_fire_next_on_empty_queue_is_a_noop(self, live_tab):
@@ -1312,17 +1582,17 @@ class TestQueue:
         live_tab.state.state_changed.connect(lambda: hits.append(1))
         live_tab.state.fire_next()
         assert hits == []
-        assert live_tab.state.effect is None
+        assert live_tab.state.intensities == {}
 
     def test_remove_queued_drops_by_index(self, live_tab):
-        live_tab.state.enqueue("effect", "custom/Riff A", "Riff A")
+        live_tab.state.enqueue("composite", "pulse_sweep", "Pulse Sweep")
         live_tab.state.enqueue("scene", "looks/Warm Wash", "Warm Wash")
         live_tab.state.remove_queued(0)
         assert [r["key"] for r in live_tab.state.next_up] == \
             ["looks/Warm Wash"]
 
     def test_queued_row_remove_button(self, live_tab):
-        live_tab.state.enqueue("effect", "custom/Riff A", "Riff A")
+        live_tab.state.enqueue("composite", "pulse_sweep", "Pulse Sweep")
         assert len(live_tab._queue_remove_buttons) == 1
         live_tab._queue_remove_buttons[0].click()
         assert live_tab.state.next_up == []
@@ -1330,14 +1600,15 @@ class TestQueue:
     def test_go_disabled_when_empty_enabled_when_not(self, live_tab):
         assert live_tab._go_btn.isEnabled() is False
         assert not live_tab._queue_empty_hint.isHidden()
-        live_tab.state.enqueue("effect", "custom/Riff A", "Riff A")
+        live_tab.state.enqueue("composite", "pulse_sweep", "Pulse Sweep")
         assert live_tab._go_btn.isEnabled() is True
         assert live_tab._queue_empty_hint.isHidden()
 
     def test_go_button_fires_next(self, live_tab):
-        live_tab.state.enqueue("effect", "custom/Riff A", "Riff A")
+        live_tab.state.toggle_group("Movers")
+        live_tab.state.enqueue("composite", "pulse_sweep", "Pulse Sweep")
         live_tab._go_btn.click()
-        assert live_tab.state.effect == "custom/Riff A"
+        assert live_tab.state.intensities == {"Movers": "intensity/Pulse"}
         assert live_tab.state.next_up == []
         assert live_tab._go_btn.isEnabled() is False
 
@@ -1345,18 +1616,16 @@ class TestQueue:
         assert live_tab._go_btn.property("role") == "cta-accent"
         assert live_tab._queue_latch_btn.property("role") == "output-select"
 
-    def test_latched_touch_enqueues_effect_without_firing(self, live_tab,
-                                                          tmp_path):
-        live_tab.set_effect_library(_riff_library(tmp_path,
-                                                  [("custom", "Riff A")]))
+    def test_latched_touch_enqueues_effect_without_firing(self, live_tab):
         live_tab.state.toggle_group("Movers")
         live_tab._queue_latch_btn.setChecked(True)
-        cell = live_tab._effect_cells["custom/Riff A"]
-        cell.clicked.emit("custom/Riff A")
+        cell = live_tab._effect_cells["pulse_sweep"]
+        cell.clicked.emit("pulse_sweep")
         assert live_tab.state.next_up == [{
-            "kind": "effect", "key": "custom/Riff A", "label": "Riff A"}]
-        # The cell did NOT fire live: no staged effect, cell not active.
-        assert live_tab.state.effect is None
+            "kind": "composite", "key": "pulse_sweep",
+            "label": "Pulse Sweep"}]
+        # The cell did NOT fire live: nothing staged, cell not active.
+        assert live_tab.state.intensities == {}
         assert not cell.is_active()
 
     def test_latched_touch_enqueues_scene(self, live_tab, tmp_path):
@@ -1370,25 +1639,90 @@ class TestQueue:
             "label": "Warm Wash"}]
         assert live_tab.state.scene is None
 
-    def test_unlatched_touch_fires_live(self, live_tab, tmp_path):
-        live_tab.set_effect_library(_riff_library(tmp_path,
-                                                  [("custom", "Riff A")]))
+    def test_unlatched_touch_fires_live(self, live_tab):
         live_tab.state.toggle_group("Movers")
         assert live_tab._queue_latch_btn.isChecked() is False
-        live_tab._effect_cells["custom/Riff A"].clicked.emit("custom/Riff A")
-        assert live_tab.state.effect == "custom/Riff A"
+        live_tab._effect_cells["pulse_sweep"].clicked.emit("pulse_sweep")
+        assert live_tab.state.intensities == {"Movers": "intensity/Pulse"}
         assert live_tab.state.next_up == []
 
     def test_state_changed_emitted_by_queue_mutators(self, live_tab):
+        live_tab.state.toggle_group("Movers")   # GO needs a selection
         hits = []
         live_tab.state.state_changed.connect(lambda: hits.append(1))
-        live_tab.state.enqueue("effect", "custom/Riff A", "Riff A")
+        live_tab.state.enqueue("composite", "pulse_sweep", "Pulse Sweep")
         live_tab.state.fire_next()
         live_tab.state.toggle_pause(0)
         live_tab.state.kill_playback(0)
         live_tab.state.enqueue("scene", "looks/Warm Wash", "Warm Wash")
         live_tab.state.remove_queued(0)
         assert len(hits) == 6
+
+
+class TestSyncCluster:
+    """The fade row's SMPTE surface (2026-07-22): inline timecode
+    readout + ARM chip on the busk surface. Display + request only -
+    the shell owns arming and reflects the actual state back."""
+
+    def test_arm_chip_emits_the_request(self, live_tab):
+        fired = []
+        live_tab.chase_arm_requested.connect(fired.append)
+        live_tab._arm_chase_btn.setChecked(True)
+        assert fired == [True]
+        live_tab._arm_chase_btn.setChecked(False)
+        assert fired == [True, False]
+
+    def test_set_chase_armed_reflects_without_echo(self, live_tab):
+        fired = []
+        live_tab.chase_arm_requested.connect(fired.append)
+        live_tab.set_chase_armed(True)
+        assert live_tab._arm_chase_btn.isChecked()
+        assert live_tab._arm_chase_btn.text() == "CHASING"
+        live_tab.set_chase_armed(False)
+        assert live_tab._arm_chase_btn.text() == "ARM"
+        assert fired == []          # shell pushes never re-emit
+
+    def test_ltc_status_shows_inline_timecode(self, live_tab):
+        live_tab.set_sync_status("ltc", "locked", "01:23:45:12")
+        assert live_tab._sync_chip.text() == "SYNC LTC"
+        assert live_tab._sync_tc_label.text() == "01:23:45:12"
+        assert not live_tab._sync_tc_label.isHidden()
+        live_tab.set_sync_status("ltc", "no_signal")
+        assert live_tab._sync_chip.text() == "SYNC LTC · NO SIG"
+        assert live_tab._sync_tc_label.text() == "--:--:--:--"
+        live_tab.set_sync_status("int")
+        assert live_tab._sync_chip.text() == "SYNC INT"
+        assert live_tab._sync_tc_label.isHidden()
+
+    def test_device_combo_enumerates_on_activation(self, live_tab,
+                                                   monkeypatch):
+        """The sync input moved here from the Structure rail
+        (2026-07-22): a venue concern, picked on the busk surface."""
+        from audio.device_manager import AudioDevice, DeviceManager
+        devices = [AudioDevice(index=3, name="Line In (HD Audio)",
+                               max_output_channels=0,
+                               max_input_channels=2,
+                               default_sample_rate=44100.0,
+                               host_api="Windows WASAPI",
+                               host_api_index=1,
+                               display_name="Line In")]
+        monkeypatch.setattr(DeviceManager, "enumerate_input_devices",
+                            lambda self, **kw: devices)
+        live_tab.on_tab_activated()
+        combo = live_tab._sync_device_combo
+        assert [combo.itemText(i) for i in range(combo.count())] == \
+            ["Default input", "Line In"]
+        combo.setCurrentIndex(1)
+        assert live_tab.config.setlist.sync_device == \
+            "Line In (HD Audio)"
+
+    def test_persisted_device_shows_before_enumeration(self, live_tab):
+        """The project's saved device reads correctly even when the
+        interface is not attached / never enumerated."""
+        live_tab.config.setlist.sync_device = "USB Reader (Venue)"
+        live_tab._select_persisted_sync_device()
+        combo = live_tab._sync_device_combo
+        assert combo.currentData() == "USB Reader (Venue)"
 
 
 class TestRoles:
@@ -1507,3 +1841,192 @@ class TestSyncChipSources:
         live_tab.set_sync_status("int")
         assert chip.text() == "SYNC INT"
         assert chip.property("state") == "on"
+
+
+class FakeShowTransport:
+    """Duck-typed stand-in for ShowsTab.live_transport()."""
+
+    def __init__(self, songs=None):
+        self._songs = songs if songs is not None else [
+            ("Alpha", "01 · Alpha"), ("Zebra", "02 · Zebra")]
+        self._current = self._songs[0][0] if self._songs else ""
+        self._playing = False
+        self._position = 42.0
+        self._duration = 185.0
+        self.calls = []
+
+    def songs(self):
+        return list(self._songs)
+
+    def current(self):
+        return self._current
+
+    def select(self, name):
+        self.calls.append(("select", name))
+        self._current = name
+
+    def is_playing(self):
+        return self._playing
+
+    def play(self):
+        self.calls.append(("play",))
+        self._playing = True
+
+    def stop(self):
+        self.calls.append(("stop",))
+        self._playing = False
+
+    def position(self):
+        return self._position
+
+    def duration(self):
+        return self._duration
+
+
+class TestShowTransportStrip:
+    """The Live tab's show strip (2026-07-16): the busk surface can
+    start/stop the show it busks over and see what plays where. All
+    display truth is polled from the injected transport."""
+
+    def test_no_transport_reads_disabled(self, live_tab):
+        live_tab.set_show_transport(None)
+        assert not live_tab._show_combo.isEnabled()
+        assert not live_tab._show_play_btn.isEnabled()
+        assert live_tab._show_time.text() == "--:-- / --:--"
+
+    def test_transport_populates_songs_and_time(self, live_tab):
+        transport = FakeShowTransport()
+        live_tab.set_show_transport(transport)
+        combo = live_tab._show_combo
+        assert [combo.itemData(i) for i in range(combo.count())] == \
+            ["Alpha", "Zebra"]
+        assert combo.currentData() == "Alpha"     # follows the Shows tab
+        assert live_tab._show_time.text() == "00:42 / 03:05"
+        assert live_tab._show_play_btn.text() == "PLAY"
+        assert not live_tab._show_play_btn.isChecked()
+
+    def test_play_selects_then_plays_and_reflects(self, live_tab):
+        transport = FakeShowTransport()
+        live_tab.set_show_transport(transport)
+        index = live_tab._show_combo.findData("Zebra")
+        live_tab._show_combo.setCurrentIndex(index)
+        live_tab._on_show_play_clicked()
+        assert ("select", "Zebra") in transport.calls
+        assert ("play",) in transport.calls
+        assert live_tab._show_play_btn.text() == "STOP"
+        assert live_tab._show_play_btn.isChecked()
+
+    def test_stop_goes_through_the_transport(self, live_tab):
+        transport = FakeShowTransport()
+        transport._playing = True
+        live_tab.set_show_transport(transport)
+        live_tab._on_show_play_clicked()
+        assert transport.calls[-1] == ("stop",)
+        assert live_tab._show_play_btn.text() == "PLAY"
+
+    def test_combo_activation_selects_song(self, live_tab):
+        transport = FakeShowTransport()
+        live_tab.set_show_transport(transport)
+        index = live_tab._show_combo.findData("Zebra")
+        live_tab._on_show_song_activated(index)
+        assert ("select", "Zebra") in transport.calls
+
+    def test_poll_follows_the_shows_tab(self, live_tab):
+        """A song loaded IN the Shows tab shows up here on the next
+        glance tick without touching the combo."""
+        transport = FakeShowTransport()
+        live_tab.set_show_transport(transport)
+        transport._current = "Zebra"
+        transport._playing = True
+        live_tab._refresh_show_transport()
+        assert live_tab._show_combo.currentData() == "Zebra"
+        assert live_tab._show_play_btn.text() == "STOP"
+
+
+class TestTeardownHygiene:
+    """Pins the 2026-08-08 CI crash: xdist workers gw1/gw2 died with a
+    native access violation inside ThemeManager.apply -> setStyleSheet,
+    reached from this file's `live_tab` fixture.
+
+    Root cause was NOT LiveTab. Every heavy UI fixture in the suite tore
+    down with `w.deleteLater(); qapp.processEvents()`, and processEvents()
+    does not deliver DeferredDelete at this nesting level, so the trees
+    were never freed. They piled up for the whole worker, and because
+    ThemeManager.apply re-polishes app.allWidgets() on every call, a later
+    apply eventually walked the pile and crashed. LiveTab is the heaviest
+    tab (251 widgets), so it died first.
+    """
+
+    def test_deleted_later_widget_is_really_gone_after_the_flush(self, qapp):
+        from PyQt6.QtWidgets import QWidget
+        from PyQt6 import sip
+        from tests.conftest import flush_deferred_deletes
+
+        widget = QWidget()
+        widget.deleteLater()
+        flush_deferred_deletes()
+        assert sip.isdeleted(widget), (
+            "flush_deferred_deletes() did not free a deleteLater()'d widget; "
+            "the suite-wide leak that crashed CI is back"
+        )
+
+    def test_live_tab_cycles_do_not_accumulate_widgets(self, qapp,
+                                                       three_group_config):
+        """The real invariant: building and tearing down LiveTab
+        repeatedly must not grow QApplication.allWidgets(). Before the
+        fix this grew by 251 per cycle and never came back down."""
+        from gui.tabs.live_tab import LiveTab
+        from tests.conftest import flush_deferred_deletes
+
+        flush_deferred_deletes()
+        baseline = len(qapp.allWidgets())
+
+        for _ in range(3):
+            tab = LiveTab(three_group_config, parent=None)
+            tab.deleteLater()
+            flush_deferred_deletes()
+
+        grew_by = len(qapp.allWidgets()) - baseline
+        assert grew_by < 251, (
+            f"LiveTab widget trees are accumulating ({grew_by} widgets left "
+            f"after 3 build/teardown cycles); one whole tab is 251"
+        )
+
+
+class TestPositionPoolTracksMarks:
+    """The pre-show rig check (user call 2026-08-08): drop a mark on the
+    Stage tab, come to LIVE, aim the movers at it.
+
+    The POSITION pool used to refresh ONLY on project load, so a mark
+    added during a session was invisible here until a reload."""
+
+    def test_a_mark_added_after_load_appears_on_activation(self, live_tab,
+                                                           three_group_config):
+        from config.models import Spot
+        before = set(live_tab._position_cells)
+        three_group_config.spots["Checkpoint"] = Spot(
+            name="Checkpoint", x=1.0, y=2.0, z=0.0)
+        live_tab.on_tab_activated()
+        after = set(live_tab._position_cells)
+        assert "mark:Checkpoint" in after
+        assert "mark:Checkpoint" not in before
+
+    def test_a_removed_mark_disappears_on_activation(self, live_tab,
+                                                     three_group_config):
+        from config.models import Spot
+        three_group_config.spots["Gone"] = Spot(name="Gone", x=0.0, y=0.0,
+                                                z=0.0)
+        live_tab.on_tab_activated()
+        assert "mark:Gone" in set(live_tab._position_cells)
+        del three_group_config.spots["Gone"]
+        live_tab.on_tab_activated()
+        assert "mark:Gone" not in set(live_tab._position_cells)
+
+    def test_activation_without_changes_is_cheap(self, live_tab):
+        """The fingerprint guard must short-circuit, or every tab switch
+        rebuilds the whole pool."""
+        live_tab.on_tab_activated()
+        rebuilt = []
+        live_tab._populate_position_pool = lambda: rebuilt.append(1)
+        live_tab.on_tab_activated()
+        assert rebuilt == []

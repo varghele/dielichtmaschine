@@ -1,9 +1,12 @@
 # visualizer/renderer/engine.py
 # ModernGL render engine with PyQt6 integration
 
+import logging
 import time
 import moderngl
 from typing import Optional
+
+logger = logging.getLogger("visualizer.engine")
 
 from PyQt6.QtWidgets import QWidget
 from PyQt6.QtOpenGLWidgets import QOpenGLWidget
@@ -65,10 +68,14 @@ class RenderEngine(QOpenGLWidget):
         # grid / DMX updates pushed at config-load time. We buffer them
         # here and flush in initializeGL so the preview is correct the
         # moment the user first activates the tab.
-        self._pending_grid_size: Optional[float] = None
-        self._pending_fixtures: Optional[list] = None
-        self._pending_dmx: dict[int, bytes] = {}
-        self._pending_plane_highlight: Optional[tuple] = None  # (name, rig_height)
+        # The last state pushed into the engine, kept (not cleared) so
+        # every initializeGL replays it: before the first one, and after
+        # a context teardown + recreation, whose fresh renderers would
+        # otherwise start with no fixtures, grid, plane or DMX.
+        self._last_grid_size: Optional[float] = None
+        self._last_fixtures: Optional[list] = None
+        self._last_dmx: dict[int, bytes] = {}
+        self._last_plane_highlight: Optional[tuple] = None  # (name, rig_height)
 
         # Mouse tracking
         self.setMouseTracking(True)
@@ -82,16 +89,25 @@ class RenderEngine(QOpenGLWidget):
         self.last_frame_time = time.time()
         self._first_frame = True  # Debug flag
 
-        # Render timer (60 FPS target)
-        self.render_timer = QTimer()
+        # Render timer (60 FPS target). Parented so it dies with the
+        # widget, and only running while the widget is shown (showEvent /
+        # hideEvent): three embedded engines are built at startup on tabs
+        # nobody is looking at, and each ticked at 60 Hz regardless.
+        self.render_timer = QTimer(self)
+        self.render_timer.setInterval(16)  # ~60 FPS
         self.render_timer.timeout.connect(self.update)
-        self.render_timer.start(16)  # ~60 FPS
 
         # Enable keyboard focus
         self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
 
     def initializeGL(self):
         """Initialize OpenGL context and resources."""
+        # Hook teardown first, so it is in place even when the moderngl
+        # setup below fails. An embedded engine never receives a
+        # closeEvent; the context's aboutToBeDestroyed is the one signal
+        # guaranteed to fire while the GL objects can still be deleted
+        # (Qt's documented QOpenGLWidget cleanup pattern).
+        self._hook_context_teardown()
         try:
             # Create ModernGL context from existing OpenGL context
             # standalone=False tells ModernGL to use the existing Qt context
@@ -138,8 +154,10 @@ class RenderEngine(QOpenGLWidget):
             # Set camera to fit stage
             self.camera.set_stage_size(self.stage_width, self.stage_height)
 
-            # Flush any state pushed before this widget was first shown.
-            self._flush_pending_state()
+            # Replay the last pushed state: updates that arrived before
+            # this widget was first shown, or everything the previous
+            # context held when Qt recreated it (reparenting).
+            self._replay_state()
 
             print(f"OpenGL initialized: {self.ctx.info['GL_RENDERER']}")
             print(f"  Stage size: {self.stage_width}m x {self.stage_height}m")
@@ -252,11 +270,23 @@ class RenderEngine(QOpenGLWidget):
         """
         Update stage dimensions.
 
+        Unchanged sizes return without touching anything: set_config's
+        contract is "call me liberally" (three embedded engines each
+        receive it on construction, on every config rebind and on song
+        load), so the redundant-call half of that contract lives HERE.
+        Safe because every init path re-applies the current size
+        independently - initializeGL constructs stage_renderer and
+        stage_planes WITH self.stage_width/height and re-syncs the
+        camera (2026-07-21; the old unconditional print pair flooded
+        the startup log six-plus times).
+
         Args:
             width: Stage width in meters
             height: Stage depth in meters
         """
-        print(f"RenderEngine: Updating stage size to {width}x{height}m")
+        if width == self.stage_width and height == self.stage_height:
+            return
+        logger.debug("stage size %sx%sm", width, height)
         self.stage_width = width
         self.stage_height = height
 
@@ -271,7 +301,6 @@ class RenderEngine(QOpenGLWidget):
             self.stage_planes.set_stage_size(width, height)
 
         self.camera.set_stage_size(width, height)
-        print(f"RenderEngine: Stage size update complete")
 
     def set_highlighted_plane(self, name: Optional[str], rig_height: float = 3.0):
         """Highlight one face of the stage bounding cuboid (None clears).
@@ -282,13 +311,12 @@ class RenderEngine(QOpenGLWidget):
                 tallest fixture's Z, min 3.0 — same rule as autogen's
                 compute_stage_planes)
         """
+        self._last_plane_highlight = (name, rig_height)
         if self.stage_planes:
             # Setters are GL-free; the VBO rebuild happens inside render.
             self.stage_planes.set_rig_height(rig_height)
             self.stage_planes.set_highlight(name)
             self.update()
-        else:
-            self._pending_plane_highlight = (name, rig_height)
 
     def set_grid_size(self, grid_size: float):
         """
@@ -297,14 +325,13 @@ class RenderEngine(QOpenGLWidget):
         Args:
             grid_size: Grid spacing in meters
         """
+        self._last_grid_size = grid_size
         if self.stage_renderer:
             # Make sure we're in the right OpenGL context
             self.makeCurrent()
             self.stage_renderer.set_grid_size(grid_size)
             self.doneCurrent()
             print(f"RenderEngine: Grid size updated to {grid_size}m")
-        else:
-            self._pending_grid_size = grid_size
 
     def update_fixtures(self, fixtures_data: list):
         """
@@ -313,12 +340,11 @@ class RenderEngine(QOpenGLWidget):
         Args:
             fixtures_data: List of fixture dictionaries from TCP message
         """
+        self._last_fixtures = fixtures_data
         if self.fixture_manager:
             self.makeCurrent()
             self.fixture_manager.update_fixtures(fixtures_data)
             self.doneCurrent()
-        else:
-            self._pending_fixtures = fixtures_data
 
     def update_dmx(self, universe: int, dmx_data: bytes):
         """
@@ -328,32 +354,30 @@ class RenderEngine(QOpenGLWidget):
             universe: Universe number
             dmx_data: 512 bytes of DMX data
         """
+        self._last_dmx[universe] = dmx_data
         if self.fixture_manager:
             self.fixture_manager.update_dmx(universe, dmx_data)
-        else:
-            self._pending_dmx[universe] = dmx_data
 
-    def _flush_pending_state(self):
-        """Apply state captured before initializeGL fired.
+    def _replay_state(self):
+        """Push the last state the engine was given into freshly built
+        renderers (called by initializeGL, so after a context recreation
+        too). The state is kept, never cleared: the next recreation
+        replays it again.
 
-        Split out so unit tests can exercise the flush against mock
+        Split out so unit tests can exercise the replay against mock
         renderers without needing a real OpenGL context.
         """
-        if self._pending_grid_size is not None and self.stage_renderer:
-            self.stage_renderer.set_grid_size(self._pending_grid_size)
-            self._pending_grid_size = None
-        if self._pending_fixtures is not None and self.fixture_manager:
-            self.fixture_manager.update_fixtures(self._pending_fixtures)
-            self._pending_fixtures = None
-        if self.fixture_manager and self._pending_dmx:
-            for uni, dmx in self._pending_dmx.items():
+        if self._last_grid_size is not None and self.stage_renderer:
+            self.stage_renderer.set_grid_size(self._last_grid_size)
+        if self._last_fixtures is not None and self.fixture_manager:
+            self.fixture_manager.update_fixtures(self._last_fixtures)
+        if self.fixture_manager:
+            for uni, dmx in self._last_dmx.items():
                 self.fixture_manager.update_dmx(uni, dmx)
-            self._pending_dmx.clear()
-        if self._pending_plane_highlight is not None and self.stage_planes:
-            name, rig_height = self._pending_plane_highlight
+        if self._last_plane_highlight is not None and self.stage_planes:
+            name, rig_height = self._last_plane_highlight
             self.stage_planes.set_rig_height(rig_height)
             self.stage_planes.set_highlight(name)
-            self._pending_plane_highlight = None
 
     def reset_camera(self):
         """Reset camera to default position."""
@@ -406,36 +430,86 @@ class RenderEngine(QOpenGLWidget):
         elif event.key() == Qt.Key.Key_R:
             self.reset_camera()
 
+    # --- Visibility ---
+
+    def showEvent(self, event):
+        """Resume the render tick when the widget becomes visible."""
+        super().showEvent(event)
+        if not self.render_timer.isActive():
+            self.render_timer.start()
+
+    def hideEvent(self, event):
+        """Pause the render tick while hidden (inactive tab, closed
+        window). DMX and fixture updates keep landing in renderer state
+        and show on the first frame after the next showEvent."""
+        self.render_timer.stop()
+        super().hideEvent(event)
+
     # --- Cleanup ---
 
+    def _hook_context_teardown(self):
+        """Connect the current Qt GL context's aboutToBeDestroyed to the
+        GL release. Qt calls initializeGL once per context (again only
+        after recreating it), so every context is connected exactly once
+        and its connections die with it. No identity bookkeeping: a
+        recreated context can reuse the old one's address, and PyQt can
+        then hand back the stale wrapper."""
+        context = self.context()
+        if context is not None:
+            context.aboutToBeDestroyed.connect(self._release_gl)
+
+    def _release_gl(self):
+        """Release every GPU resource with this widget's context current.
+
+        moderngl deletes GL names in whatever context is current; without
+        makeCurrent() they would land in another engine's context (or in
+        none). Idempotent, and a no-op for an engine that never
+        initialised, so it never pokes a context it did not touch.
+        """
+        owned = [
+            "fixture_manager", "stage_renderer", "stage_planes",
+            "gizmo_renderer", "hdr",
+        ]
+        if self.ctx is None and all(getattr(self, a) is None for a in owned):
+            return
+        try:
+            self.makeCurrent()
+            current = True
+        except RuntimeError:
+            # The C++ widget is already gone (aboutToBeDestroyed from the
+            # QOpenGLWidget destructor), so nothing can be made current.
+            # Only drop the references then: a release would issue GL
+            # deletes with no context or a foreign one current, and the
+            # dying context frees its objects anyway.
+            current = False
+        try:
+            for attr in owned:
+                obj = getattr(self, attr)
+                setattr(self, attr, None)
+                if obj is not None and current:
+                    try:
+                        obj.release()
+                    except Exception as e:
+                        logger.debug("releasing %s failed: %s", attr, e)
+            # The context last, after every object that lives in it.
+            ctx, self.ctx = self.ctx, None
+            if ctx is not None and current:
+                try:
+                    ctx.release()
+                except Exception as e:
+                    logger.debug("releasing the moderngl context failed: %s", e)
+        finally:
+            if current:
+                try:
+                    self.doneCurrent()
+                except RuntimeError:
+                    pass
+
     def cleanup(self):
-        """Release GPU resources."""
+        """Stop rendering and release GPU resources."""
         if self.render_timer:
             self.render_timer.stop()
-
-        if self.fixture_manager:
-            self.fixture_manager.release()
-            self.fixture_manager = None
-
-        if self.stage_renderer:
-            self.stage_renderer.release()
-            self.stage_renderer = None
-
-        if self.stage_planes:
-            self.stage_planes.release()
-            self.stage_planes = None
-
-        if self.gizmo_renderer:
-            self.gizmo_renderer.release()
-            self.gizmo_renderer = None
-
-        if self.hdr:
-            self.hdr.release()
-            self.hdr = None
-
-        if self.ctx:
-            self.ctx.release()
-            self.ctx = None
+        self._release_gl()
 
     def closeEvent(self, event):
         """Handle widget close."""

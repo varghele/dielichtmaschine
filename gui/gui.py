@@ -282,7 +282,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         if getattr(self, "_output_arbiter", None) is None:
             from utils.artnet.live_layer import LiveBuskLayer
             from utils.artnet.live_engine import (
-                LiveEffectsBinder, LiveEngine, LiveMovementBinder,
+                LiveEngine, LiveGroupEffectsBinder, LiveMovementBinder,
             )
             from gui.tabs.live_tab import COLOUR_SWATCHES
 
@@ -310,25 +310,19 @@ class MainWindow(QMainWindow, Ui_MainWindow):
                                   emit_safe_idle=False)
 
             self._live_engine = LiveEngine(_live_manager_factory)
-            self._live_effects_binder = LiveEffectsBinder(
+            # Intensity FX: a per-group binder on its own slot family
+            # ("intensity:<group>"), fed from LiveState.intensities -
+            # each group's dimmer pattern runs under its colour riff
+            # concurrently. (The EFFECTS pool is now composites that
+            # SET intensity + shape - 2026-07-24 - so there is no
+            # separate effect slot: composites render through this
+            # binder and the movement binder below.)
+            self._live_intensity_binder = LiveGroupEffectsBinder(
                 state=self.live_tab.state,
                 engine=self._live_engine,
                 config_provider=lambda: self.live_tab.config,
                 riff_provider=self.live_tab.riff_for_key,
-            )
-            self.live_tab.state.state_changed.connect(
-                self._live_effects_binder.sync)
-            self._live_effects_binder.sync()
-
-            # Intensity FX: the same binder class on its own slot, fed
-            # from LiveState.intensity (bundled dimmer riffs) - a
-            # dimmer pattern runs under a colour riff concurrently.
-            self._live_intensity_binder = LiveEffectsBinder(
-                state=self.live_tab.state,
-                engine=self._live_engine,
-                config_provider=lambda: self.live_tab.config,
-                riff_provider=self.live_tab.riff_for_key,
-                slot="intensity", state_attr="intensity",
+                category="intensity", state_attr="intensities",
                 record_kind="intensity",
             )
             self.live_tab.state.state_changed.connect(
@@ -360,9 +354,8 @@ class MainWindow(QMainWindow, Ui_MainWindow):
                 engine=self._live_engine,
                 shape_groups_provider=(
                     self._live_movement_binder.active_groups),
-                dimmer_groups_provider=lambda: (
-                    self._live_effects_binder.dimmer_groups()
-                    | self._live_intensity_binder.dimmer_groups()),
+                dimmer_groups_provider=(
+                    self._live_intensity_binder.dimmer_groups),
             )
             arbiter.set_live_layer(self._live_busk_layer)
 
@@ -435,13 +428,50 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             self._ltc_service.timecode.connect(self._on_ltc_timecode)
         return self._ltc_service
 
+    def pause_look_layer(self):
+        """The one PauseLookLayer (utils/artnet/pause_layer.py),
+        created lazily; arm_ltc_chase installs it into the arbiter's
+        pause slot, disarm clears and removes it. The shell owns the
+        policy (WHEN a pause look shows - see _ltc_tick); the layer
+        only renders."""
+        if getattr(self, "_pause_look_layer", None) is None:
+            from utils.artnet.pause_layer import PauseLookLayer
+            self._pause_look_layer = PauseLookLayer(
+                config_provider=lambda: self.config,
+                scene_provider=lambda key:
+                    self.scene_library.get_scene(key) if key else None)
+        return self._pause_look_layer
+
+    def _current_pause_look(self):
+        """The pause look between songs: the ``pause_after`` of the
+        setlist entry whose song the transport last loaded (the pause
+        AFTER that song), falling back to the first entry's - so an
+        armed chase before the first song already shows the pre-show
+        look instead of the raw idle floor."""
+        entries = getattr(self.config.setlist, "entries", None) or []
+        if not entries:
+            return None
+        current = getattr(self.shows_tab, "current_song_name", None)
+        for entry in entries:
+            if entry.song == current:
+                return entry.pause_after
+        return entries[0].pause_after
+
     def ltc_chase_armed(self) -> bool:
         return getattr(self, "_ltc_timer", None) is not None
 
     def _on_chase_arm_requested(self, armed: bool):
         if armed:
+            if getattr(self.config.setlist, "sync_mode", "") != "smpte":
+                self.statusBar().showMessage(
+                    "Set the setlist sync mode to SMPTE on the "
+                    "Structure tab before arming the chase", 6000)
+                self.structure_tab.set_chase_armed(False)
+                self.live_tab.set_chase_armed(False)
+                return
             if not self.arm_ltc_chase():
                 self.structure_tab.set_chase_armed(False)
+                self.live_tab.set_chase_armed(False)
         else:
             self.disarm_ltc_chase()
 
@@ -462,7 +492,13 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self._ltc_runner = None    # built once the incoming rate is known
         self.shows_tab.set_chase_armed(True, disarm=self.disarm_ltc_chase)
         self.structure_tab.set_chase_armed(True)
+        self.live_tab.set_chase_armed(True)
         self.live_tab.set_sync_status("ltc", "no_signal")
+        # The pause-look layer lives exactly as long as the chase is
+        # armed: between songs the arbiter renders the entry's
+        # pause_after (a song firing covers it - playback merges above
+        # the pause slot), _ltc_tick drives activate/clear.
+        self.output_arbiter().set_pause_look_layer(self.pause_look_layer())
         from PyQt6.QtCore import QTimer
         timer = QTimer(self)
         timer.setInterval(100)
@@ -485,7 +521,14 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             self._ltc_service.stop()
         self.shows_tab.set_chase_armed(False)
         self.structure_tab.set_chase_armed(False)
+        self.live_tab.set_chase_armed(False)
         self.live_tab.set_sync_status("int")
+        layer = getattr(self, "_pause_look_layer", None)
+        if layer is not None:
+            layer.clear()
+            arbiter = getattr(self, "_output_arbiter", None)
+            if arbiter is not None:
+                arbiter.set_pause_look_layer(None)
 
     def _ltc_tick(self):
         service = getattr(self, "_ltc_service", None)
@@ -504,6 +547,21 @@ class MainWindow(QMainWindow, Ui_MainWindow):
                     rate=rate)
         if self._ltc_runner is not None:
             self._ltc_runner.update(service.position())
+        # Pause look policy: armed + no song playing = the current
+        # entry's pause_after shows; a playing song clears it (playback
+        # would cover it anyway - the pause slot merges below - but a
+        # cleared layer also stops claiming groups the song leaves
+        # unclaimed).
+        layer = getattr(self, "_pause_look_layer", None)
+        if layer is not None:
+            if getattr(self.shows_tab, "is_playing", False):
+                layer.clear()
+            else:
+                look = self._current_pause_look()
+                if look is not None:
+                    layer.activate(look)
+                else:
+                    layer.clear()
 
     def _chase_song_duration(self, name: str) -> float:
         from timeline.song_structure import SongStructure
@@ -553,6 +611,12 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         # the SHELL arms/disarms (docs/ltc-plan.md phase 3).
         self.structure_tab.chase_arm_requested.connect(
             self._on_chase_arm_requested)
+        self.live_tab.chase_arm_requested.connect(
+            self._on_chase_arm_requested)
+
+        # The Live tab's show strip drives the Shows tab's transport
+        # (operator semantics: its STOP disarms an armed chase too).
+        self.live_tab.set_show_transport(self.shows_tab.live_transport())
 
         # Replace placeholder tabs with actual tab widgets
         # The tab widget structure is created in Ui_MainWindow
@@ -685,8 +749,10 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         # Create Edit menu if it doesn't exist
         if not hasattr(self, 'menuEdit'):
             self.menuEdit = QtWidgets.QMenu("Edit", parent=self)
-            # Insert Edit menu after File menu (before Settings menu)
-            self.overflow_menu.insertMenu(self.menuSettings.menuAction(), self.menuEdit)
+            # Menu order (user call 2026-07-23): File, Edit, View,
+            # Tools, Settings, Help - Edit slots in before View.
+            self.overflow_menu.insertMenu(self.menuView.menuAction(),
+                                          self.menuEdit)
 
         # Create undo action
         self.undo_action = self.undo_stack.createUndoAction(self, "Undo")
@@ -761,14 +827,28 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         # Every real save lands here: reset the dirty-marker baseline.
         self._mark_config_clean()
 
+    def _config_snapshot_bytes(self):
+        """The whole config as pickle bytes - ONE fast pass (~10 ms on
+        a real project) that serves both the dirty fingerprint and the
+        autosave worker's snapshot. Raises when something unpicklable
+        was attached to the config; callers fall back."""
+        import pickle
+        return pickle.dumps(self.config, 5)
+
     def _config_fingerprint(self):
-        """A value that changes when the config content changes, for the
-        autosave. Cheap enough at the autosave cadence."""
-        from dataclasses import asdict
+        """A value that changes when the config content changes, for
+        the autosave and the dirty marker. Pickle-based since the
+        2026-07-16 performance pass (the asdict+repr walk cost ~50 ms
+        per tick on a real project - a visible periodic stutter on
+        older machines; pickle does the same full-content walk in C)."""
         try:
-            return hash(repr(asdict(self.config)))
+            return hash(self._config_snapshot_bytes())
         except Exception:
-            return None
+            from dataclasses import asdict
+            try:
+                return hash(repr(asdict(self.config)))
+            except Exception:
+                return None
 
     # -- dirty marker (Reaper-style " *" on the topbar filename + window
     # title). Truth = the content fingerprint differs from the last
@@ -815,8 +895,9 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         Ctrl+S clears it; a crash leaves it for recovery on next launch
         (see utils/autosave.py and _do_load_configuration)."""
         from utils.autosave import AutosaveManager
+        self._autosave_worker = None
         self._autosave = AutosaveManager(
-            save_fn=lambda p: self.config.save(p),
+            save_fn=self._autosave_write_async,
             fingerprint_fn=self._config_fingerprint,
             current_path=lambda: self.config_path)
         self._autosave.prime()
@@ -828,6 +909,46 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         # After the window is up, offer to recover a previous session that
         # ended (crashed) with unsaved changes.
         QTimer.singleShot(300, self._offer_launch_recovery)
+
+    def _autosave_write_async(self, path):
+        """The autosave's save_fn: snapshot on the UI thread (a ~10 ms
+        pickle), serialize + write on a worker (utils.autosave.
+        write_snapshot; the YAML dump of a real project is the part
+        that used to freeze the UI for near a second every 15 s -
+        2026-07-16 performance pass).
+
+        Backpressure: while a previous write is still running, raise
+        OSError so the manager treats this tick as a failed write and
+        retries next tick. An unpicklable config (something transient
+        attached at runtime) falls back to the old synchronous save -
+        the backup must never silently stop happening."""
+        worker = self._autosave_worker
+        if worker is not None and worker.isRunning():
+            raise OSError("autosave writer still busy")
+        try:
+            snapshot = self._config_snapshot_bytes()
+        except Exception:
+            self.config.save(path)
+            return
+        from PyQt6.QtCore import QThread
+
+        class _Writer(QThread):
+            def __init__(self, data, dest, parent=None):
+                super().__init__(parent)
+                self._data = data
+                self._dest = dest
+
+            def run(self):
+                from utils.autosave import write_snapshot
+                try:
+                    write_snapshot(self._data, self._dest)
+                except Exception as exc:   # next content change retries
+                    import logging
+                    logging.getLogger("lichtmaschine.autosave").warning(
+                        "autosave write failed: %s", exc)
+
+        self._autosave_worker = _Writer(snapshot, path, parent=self)
+        self._autosave_worker.start()
 
     def _autosave_tick(self):
         """Timer tick: back up if changed, and remember which project the
@@ -905,6 +1026,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.actionImportCsvTable.triggered.connect(self.import_csv_lighting_table)
         self.actionImportShowsFromConfig.triggered.connect(self.import_shows_from_config_file)
         self.actionImportLegacyCsv.triggered.connect(self.import_legacy_csv_songs)
+        self.actionMorphToVenue.triggered.connect(self.open_morph_screen)
         self.actionNewFromTemplate.triggered.connect(self.new_from_template)
         self.actionImportWorkspace.triggered.connect(self.import_workspace)
         self.actionCreateWorkspace.triggered.connect(self.create_workspace)
@@ -912,6 +1034,13 @@ class MainWindow(QMainWindow, Ui_MainWindow):
 
         # Tab change handler
         self.tabWidget.currentChanged.connect(self._on_tab_changed)
+
+        # Tools menu actions
+        self.actionConvertMovementTargets.triggered.connect(
+            self.convert_movement_targets)
+        self.actionVenuePreflight.triggered.connect(
+            self.open_venue_preflight)
+        self.actionRenderToVideo.triggered.connect(self.render_to_video)
 
         # Settings menu actions
         self.actionAudioSettings.triggered.connect(self.open_audio_settings)
@@ -941,13 +1070,6 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             self.actionThemeLight.setChecked(True)
         else:
             self.actionThemeDark.setChecked(True)
-
-        # Render menu (insert before Help)
-        self.menuRender = QtWidgets.QMenu("Render", parent=self)
-        self.overflow_menu.insertMenu(self.menuHelp.menuAction(), self.menuRender)
-        self.actionRenderToVideo = QAction("Render Show to Video...", self)
-        self.menuRender.addAction(self.actionRenderToVideo)
-        self.actionRenderToVideo.triggered.connect(self.render_to_video)
 
         # Ctrl+L focuses the embedded Auto tab (index 5) — the auto-DJ
         # audio-reactive lighting mode. Was originally a separate "Live
@@ -1442,6 +1564,12 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             # persist.
             self._offer_legacy_csv_merge()
 
+            # Fetch GDTF definitions for this project's fixtures in the
+            # background so the visualizer renders native models
+            # (stored Share credentials + internet permitting - quiet
+            # otherwise).
+            self._start_gdtf_autopull()
+
         except Exception as e:
             self.progress_manager.finish_modal()
             print(f"Error loading configuration: {e}")
@@ -1454,6 +1582,142 @@ class MainWindow(QMainWindow, Ui_MainWindow):
                 f"Failed to load "
                 f"{getattr(self, '_pending_config_path', 'project')}:"
                 f"\n{e}")
+
+    def _start_gdtf_autopull(self):
+        """After a project load: pull GDTF definitions for the loaded
+        fixtures from GDTF Share on a worker thread (2026-07-16).
+
+        Everything is gated inside utils.gdtf_share.pull_missing_gdtf:
+        no stored credentials, no internet, no exact-identity match,
+        or a channel-footprint mismatch all mean nothing happens - the
+        offline venue laptop behaves exactly as before. Kept downloads
+        land in the project gdtf_fixtures/ dir (machine-local, never
+        committed - Share terms); the definition cache invalidates so
+        the next visualizer open renders the native models."""
+        from utils.gdtf_share import auto_pull_enabled, autopull_snapshot, \
+            stored_password, stored_username
+        if not auto_pull_enabled():
+            return
+        user = stored_username()
+        if not user or not stored_password(user):
+            return
+        worker = getattr(self, "_gdtf_autopull_worker", None)
+        if worker is not None and worker.is_alive():
+            return
+
+        import threading
+        from PyQt6.QtCore import QObject, pyqtSignal
+
+        class _Relay(QObject):
+            pulled = pyqtSignal(list)
+
+        # A plain DAEMON thread, not a QThread: a Share request can block
+        # for up to 180 s and cannot be interrupted, and quitting must
+        # neither wait for it nor destroy a running QThread (which aborts
+        # the process). closeEvent sets the cancel event; the pull then
+        # moves nothing into the library and the process exits without
+        # joining it. The relay lives on the UI thread, so the result
+        # arrives there as a queued signal.
+        relay = _Relay(self)
+        relay.pulled.connect(self._on_gdtf_autopull_done)
+        cancel = threading.Event()
+        # A snapshot, never the live config: the worker walks the
+        # fixtures for the length of a network pull.
+        snapshot = autopull_snapshot(self.config)
+
+        def run():
+            try:
+                from utils.fixture_library import project_gdtf_fixtures_dir
+                from utils.gdtf_share import pull_missing_gdtf
+                kept = pull_missing_gdtf(
+                    snapshot, project_gdtf_fixtures_dir(), cancel=cancel)
+            except Exception:
+                kept = []
+            if cancel.is_set():
+                return
+            try:
+                relay.pulled.emit(kept)
+            except RuntimeError:
+                pass        # window already gone
+
+        worker = threading.Thread(target=run, name="gdtf-autopull",
+                                  daemon=True)
+        self._gdtf_autopull_cancel = cancel
+        self._gdtf_autopull_relay = relay
+        self._gdtf_autopull_worker = worker
+        worker.start()
+
+    def _on_gdtf_autopull_done(self, kept):
+        if not kept:
+            return
+        from utils.fixture_library import invalidate_fixture_caches
+        invalidate_fixture_caches()
+        names = ", ".join(os.path.splitext(os.path.basename(p))[0]
+                          .split("@")[1] if "@" in os.path.basename(p)
+                          else os.path.basename(p) for p in kept)
+        self.statusbar.showMessage(
+            f"GDTF Share: fetched {len(kept)} fixture definition(s) "
+            f"({names}) - the visualizer uses them on next open", 10000)
+
+    def open_morph_screen(self):
+        """Tools > Morph to Venue: the full-window morph flow
+        (gui/screens/morph_screen.py), hosted in the page_stack like
+        Home so the shell nav stays usable mid-morph. The open project
+        is the SOURCE and stays read-only; the screen loads the target
+        rig itself and writes results only through its own save
+        buttons. Navigating away keeps an in-progress morph alive;
+        re-opening from the menu resumes it. A screen authored against
+        a project this window no longer holds is stale (load swapped
+        the config reference) and is discarded, never resumed."""
+        screen = getattr(self, '_morph_screen', None)
+        if screen is not None and screen.source_config is not self.config:
+            self._discard_morph_screen()
+            screen = None
+        if screen is None:
+            if not self.config.songs:
+                QMessageBox.information(
+                    self, "Morph to Venue",
+                    "The open project has no songs to morph. Open the "
+                    "show you want to take to another venue first.")
+                return
+            from gui.screens.morph_screen import MorphScreen
+            screen = MorphScreen(
+                self.config,
+                source_path=getattr(self, 'config_path', '') or '')
+            screen.leave_requested.connect(self.show_pages)
+            screen.closed.connect(self._discard_morph_screen)
+            self.page_stack.addWidget(screen)
+            self._morph_screen = screen
+        self.page_stack.setCurrentWidget(screen)
+        # Like Home: no shell section is active on a stack screen.
+        self.topbar.set_active_section(None)
+        self.subnav.setVisible(False)
+
+    def _discard_morph_screen(self):
+        """Tear the morph screen down (flow closed, or stale after a
+        project load). Idempotent."""
+        screen = getattr(self, '_morph_screen', None)
+        if screen is None:
+            return
+        self._morph_screen = None
+        screen.shutdown()
+        if self.page_stack.currentWidget() is screen:
+            self.show_pages()
+        self.page_stack.removeWidget(screen)
+        screen.deleteLater()
+
+    def open_venue_preflight(self):
+        """Tools > Venue Pre-Flight: run (or resume) the on-site
+        checklist for the CURRENT config - the standalone path, plan
+        derived from the config's own lanes. The morph screen opens the
+        same dialog with the real plan for config B."""
+        from gui.dialogs.preflight_dialog import PreflightDialog
+        dialog = PreflightDialog(
+            self.config,
+            config_path=getattr(self, 'config_path', '') or '',
+            arbiter_provider=self.output_arbiter,
+            parent=self)
+        dialog.exec()
 
     def import_legacy_csv_songs(self):
         """File > Import Legacy CSV Songs: pick a folder of pre-v1.0
@@ -2043,9 +2307,48 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             f"Exported {len(self.config.fixtures)} fixture(s) to {fmt.upper()}:\n{file_path}"
         )
 
+    def _preflight_export_warning(self):
+        """The pre-flight export guard (design doc 7.5): the hard
+        warning text when the config's checklist exists and is
+        incomplete or stale, else None. A missing or corrupt checklist
+        file must never break an export - everything is guarded."""
+        config_path = getattr(self, 'config_path', '') or ''
+        if not config_path:
+            return None
+        try:
+            from utils.morph.plan import config_hash
+            from utils.morph.preflight import (PreflightChecklist,
+                                               export_guard_message)
+            return export_guard_message(
+                PreflightChecklist.default_path(config_path),
+                config_hash(self.config))
+        except Exception:
+            return None
+
+    def _confirm_preflight_export(self, message) -> bool:
+        """Hard warning, not a footnote: Continue anyway / Cancel.
+        Split out so tests drive create_workspace without a modal."""
+        box = QMessageBox(self)
+        box.setIcon(QMessageBox.Icon.Warning)
+        box.setWindowTitle("Venue pre-flight incomplete")
+        box.setText(message)
+        continue_btn = box.addButton(
+            "Continue Anyway", QMessageBox.ButtonRole.AcceptRole)
+        box.addButton(QMessageBox.StandardButton.Cancel)
+        box.exec()
+        return box.clickedButton() is continue_btn
+
     def create_workspace(self):
         """Create QLC+ workspace file from configuration"""
         try:
+            # Pre-flight export guard (design doc 7.5): a .qxw export
+            # MATERIALIZES pan/tilt, so exporting past an incomplete or
+            # stale checklist bakes unverified geometry into the file.
+            guard_message = self._preflight_export_warning()
+            if guard_message is not None \
+                    and not self._confirm_preflight_export(guard_message):
+                return
+
             # Show workspace options dialog
             options_dialog = WorkspaceOptionsDialog(self, config=self.config)
             if options_dialog.exec() != options_dialog.DialogCode.Accepted:
@@ -2166,6 +2469,31 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         from gui.dialogs.library_paths_dialog import LibraryPathsDialog
         LibraryPathsDialog(parent=self).exec()
 
+    def convert_movement_targets(self):
+        """Tools > Convert Movement to World Targets... (v1.5a).
+
+        Traces every manual pan/tilt movement block's centre beam onto
+        the stage with the solver forward pass and writes the landing
+        point into target_point (utils/movement_migration.py); pan/tilt
+        stay as fallback. The confirmation dialog lists the full report
+        first - nothing changes until CONVERT - and the write is
+        in-memory only: the user saves manually.
+        """
+        from gui.dialogs.movement_migration_dialog import (
+            run_movement_migration,
+        )
+        # Fold the Shows tab's live timeline edits into the config so
+        # the sweep sees what the user sees.
+        self.shows_tab.save_to_config()
+        applied = run_movement_migration(self.config, parent=self)
+        if applied is None:
+            return
+        self.shows_tab.mark_config_dirty()
+        self.shows_tab.update_from_config()
+        self.statusbar.showMessage(
+            f"Converted {applied} movement block(s) to world targets "
+            "(save the config to persist)", 6000)
+
     def open_diagnostics(self):
         """Help > Diagnostics: the copyable bug-report block."""
         from gui.dialogs.diagnostics_dialog import DiagnosticsDialog
@@ -2235,26 +2563,35 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         QDesktopServices.openUrl(QUrl.fromLocalFile(directory))
 
     def show_about(self):
-        """Show about dialog"""
-        from utils import app_identity
-        QMessageBox.about(
-            self,
-            f"About {app_identity.APP_NAME}",
-            f"{app_identity.APP_NAME}\n"
-            f"{app_identity.SLOGAN_EN}\n\n"
-            f"Version {app_identity.APP_VERSION} · {app_identity.APP_DOMAIN}\n\n"
-            "Visual light show authoring:\n"
-            "- Beat-synced timeline editing\n"
-            "- Fixture management and grouping (GDTF and QLC+ formats)\n"
-            "- Stage layout and printable stage plots\n"
-            "- Automatic show generation from audio\n"
-            "- Real-time 3D visualizer preview\n"
-            "- Live ArtNet/DMX playback\n"
-            "- QLC+ workspace export (interop)"
-        )
+        """Show the branded About dialog (gui/dialogs/about_dialog.py)."""
+        from gui.dialogs.about_dialog import AboutDialog
+        AboutDialog(self).exec()
 
     def closeEvent(self, event):
         """Handle application close"""
+        # A GDTF auto-pull is never waited on (its requests block for up
+        # to 180 s): cancel it so it moves nothing into the library, and
+        # let the daemon thread die with the process.
+        cancel = getattr(self, "_gdtf_autopull_cancel", None)
+        if cancel is not None:
+            cancel.set()
+        # Never tear down under a live autosave write (a QThread
+        # destroyed while running aborts the process; the write is
+        # atomic either way, but let it finish).
+        worker = getattr(self, "_autosave_worker", None)
+        if worker is not None and worker.isRunning():
+            worker.wait(10000)
+        # Same for the workers that cannot be interrupted: an autogen
+        # run and superseded audio decodes / waveform analyses.
+        for tab_name in ("shows_tab", "structure_tab"):
+            tab = getattr(self, tab_name, None)
+            worker = getattr(tab, "_autogen_worker", None)
+            if worker is not None and worker.isRunning():
+                worker.wait(10000)
+        waveform_module = sys.modules.get("audio.audio_waveform_widget")
+        if waveform_module is not None:
+            waveform_module.wait_parked_threads(10000)
+
         # Clean up shows tab audio resources
         if hasattr(self.shows_tab, 'cleanup'):
             self.shows_tab.cleanup()
@@ -2265,6 +2602,11 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         # only place that stops it.
         if hasattr(self, 'auto_tab') and hasattr(self.auto_tab, 'cleanup'):
             self.auto_tab.cleanup()
+
+        # Release the Stage tab's GL surfaces while their contexts still
+        # exist (the Shows and Auto tabs release theirs in cleanup above).
+        if hasattr(self, 'stage_tab') and hasattr(self.stage_tab, 'cleanup'):
+            self.stage_tab.cleanup()
 
         # The shared output arbiter outlives the per-tab controllers;
         # close its socket last.

@@ -35,6 +35,7 @@ preview + pop-out, TCP notify + visualizer broadcast) is unchanged.
 """
 
 import datetime
+import math
 import subprocess
 import sys
 import os
@@ -54,6 +55,10 @@ from gui.widgets.embedded_visualizer import EmbeddedVisualizer
 LIBRARY_WIDTH = 260
 RIGHT_COLUMN_WIDTH = 448
 STRIP_HEIGHT = 38
+
+#: clicking within this radius (metres) of an existing mark selects it
+#: instead of stacking a near-duplicate on top of it
+MARK_SNAP_M = 0.5
 PREVIEW_HEADER_HEIGHT = 30
 
 # The stage-element kinds the reference screen shows first, in its
@@ -415,6 +420,25 @@ class StageTab(BaseTab):
         strip_row.addWidget(self.layer_lock_hint)
 
         strip_font = display_font(11, QFont.Weight.DemiBold, tracking_em=0.08)
+
+        # Click-to-aim toggle (v1.5a focus geometry): while checked,
+        # clicking the plan writes the clicked stage coordinate into the
+        # selected movement block's target_point (Shift keeps the
+        # current target height). Auto-sized display-caps toggle - NOT
+        # fixed-width, so it stays outside the clipping sweep's scope
+        # (tests/visual/test_widget_clipping.py); the base :checked rule
+        # tints it while the mode is armed, like the Shows INSPECTOR
+        # toggle.
+        self.aim_btn = QtWidgets.QPushButton("PLACE MARK")
+        self.aim_btn.setProperty("role", "cta-outline")
+        self.aim_btn.setFont(strip_font)
+        self.aim_btn.setCheckable(True)
+        self.aim_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.aim_btn.setToolTip(
+            "Click-to-aim: click the stage plan to point the movement\n"
+            "block selected in the Show timeline at that spot (floor,\n"
+            "z=0). Hold Shift to keep the target's current height.")
+        strip_row.addWidget(self.aim_btn)
 
         self.morph_btn = QtWidgets.QPushButton("MORPH...")
         self.morph_btn.setIcon(line_icon("morph", tokens["text_disabled"]))
@@ -1347,6 +1371,82 @@ class StageTab(BaseTab):
         self._fit_shortcut.setContext(Qt.ShortcutContext.WidgetWithChildrenShortcut)
         self._fit_shortcut.activated.connect(self.stage_view.fit_to_stage)
 
+        # Click-to-aim (v1.5a focus geometry).
+        self.aim_btn.toggled.connect(self._on_aim_mode_toggled)
+        self.stage_view.aim_clicked.connect(self._on_aim_clicked)
+
+    # ── Click-to-aim (v1.5a focus geometry) ───────────────────────────
+
+    def _show_status(self, message: str, timeout: int = 5000) -> None:
+        """Transient message on the main window's status strip (no-op
+        when the tab lives outside the shell, e.g. in tests)."""
+        window = self.window()
+        bar = window.statusBar() if hasattr(window, "statusBar") else None
+        if bar is not None:
+            bar.showMessage(message, timeout)
+
+    def _on_aim_mode_toggled(self, checked: bool) -> None:
+        self.stage_view.set_aim_mode(checked)
+        if checked:
+            self._show_status(
+                "PLACE MARK: click the stage plan to drop ONE mark "
+                "there · Shift-click to keep placing")
+
+    def _mark_near(self, x_m: float, y_m: float):
+        """Name of an existing mark within MARK_SNAP_M of a point, else
+        None. Nearest wins."""
+        spots = getattr(self.config, "spots", {}) or {}
+        best, best_distance = None, MARK_SNAP_M
+        for name, spot in spots.items():
+            distance = math.hypot(spot.x - x_m, spot.y - y_m)
+            if distance <= best_distance:
+                best, best_distance = name, distance
+        return best
+
+    def _on_aim_clicked(self, x_m: float, y_m: float,
+                        keep_going: bool) -> None:
+        """Drop a mark where the plan was clicked.
+
+        Placement only - it does NOT touch any show block (user call
+        2026-08-09). The Stage tab owns rig geometry: marks are placed
+        and dragged here. Choosing WHICH mark a movement block aims at
+        belongs to the movement block dialog, and pointing real movers
+        at a mark belongs to the Live POSITION pool. One job per
+        surface; an earlier version of this did all three and duplicated
+        both of the others.
+
+        ONE MARK PER ARM: placing disarms the mode, because a sticky
+        placement mode drops a mark on every subsequent click, including
+        the ones meant to select a fixture (reported 2026-08-09). Hold
+        SHIFT to stay armed and place several in a row.
+
+        A click within ``MARK_SNAP_M`` of an existing mark selects that
+        one instead of stacking a near-duplicate on top of it, and does
+        NOT disarm - nothing was placed yet. New marks land on the floor
+        (z=0); edit the height in the MARKS list. The coordinate arrives
+        already grid-snapped when Snap to grid is on.
+
+        ``keep_going`` is the Shift flag from the view.
+        """
+        name = self._mark_near(x_m, y_m)
+        if name is not None:
+            self._select_mark_in_list(name)
+            self._show_status(
+                f"PLACE MARK: '{name}' is already here - selected it")
+            return
+        spot = self.stage_view.add_spot(round(x_m, 3), round(y_m, 3), 0.0)
+        self._select_mark_in_list(spot.name)
+        # Select it on the PLAN too: the plan has focus (you just
+        # clicked it), so Delete undoes a misplaced mark straight away.
+        self.stage_view.scene.clearSelection()
+        spot.setSelected(True)
+        if not keep_going:
+            self.aim_btn.setChecked(False)      # disarms via toggled
+        self._show_status(
+            f"PLACE MARK: '{spot.name}' at "
+            f"({x_m:.2f}, {y_m:.2f}) m - rename it in the MARKS list"
+            + ("" if keep_going else " · Shift-click to place several"))
+
     def _on_preview_collapsed(self, collapsed: bool) -> None:
         """Chevron in the 3D preview header: hide/show the GL pane."""
         from gui.icons import line_icon
@@ -1636,6 +1736,20 @@ class StageTab(BaseTab):
         self._tcp_update_timer.stop()
         self._tcp_update_pending = False
         self._save_splitter_state()
+
+    def cleanup(self):
+        """Release the tab's GL surfaces (3D preview and the inline
+        orientation preview) with their contexts current. Called from
+        MainWindow.closeEvent on app shutdown; embedded GL widgets never
+        receive a closeEvent of their own."""
+        for name in ("embedded_visualizer", "orientation_panel"):
+            widget = getattr(self, name, None)
+            if widget is None:
+                continue
+            try:
+                widget.cleanup()
+            except Exception:
+                pass
 
     def _save_splitter_state(self) -> None:
         """Persist the preview/inspector splitter sizes via QSettings so
@@ -2421,6 +2535,13 @@ class StageTab(BaseTab):
                     config_fixture.z = values['z_height']
                     config_fixture.orientation_uses_group_default = False
                     config_fixture.z_uses_group_default = False
+                    # Per-fixture DMX inversion (v1.5a): only written
+                    # when the panel provided the keys, so older
+                    # values dicts stay valid.
+                    if 'invert_pan' in values:
+                        config_fixture.invert_pan = values['invert_pan']
+                    if 'invert_tilt' in values:
+                        config_fixture.invert_tilt = values['invert_tilt']
 
         if values.get('apply_to_group') and self.config:
             groups = set(f.group for f in fixture_items if hasattr(f, 'group') and f.group)

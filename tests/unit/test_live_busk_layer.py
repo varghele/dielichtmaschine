@@ -179,6 +179,60 @@ class TestClaimRules:
         assert layer.render(0.0) == {}
 
 
+class TestColourFX:
+    """COLOUR FX (LiveState.colour_fx, 2026-07-24): a procedural,
+    time-cycling colour that claims like a swatch but from a moving
+    hue, overriding the static swatch on that group."""
+
+    def test_rainbow_claims_colour_and_moves_over_time(self, qapp,
+                                                       mock_fixture_def):
+        state, layer, _, _ = _setup(mock_fixture_def)
+        state.selected = {"Movers"}
+        state.stage_colour_fx("rainbow")
+        v0, mask0 = layer.render(0.0)[1]
+        # Claims dimmer + colour + shutter like a swatch would.
+        assert mask0[DIMMER] and v0[DIMMER] == 255
+        assert mask0[RED] and mask0[GREEN] and mask0[BLUE]
+        # A quarter period later the hue has moved (different RGB).
+        from utils.artnet.live_layer import RAINBOW_PERIOD_S
+        v1, _ = layer.render(RAINBOW_PERIOD_S / 4.0)[1]
+        assert (v1[RED], v1[GREEN], v1[BLUE]) != (v0[RED], v0[GREEN],
+                                                  v0[BLUE])
+
+    def test_rainbow_overrides_a_held_swatch(self, qapp, mock_fixture_def):
+        from utils.artnet.live_layer import _rainbow_rgb
+        state, layer, _, _ = _setup(mock_fixture_def)
+        state.selected = {"Movers"}
+        state.stage_colour("red")           # static swatch...
+        state.stage_colour_fx("rainbow")    # ...overridden by the FX
+        values, _ = layer.render(0.0)[1]
+        # MH1 (index 0 of 2 by stage x) carries the rainbow hue at t=0,
+        # not the swatch red.
+        expected = _rainbow_rgb(0.0, 0, 2)
+        assert (values[0 + RED], values[0 + GREEN], values[0 + BLUE]) \
+            == expected
+
+    def test_rainbow_fans_across_group_fixtures(self, qapp,
+                                                mock_fixture_def):
+        state, layer, _, _ = _setup(mock_fixture_def)
+        state.selected = {"Movers"}
+        state.stage_colour_fx("rainbow")
+        values, _ = layer.render(0.0)[1]
+        # Two fixtures, hue spread by stage x: their colours differ.
+        assert (values[0 + RED], values[0 + GREEN], values[0 + BLUE]) != \
+            (values[10 + RED], values[10 + GREEN], values[10 + BLUE])
+
+    def test_fx_alone_still_lights_the_group(self, qapp, mock_fixture_def):
+        # No swatch, no scene, no flash - just the FX: it lights the
+        # group on its own (dimmer at submaster + a colour claim).
+        state, layer, _, _ = _setup(mock_fixture_def)
+        state.selected = {"Movers"}
+        state.stage_colour_fx("rainbow")
+        values, mask = layer.render(0.0)[1]
+        assert mask[DIMMER] and values[DIMMER] == 255
+        assert mask[RED] and mask[GREEN] and mask[BLUE]
+
+
 class TestDimmerlessFixtures:
     def _par_setup(self, mock_fixture_def, rgb_par_def):
         par1 = _fixture("PAR1", 100, x=-1.0, model="ParModel")
@@ -390,6 +444,82 @@ class TestScenePool:
         state.set_strobe_on(True)
         state.set_strobe_rate(0)             # 1 Hz chop
         assert layer.render(0.75)[1][0][DIMMER] == 0
+
+
+class TestSceneAims:
+    """Scenes carry mover aims (2026-07-17): Scene.positions maps a
+    group to a POSITION-pool id, applied while the scene is staged -
+    an explicitly held position wins, and the aim releases with the
+    scene. Colour and aim are independent (an aim-only scene works)."""
+
+    def _scene(self, color="#FF2A1E", groups=("Movers",), positions=None):
+        from config.models import Scene
+        return Scene(name="Aimed", category="general", color=color,
+                     groups=list(groups),
+                     positions=dict(positions or {}))
+
+    def _setup_with_scene(self, mock_fixture_def, scene):
+        state, layer, config, maps = _setup(mock_fixture_def)
+        config.spots = {"Target": Spot(name="Target", x=0.0, y=-2.0,
+                                       z=0.0)}
+        layer_provider = lambda key: scene \
+            if key == "general/Aimed" else None
+        layer = LiveBuskLayer(state, config_provider=lambda: config,
+                              swatches=COLOUR_SWATCHES,
+                              scene_provider=layer_provider)
+        layer.set_fixture_maps(maps)
+        return state, layer, config
+
+    def test_scene_positions_aim_the_groups_movers(self, qapp,
+                                                   mock_fixture_def):
+        scene = self._scene(positions={"Movers": "mark:Target"})
+        state, layer, config = self._setup_with_scene(mock_fixture_def,
+                                                      scene)
+        state.set_scene("general/Aimed")
+        values, mask = layer.render(0.0)[1]
+        # Colour on the group AND the aim, fine bytes included.
+        assert values[RED] == 0xFF
+        for fixture, base in ((config.fixtures[0], 0),
+                              (config.fixtures[1], 10)):
+            pan_c, pan_f, tilt_c, tilt_f = _expected_aim16(
+                fixture, (0.0, -2.0, 0.0))
+            assert mask[base + PAN]
+            assert (values[base + PAN], values[base + TILT]) == \
+                (pan_c, tilt_c)
+            assert (values[base + PAN_FINE], values[base + TILT_FINE]) \
+                == (pan_f, tilt_f)
+
+    def test_held_position_beats_the_scene_aim(self, qapp,
+                                               mock_fixture_def):
+        scene = self._scene(positions={"Movers": "mark:Target"})
+        state, layer, config = self._setup_with_scene(mock_fixture_def,
+                                                      scene)
+        state.set_scene("general/Aimed")
+        state.positions = {"Movers": "preset:centre"}
+        values, _ = layer.render(0.0)[1]
+        expected = _expected_aim(config.fixtures[0], (0.0, 0.0, 1.5))
+        assert (values[PAN], values[TILT]) == expected
+
+    def test_aim_only_scene_renders_the_aim(self, qapp,
+                                            mock_fixture_def):
+        """A scene with positions but no colour still aims - colour
+        and aim are independent claims."""
+        scene = self._scene(color="",
+                            positions={"Movers": "mark:Target"})
+        state, layer, config = self._setup_with_scene(mock_fixture_def,
+                                                      scene)
+        state.set_scene("general/Aimed")
+        values, mask = layer.render(0.0)[1]
+        assert mask[PAN] and mask[TILT]
+        assert mask[DIMMER] == 0 and mask[RED] == 0   # no colour claim
+
+    def test_scene_release_clears_the_aim(self, qapp, mock_fixture_def):
+        scene = self._scene(positions={"Movers": "mark:Target"})
+        state, layer, _ = self._setup_with_scene(mock_fixture_def, scene)
+        state.set_scene("general/Aimed")
+        assert layer.render(0.0)
+        state.set_scene(None)
+        assert layer.render(0.0) == {}
 
 
 class TestStrobe:

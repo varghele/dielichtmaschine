@@ -2,9 +2,12 @@
 # Protocol definition for Lichtmaschine <-> Visualizer communication
 
 import json
+import logging
 from enum import Enum
+
+logger = logging.getLogger("visualizer.protocol")
 from typing import Dict, List, Any, Optional, Tuple
-from config.models import Configuration, Fixture, FixtureGroup
+from config.models import Configuration, Fixture, FixtureGroup, primary_group
 from utils import user_warnings
 from utils.fixture_capabilities import get_capabilities_for_fixture
 
@@ -21,6 +24,12 @@ class MessageType(Enum):
 
 # Cache for parsed fixture definitions
 _fixture_definition_cache: Dict[Tuple[str, str], Dict] = {}
+
+
+def clear_visualizer_definition_cache() -> None:
+    """Drop the parsed visualizer data (utils.fixture_library.
+    invalidate_fixture_caches calls this when fixture files change)."""
+    _fixture_definition_cache.clear()
 
 # Gobo pattern keyword mapping
 # Maps keywords found in gobo capability text to procedural pattern IDs
@@ -326,7 +335,8 @@ def _parse_qxf_for_visualizer(manufacturer: str, model: str, mode_name: str) -> 
 
         if color_wheel_colors:
             result['color_wheel'] = color_wheel_colors
-            print(f"  Parsed {len(color_wheel_colors)} color wheel entries")
+            logger.debug("parsed %d color wheel entries",
+                         len(color_wheel_colors))
 
         # Extract gobo wheel capabilities
         gobo_wheel_entries = []
@@ -627,7 +637,7 @@ class VisualizerProtocol:
             )
 
             # Get group for effective orientation and z values
-            group = config.groups.get(fixture.group) if fixture.group else None
+            group = primary_group(config, fixture)
             mounting, yaw, pitch, roll = fixture.get_effective_orientation(group)
             fixture_z = fixture.get_effective_z(group)
 

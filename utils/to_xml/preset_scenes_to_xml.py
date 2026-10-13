@@ -1381,7 +1381,10 @@ def create_sparkle_chaser(
     """Create Sparkle chaser with random flashes (1 beat per flash)."""
     import random
 
-    # Create scenes for random sparkle (randomly select a few fixtures to flash)
+    # Create scenes for random sparkle (randomly select a few fixtures to flash).
+    # A local, fixed-seed RNG keeps the export reproducible without the
+    # caller seeding (or this function consuming) the global RNG.
+    sparkle_rng = random.Random(0)
     num_sparkle_steps = 8
     step_scene_ids = []
 
@@ -1390,7 +1393,7 @@ def create_sparkle_chaser(
 
         # Randomly select 20-30% of fixtures to be bright
         num_bright = max(1, len(all_fixtures) // 4)
-        bright_fixtures = random.sample(all_fixtures, min(num_bright, len(all_fixtures)))
+        bright_fixtures = sparkle_rng.sample(all_fixtures, min(num_bright, len(all_fixtures)))
 
         for fixture_id, fixture in all_fixtures:
             channels_dict, _ = get_fixture_channels_for_preset(

@@ -179,3 +179,54 @@ class TestLtcChaseEndToEnd:
         assert structure.chase_arm_btn.text() == "ARM CHASE"
         assert chip.text() == "SYNC INT"
         assert not service.is_running
+
+    def test_pause_look_lives_between_songs(self, chase_window):
+        """The minimal pause engine (2026-07-17): armed + no song
+        playing = the current entry's pause_after is active on the
+        arbiter's pause slot; a playing song clears it (and a dropped
+        cable mid-song must NOT flip to the pause look); disarm
+        removes the layer from the arbiter."""
+        from config.models import PauseLook, Scene
+
+        window, service, clock, samples = chase_window
+        shows = window.shows_tab
+        structure = window.structure_tab
+
+        red = Scene(name="PauseRed", category="test", color="#FF0000",
+                    groups=[])
+        window.scene_library.add_scene(red, category="test")
+        for entry in window.config.setlist.entries:
+            entry.pause_after = PauseLook(mode="scene", level=100,
+                                          until="trigger",
+                                          scene="test/PauseRed")
+
+        # ARM: the layer is installed and, with nothing playing yet,
+        # the pre-show pause look is already active.
+        structure._refresh_sync_chase_row()
+        structure.chase_arm_btn.setChecked(True)
+        assert window.ltc_chase_armed()
+        layer = window.pause_look_layer()
+        assert window.output_arbiter()._pause_look_layer is layer
+        window._ltc_tick()
+        assert layer.active
+        assert getattr(layer._look, "scene", "") == "test/PauseRed"
+
+        # Song fires: the pause look clears.
+        _feed(window, service, clock, samples, 0.0, 2.0)
+        assert shows.is_playing
+        assert not layer.active
+
+        # Cable pulled mid-song: freewheel keeps the show running and
+        # the pause look STAYS off - no red blast mid-verse.
+        clock.t += 1.0
+        service.drain_once()
+        window._ltc_tick()
+        assert shows.is_playing
+        assert not layer.active
+
+        # Operator STOP: disarm clears the look and empties the slot.
+        shows._on_stop_clicked()
+        assert not window.ltc_chase_armed()
+        assert not layer.active
+        arbiter = getattr(window, "_output_arbiter", None)
+        assert arbiter is not None and arbiter._pause_look_layer is None

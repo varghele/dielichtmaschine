@@ -24,7 +24,14 @@ _LINK_DEF = re.compile(r"^\[[^\]]+\]:\s")
 
 def extract(changelog_text: str, version: str) -> str:
     version = version.lstrip("vV")
-    header = f"## [{version}]"
+    # A dev version (e.g. "1.5.0-dev", the in-between-releases marker
+    # on a milestone branch) has no released section yet - its notes
+    # ARE the [Unreleased] section. The release ritual drops the -dev
+    # suffix, at which point the renamed section matches as usual.
+    if version.endswith("-dev"):
+        header = "## [Unreleased]"
+    else:
+        header = f"## [{version}]"
     lines = changelog_text.splitlines()
 
     start = next((i for i, ln in enumerate(lines) if ln.startswith(header)), None)

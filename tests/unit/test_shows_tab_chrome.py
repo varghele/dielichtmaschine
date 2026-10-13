@@ -205,7 +205,7 @@ class TestToolbarStructure:
                        shows_tab.time_label, shows_tab.position_slider,
                        shows_tab.total_time_label, shows_tab.zoom_slider,
                        shows_tab.swing_btn, shows_tab.snap_chip,
-                       shows_tab.grid_group_frame, shows_tab.save_btn):
+                       shows_tab.grid_group_frame, shows_tab.lock_chip):
             assert toolbar.isAncestorOf(widget), widget
 
     def test_compact_action_texts_match_the_mock(self, shows_tab):
@@ -640,15 +640,18 @@ class TestButtonCoherence:
         # other text action -> cta-outline (bordered display caps).
         assert shows_tab.add_lane_btn.property("role") == "success"
         assert shows_tab.autogen_btn.property("role") == "cta-accent"
-        assert shows_tab.save_btn.property("role") == "cta-outline"
         assert shows_tab.inspector_btn.property("role") == "cta-outline"
         assert shows_tab.pane_popout_btn.property("role") == "cta-outline"
+        # The SAVE button's old slot: the LOCK chip (2026-07-22; SAVE
+        # was a no-op relic - save_to_config runs on every edit).
+        assert shows_tab.lock_chip.property("role") == "output-select"
+        assert shows_tab.lock_chip.isCheckable()
 
     def test_display_caps_actions_are_uppercase(self, shows_tab):
         # cta-accent / cta-outline text buttons carry display caps.
         assert shows_tab.autogen_btn.text() == "AUTOGEN"
-        assert shows_tab.save_btn.text() == "SAVE"
         assert shows_tab.inspector_btn.text() == "INSPECTOR"
+        assert shows_tab.lock_chip.text() == "LOCK"
 
     def test_grid_snap_swing_chips_carry_their_theme_roles(self, shows_tab):
         # Grid cells are borderless segments inside the card group; SNAP
@@ -689,7 +692,7 @@ class TestPreservedChrome:
         """gui.py drives these by attribute - pin their existence."""
         for name in ("show_combo", "add_lane_btn", "autogen_btn",
                      "inspector_btn", "zoom_slider", "zoom_label",
-                     "save_btn", "play_btn", "stop_btn", "time_label",
+                     "lock_chip", "play_btn", "stop_btn", "time_label",
                      "position_slider", "total_time_label",
                      "embedded_riff_panel", "embedded_visualizer",
                      "snap_chip", "swing_btn", "status_line",
@@ -865,3 +868,50 @@ class TestChaseTransport:
         assert disarms == []
         shows_tab.set_chase_armed(False)
         assert shows_tab.play_btn.isEnabled()
+
+
+class TestLiveShowTransport:
+    """LiveShowTransport (2026-07-16): the Live tab's operator view of
+    the timeline transport - same combo-driven song switching as the
+    chase transport, but stop() goes through the operator STOP hook
+    (it must disarm an armed chase like the real button)."""
+
+    def test_songs_lists_combo_entries_without_separators(self, shows_tab):
+        _add_show(shows_tab.config, "Zweite Nummer")
+        shows_tab.update_from_config()
+        transport = shows_tab.live_transport()
+        names = [name for name, _label in transport.songs()]
+        assert set(names) >= {"Zweite Nummer"}
+        assert all(names), "separators must never leak into songs()"
+
+    def test_play_stop_and_state(self, shows_tab):
+        shows_tab.update_from_config()
+        transport = shows_tab.live_transport()
+        assert not transport.is_playing()
+        transport.play()
+        assert shows_tab.is_playing and transport.is_playing()
+        transport.play()                       # idempotent while playing
+        assert shows_tab.is_playing
+        transport.stop()
+        assert not shows_tab.is_playing
+
+    def test_stop_disarms_an_armed_chase(self, shows_tab):
+        """Operator semantics: unlike the chase transport, this stop
+        runs the disarm hook."""
+        shows_tab.update_from_config()
+        transport = shows_tab.live_transport()
+        transport.play()
+        disarmed = []
+        shows_tab.set_chase_armed(True, disarm=lambda: disarmed.append(1))
+        transport.stop()
+        assert disarmed == [1]
+        assert not shows_tab.is_playing
+
+    def test_select_and_duration(self, shows_tab):
+        _add_show(shows_tab.config, "Zweite Nummer")
+        shows_tab.update_from_config()
+        transport = shows_tab.live_transport()
+        transport.select("Zweite Nummer")
+        assert transport.current() == "Zweite Nummer"
+        assert transport.duration() > 0.0
+        assert transport.position() == pytest.approx(0.0)

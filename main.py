@@ -10,7 +10,27 @@ sys.setrecursionlimit(10000)
 # process silently and there's no way to know which Python call site led
 # into the offending C extension.
 import faulthandler
-faulthandler.enable()
+if sys.stderr is not None:
+    faulthandler.enable()
+else:
+    # Windowed build (PyInstaller console=False) launched without a
+    # console: sys.stderr is None and faulthandler.enable() RAISES -
+    # the packaged exe died on DOUBLE-CLICK before any window
+    # (found packing for the Stellwerk gig, 2026-07-17; every shell
+    # launch inherits console handles, so CLI smoke tests never see
+    # it). Route the dumps to a file in the log dir instead; the
+    # handle stays open for the process lifetime on purpose. Never
+    # let diagnostics-plumbing failures stop the app from booting.
+    try:
+        import os as _os
+        from utils.app_logging import log_dir as _log_dir
+        _crash_dir = _log_dir()
+        _os.makedirs(_crash_dir, exist_ok=True)
+        _faulthandler_file = open(
+            _os.path.join(_crash_dir, "native-crash.log"), "a")
+        faulthandler.enable(file=_faulthandler_file)
+    except Exception:
+        pass
 
 import os
 from utils import app_identity
@@ -26,6 +46,12 @@ if '--version' in sys.argv:
 if len(sys.argv) > 1 and sys.argv[1] == 'export':
     from utils.export_cli import run_export_cli
     sys.exit(run_export_cli(sys.argv[2:]))
+
+# Headless morph (v1.5b): compile a setlist onto a target rig without a
+# window (utils/morph_cli.py). Keep above the Qt imports like export.
+if len(sys.argv) > 1 and sys.argv[1] == 'morph':
+    from utils.morph_cli import run_morph_cli
+    sys.exit(run_morph_cli(sys.argv[2:]))
 
 from PyQt6 import QtWidgets
 from PyQt6.QtGui import QIcon

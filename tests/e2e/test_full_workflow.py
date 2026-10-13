@@ -214,7 +214,9 @@ def step5_build_timeline(window, dialogs):
     # The same call the block widget's double-click / context menu makes.
     block_widget.open_sublane_dialog("colour", colour_block)
 
-    tab.save_btn.click()
+    # SAVE button removed 2026-07-22 (redundant - save_to_config runs
+    # on every edit); the direct call is the same sync-back.
+    tab.save_to_config()
 
 
 def step6_build_playback_controller(window, monkeypatch):
@@ -464,23 +466,21 @@ class TestStep2Fixtures:
         movers = detect_targets_capabilities([MOVER_GROUP], main_window.config)
         assert movers.has_movement and movers.has_dimmer
 
-    @pytest.mark.xfail(
-        strict=True,
-        reason="BUG: utils/fixture_utils.py:114 detect_fixture_group_capabilities "
-               "walks fixture_def['channels'] (every channel the .qxf declares) "
-               "instead of the channels of fixture.current_mode. The Hero Spot 60 "
-               "in '8 Channel' mode has no Color/Gobo/Prism channel, yet the group "
-               "reports has_colour/has_special, so the timeline offers colour and "
-               "special sublanes whose DMX goes nowhere - FixtureChannelMap "
-               "(utils/artnet/dmx_manager.py:44) does respect current_mode.")
     def test_capabilities_must_respect_the_patched_mode(self, main_window, dialogs):
+        """Regression (v1.5.5 G5): capabilities came from every channel the
+        .qxf declares, so the Hero Spot 60 in '8 Channel' mode (no Color
+        channel) offered a colour sublane whose DMX went nowhere. Detection
+        now reads the patched mode's channels."""
         step1_create_artnet_universe(main_window)
         step2_patch_fixtures(main_window, dialogs)
 
         from utils.target_resolver import detect_targets_capabilities
         movers = detect_targets_capabilities([MOVER_GROUP], main_window.config)
         assert not movers.has_colour, "8 Channel mode exposes no colour channel"
-        assert not movers.has_special, "8 Channel mode exposes no gobo/prism channel"
+        # No gobo / prism in 8 Channel mode, but its Focus channel
+        # (BeamFocusNearFar) is a special-sublane parameter, so the special
+        # sublane rightly stays.
+        assert movers.has_special
 
 
 # ===========================================================================
@@ -664,19 +664,12 @@ class TestStep5Timeline:
         assert saved[0].fixture_targets == [WASH_GROUP]
         assert len(saved[0].light_blocks[0].colour_blocks) == 1
 
-    @pytest.mark.xfail(
-        strict=True,
-        reason="BUG: an RGB-slider-only edit on a 6-channel PAR is recorded as "
-               "color_mode='Wheel'. Two causes: utils/fixture_utils.py:197 "
-               "get_color_wheel_options walks fixture_def['channels'] instead of "
-               "the current_mode's channels, so a colour wheel is offered for a "
-               "mode that has none; and timeline_ui/colour_block_dialog.py:418 "
-               "accept() sets color_mode='Wheel' whenever wheel options exist, "
-               "even when the user never touched the wheel combo. Harmless today "
-               "(FixtureChannelMap finds no wheel channel in 6 Channel mode) but "
-               "the block silently flips to the wheel colour if the fixture is "
-               "later re-patched to 8 Channel mode.")
     def test_rgb_only_colour_edit_stays_in_rgb_mode(self, main_window, dialogs, inputs):
+        """Regression (v1.5.5 G5): get_color_wheel_options walked every
+        channel of the .qxf, so the PAR's 8-channel 'Colour selection'
+        wheel was offered in 6 Channel mode and an RGB-only edit was
+        recorded as color_mode='Wheel'. Wheel options now come from the
+        patched mode, which has no wheel."""
         step1_create_artnet_universe(main_window)
         step2_patch_fixtures(main_window, dialogs)
         step4_create_show_structure(main_window, inputs)
@@ -968,7 +961,7 @@ class TestOutputShellWiring:
         # The live engine renders under the busk writes and its binder
         # follows LiveState (live-output-plan phase 3).
         assert window._live_busk_layer._engine is window._live_engine
-        assert window._live_effects_binder._engine is window._live_engine
+        assert window._live_intensity_binder._engine is window._live_engine
 
     def test_live_masters_push_into_the_arbiter(self, wired_window):
         window, arbiter = wired_window

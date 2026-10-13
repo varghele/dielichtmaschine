@@ -363,4 +363,4 @@ with the solver for the wrong reason).
 | Frame handedness tests | `tests/unit/test_display_frame.py` |
 | Preset beam-direction + migration + aiming tests | `tests/unit/test_orientation.py` |
 | The reflection trap, short form | `docs/gl-gotchas.md` #4 |
-| Open yoke item | `todo.md`, ROADMAP v1.5a |
+| Open yoke item (mixed-rig beam/base axes) | ROADMAP v1.6 (deferred from v1.5) |

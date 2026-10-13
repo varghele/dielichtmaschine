@@ -254,8 +254,8 @@ class GDTFSharePane(QtWidgets.QWidget):
         self._submit(work, self._on_downloaded, self._on_download_failed)
 
     def _on_downloaded(self, paths: list):
-        from utils.fixture_library import clear_library_cache
-        clear_library_cache()
+        from utils.fixture_library import invalidate_fixture_caches
+        invalidate_fixture_caches()
         from utils.app_settings import user_gdtf_dir
         self.status_label.setText(
             f"Saved {len(paths)} file(s) to {user_gdtf_dir()}")

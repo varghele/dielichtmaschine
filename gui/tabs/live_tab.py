@@ -64,12 +64,13 @@ from PyQt6.QtGui import QColor, QFont, QPainter, QPolygon
 from PyQt6.QtCore import QPoint
 from PyQt6.QtWidgets import (
     QApplication, QWidget, QVBoxLayout, QHBoxLayout, QGridLayout, QScrollArea,
-    QFrame, QPushButton, QLabel, QButtonGroup,
+    QFrame, QPushButton, QLabel, QButtonGroup, QComboBox,
 )
 
 from auto.bpm_detector import TapBPM
 from config.models import Configuration
 from gui.typography import DisplayLabel, MicroLabel, display_font, mono_font
+from utils.artnet.live_layer import level_local
 from utils.position_presets import (
     ELEMENT_PRESET_PREFIX, KIND_POINT, MARK_PREFIX, PRESET_PREFIX,
     compute_presets, element_preset_ids, group_has_movers, mark_id,
@@ -112,6 +113,17 @@ COLOUR_SWATCHES: Tuple[Tuple[str, str, str, Optional[str]], ...] = (
     ("mag_amber", "Mag / Amber", "#C95FD0", "#FFB43C"),
 )
 
+# COLOUR FX (2026-07-24): procedural colour looks that override the
+# static swatch on the selected groups, cycling in time. Rendered in
+# the busk layer (utils/artnet/live_layer.py), not the engine, because
+# they sit ON TOP of the merged engine frame like the swatch does. Per
+# group, same staging pattern as the swatches. Each entry is (id,
+# label); the id keys the busk-layer procedural colour.
+COLOUR_FX: Tuple[Tuple[str, str], ...] = (
+    ("rainbow", "Rainbow"),
+)
+COLOUR_FX_IDS = frozenset(fx_id for fx_id, _label in COLOUR_FX)
+
 # Fade options: (key, label, seconds). Bar-relative fades have no fixed
 # second count without a clock, so their seconds is None - the key still
 # selects the chip and drives future bar-locked resolves.
@@ -145,6 +157,33 @@ MOVEMENT_SHAPES: Tuple[Tuple[str, str], ...] = (
     ("random", "Random"),
     ("fan", "Fan"),
 )
+
+# Composite effects (2026-07-24): one grab fires a coordinated
+# INTENSITY FX + MOVEMENT SHAPE onto the selected groups (colour is
+# left to the swatch). Each entry is
+# (id, label, category, intensity riff key, shape id); staging WRITES
+# the per-group intensity + shape state, so composites reuse the
+# correct dimmer + world-anchored-movement rendering instead of a
+# separate effect engine slot. "loops" = sustained looks, "hits" =
+# short and punchy. The pairings are the tuning surface.
+COMPOSITE_EFFECTS: Tuple[Tuple[str, str, str, str, str], ...] = (
+    ("pulse_sweep", "Pulse Sweep", "loops", "intensity/Pulse", "circle"),
+    ("ballad", "Ballad", "loops", "intensity/Throb", "figure_8"),
+    ("chase_run", "Chase Run", "loops", "intensity/Chase",
+     "linear_sweep"),
+    ("wave", "Wave", "loops", "intensity/Wave", "bounce"),
+    ("twinkle_drift", "Twinkle Drift", "loops", "intensity/Sparkle",
+     "lissajous"),
+    ("cascade_fan", "Cascade Fan", "loops", "intensity/Cascade", "fan"),
+    ("strobe_snap", "Strobe Snap", "hits", "intensity/Strobe Burst",
+     "random"),
+    ("fan_stab", "Fan Stab", "hits", "intensity/Stroke", "fan"),
+    ("heartbeat", "Heartbeat", "hits", "intensity/Heartbeat", "circle"),
+    ("build_up", "Build Up", "hits", "intensity/Fill", "triangle"),
+)
+COMPOSITE_BY_ID = {c[0]: c for c in COMPOSITE_EFFECTS}
+#: Category display order + labels for the EFFECTS pool headers.
+COMPOSITE_CATEGORIES = (("loops", "Loops"), ("hits", "Hits"))
 # INTENSITY FX: the riff-library category the pool lists (bundled
 # dimmer-only riffs in riffs/intensity/). Staged on the engine's own
 # "intensity" slot, concurrent with a colour riff from EFFECTS.
@@ -158,6 +197,16 @@ SHAPE_SIZES: Tuple[Tuple[str, float], ...] = (
     ("L", 1.5),
 )
 DEFAULT_SHAPE_SIZE_M = 0.75
+
+
+def _display_name(raw: Optional[str]) -> str:
+    """Human-readable label for a library item name. Riff and scene
+    names double as file keys ("intensity_crescendo_8bar"), so the
+    underscores come out for display - the spaces also let the pool
+    cells word-wrap long names onto a second line instead of running
+    an unbreakable token past the cell edge. Keys stay raw everywhere;
+    only what the operator reads goes through here."""
+    return " ".join((raw or "").replace("_", " ").split())
 
 
 def _active_tokens() -> dict:
@@ -238,18 +287,18 @@ class LiveState(QObject):
         # whether a predefined show also runs underneath ("show") or not
         # ("live", the default). No engine merges them yet.
         self.mode: str = "live"                  # "show" | "live"
-        # Library-backed staging. An effect is a riff (key "category/name")
-        # scoped to the current SELECT state; a scene is a whole-rig look
-        # (key "category/name") independent of the selection. Both toggle;
-        # neither is tied to the group set, so update_from_config leaves
-        # them alone (like bpm / mode).
-        self.effect: Optional[str] = None        # staged riff key
+        # Library-backed staging. The EFFECTS pool is COMPOSITES
+        # (2026-07-24): a composite is a named (intensity FX, movement
+        # shape) pair, and staging one WRITES self.intensities +
+        # self.shapes for the selected groups - there is no separate
+        # effect state. Colour stays with the swatch. A scene is a
+        # whole-rig look independent of the selection.
         self.scene: Optional[str] = None         # staged scene key
-        # Staged MOVEMENT SHAPE (a MOVEMENT_REGISTRY rudiment id like
-        # "circle"). Selection-scoped like effect (the movement binder
-        # restages on selection change); anchored per group at the held
-        # position. Survives update_from_config like effect/scene.
-        self.shape: Optional[str] = None
+        # MOVEMENT SHAPES, PER GROUP (2026-07-22, same pattern as
+        # effects): group name -> MOVEMENT_REGISTRY rudiment id.
+        # Each mover group traces its own shape at its own held-
+        # position anchor; a shape keeps running after deselection.
+        self.shapes: Dict[str, str] = {}
         # Orbit radius in METERS (the S/M/L chips) - live shapes trace
         # in stage space around their anchor, so the size is physical,
         # not a DMX amplitude. A preference like fade/bpm: survives
@@ -260,10 +309,11 @@ class LiveState(QObject):
         # lockstep, 100 fans the heads evenly across the whole cycle.
         # A preference like shape_size.
         self.shape_stagger: int = 0
-        # Staged INTENSITY FX (a bundled "intensity/..." dimmer riff
-        # key). Same mechanics as effect on its own engine slot, so a
-        # dimmer pattern and a colour riff run concurrently.
-        self.intensity: Optional[str] = None
+        # INTENSITY FX, PER GROUP (2026-07-22): group name -> bundled
+        # "intensity/..." dimmer riff key. Same pattern as effects, on
+        # its own engine slot family, so each group's dimmer pattern
+        # runs concurrently with its colour riff.
+        self.intensities: Dict[str, str] = {}
         # Applied position palettes, PER GROUP (group name -> namespaced
         # id: "preset:centre", "preset:element:<id>", "mark:<spot name>"
         # - see utils/position_presets.py). Mirrors ``colours``: staging
@@ -277,10 +327,17 @@ class LiveState(QObject):
         # geometry presets are never pruned.
         self.positions: Dict[str, str] = {}       # group name -> id
         self.position_labels: Dict[str, str] = {}  # id -> display label
+        # COLOUR FX, PER GROUP (2026-07-24): group name -> COLOUR_FX id
+        # (currently only "rainbow"). A procedural colour that overrides
+        # the static swatch on that group; rendered by the busk layer,
+        # cleared by release_all and pruned with its group. Same staging
+        # pattern as the swatches.
+        self.colour_fx: Dict[str, str] = {}
         # Dual queue. ``running`` is the running-playbacks stack - plain
-        # dict records {"kind": "effect"|"scene", "key", "label",
-        # "paused"} mirroring the single active effect/scene (at most one
-        # record per kind, rendered as individual playback rows).
+        # dict records {"kind", "key", "label", "paused"}; effect-kind
+        # records additionally carry "groups" (sorted list) and there
+        # is one PER DISTINCT RIFF KEY held in ``effects``; the other
+        # kinds keep at most one record each.
         # ``next_up`` holds preloaded records (same shape, no "paused")
         # staged via enqueue(); fire_next() (GO) pops the head and
         # applies it. Both survive update_from_config (like bpm / mode).
@@ -303,12 +360,22 @@ class LiveState(QObject):
         self.selected &= valid
         self.flash &= valid
         self.colours = {g: c for g, c in self.colours.items() if g in valid}
+        self.colour_fx = {g: fx for g, fx in self.colour_fx.items()
+                          if g in valid}
         # Keep existing submaster values; add 100 for new groups; drop
         # stale. Rebuild as an ordered dict following the group order.
         self.submasters = {g: self.submasters.get(g, 100) for g in names}
         self.positions = {g: p for g, p in self.positions.items()
                           if g in valid}
         self._prune_positions(spot_names, valid_element_ids)
+        # Per-group intensity/shapes follow their group out of the
+        # config (the keys themselves are library-bound).
+        self.intensities = {g: k for g, k in self.intensities.items()
+                            if g in valid}
+        self.shapes = {g: k for g, k in self.shapes.items()
+                       if g in valid}
+        self._sync_running_grouped("intensity", self.intensities)
+        self._sync_running_grouped("shape", self.shapes)
 
     def _prune_positions(self, spot_names, valid_element_ids) -> None:
         spot_names = set(spot_names)
@@ -374,6 +441,29 @@ class LiveState(QObject):
         swatches the pool outlines in the accent."""
         return {self.colours[g] for g in self.selected if g in self.colours}
 
+    def stage_colour_fx(self, fx_id: str) -> int:
+        """Touch a COLOUR FX (currently "rainbow"): apply it to every
+        selected group, mutual exclusion per group. Touching an fx every
+        selected group already holds RELEASES it from those groups (the
+        same toggle contract as the swatches) - the group falls back to
+        its swatch/scene. Returns the number of groups affected; 0 means
+        nothing was selected and the touch is a no-op the tab surfaces."""
+        if self.selected and all(self.colour_fx.get(g) == fx_id
+                                 for g in self.selected):
+            for group in self.selected:
+                self.colour_fx.pop(group, None)
+        else:
+            for group in self.selected:
+                self.colour_fx[group] = fx_id
+        self.state_changed.emit()
+        return len(self.selected)
+
+    def active_colour_fx_ids(self) -> set:
+        """COLOUR FX ids applied to any selected group - the cells the
+        pool outlines in the accent."""
+        return {self.colour_fx[g] for g in self.selected
+                if g in self.colour_fx}
+
     def release_all(self) -> None:
         """Panic release: clear the programmer (applied colours + staged
         + selection + staged position) AND the running playbacks (staged
@@ -381,12 +471,12 @@ class LiveState(QObject):
         The next_up queue is deliberately kept - it is preloaded, not
         output."""
         self.colours.clear()
+        self.colour_fx.clear()
         self.staged_colour = None
         self.selected.clear()
-        self.effect = None
         self.scene = None
-        self.shape = None
-        self.intensity = None
+        self.shapes.clear()
+        self.intensities.clear()
         self.positions.clear()
         self.running.clear()
         self.state_changed.emit()
@@ -444,14 +534,11 @@ class LiveState(QObject):
         deliberately excluded - they live in the output arbiter's
         post-merge stage so they also cap timeline/Auto playback
         (docs/output-sync-plan.md); group_level keeps the full product
-        for consumers that want the final number."""
-        if group not in self.submasters:
-            return 0.0
-        if group in self.flash:
-            return 1.0
-        if self.blackout:
-            return 0.0
-        return self.submasters[group] / 100.0
+        for consumers that want the final number. The rule itself lives
+        in utils/artnet/live_layer.level_local (one copy, shared with
+        the layer's per-frame state snapshot)."""
+        return level_local(self.submasters, self.flash, self.blackout,
+                           group)
 
     # -- strobe ---------------------------------------------------------
     def set_strobe_on(self, on: bool) -> None:
@@ -478,13 +565,121 @@ class LiveState(QObject):
         self.mode = "show" if mode == "show" else "live"
         self.state_changed.emit()
 
-    # -- library staging (effects / scenes) -----------------------------
-    def set_effect(self, key: Optional[str]) -> None:
-        """Toggle the staged effect (a riff, selection-scoped). Touching
-        the same key again clears it. Mirrors into the running stack."""
-        self.effect = None if key == self.effect else key
-        self._sync_running("effect", self.effect)
+    # -- library staging (effects / intensity / shapes / scenes) --------
+    def _stage_grouped(self, mapping: Dict[str, str], kind: str,
+                       key: str, apply_only: bool = False) -> int:
+        """The shared per-group touch (the positions pattern): apply
+        ``key`` to every selected group in ``mapping``; touching a key
+        every selected group already runs RELEASES it from those groups
+        unless ``apply_only`` (GO fires apply-only: never toggles). A
+        staged key KEEPS RUNNING on its group after deselection.
+        Returns the number of groups affected - 0 means nothing was
+        selected and the touch was a no-op the tab must surface."""
+        if not self.selected:
+            self.state_changed.emit()
+            return 0
+        if not apply_only and all(mapping.get(g) == key
+                                  for g in self.selected):
+            for group in self.selected:
+                mapping.pop(group, None)
+        else:
+            for group in self.selected:
+                mapping[group] = key
+        self._sync_running_grouped(kind, mapping)
         self.state_changed.emit()
+        return len(self.selected)
+
+    def stage_composite(self, composite_id: str,
+                        apply_only: bool = False) -> int:
+        """Fire a composite effect: set its paired INTENSITY FX and
+        MOVEMENT SHAPE on every selected group (colour left to the
+        swatch). Toggle - a second touch where every selected group
+        already holds BOTH releases them - unless ``apply_only`` (GO
+        fires apply-only). Returns the number of groups affected; 0
+        means nothing was selected and the touch is a no-op the tab
+        surfaces."""
+        entry = COMPOSITE_BY_ID.get(composite_id)
+        if entry is None or not self.selected:
+            self.state_changed.emit()
+            return 0
+        _id, _label, _cat, intensity_key, shape_id = entry
+        fully_held = all(self.intensities.get(g) == intensity_key
+                         and self.shapes.get(g) == shape_id
+                         for g in self.selected)
+        if fully_held and not apply_only:
+            for group in self.selected:
+                self.intensities.pop(group, None)
+                self.shapes.pop(group, None)
+        else:
+            for group in self.selected:
+                self.intensities[group] = intensity_key
+                self.shapes[group] = shape_id
+        self._sync_running_grouped("intensity", self.intensities)
+        self._sync_running_grouped("shape", self.shapes)
+        self.state_changed.emit()
+        return len(self.selected)
+
+    def active_composite_ids(self) -> set:
+        """Composite ids where some SELECTED group holds the exact
+        (intensity, shape) pair - the cells the pool outlines."""
+        active = set()
+        for cid, (_i, _l, _c, intensity_key, shape_id) \
+                in COMPOSITE_BY_ID.items():
+            if any(self.intensities.get(g) == intensity_key
+                   and self.shapes.get(g) == shape_id
+                   for g in self.selected):
+                active.add(cid)
+        return active
+
+    def stage_intensity(self, key: str) -> int:
+        """Touch an intensity FX (per-group, see _stage_grouped)."""
+        return self._stage_grouped(self.intensities, "intensity", key)
+
+    def stage_shape(self, key: str) -> int:
+        """Touch a movement shape (per-group; non-mover groups hold
+        the id silently - the binder only drives movers)."""
+        return self._stage_grouped(self.shapes, "shape", key)
+
+    @staticmethod
+    def _active_keys(mapping: Dict[str, str], selected) -> set:
+        return {mapping[g] for g in selected if g in mapping}
+
+    def active_intensity_keys(self) -> set:
+        return self._active_keys(self.intensities, self.selected)
+
+    def active_shape_keys(self) -> set:
+        return self._active_keys(self.shapes, self.selected)
+
+    def _grouped_mapping(self, kind: str) -> Optional[Dict[str, str]]:
+        return {"intensity": self.intensities,
+                "shape": self.shapes}.get(kind)
+
+    def _sync_running_grouped(self, kind: str,
+                              mapping: Dict[str, str]) -> None:
+        """Rebuild ``kind``'s running records from its per-group
+        mapping: one record per DISTINCT key carrying its sorted group
+        list. Existing records keep their position and paused flag;
+        emptied records leave; new keys append. Silent - the calling
+        mutator emits."""
+        groups_by_key: Dict[str, list] = {}
+        for group, key in mapping.items():
+            groups_by_key.setdefault(key, []).append(group)
+        kept: List[dict] = []
+        for record in self.running:
+            if record.get("kind") != kind:
+                kept.append(record)
+                continue
+            groups = groups_by_key.pop(record["key"], None)
+            if groups:
+                record["groups"] = sorted(groups)
+                kept.append(record)
+        for key in groups_by_key:
+            label = key.split("/")[-1] if "/" in key else key
+            kept.append({"kind": kind, "key": key,
+                         "label": _display_name(label),
+                         "groups": sorted(groups_by_key[key]),
+                         "paused": False})
+        self.running[:] = kept
 
     def set_scene(self, key: Optional[str]) -> None:
         """Toggle the staged scene (a whole-rig look, selection-agnostic).
@@ -492,23 +687,6 @@ class LiveState(QObject):
         stack."""
         self.scene = None if key == self.scene else key
         self._sync_running("scene", self.scene)
-        self.state_changed.emit()
-
-    def set_shape(self, key: Optional[str]) -> None:
-        """Toggle the staged movement shape (a rudiment id, applied to
-        the selected mover groups by the movement binder). Touching the
-        same key again clears it. Mirrors into the running stack as
-        kind "shape" so the PAUSE/KILL rows work on it."""
-        self.shape = None if key == self.shape else key
-        self._sync_running("shape", self.shape)
-        self.state_changed.emit()
-
-    def set_intensity(self, key: Optional[str]) -> None:
-        """Toggle the staged intensity FX (a bundled dimmer riff key,
-        selection-scoped like effect, own engine slot). Mirrors into
-        the running stack as kind "intensity"."""
-        self.intensity = None if key == self.intensity else key
-        self._sync_running("intensity", self.intensity)
         self.state_changed.emit()
 
     def set_shape_size(self, meters: float) -> None:
@@ -568,7 +746,8 @@ class LiveState(QObject):
                 del self.running[index]
             return
         record = {"kind": kind, "key": key,
-                  "label": key.split("/")[-1], "paused": False}
+                  "label": _display_name(key.split("/")[-1]),
+                  "paused": False}
         if index is None:
             self.running.append(record)
         else:
@@ -576,8 +755,9 @@ class LiveState(QObject):
 
     # -- dual queue (running stack + next-up list) ----------------------
     def enqueue(self, kind: str, key: str, label: str) -> None:
-        """Stage a record in the next-up list (repeats allowed)."""
-        kind = "scene" if kind == "scene" else "effect"
+        """Stage a record in the next-up list (repeats allowed). Kinds:
+        "composite" (a composite effect id) or "scene"."""
+        kind = "scene" if kind == "scene" else "composite"
         self.next_up.append({"kind": kind, "key": key, "label": label})
         self.state_changed.emit()
 
@@ -588,9 +768,9 @@ class LiveState(QObject):
             self.state_changed.emit()
 
     def fire_next(self) -> None:
-        """GO: pop the head of next_up and apply it live via
-        set_effect/set_scene. Applies, never toggles - firing a key that
-        is already running keeps it running."""
+        """GO: pop the head of next_up and apply it live. Applies,
+        never toggles - firing something the selection already runs
+        keeps it running (stage_composite apply_only)."""
         if not self.next_up:
             return
         record = self.next_up.pop(0)
@@ -599,9 +779,8 @@ class LiveState(QObject):
                 self.set_scene(record["key"])
                 return
         else:
-            if record["key"] != self.effect:
-                self.set_effect(record["key"])
-                return
+            self.stage_composite(record["key"], apply_only=True)
+            return
         self.state_changed.emit()
 
     def kill_playback(self, index: int) -> None:
@@ -613,12 +792,13 @@ class LiveState(QObject):
         record = self.running.pop(index)
         if record["kind"] == "scene":
             self.scene = None
-        elif record["kind"] == "shape":
-            self.shape = None
-        elif record["kind"] == "intensity":
-            self.intensity = None
         else:
-            self.effect = None
+            # Grouped kinds (effect/intensity/shape): release ONLY
+            # this record's groups; other keys keep running on theirs.
+            mapping = self._grouped_mapping(record["kind"])
+            if mapping is not None:
+                for group in record.get("groups") or ():
+                    mapping.pop(group, None)
         self.state_changed.emit()
 
     def toggle_pause(self, index: int) -> None:
@@ -757,7 +937,9 @@ class _VerticalFader(QWidget):
 # ---------------------------------------------------------------------------
 
 class _SelectTile(QWidget):
-    """A group SELECT tile: 3px data-color bar, caps name, fixture count.
+    """A group SELECT tile: 3px data-color bar, caps name, fixture
+    count, and the group's RUNNING EFFECT name (per-group effects,
+    2026-07-22 - the auto tab's per-group riff readout precedent).
 
     Toggles selection on click (emits ``clicked``); selected state paints
     an accent border + raised fill (widget-local, token-derived colors).
@@ -775,7 +957,12 @@ class _SelectTile(QWidget):
         self.setCursor(Qt.CursorShape.PointingHandCursor)
 
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(12, 7, 14, 7)
+        # 4px vertical margins (were 7): the third line (running
+        # effect) grew the tile, and the tile drives the LIVE tab's
+        # height minimum - which drives the WINDOW minimum. Linux CI
+        # renders fonts a few px taller, so the 720p guarantee needs
+        # headroom, not exactness (caught 2026-07-22 at 725/720).
+        layout.setContentsMargins(12, 4, 14, 4)
         layout.setSpacing(1)
         self.name_label = DisplayLabel(group_name, point_size=13,
                                        weight=QFont.Weight.Bold,
@@ -787,6 +974,10 @@ class _SelectTile(QWidget):
                                       tracking_em=0.1)
         self.count_label.setMinimumWidth(1)
         layout.addWidget(self.count_label)
+        self.effect_label = MicroLabel("-", point_size=7,
+                                       tracking_em=0.1)
+        self.effect_label.setMinimumWidth(1)
+        layout.addWidget(self.effect_label)
         self._restyle()
 
     def is_selected(self) -> bool:
@@ -798,6 +989,10 @@ class _SelectTile(QWidget):
             self._selected = selected
         self._restyle()
 
+    def set_running_effect(self, label: str) -> None:
+        """The group's running effect display name ("" / "-" = none)."""
+        self.effect_label.setText(label or "-")
+
     def _restyle(self) -> None:
         tokens = _active_tokens()
         bg = tokens["raised"] if self._selected else tokens["panel"]
@@ -807,6 +1002,8 @@ class _SelectTile(QWidget):
             f" background-color: {bg};"
             f" border: 1px solid {border};"
             f" border-left: 3px solid {self._color}; }}")
+        self.effect_label.setStyleSheet(
+            f"color: {tokens['accent']}; background: transparent;")
 
     def mousePressEvent(self, event):
         if event.button() == Qt.MouseButton.LeftButton:
@@ -977,7 +1174,10 @@ class _LibraryCell(QWidget):
                 f"#LiveLibraryChip {{ background-color: {chip_color}; }}")
             layout.addWidget(chip)
             self._chip = chip
-        self.name_label = DisplayLabel(label, point_size=11,
+        # 10pt (was 11): library names word-wrap since the underscore
+        # cleanup, but QLabel cannot break INSIDE a word - a long single
+        # word ("CRESCENDO") must fit the cell width in one piece.
+        self.name_label = DisplayLabel(label, point_size=10,
                                        weight=QFont.Weight.Bold,
                                        tracking_em=0.03)
         self.name_label.setMinimumWidth(1)
@@ -1047,6 +1247,11 @@ class LiveTab(BaseTab):
     effects wait on the live engine (docs/live-output-plan.md).
     """
 
+    #: ARM toggled by the operator on the busk surface (2026-07-22);
+    #: the shell arms/disarms and reflects the ACTUAL state back via
+    #: set_chase_armed - same contract as the Structure tab's chip.
+    chase_arm_requested = pyqtSignal(bool)
+
     def __init__(self, config: Configuration, parent=None):
         # Non-UI state must exist before super().__init__ runs setup_ui().
         self.state = LiveState()
@@ -1056,6 +1261,7 @@ class LiveTab(BaseTab):
         self._tap_bpm = TapBPM()
         self._select_tiles: Dict[str, _SelectTile] = {}
         self._colour_swatches: Dict[str, _ColourSwatch] = {}
+        self._colour_fx_cells: Dict[str, _LibraryCell] = {}
         self._colour_placeholders: Dict[str, QWidget] = {}
         # POSITION PALETTES: computed-preset cells + one cell per
         # config.spots spike mark, keyed by namespaced position id.
@@ -1089,6 +1295,7 @@ class LiveTab(BaseTab):
         # OUT chip source: the shared OutputArbiter, injected by gui.py
         # when output is first enabled (None = nothing streams).
         self._status_arbiter = None
+        self._show_transport = None
         self._last_frames_sent = None
 
         super().__init__(config, parent)
@@ -1102,6 +1309,7 @@ class LiveTab(BaseTab):
         self._status_timer = QTimer(self)
         self._status_timer.setInterval(500)
         self._status_timer.timeout.connect(self._refresh_output_status)
+        self._status_timer.timeout.connect(self._refresh_show_transport)
         self._status_timer.start()
 
     # -- BaseTab ---------------------------------------------------------
@@ -1126,6 +1334,7 @@ class LiveTab(BaseTab):
         preset-relevant stage elements or the stage dimensions change."""
         self._rebuild_groups()
         self._rebuild_positions()
+        self._select_persisted_sync_device()
         self._sync_from_state()
 
     # -- CENTRE: select row, fade row, pools, programmer bar -------------
@@ -1139,6 +1348,7 @@ class LiveTab(BaseTab):
         layout.setSpacing(0)
 
         layout.addWidget(self._build_select_row())
+        layout.addWidget(self._build_show_row())
         layout.addWidget(self._build_fade_row())
         layout.addWidget(self._build_pools(), 1)
         layout.addWidget(self._build_programmer_bar())
@@ -1218,6 +1428,137 @@ class LiveTab(BaseTab):
         btn.clicked.connect(lambda _checked=False, m=mode: self.state.set_mode(m))
         return btn
 
+    def _build_show_row(self) -> QWidget:
+        """The show transport strip: pick a song, start/stop it, and
+        see where it is - the thing you busk OVER. Display + control
+        ride the shell-injected transport (set_show_transport); with
+        none injected the strip reads as disabled. The slot rules are
+        untouched: PLAY acquires the playback slot exactly like the
+        Shows tab's own Play (busk-on-top keeps working), STOP is the
+        operator's STOP (it also disarms an armed LTC chase)."""
+        row = QWidget()
+        row.setProperty("role", "section-caption")
+        row.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
+        hbox = QHBoxLayout(row)
+        hbox.setContentsMargins(16, 6, 16, 6)
+        hbox.setSpacing(6)
+
+        hbox.addWidget(MicroLabel("Show", point_size=8, tracking_em=0.12))
+        self._show_combo = QComboBox()
+        self._show_combo.setMinimumWidth(180)
+        self._show_combo.setProperty("role", "lane-chip")
+        self._show_combo.setToolTip(
+            "The song the busk rides over (setlist order, then extras)")
+        self._show_combo.activated.connect(self._on_show_song_activated)
+        hbox.addWidget(self._show_combo)
+
+        self._show_play_btn = QPushButton("PLAY")
+        self._show_play_btn.setCheckable(True)
+        self._show_play_btn.setProperty("role", "output-select")
+        self._show_play_btn.setFont(mono_font(8, QFont.Weight.DemiBold))
+        self._show_play_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._show_play_btn.setToolTip(
+            "Start / stop the selected show under the busk surface")
+        self._show_play_btn.clicked.connect(self._on_show_play_clicked)
+        hbox.addWidget(self._show_play_btn)
+
+        # Same LED-readout voice as the BPM: what is playing, where.
+        self._show_time = QLabel("--:-- / --:--")
+        self._show_time.setObjectName("TimeReadout")
+        self._show_time.setToolTip("Show position / total")
+        hbox.addWidget(self._show_time)
+
+        self._show_hint = MicroLabel(
+            "No show transport - open a project with songs",
+            point_size=7, tracking_em=0.08)
+        self._show_hint.setMinimumWidth(1)
+        hbox.addSpacing(6)
+        hbox.addWidget(self._show_hint)
+        hbox.addStretch(1)
+        self._refresh_show_transport()
+        return row
+
+    def set_show_transport(self, transport) -> None:
+        """Wire the Shows tab's transport adapter (gui.py injects it;
+        None reads as no transport). The tab polls it at glance rate -
+        display truth comes from the Shows tab, never local state."""
+        self._show_transport = transport
+        self._refresh_show_transport()
+
+    @staticmethod
+    def _format_show_time(seconds: float) -> str:
+        seconds = max(0, int(seconds))
+        return f"{seconds // 60:02d}:{seconds % 60:02d}"
+
+    def _on_show_song_activated(self, index: int) -> None:
+        transport = getattr(self, "_show_transport", None)
+        if transport is None:
+            return
+        name = self._show_combo.itemData(index)
+        if name:
+            transport.select(name)
+
+    def _on_show_play_clicked(self) -> None:
+        transport = getattr(self, "_show_transport", None)
+        if transport is None:
+            return
+        if transport.is_playing():
+            transport.stop()
+        else:
+            name = self._show_combo.currentData()
+            if name:
+                transport.select(name)
+            transport.play()
+        self._refresh_show_transport()
+
+    def _refresh_show_transport(self) -> None:
+        """Glance-rate poll (same 500 ms timer as the OUT chip): sync
+        the song list, follow the Shows tab's current song while the
+        combo is closed, and restyle PLAY/readout from wire truth."""
+        transport = getattr(self, "_show_transport", None)
+        combo = getattr(self, "_show_combo", None)
+        if combo is None:
+            return
+        if transport is None:
+            for widget in (combo, self._show_play_btn):
+                widget.setEnabled(False)
+            self._show_time.setText("--:-- / --:--")
+            self._show_hint.setVisible(True)
+            return
+
+        songs = transport.songs()
+        known = [(combo.itemData(i), combo.itemText(i))
+                 for i in range(combo.count())]
+        if songs != known:
+            combo.blockSignals(True)
+            combo.clear()
+            for name, label in songs:
+                combo.addItem(label, name)
+            combo.blockSignals(False)
+        current = transport.current()
+        if current and combo.currentData() != current \
+                and not combo.view().isVisible():
+            index = combo.findData(current)
+            if index >= 0:
+                combo.blockSignals(True)
+                combo.setCurrentIndex(index)
+                combo.blockSignals(False)
+
+        playing = transport.is_playing()
+        combo.setEnabled(bool(songs))
+        self._show_play_btn.setEnabled(bool(songs))
+        self._show_play_btn.setChecked(playing)
+        self._show_play_btn.setText("STOP" if playing else "PLAY")
+        self._show_hint.setVisible(not songs)
+        self._show_hint.setText("No songs in this project"
+                                if songs == [] else self._show_hint.text())
+        if songs:
+            self._show_time.setText(
+                f"{self._format_show_time(transport.position())} / "
+                f"{self._format_show_time(transport.duration())}")
+        else:
+            self._show_time.setText("--:-- / --:--")
+
     def _build_fade_row(self) -> QWidget:
         row = QWidget()
         row.setProperty("role", "section-caption")
@@ -1261,7 +1602,44 @@ class LiveTab(BaseTab):
             "clock, MTC, LTC - arrives with the sync engine and will "
             "slave the clock shown here")
         hbox.addWidget(self._sync_chip)
+        # Incoming SMPTE readout (2026-07-22): the received timecode,
+        # inline instead of tooltip-only - the operator glance line.
+        # Empty (hidden) while the sync is internal.
+        self._sync_tc_label = QLabel("")
+        self._sync_tc_label.setObjectName("TimeReadout")
+        self._sync_tc_label.setToolTip("Last received SMPTE timecode")
+        self._sync_tc_label.hide()
+        hbox.addWidget(self._sync_tc_label)
+        # Sync input DEVICE (2026-07-22, moved here from the Structure
+        # rail): the physical input is a VENUE concern - it changes
+        # with the rig, not with the show - so it lives on the busk
+        # surface (the Auto tab precedent). The choice still persists
+        # in setlist.sync_device (the project remembers its venue).
+        # Device enumeration is not free: populated on tab activation.
+        self._sync_device_combo = QComboBox()
+        self._sync_device_combo.setObjectName("SyncDeviceCombo")
+        self._sync_device_combo.setProperty("role", "lane-chip")
+        self._sync_device_combo.setFont(mono_font(8))
+        self._sync_device_combo.setMaximumWidth(180)
+        self._sync_device_combo.setToolTip(
+            "Audio input carrying the LTC/SMPTE signal")
+        self._sync_device_combo.currentIndexChanged.connect(
+            self._on_sync_device_selected)
+        hbox.addWidget(self._sync_device_combo)
+        # ARM CHASE from the busk surface (the same shell arm/disarm
+        # the Structure tab drives).
+        self._arm_chase_btn = QPushButton("ARM")
+        self._arm_chase_btn.setCheckable(True)
+        self._arm_chase_btn.setProperty("role", "output-select")
+        self._arm_chase_btn.setFont(mono_font(8, QFont.Weight.Medium))
+        self._arm_chase_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._arm_chase_btn.setToolTip(
+            "Follow incoming SMPTE timecode (songs with an SMPTE "
+            "trigger fire at their start time)")
+        self._arm_chase_btn.toggled.connect(self._on_arm_chase_toggled)
+        hbox.addWidget(self._arm_chase_btn)
         hbox.addSpacing(8)
+        self._seed_sync_device_combo()
         self._refresh_output_status()
 
         # Tempo cluster (right end): a BPM readout + TAP + RESET. This is
@@ -1382,8 +1760,9 @@ class LiveTab(BaseTab):
         """SYNC chip source (docs/ltc-plan.md phase 3). ``source`` is
         "int" (internal TAP, the default) or "ltc" with the chase's
         state ("locked" / "freewheel" / "no_signal") and the last
-        received timecode label for the tooltip. Display-only; the
-        shell drives this from the LTC service's signals."""
+        received timecode label - shown INLINE in the #TimeReadout
+        next to the chip (2026-07-22). Display-only; the shell drives
+        this from the LTC service's signals."""
         chip = self._sync_chip
         if source == "ltc":
             text = {"locked": "SYNC LTC",
@@ -1400,6 +1779,8 @@ class LiveTab(BaseTab):
                 tip += " · no signal"
             chip.setToolTip(tip)
             self._set_chip_state(chip, state == "locked")
+            self._sync_tc_label.setText(label or "--:--:--:--")
+            self._sync_tc_label.show()
         else:
             chip.setText("SYNC INT")
             chip.setToolTip(
@@ -1407,6 +1788,92 @@ class LiveTab(BaseTab):
                 "clock, MTC, LTC - arrives with the sync engine and "
                 "will slave the clock shown here")
             self._set_chip_state(chip, True)
+            self._sync_tc_label.clear()
+            self._sync_tc_label.hide()
+
+    def _on_arm_chase_toggled(self, checked: bool) -> None:
+        self.chase_arm_requested.emit(bool(checked))
+
+    def set_chase_armed(self, armed: bool) -> None:
+        """The shell reflects the ACTUAL chase state here (arming can
+        fail; disarm can come from the timeline's STOP or the
+        Structure tab's chip)."""
+        btn = self._arm_chase_btn
+        btn.blockSignals(True)
+        btn.setChecked(armed)
+        btn.setText("CHASING" if armed else "ARM")
+        btn.blockSignals(False)
+
+    def _seed_sync_device_combo(self) -> None:
+        """Cheap pre-enumeration state: Default input plus the
+        persisted device (so the project's choice reads correctly
+        before the device list is ever enumerated)."""
+        combo = self._sync_device_combo
+        combo.blockSignals(True)
+        combo.clear()
+        combo.addItem("Default input", "")
+        persisted = getattr(getattr(self.config, "setlist", None),
+                            "sync_device", "") or ""
+        if persisted:
+            combo.addItem(persisted, persisted)
+            combo.setCurrentIndex(1)
+        combo.blockSignals(False)
+
+    def refresh_sync_devices(self) -> None:
+        """Enumerate the audio inputs into the combo (once per
+        session; called on tab activation - enumeration is not free).
+        Keeps the persisted selection, appending it verbatim when the
+        enumeration no longer lists it (unplugged interface: the
+        choice must survive a venue where the box is not attached)."""
+        if getattr(self, "_sync_devices_loaded", False):
+            self._select_persisted_sync_device()
+            return
+        combo = self._sync_device_combo
+        combo.blockSignals(True)
+        combo.clear()
+        combo.addItem("Default input", "")
+        try:
+            from audio.device_manager import DeviceManager
+            for dev in DeviceManager().enumerate_input_devices():
+                combo.addItem(dev.display_name or dev.name, dev.name)
+            self._sync_devices_loaded = True
+        except Exception:
+            pass    # enumeration failed: default input only
+        combo.blockSignals(False)
+        self._select_persisted_sync_device()
+
+    def _select_persisted_sync_device(self) -> None:
+        combo = self._sync_device_combo
+        persisted = getattr(getattr(self.config, "setlist", None),
+                            "sync_device", "") or ""
+        combo.blockSignals(True)
+        index = combo.findData(persisted)
+        if index < 0 and persisted:
+            combo.addItem(persisted, persisted)
+            index = combo.count() - 1
+        combo.setCurrentIndex(max(0, index))
+        combo.blockSignals(False)
+
+    def _on_sync_device_selected(self, index: int) -> None:
+        value = self._sync_device_combo.itemData(index) or ""
+        setlist = getattr(self.config, "setlist", None)
+        if setlist is None or setlist.sync_device == value:
+            return
+        setlist.sync_device = value
+
+    def on_tab_activated(self) -> None:
+        """Shell hook (gui._on_tab_changed): the device list is
+        enumerated the first time the busk surface is actually shown,
+        and the POSITION pool re-reads the marks.
+
+        The pool used to refresh ONLY on project load, so a mark added
+        on the Stage tab was invisible here until you reloaded - which
+        broke the obvious pre-show workflow: drop a mark where you want
+        to check, come to LIVE, aim the movers at it (2026-08-08).
+        ``_rebuild_positions`` early-returns on an unchanged
+        fingerprint, so this costs nothing on a normal tab switch."""
+        self.refresh_sync_devices()
+        self._rebuild_positions()
 
     @staticmethod
     def _set_chip_state(chip: QLabel, on: bool) -> None:
@@ -1445,6 +1912,18 @@ class LiveTab(BaseTab):
         hbox.addWidget(self._effects_pool, 11)
         hbox.addWidget(self._scenes_pool, 11)
         self._restyle_pools_host()
+        # 720p floor (2026-07-18): the pool grids DEMAND ~1128x624 as
+        # their layout minimum, which propagates through the tab stack
+        # into the WINDOW minimum (1462x1020) - Windows enforces that,
+        # so the app could not fit a 1280x720 display at all. An
+        # explicit minimum overrides the layout hint per axis
+        # (qSmartMinSize): the pools compress below their preferred
+        # size instead of pinning the window, and the squeezed render
+        # is pinned by tests/visual/test_720p_layout.py goldens.
+        # 200 (was 220) since the riff pools scroll (2026-07-22): a
+        # lower floor stays usable, and the LIVE tab is the window
+        # height driver - Linux CI needs the headroom.
+        host.setMinimumSize(600, 200)
         return host
 
     def _restyle_pools_host(self) -> None:
@@ -1460,6 +1939,27 @@ class LiveTab(BaseTab):
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
         return pool, layout
+
+    @staticmethod
+    def _pool_scroller(grid_host: QWidget) -> QScrollArea:
+        """Wrap a pool grid in a vertical scroller (2026-07-22): a
+        long library made the fixed grid overflow its column - cells
+        painting over each other and the category headers. The scroll
+        area's minimum is a few rows, so the pools keep squeezing at
+        720p instead of demanding their content height."""
+        scroller = QScrollArea()
+        scroller.setWidgetResizable(True)
+        scroller.setFrameShape(QFrame.Shape.NoFrame)
+        scroller.setHorizontalScrollBarPolicy(
+            Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        scroller.setWidget(grid_host)
+        scroller.setMinimumHeight(60)
+        # The viewport must keep the pool's themed background - a bare
+        # QScrollArea paints the platform base color.
+        scroller.setStyleSheet(
+            "QScrollArea, QScrollArea > QWidget > QWidget "
+            "{ background: transparent; }")
+        return scroller
 
     def _pool_header(self, title: str, tag: Optional[str] = None,
                      tag_accent: bool = False) -> QWidget:
@@ -1521,6 +2021,27 @@ class LiveTab(BaseTab):
         # the slack so the real columns stay at the swatch's fixed width.
         grid.setColumnStretch(columns, 1)
         layout.addWidget(grid_host)
+
+        # COLOUR FX subsection: procedural colour looks (Rainbow) that
+        # override the swatch on the selected groups. Same selection gate
+        # as the swatches (staging targets the selection).
+        layout.addWidget(self._pool_header("Colour FX", "Applies to: "
+                                           "selection"))
+        fx_host = QWidget()
+        fx_grid = QGridLayout(fx_host)
+        fx_grid.setContentsMargins(14, 0, 14, 12)
+        fx_grid.setSpacing(6)
+        self._colour_fx_cells: Dict[str, _LibraryCell] = {}
+        for i, (fx_id, label) in enumerate(COLOUR_FX):
+            cell = _LibraryCell(fx_id, label)
+            cell.setToolTip(
+                f"{label} · cycles the colour on the selected groups · "
+                "overrides the swatch · touch again to release")
+            cell.clicked.connect(self._on_colour_fx_touched)
+            self._colour_fx_cells[fx_id] = cell
+            fx_grid.addWidget(cell, i // columns, i % columns)
+        fx_grid.setColumnStretch(columns, 1)
+        layout.addWidget(fx_host)
         layout.addStretch(1)
         return pool
 
@@ -1635,12 +2156,10 @@ class LiveTab(BaseTab):
         return pool
 
     def _on_shape_touched(self, shape_id: str) -> None:
-        """Fire/toggle a movement shape on the selected mover groups.
-        Fire-only (no QUEUE latch - shapes are not queueable records);
-        selection-scoped like effects, so a touch with no mover
-        selection keeps the state and warns."""
-        self.state.set_shape(shape_id)
-        if self.state.shape == shape_id and not self._selection_has_movers():
+        """Apply/release a movement shape on the selected groups
+        (per-group, the effects pattern; the binder only drives the
+        mover groups among them). Fire-only - no QUEUE latch."""
+        if not self.state.stage_shape(shape_id):
             self._flash_programmer_warning(
                 "NO MOVER GROUP SELECTED · SHAPES RUN ON SELECTED MOVERS")
         else:
@@ -1742,10 +2261,10 @@ class LiveTab(BaseTab):
         grid = QGridLayout(grid_host)
         grid.setContentsMargins(14, 0, 14, 8)
         grid.setSpacing(6)
+        grid.setRowStretch(999, 1)      # content packs to the top
         self._intensity_grid = grid
         self._intensity_grid_host = grid_host
-        layout.addWidget(grid_host)
-        layout.addStretch(1)
+        layout.addWidget(self._pool_scroller(grid_host), 1)
         self._populate_intensity_pool()
         return pool
 
@@ -1763,8 +2282,9 @@ class LiveTab(BaseTab):
         columns = 2
         for i, riff in enumerate(riffs):
             key = f"{riff.category}/{riff.name}"
-            cell = _LibraryCell(key, riff.name)
-            cell.setToolTip(f"{riff.name} · {riff.description} · "
+            cell = _LibraryCell(key, _display_name(riff.name))
+            cell.setToolTip(f"{_display_name(riff.name)} · "
+                            f"{riff.description} · "
                             "dimmer-only, loops on the selected groups "
                             "· touch again to release")
             cell.clicked.connect(self._on_intensity_touched)
@@ -1775,10 +2295,10 @@ class LiveTab(BaseTab):
             self._intensity_grid.setColumnStretch(col, 1)
 
     def _on_intensity_touched(self, key: str) -> None:
-        """Fire/toggle an intensity FX (selection-scoped, own engine
-        slot - runs under a colour riff). Fire-only like shapes."""
-        self.state.set_intensity(key)
-        if self.state.intensity == key and not self.state.selected:
+        """Apply/release an intensity FX on the selected groups
+        (per-group, the effects pattern - each group's dimmer pattern
+        runs under its colour riff). Fire-only like shapes."""
+        if not self.state.stage_intensity(key):
             self._flash_programmer_warning(
                 "NO GROUP SELECTED · INTENSITY FX RUN ON SELECTED GROUPS")
         else:
@@ -1787,9 +2307,9 @@ class LiveTab(BaseTab):
     # -- library pools (effects / scenes) --------------------------------
 
     def _build_effects_pool(self) -> QWidget:
-        """EFFECTS pool: riffs from the shared RiffLibrary. Selection-scoped
-        - the whole pool greys out when nothing is selected (an effect
-        applies to the current SELECT state)."""
+        """EFFECTS pool: COMPOSITE looks (2026-07-24). Each cell fires
+        a coordinated intensity FX + movement shape on the selected
+        groups; the pool greys out with no selection."""
         pool, layout = self._pool_shell()
         layout.addWidget(self._pool_header(
             "Effects", "Applies to: selection", tag_accent=True))
@@ -1797,9 +2317,9 @@ class LiveTab(BaseTab):
         grid = QGridLayout(grid_host)
         grid.setContentsMargins(14, 0, 14, 10)
         grid.setSpacing(6)
+        grid.setRowStretch(999, 1)      # content packs to the top
         self._effects_grid = grid
-        layout.addWidget(grid_host)
-        layout.addStretch(1)
+        layout.addWidget(self._pool_scroller(grid_host), 1)
         self._populate_effects_pool()
         return pool
 
@@ -1813,9 +2333,9 @@ class LiveTab(BaseTab):
         grid = QGridLayout(grid_host)
         grid.setContentsMargins(14, 0, 14, 10)
         grid.setSpacing(6)
+        grid.setRowStretch(999, 1)      # content packs to the top
         self._scenes_grid = grid
-        layout.addWidget(grid_host)
-        layout.addStretch(1)
+        layout.addWidget(self._pool_scroller(grid_host), 1)
         self._populate_scenes_pool()
         return pool
 
@@ -1825,6 +2345,13 @@ class LiveTab(BaseTab):
             item = grid.takeAt(0)
             widget = item.widget()
             if widget is not None:
+                # Detach immediately: deleteLater alone leaves the
+                # widget parented and PAINTING until the event loop
+                # runs - a repopulate could show the old empty-state
+                # marker ghosting behind the new cells (exposed by the
+                # category headers, same lesson as _clear_light_lanes).
+                widget.hide()
+                widget.setParent(None)
                 widget.deleteLater()
 
     def _empty_riff_library(self):
@@ -1859,24 +2386,34 @@ class LiveTab(BaseTab):
         return self._scene_library
 
     def _populate_effects_pool(self) -> None:
+        """Rebuild the EFFECTS pool: the COMPOSITE looks
+        (2026-07-24), split into Loops and Hits sections (the POSITION
+        pool's subsection precedent). Cells are keyed by composite id;
+        touching one stages its intensity + shape pair."""
         self._clear_grid(self._effects_grid)
         self._effect_cells = {}
-        library = self._resolve_effect_library()
-        riffs = [r for r in (library.get_all_riffs()
-                             if library is not None else [])
-                 if r.category != INTENSITY_CATEGORY]
-        if not riffs:
-            self._effects_grid.addWidget(
-                self._marker("No effects yet · save riffs from the timeline"),
-                0, 0, 1, 2)
-            return
         columns = 2
-        for i, riff in enumerate(riffs):
-            key = f"{riff.category}/{riff.name}"
-            cell = _LibraryCell(key, riff.name)
-            cell.clicked.connect(self._on_effect_touched)
-            self._effect_cells[key] = cell
-            self._effects_grid.addWidget(cell, i // columns, i % columns)
+        grid_row = 0
+        for category, label in COMPOSITE_CATEGORIES:
+            entries = [c for c in COMPOSITE_EFFECTS if c[2] == category]
+            if not entries:
+                continue
+            header = MicroLabel(label, point_size=7, tracking_em=0.12)
+            self._effects_grid.addWidget(header, grid_row, 0, 1, columns)
+            grid_row += 1
+            for i, (cid, clabel, _cat, ikey, shape) in enumerate(entries):
+                cell = _LibraryCell(cid, clabel)
+                shape_label = dict(MOVEMENT_SHAPES).get(shape, shape)
+                cell.setToolTip(
+                    f"{clabel} · {self._key_name(ikey)} + "
+                    f"{shape_label} · sets the intensity FX and movement "
+                    "shape on the selected groups · touch again to release")
+                cell.clicked.connect(self._on_composite_touched)
+                self._effect_cells[cid] = cell
+                self._effects_grid.addWidget(cell,
+                                             grid_row + i // columns,
+                                             i % columns)
+            grid_row += (len(entries) + columns - 1) // columns
         for col in range(columns):
             self._effects_grid.setColumnStretch(col, 1)
 
@@ -1894,7 +2431,8 @@ class LiveTab(BaseTab):
         for i, scene in enumerate(scenes):
             key = f"{scene.category}/{scene.name}"
             chip = scene.color if scene.color else None
-            cell = _LibraryCell(key, scene.name, chip_color=chip)
+            cell = _LibraryCell(key, _display_name(scene.name),
+                                chip_color=chip)
             cell.clicked.connect(self._on_scene_touched)
             self._scene_cells[key] = cell
             self._scenes_grid.addWidget(cell, i // columns, i % columns)
@@ -1911,8 +2449,9 @@ class LiveTab(BaseTab):
 
     def riff_for_key(self, key: Optional[str]):
         """The Riff behind a "category/name" pool key, or None. The
-        live engine binder (utils/artnet/live_engine.py) resolves the
-        staged LiveState.effect through this."""
+        intensity binder (utils/artnet/live_engine.py) resolves the
+        per-group LiveState.intensities keys through this (composite
+        effects write those keys)."""
         if not key:
             return None
         return self._resolve_effect_library().riffs.get(key)
@@ -1945,20 +2484,28 @@ class LiveTab(BaseTab):
         else:
             self._clear_programmer_warning()
 
-    def _on_effect_touched(self, key: str) -> None:
-        """Latched QUEUE stages the effect in next_up (cell stays
-        inactive); unlatched fires it live via the toggle. Effects are
-        selection-scoped (one engine lane per selected group): staging
-        one with nothing selected keeps the state but plays silence, so
-        the programmer bar says so - it starts the moment groups are
-        selected (the binder restages on selection change)."""
-        if self._queue_latch_btn.isChecked():
-            self.state.enqueue("effect", key, self._key_name(key))
-            return
-        self.state.set_effect(key)
-        if self.state.effect == key and not self.state.selected:
+    def _on_colour_fx_touched(self, fx_id: str) -> None:
+        # Colour FX are per-group like the swatches: staging targets the
+        # selected groups and overrides their swatch with a cycling look.
+        if not self.state.stage_colour_fx(fx_id):
             self._flash_programmer_warning(
-                "NO GROUP SELECTED · THE EFFECT PLAYS ON SELECTED GROUPS")
+                "NO GROUP SELECTED · PICK GROUPS, THEN TOUCH A COLOUR FX")
+        else:
+            self._clear_programmer_warning()
+
+    def _on_composite_touched(self, composite_id: str) -> None:
+        """Latched QUEUE preloads the composite in next_up (cell stays
+        inactive); unlatched fires it on the SELECTED groups - setting
+        their intensity FX + movement shape (colour stays with the
+        swatch)."""
+        entry = COMPOSITE_BY_ID.get(composite_id)
+        label = entry[1] if entry else composite_id
+        if self._queue_latch_btn.isChecked():
+            self.state.enqueue("composite", composite_id, label)
+            return
+        if not self.state.stage_composite(composite_id):
+            self._flash_programmer_warning(
+                "NO GROUP SELECTED · PICK GROUPS, THEN TOUCH AN EFFECT")
         else:
             self._clear_programmer_warning()
 
@@ -2368,24 +2915,50 @@ class LiveTab(BaseTab):
 
     # -- state -> widgets (single source of truth) -----------------------
 
+    def _tile_readout(self, group: str) -> str:
+        """A group's running-effect tile line: the COMPOSITE name when
+        its (intensity, shape) matches one, else the raw intensity FX
+        (+ shape) it holds. Empty when the group runs neither."""
+        state = self.state
+        intensity = state.intensities.get(group)
+        shape = state.shapes.get(group)
+        composite = next(
+            (c[1] for c in COMPOSITE_EFFECTS
+             if c[3] == intensity and c[4] == shape), None)
+        if composite:
+            return composite
+        parts = []
+        if intensity:
+            parts.append(_display_name(intensity.split("/")[-1]))
+        if shape:
+            parts.append(dict(MOVEMENT_SHAPES).get(shape, shape))
+        return " · ".join(parts)
+
     def _sync_from_state(self) -> None:
         state = self.state
         for name, tile in self._select_tiles.items():
             tile.set_selected(name in state.selected)
+            tile.set_running_effect(self._tile_readout(name))
 
         active_ids = state.active_colour_ids()
         for colour_id, swatch in self._colour_swatches.items():
             swatch.set_active(colour_id in active_ids)
+        active_fx = state.active_colour_fx_ids()
+        for fx_id, cell in self._colour_fx_cells.items():
+            cell.set_active(fx_id in active_fx)
 
-        # EFFECTS and INTENSITY FX: selection-scoped. Grey the pools
-        # with no selection, then outline the active key. SCENES:
-        # whole-rig, always enabled.
+        # EFFECTS and INTENSITY FX: per-group. The pools grey with no
+        # selection (STAGING targets the selection; running keys keep
+        # running) and outline the keys held by any selected group.
+        # SCENES: whole-rig, always enabled.
         self._effects_pool.setEnabled(bool(state.selected))
-        for key, cell in self._effect_cells.items():
-            cell.set_active(key == state.effect)
+        active_composites = state.active_composite_ids()
+        for cid, cell in self._effect_cells.items():
+            cell.set_active(cid in active_composites)
         self._intensity_pool.setEnabled(bool(state.selected))
+        active_intensities = state.active_intensity_keys()
         for key, cell in self._intensity_cells.items():
-            cell.set_active(key == state.intensity)
+            cell.set_active(key in active_intensities)
         for key, cell in self._scene_cells.items():
             cell.set_active(key == state.scene)
 
@@ -2397,12 +2970,12 @@ class LiveTab(BaseTab):
         for name, cell in self._position_cells.items():
             cell.set_active(name in active_positions)
 
-        # MOVEMENT SHAPES: same movers-only gate; outline the staged
-        # rudiment (one active shape, like the effect key) and check
-        # the matching orbit-size chip.
+        # MOVEMENT SHAPES: same movers-only gate; per-group like
+        # effects, so outline the selection's held shapes.
         self._shapes_section.setEnabled(self._selection_has_movers())
+        active_shapes = state.active_shape_keys()
         for shape_id, cell in self._movement_cells.items():
-            cell.set_active(shape_id == state.shape)
+            cell.set_active(shape_id in active_shapes)
         for btn, meters in self._shape_size_buttons:
             self._sync_toggle(btn, abs(state.shape_size - meters) < 1e-9)
         self._stagger_slider.set_value(state.shape_stagger)
@@ -2485,9 +3058,16 @@ class LiveTab(BaseTab):
             "Show mode · pinned · no engine yet")
         return row
 
+    #: Running/queued row kind -> tag caption.
+    _RECORD_TAGS = {"intensity": "DIM", "shape": "SHAPE",
+                    "scene": "SCENE", "composite": "FX"}
+
     def _make_running_row(self, index: int, record: dict) -> QWidget:
         row, hbox = self._row_shell()
-        tag = "FX" if record["kind"] == "effect" else "SCENE"
+        tag = self._RECORD_TAGS.get(record["kind"], "FX")
+        groups = record.get("groups") or ()
+        if groups:
+            tag += " · " + " + ".join(groups)
         self._row_text(hbox, record["label"],
                        f"{tag} · PAUSED" if record["paused"] else tag)
         pause = self._row_button(
@@ -2509,7 +3089,7 @@ class LiveTab(BaseTab):
 
     def _make_queued_row(self, index: int, record: dict) -> QWidget:
         row, hbox = self._row_shell()
-        tag = "FX" if record["kind"] == "effect" else "SCENE"
+        tag = self._RECORD_TAGS.get(record["kind"], "FX")
         self._row_text(hbox, record["label"], tag)
         remove = self._row_button("X", "output-select",
                                   "Remove this item from the queue")
@@ -2573,16 +3153,23 @@ class LiveTab(BaseTab):
             text = f"PROGRAMMER: {groups_txt} (HELD) · RELEASE TO SHOW"
         else:
             text = "PROGRAMMER: EMPTY · SELECT A GROUP · TOUCH A PALETTE"
-        if state.effect:
-            text += f" · FX: {self._key_name(state.effect).upper()}"
+        # Composites decompose into DIM (intensity) + SHAPE, both shown
+        # below - no separate FX line.
         if state.scene:
             text += f" · SCENE: {self._key_name(state.scene).upper()}"
-        if state.shape:
-            shape_label = dict(MOVEMENT_SHAPES).get(state.shape,
-                                                    state.shape)
-            text += f" · SHAPE: {shape_label.upper()}"
-        if state.intensity:
-            text += f" · DIM: {self._key_name(state.intensity).upper()}"
+        shape_ids = state.active_shape_keys() if state.selected \
+            else set(state.shapes.values())
+        if shape_ids:
+            shape_labels = sorted(
+                dict(MOVEMENT_SHAPES).get(s, s).upper()
+                for s in shape_ids)
+            text += f" · SHAPE: {' · '.join(shape_labels)}"
+        intensity_keys = state.active_intensity_keys() if state.selected \
+            else set(state.intensities.values())
+        if intensity_keys:
+            dim_labels = sorted(self._key_name(k).upper()
+                                for k in intensity_keys)
+            text += f" · DIM: {' · '.join(dim_labels)}"
         # POS shows the selection's applied targets; with no selection,
         # everything held (mirrors the colour HELD branch). Display
         # labels ("CROSS", "DS CENTRE"), not raw namespaced ids; fall
@@ -2599,10 +3186,11 @@ class LiveTab(BaseTab):
 
     @staticmethod
     def _key_name(key: Optional[str]) -> str:
-        """The display name from a "category/name" library key."""
+        """The display name from a "category/name" library key
+        (underscores read as spaces, see _display_name)."""
         if not key:
             return "-"
-        return key.split("/")[-1]
+        return _display_name(key.split("/")[-1])
 
     @staticmethod
     def _colour_label(colour_id: Optional[str]) -> str:
@@ -2628,7 +3216,8 @@ class LiveTab(BaseTab):
                 cell._restyle()
             for cell in list(self._effect_cells.values()) + \
                     list(self._scene_cells.values()) + \
-                    list(self._position_cells.values()):
+                    list(self._position_cells.values()) + \
+                    list(self._colour_fx_cells.values()):
                 cell._restyle()
             for fader in self._submaster_faders.values():
                 fader.update()

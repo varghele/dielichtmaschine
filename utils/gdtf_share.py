@@ -35,6 +35,13 @@ class GDTFShareError(Exception):
     """Any failure talking to GDTF Share, with a user-presentable message."""
 
 
+class GDTFShareCancelled(GDTFShareError):
+    """The caller's cancel event was set mid-operation."""
+
+
+DOWNLOAD_CHUNK = 64 * 1024
+
+
 def default_catalog_cache_path() -> str:
     from utils.app_identity import user_data_dir
     return os.path.join(user_data_dir(), "gdtf_share_catalog.json")
@@ -73,15 +80,23 @@ class GDTFShareClient:
     overrides where the catalog JSON lands (tests use a tmp dir).
     """
 
-    def __init__(self, session=None, cache_path=None, clock=time.time):
+    def __init__(self, session=None, cache_path=None, clock=time.time,
+                 cancel=None):
         if session is None:
             import requests
             session = requests.Session()
         self._session = session
         self._cache_path = cache_path or default_catalog_cache_path()
         self._clock = clock
+        # Anything with is_set() (a threading.Event): a download stops
+        # between chunks once it is set and leaves no file behind.
+        self._cancel = cancel
         self.logged_in = False
         self._catalog = None
+
+    def _check_cancel(self):
+        if self._cancel is not None and self._cancel.is_set():
+            raise GDTFShareCancelled("Cancelled.")
 
     # -- API calls --------------------------------------------------------
 
@@ -146,24 +161,41 @@ class GDTFShareClient:
         return matches[:limit]
 
     def download(self, entry: dict, dest_dir: str) -> str:
-        """Fetch one revision into ``dest_dir``; returns the file path."""
+        """Fetch one revision into ``dest_dir``; returns the file path.
+
+        Streamed in chunks (the cancel event is checked between them)
+        into a ``.part`` file that only an atomic rename turns into the
+        ``.gdtf``: the library scans that directory, so a cancelled,
+        failed or killed download must never leave a torn archive
+        there."""
         rid = entry["rid"]
+        self._check_cancel()
         try:
             response = self._session.get(
                 f"{BASE_URL}/downloadFile.php", params={"rid": rid},
-                timeout=180)
+                timeout=180, stream=True)
             response.raise_for_status()
+            iter_content = getattr(response, "iter_content", None)
+            if iter_content is None:
+                content = response.content
+            else:
+                chunks = []
+                for chunk in iter_content(DOWNLOAD_CHUNK):
+                    self._check_cancel()
+                    chunks.append(chunk)
+                content = b"".join(chunks)
+        except GDTFShareError:
+            raise
         except Exception as exc:
             raise GDTFShareError(f"Download of rid {rid} failed: {exc}") from exc
-        content = response.content
         if content[:2] != b"PK":  # a .gdtf is a zip archive
             raise GDTFShareError(
                 f"GDTF Share did not return a .gdtf archive for rid {rid} "
                 "(is the session still logged in?).")
+        self._check_cancel()
         os.makedirs(dest_dir, exist_ok=True)
         out_path = os.path.join(dest_dir, entry_filename(entry))
-        with open(out_path, "wb") as f:
-            f.write(content)
+        _write_atomic(out_path, content)
         return out_path
 
     # -- internals --------------------------------------------------------
@@ -203,6 +235,23 @@ class GDTFShareClient:
                 json.dump(entries, f)
         except OSError:
             pass  # a cacheless catalog still works this session
+
+
+def _write_atomic(path: str, content: bytes) -> None:
+    """``content`` to ``path`` via ``path.part`` + rename. The library
+    only picks up ``.gdtf``/``.qxf`` names, so a leftover ``.part``
+    from a killed process is inert."""
+    part = path + ".part"
+    try:
+        with open(part, "wb") as f:
+            f.write(content)
+        os.replace(part, path)
+    except BaseException:
+        try:
+            os.remove(part)
+        except OSError:
+            pass
+        raise
 
 
 # -- credential store ---------------------------------------------------------
@@ -267,3 +316,181 @@ def clear_password(user: str) -> None:
         keyring.delete_password(KEYRING_SERVICE, user)
     except Exception:
         pass
+
+
+# ---------------------------------------------------------------------------
+# Auto-pull (2026-07-16): fetch GDTF definitions for the fixtures a
+# project actually uses, so the visualizer renders native models
+# without a manual browser trip. gui.py runs pull_missing_gdtf on a
+# worker thread after a project load, gated on stored credentials and
+# the gdtf_share/auto_pull setting; every failure path is quiet - a
+# venue laptop without internet must behave exactly as before.
+# ---------------------------------------------------------------------------
+
+AUTO_PULL_KEY = "gdtf_share/auto_pull"
+
+
+def auto_pull_enabled() -> bool:
+    from utils.app_settings import app_settings
+    return app_settings().value(AUTO_PULL_KEY, True, type=bool)
+
+
+def set_auto_pull_enabled(enabled: bool) -> None:
+    from utils.app_settings import app_settings
+    settings = app_settings()
+    settings.setValue(AUTO_PULL_KEY, bool(enabled))
+    settings.sync()
+
+
+def _norm_identity(text: str) -> str:
+    return " ".join((text or "").lower().replace("_", " ").split())
+
+
+def missing_gdtf_identities(config) -> list:
+    """(manufacturer, model) pairs used by the config whose resolved
+    definition carries no GDTF geometry (i.e. would render as a
+    procedural chassis)."""
+    from utils.fixture_library import get_definition
+    missing = []
+    for manufacturer, model in sorted({(f.manufacturer, f.model)
+                                       for f in config.fixtures}):
+        if not manufacturer or not model:
+            continue
+        defn = get_definition(manufacturer, model)
+        if defn is None or defn.gdtf is None:
+            missing.append((manufacturer, model))
+    return missing
+
+
+def autopull_candidates(catalog: list, identities: list) -> dict:
+    """{identity: best catalog entry} for entries whose manufacturer +
+    fixture name match an identity exactly (case / underscore / extra
+    whitespace insensitive - anything looser risks shadowing a fixture
+    with a DIFFERENT product, which would silently change its channel
+    map)."""
+    wanted = {(_norm_identity(m), _norm_identity(mo)): (m, mo)
+              for m, mo in identities}
+    hits = {}
+    for entry in catalog:
+        key = (_norm_identity(entry.get("manufacturer")),
+               _norm_identity(entry.get("fixture")))
+        identity = wanted.get(key)
+        if identity is not None:
+            hits.setdefault(identity, []).append(entry)
+    return {identity: sorted(entries, key=rank_key, reverse=True)[0]
+            for identity, entries in hits.items()}
+
+
+def _footprints_for_identity(config, manufacturer: str, model: str) -> set:
+    """The channel footprints the config's fixtures of this identity
+    are patched with (from their stored available_modes)."""
+    footprints = set()
+    for fixture in config.fixtures:
+        if fixture.manufacturer != manufacturer or fixture.model != model:
+            continue
+        for mode in fixture.available_modes or []:
+            if mode.name == fixture.current_mode:
+                footprints.add(int(mode.channels))
+    return footprints
+
+
+def autopull_snapshot(config):
+    """The part of ``config`` that pull_missing_gdtf reads (each
+    fixture's identity and patched mode footprint), copied for the
+    auto-pull worker thread. The pull runs for seconds over the
+    network while the user keeps editing the live project; walking the
+    live fixture list from that thread could skip, double or crash on a
+    fixture added, removed or re-moded mid-pull."""
+    from types import SimpleNamespace
+    return SimpleNamespace(fixtures=[
+        SimpleNamespace(
+            manufacturer=f.manufacturer,
+            model=f.model,
+            current_mode=f.current_mode,
+            available_modes=[SimpleNamespace(name=m.name, channels=m.channels)
+                             for m in (f.available_modes or [])],
+        )
+        for f in list(config.fixtures)
+    ])
+
+
+def pull_missing_gdtf(config, dest_dir: str, client=None,
+                      cancel=None) -> list:
+    """Download exact-identity GDTFs for the config's non-GDTF
+    fixtures. Returns the file paths KEPT.
+
+    Safety gates, in order: stored credentials must exist; the
+    downloaded file's INTERNAL identity must match (that is what the
+    library keys on - a catalog name match alone does not shadow);
+    and the GDTF must offer a mode matching every affected fixture's
+    patched channel footprint (a shadow swaps the whole definition,
+    so a footprint mismatch would silently re-map the wire). Downloads
+    land in a private staging directory and only a file that passed
+    every gate is moved into ``dest_dir``, so a pull that is killed or
+    cancelled mid-way never leaves an unchecked file where the library
+    would load it. All network/parse failures return what was kept so
+    far, quietly.
+
+    ``cancel`` (a threading.Event) stops the pull between steps and a
+    download between chunks; nothing is moved into ``dest_dir`` once it
+    is set."""
+    import shutil
+    import tempfile
+
+    def cancelled():
+        return cancel is not None and cancel.is_set()
+
+    identities = missing_gdtf_identities(config)
+    if not identities or cancelled():
+        return []
+    user = stored_username()
+    password = stored_password(user)
+    if not user or not password:
+        return []
+
+    kept = []
+    try:
+        if client is None:
+            client = GDTFShareClient(cancel=cancel)
+        client.login(user, password)
+        if cancelled():
+            return []
+        candidates = autopull_candidates(client.catalog(), identities)
+    except Exception:
+        return []
+
+    from utils.gdtf_loader import parse_gdtf_file
+    staging = tempfile.mkdtemp(prefix="lm-gdtf-pull-")
+    try:
+        for (manufacturer, model), entry in sorted(candidates.items()):
+            if cancelled():
+                break
+            try:
+                staged = client.download(entry, staging)
+                defn = parse_gdtf_file(staged)
+            except Exception:
+                continue
+            internal = (_norm_identity(defn.manufacturer),
+                        _norm_identity(defn.model))
+            if internal != (_norm_identity(manufacturer),
+                            _norm_identity(model)):
+                continue
+            gdtf_footprints = {len(m.channels) for m in defn.modes}
+            needed = _footprints_for_identity(config, manufacturer, model)
+            if needed and not needed <= gdtf_footprints:
+                continue
+            if defn.gdtf is None:
+                continue              # no geometry: nothing gained
+            if cancelled():
+                break
+            try:
+                os.makedirs(dest_dir, exist_ok=True)
+                path = os.path.join(dest_dir, os.path.basename(staged))
+                with open(staged, "rb") as f:
+                    _write_atomic(path, f.read())
+            except OSError:
+                continue
+            kept.append(path)
+    finally:
+        shutil.rmtree(staging, ignore_errors=True)
+    return kept

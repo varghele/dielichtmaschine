@@ -111,6 +111,11 @@ class AutoShowEngine:
 
         # Callbacks for UI updates
         self._on_riffs_updated: Optional[Callable[[Dict[str, Tuple[str, str]]], None]] = None
+        # Riff selection queued for the UI callback. The selection runs
+        # under _lock; the callback fires only after the lock is released
+        # (_flush_riffs_updated), so a callback that reads an engine
+        # property cannot deadlock on the non-reentrant lock.
+        self._pending_riffs: Optional[Dict[str, Tuple[str, str]]] = None
 
     # ── Public setters (called from Qt main thread) ──
 
@@ -223,6 +228,7 @@ class AutoShowEngine:
             self._running = True
             self._engine_time = time.monotonic()
             self._start_new_cycle()
+        self._flush_riffs_updated()
 
     def stop(self):
         """Stop the engine and clear all blocks."""
@@ -236,6 +242,12 @@ class AutoShowEngine:
         Args:
             current_time: monotonic time
         """
+        try:
+            self._tick_locked(current_time)
+        finally:
+            self._flush_riffs_updated()
+
+    def _tick_locked(self, current_time: float):
         with self._lock:
             if not self._running:
                 return
@@ -426,12 +438,25 @@ class AutoShowEngine:
             self._cycle.groove_rudiment = first[0]
             self._cycle.fill_rudiment = first[1]
 
-        # Notify UI with full per-group dict
-        if self._on_riffs_updated:
-            try:
-                self._on_riffs_updated(dict(self._per_group_rudiments))
-            except Exception:
-                pass
+        # Queue the UI notification; the public entry points deliver it
+        # once _lock is released (_flush_riffs_updated).
+        self._pending_riffs = dict(self._per_group_rudiments)
+
+    def _flush_riffs_updated(self):
+        """Deliver a queued riff selection to the UI callback, OUTSIDE
+        the engine lock. Called by start() and tick() after they release
+        it."""
+        if self._pending_riffs is None:
+            return   # the common tick: nothing selected, no lock taken
+        with self._lock:
+            pending, self._pending_riffs = self._pending_riffs, None
+        callback = self._on_riffs_updated
+        if pending is None or callback is None:
+            return
+        try:
+            callback(pending)
+        except Exception:
+            pass
 
     def _update_auto_color(self, profile: SectionAnalysis):
         """Generate color from spectral centroid."""

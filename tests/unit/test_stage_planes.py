@@ -138,20 +138,21 @@ class TestEnginePendingPlane:
 
     def test_set_before_init_is_buffered(self, engine):
         engine.set_highlighted_plane("Back", rig_height=5.5)
-        assert engine._pending_plane_highlight == ("Back", 5.5)
+        assert engine._last_plane_highlight == ("Back", 5.5)
 
     def test_flush_applies_buffered_highlight(self, engine):
         engine.set_highlighted_plane("Back", rig_height=5.5)
         engine.stage_planes = MagicMock()
-        engine._flush_pending_state()
+        engine._replay_state()
         engine.stage_planes.set_rig_height.assert_called_once_with(5.5)
         engine.stage_planes.set_highlight.assert_called_once_with("Back")
-        assert engine._pending_plane_highlight is None
+        # Kept for the next context recreation.
+        assert engine._last_plane_highlight == ("Back", 5.5)
 
     def test_post_init_goes_straight_through(self, engine):
         engine.stage_planes = MagicMock()
         engine.set_highlighted_plane("Floor", rig_height=3.0)
-        assert engine._pending_plane_highlight is None
+        assert engine._last_plane_highlight == ("Floor", 3.0)
         engine.stage_planes.set_highlight.assert_called_once_with("Floor")
 
     def test_stage_size_forwarded_to_planes(self, engine):

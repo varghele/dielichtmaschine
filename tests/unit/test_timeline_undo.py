@@ -189,6 +189,12 @@ class TestEnvelopeDragPush:
             self.resizing_left = False
             self.resizing_right = False
             self.block = block
+            # The drag finalize flips morphed provenance to hand_edited
+            # (morph design doc 5.3); borrow the real hook so the stub
+            # stays complete.
+            from timeline_ui.light_block_widget import LightBlockWidget
+            self._flip_morph_provenance = (
+                LightBlockWidget._flip_morph_provenance.__get__(self))
 
             class _Lane:
                 # A real LightLaneWidget carries light_block_widgets;
@@ -234,16 +240,49 @@ class TestEnvelopeDragPush:
         assert stack.count() == 0
         assert stub.block_edited.count == 0
 
-    def test_resize_pushes_resize_command(self, qapp):
-        stack = QUndoStack(qapp)
-        block = _block(4.0, 12.0)     # end dragged from 8 to 12
+    def _edge_stub(self, stack, block):
+        from timeline_ui.light_block_widget import LightBlockWidget
+        from utils.envelope_edit import EnvelopeState
         stub = self._Stub(stack, block)
         stub.dragging = False
         stub.resizing_right = True
+        stub._envelope_drag_state = EnvelopeState.capture(block)
+        stub._envelope_drag_stretch = False
+        stub._mark_hand_edit = LightBlockWidget._mark_hand_edit.__get__(stub)
+        stub._push_envelope_edge_undo = (
+            LightBlockWidget._push_envelope_edge_undo.__get__(stub))
+        return stub
+
+    def test_trim_pushes_one_command_that_restores_dropped_blocks(self, qapp):
+        from utils import envelope_edit
+        stack = QUndoStack(qapp)
+        block = _block(4.0, 8.0)
+        tail = DimmerBlock(start_time=8.0, end_time=10.0)
+        block.dimmer_blocks.append(tail)
+        block.update_envelope_bounds()
+        stub = self._edge_stub(stack, block)
+        envelope_edit.apply(block, stub._envelope_drag_state, "right", 6.0,
+                            stretch=False)
         self._push(stub)
         assert stack.count() == 1
+        assert stack.undoText() == "Trim Block"
+        assert stub.block_edited.count == 1
+        assert block.modified          # sublane content changed
         stack.undo()
-        assert block.end_time == 8.0
+        assert block.dimmer_blocks[1] is tail
+        assert [(d.start_time, d.end_time) for d in block.dimmer_blocks] == \
+            [(4.0, 8.0), (8.0, 10.0)]
+        assert (block.start_time, block.end_time) == (4.0, 10.0)
+        stack.redo()
+        assert [(d.start_time, d.end_time) for d in block.dimmer_blocks] == \
+            [(4.0, 6.0)]
+
+    def test_edge_drag_that_changed_nothing_pushes_nothing(self, qapp):
+        stack = QUndoStack(qapp)
+        stub = self._edge_stub(stack, _block(4.0, 8.0))
+        self._push(stub)
+        assert stack.count() == 0
+        assert stub.block_edited.count == 0
 
     def test_shift_copy_drag_pushes_nothing(self, qapp):
         # The copy routes through paste (its own command); the original
@@ -254,3 +293,22 @@ class TestEnvelopeDragPush:
         stub.shift_drag_copying = True
         self._push(stub)
         assert stack.count() == 0
+
+
+class TestShiftDragCopyRestore:
+    """A shift+drag copy returns the original block whole before the
+    copy is pasted. The sublane offset used to be computed after the
+    envelope was reset, so it was 0: the original's sublane blocks stayed
+    at the drop position and the paste shifted the copy's twice."""
+
+    def test_sublane_blocks_return_with_the_envelope(self):
+        from types import SimpleNamespace
+        from config.models import DimmerBlock, LightBlock
+        from timeline_ui.light_block_widget import LightBlockWidget
+
+        dimmer = DimmerBlock(start_time=14.0, end_time=16.0)  # dragged +10
+        block = LightBlock(start_time=4.0, end_time=8.0,      # already reset
+                           effect_name="test.static", dimmer_blocks=[dimmer])
+        stub = SimpleNamespace(block=block, drag_start_time=4.0)
+        LightBlockWidget._restore_sublane_times(stub, 14.0)
+        assert (dimmer.start_time, dimmer.end_time) == (4.0, 6.0)

@@ -4,7 +4,7 @@
 
 **LET THERE BE LIGHT.** Die Lichtmaschine is a standalone visual light-show authoring tool: beat-synced timeline editing, a built-in 3D preview, automatic show generation from audio analysis, and live ArtNet/DMX playback - with export to [QLC+](https://www.qlcplus.org/) workspaces as an interop path.
 
-> **Status:** `v1.0.0` is the latest release; `v1.4.0` "the standalone switch" is in preparation on the current branch - setlists with SMPTE/LTC timecode chase, in-app GDTF Share downloads, CSV rig import, a live busking surface with native ArtNet output, and the Die Lichtmaschine rebrand all land with it. See the [CHANGELOG](CHANGELOG.md) and [ROADMAP](ROADMAP.md).
+> **Status:** `v1.4.0` "the standalone switch" is the latest release - setlists with SMPTE/LTC timecode chase, in-app GDTF Share downloads, CSV rig import, a live busking surface with native ArtNet output, and the Die Lichtmaschine rebrand. `v1.5.0` is in preparation on the current branch: world-space focus geometry, show morphing (take a whole show to another venue's rig), the venue pre-flight checklist, and a round of real-project performance work. See the [CHANGELOG](CHANGELOG.md) and [ROADMAP](ROADMAP.md).
 >
 > This project was formerly known as **QLC+ Show Creator** - old links, releases, and issues refer to the same codebase.
 
@@ -54,6 +54,8 @@ conda env create -f environment.yml
 conda activate lichtmaschine
 python main.py
 ```
+
+The environment uses conda-forge only, so [Miniforge](https://github.com/conda-forge/miniforge) works out of the box. Recent Miniconda and Anaconda installs stop `conda env create` (and `conda create`, which IDEs such as PyCharm run) with `CondaToSNonInteractiveError` until the Terms of Service of their own `defaults` channels are accepted, even though this environment never installs from them. Either accept them (the `conda tos accept` commands the error prints), remove the `defaults` channels from that install (the error links the instructions), or create the environment with Miniforge's `conda` instead.
 
 ### With pip
 

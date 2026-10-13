@@ -238,6 +238,41 @@ class Ui_MainWindow(object):
         self.menuTheme.addAction(self.actionThemeLight)
         self.menuView.addMenu(self.menuTheme)
 
+        # Tools menu - batch operations on the loaded config. First
+        # resident: the v1.5a movement migration (trace each manual
+        # pan/tilt movement block's centre beam onto the stage and write
+        # the landing point as its world target; gui.py wires the
+        # handler, utils/movement_migration.py does the tracing).
+        self.menuTools = QtWidgets.QMenu("Tools", parent=MainWindow)
+        # Venue adaptation first (the task the user reaches for here):
+        # the morph screen + patchbay (gui/screens/morph_screen.py,
+        # design doc docs/design-show-morphing.md; lived in the File
+        # menu as a dialog until 2026-07-16 - it is a venue WORKFLOW
+        # like the two below, not a file operation).
+        self.actionMorphToVenue = QAction("Morph to Venue...", MainWindow)
+        self.menuTools.addAction(self.actionMorphToVenue)
+        # Venue pre-flight: the generated on-site checklist that drives
+        # the rig into testable states (design doc 7, v1.5b phase 5).
+        # gui.py wires the handler; the same dialog also opens from the
+        # morph screen's commit page.
+        self.actionVenuePreflight = QAction("Venue Pre-Flight...",
+                                            MainWindow)
+        self.menuTools.addAction(self.actionVenuePreflight)
+        # Batch migration on the loaded config: the v1.5a movement
+        # conversion (trace each manual pan/tilt movement block's centre
+        # beam onto the stage and write the landing point as its world
+        # target; utils/movement_migration.py does the tracing).
+        self.actionConvertMovementTargets = QAction(
+            "Convert Movement to World Targets...", MainWindow)
+        self.menuTools.addAction(self.actionConvertMovementTargets)
+        # Render-to-video: lived in its own one-action Render menu
+        # until 2026-07-22 - it is a tool over the loaded show, not a
+        # menu category. gui.py wires the handler.
+        self.menuTools.addSeparator()
+        self.actionRenderToVideo = QAction("Render Show to Video...",
+                                           MainWindow)
+        self.menuTools.addAction(self.actionRenderToVideo)
+
         # Settings menu
         self.menuSettings = QtWidgets.QMenu("Settings", parent=MainWindow)
         self.actionAudioSettings = QAction("Audio Settings...", MainWindow)
@@ -275,14 +310,15 @@ class Ui_MainWindow(object):
         self.menuHelp.addAction(self.actionAbout)
 
         # No QMenuBar (North Star shell): the menus live in one overflow
-        # QMenu behind the topbar's ☰ button. gui.py inserts the Edit and
-        # Render menus into this container (before Settings / Help), and
-        # re-registers every shortcut on the window afterwards
-        # (register_menu_shortcuts) since popup-only actions don't fire
-        # their shortcuts app-wide.
+        # QMenu behind the topbar's ☰ button. gui.py inserts the Edit
+        # menu into this container (before View - final order File,
+        # Edit, View, Tools, Settings, Help), and re-registers every
+        # shortcut on the window afterwards (register_menu_shortcuts)
+        # since popup-only actions don't fire their shortcuts app-wide.
         self.overflow_menu = QtWidgets.QMenu(MainWindow)
         self.overflow_menu.addMenu(self.menuFile)
         self.overflow_menu.addMenu(self.menuView)
+        self.overflow_menu.addMenu(self.menuTools)
         self.overflow_menu.addMenu(self.menuSettings)
         self.overflow_menu.addMenu(self.menuHelp)
 

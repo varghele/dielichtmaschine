@@ -43,6 +43,10 @@ class ArtNetListener(QObject):
     # Timeout for "receiving" status (seconds)
     RECEIVE_TIMEOUT = 2.0
 
+    # Per-universe source lock: how long the locked sender may stay
+    # silent before another source can take the universe over.
+    SOURCE_FAILOVER_S = 1.5
+
     def __init__(self, port: int = ARTNET_PORT, universes: list = None):
         """
         Initialize ArtNet listener.
@@ -71,6 +75,22 @@ class ArtNetListener(QObject):
         # Packet statistics
         self.packets_received = 0
         self.packets_invalid = 0
+        # Frames dropped because another source holds the universe.
+        self.packets_foreign = 0
+
+        # Per-universe SOURCE LOCK: universe -> (source ip, last time).
+        # The arbiter sends every universe TWICE on one machine when
+        # its primary target is broadcast: the yoke-converted hardware
+        # frame (broadcast, received locally too) and the solver-frame
+        # loopback mirror. Rendering whichever packet arrived last
+        # flipped every mover between two poses at 44 Hz - the
+        # "twitching heads at idle" bug (2026-07-17). One universe
+        # therefore renders ONE sender: loopback wins when present
+        # (the mirror is the authoritative solver-convention feed for
+        # a local viewer - this viewer converts the yoke itself), any
+        # other source is first-come and only replaced after
+        # SOURCE_FAILOVER_S of silence.
+        self.source_lock: Dict[int, tuple] = {}
 
     def start(self) -> bool:
         """
@@ -143,6 +163,34 @@ class ArtNetListener(QObject):
                 if self.running:
                     break
 
+    @staticmethod
+    def _is_loopback(ip: str) -> bool:
+        return ip.startswith("127.") or ip == "::1"
+
+    def _accept_source(self, universe: int, addr: tuple) -> bool:
+        """Whether this packet's sender may drive ``universe``.
+
+        Lock rules: the locked sender always may; a loopback sender
+        takes the lock from a non-loopback one immediately (the local
+        mirror outranks the broadcast hardware frame); anyone else
+        takes over only after the locked sender has been silent for
+        SOURCE_FAILOVER_S (so a viewer keeps following QLC+ or a
+        remote desk when the local feed stops).
+        """
+        source_ip = addr[0] if addr else ""
+        now = time.time()
+        locked = self.source_lock.get(universe)
+        if locked is not None:
+            locked_ip, locked_time = locked
+            if source_ip != locked_ip:
+                loopback_takeover = (self._is_loopback(source_ip)
+                                     and not self._is_loopback(locked_ip))
+                if not loopback_takeover \
+                        and now - locked_time <= self.SOURCE_FAILOVER_S:
+                    return False
+        self.source_lock[universe] = (source_ip, now)
+        return True
+
     def _process_packet(self, data: bytes, addr: tuple):
         """
         Process received ArtNet packet.
@@ -172,6 +220,11 @@ class ArtNetListener(QObject):
 
         # Filter by universe if configured
         if self.universes is not None and universe not in self.universes:
+            return
+
+        # Source lock (see __init__): one sender per universe.
+        if not self._accept_source(universe, addr):
+            self.packets_foreign += 1
             return
 
         # Parse DMX data length (big-endian, bytes 16-17)

@@ -227,3 +227,157 @@ class TestBulkDeleteSublaneBlocks:
 
         assert stub_block.dimmer_blocks == []
         assert stub_block.colour_blocks == []
+
+
+class TestSublaneSelectionIsExclusive:
+    """Reported 2026-08-09: "some sort of selection gets stuck where I
+    click on another block and the selection doesn't vanish".
+
+    Sublane selection lives on EACH LightBlockWidget and was never made
+    exclusive, so selecting a sub-block in one clip left the previous
+    one highlighted in another clip. Escape did not clear it either - it
+    only clears the SelectionManager's envelope selection."""
+
+    def test_helper_clears_every_other_widget(self, qapp):
+        from timeline_ui.light_block_widget import clear_sublane_selection
+
+        class FakeWidget:
+            def __init__(self):
+                self.selected_sublane_type = "colour"
+                self.selected_sublane_block = object()
+                self.updated = 0
+
+            def update(self):
+                self.updated += 1
+
+        class FakeLane:
+            def __init__(self, widgets):
+                self.light_block_widgets = widgets
+
+        class FakeHost:
+            def __init__(self, lanes):
+                self.lane_widgets = lanes
+
+        keep, other_a, other_b = FakeWidget(), FakeWidget(), FakeWidget()
+        host = FakeHost([FakeLane([keep, other_a]), FakeLane([other_b])])
+
+        class FakeLaneWidget:
+            def parent(self):
+                return host
+
+        assert clear_sublane_selection(FakeLaneWidget(), keep=keep) is True
+        assert keep.selected_sublane_block is not None, "the clicked one stays"
+        for other in (other_a, other_b):
+            assert other.selected_sublane_type is None
+            assert other.selected_sublane_block is None
+            assert other.updated == 1
+
+    def test_helper_reports_no_host(self, qapp):
+        from timeline_ui.light_block_widget import clear_sublane_selection
+        assert clear_sublane_selection(None) is False
+
+    def test_already_clear_widgets_are_not_repainted(self, qapp):
+        """Escape on a clean timeline must not repaint every clip."""
+        from timeline_ui.light_block_widget import clear_sublane_selection
+
+        class Clean:
+            selected_sublane_type = None
+            selected_sublane_block = None
+
+            def __init__(self):
+                self.updated = 0
+
+            def update(self):
+                self.updated += 1
+
+        class FakeLane:
+            def __init__(self, widgets):
+                self.light_block_widgets = widgets
+
+        class FakeHost:
+            def __init__(self, lanes):
+                self.lane_widgets = lanes
+
+        clean = Clean()
+        host = FakeHost([FakeLane([clean])])
+
+        class FakeLaneWidget:
+            def parent(self):
+                return host
+
+        clear_sublane_selection(FakeLaneWidget())
+        assert clean.updated == 0
+
+
+# ── Envelope edge drag: trim, Alt = stretch (decision 2026-10-13) ────────
+
+class TestEnvelopeEdgeDrag:
+    """Drives the real press/move/release handlers on the right envelope
+    handle (header strip, last RESIZE_HANDLE_WIDTH pixels)."""
+
+    @staticmethod
+    def _event(kind, x, y, modifiers=None):
+        from PyQt6.QtCore import QEvent, QPointF, Qt
+        from PyQt6.QtGui import QMouseEvent
+        types = {"press": QEvent.Type.MouseButtonPress,
+                 "move": QEvent.Type.MouseMove,
+                 "release": QEvent.Type.MouseButtonRelease}
+        mods = modifiers if modifiers is not None else \
+            Qt.KeyboardModifier.NoModifier
+        button = Qt.MouseButton.LeftButton
+        buttons = Qt.MouseButton.NoButton if kind == "release" else button
+        point = QPointF(x, y)
+        return QMouseEvent(types[kind], point, point, point, button,
+                           buttons, mods)
+
+    def _drag_right_edge(self, widget, to_x, modifiers=None):
+        edge_x = widget.width() - 2
+        widget.mousePressEvent(self._event("press", edge_x, 2))
+        assert widget.resizing_right, "press must hit the right handle"
+        widget.mouseMoveEvent(self._event("move", to_x, 2, modifiers))
+        widget.mouseReleaseEvent(self._event("release", to_x, 2, modifiers))
+
+    def _fill(self, block):
+        block.dimmer_blocks = [DimmerBlock(start_time=0.0, end_time=6.0),
+                               DimmerBlock(start_time=6.0, end_time=10.0)]
+
+    def test_plain_drag_trims(self, widget, stub_block):
+        self._fill(stub_block)
+        widget.update_position()
+        self._drag_right_edge(widget, widget.width() - 2 - 500)   # -5 s
+        assert [(d.start_time, d.end_time) for d in stub_block.dimmer_blocks] \
+            == [(0.0, 5.0)]
+        assert stub_block.end_time == pytest.approx(5.0)
+        assert widget._envelope_drag_state is None
+
+    def test_alt_drag_stretches(self, widget, stub_block):
+        from PyQt6.QtCore import Qt
+        self._fill(stub_block)
+        widget.update_position()
+        self._drag_right_edge(widget, widget.width() - 2 + 1000,   # +10 s
+                              Qt.KeyboardModifier.AltModifier)
+        assert [(d.start_time, d.end_time) for d in stub_block.dimmer_blocks] \
+            == [(0.0, 12.0), (12.0, 20.0)]
+        assert stub_block.end_time == pytest.approx(20.0)
+
+    def test_header_middle_still_moves(self, widget, stub_block):
+        widget.update_position()
+        widget.mousePressEvent(self._event("press", widget.width() // 2, 2))
+        assert widget.dragging and not widget.resizing_right
+        assert widget._envelope_drag_state is None
+
+    def test_edges_below_the_header_are_not_handles(self, widget):
+        from PyQt6.QtCore import QPoint
+        widget.update_position()
+        below = widget.HEADER_HEIGHT + 5
+        assert widget._envelope_edge_at(QPoint(widget.width() - 2, below)) \
+            is None
+        assert widget._envelope_edge_at(QPoint(widget.width() - 2, 2)) \
+            == "right"
+        assert widget._envelope_edge_at(QPoint(2, 2)) == "left"
+
+    def test_narrow_block_has_no_handles(self, widget, stub_block):
+        from PyQt6.QtCore import QPoint
+        stub_block.end_time = 0.2            # 20 px: the minimum width
+        widget.update_position()
+        assert widget._envelope_edge_at(QPoint(1, 2)) is None

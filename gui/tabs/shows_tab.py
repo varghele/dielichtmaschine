@@ -3,6 +3,9 @@
 
 import os
 import csv
+import logging
+
+_audio_logger = logging.getLogger("shows.audio")
 from PyQt6.QtWidgets import (QVBoxLayout, QHBoxLayout, QComboBox, QPushButton,
                              QLabel, QSlider, QScrollArea, QWidget, QFrame,
                              QSplitter, QSizePolicy, QInputDialog, QMessageBox, QCheckBox,
@@ -23,6 +26,7 @@ from timeline_ui.light_block_widget import (bar_range_label,
 from gui.icons import line_icon, shell_icon
 from gui.typography import DisplayLabel, MicroLabel, mono_font
 from gui.tabs.configuration_tab import TOOLBAR_BTN_WIDTH
+from timeline_ui.locking import flash_locked
 from timeline_ui.selection_manager import SelectionManager
 from timeline_ui.selection_overlay import SelectionOverlay
 from timeline_ui.effect_clipboard import (copy_multiple_effects, paste_multiple_effects,
@@ -103,6 +107,57 @@ class TimelineChaseTransport:
         return self._tab._get_current_position()
 
 
+class LiveShowTransport:
+    """The LIVE tab's view of the timeline transport: the busk surface
+    starts/stops the show it busks over and reads where it is. All
+    calls run on the UI thread (the Live tab's 500 ms glance timer).
+
+    Unlike TimelineChaseTransport this is the OPERATOR: stop() goes
+    through _on_stop_clicked, so it disarms an armed LTC chase exactly
+    like the Shows tab's own STOP button."""
+
+    def __init__(self, tab: "ShowsTab"):
+        self._tab = tab
+
+    def songs(self):
+        """(name, display label) pairs in the Shows combo's order -
+        setlist first, extras after the separator."""
+        combo = self._tab.show_combo
+        result = []
+        for i in range(combo.count()):
+            name = combo.itemData(i)
+            if name:                      # separators carry no data
+                result.append((name, combo.itemText(i)))
+        return result
+
+    def current(self) -> str:
+        return self._tab.current_song_name or ""
+
+    def select(self, name: str) -> None:
+        combo = self._tab.show_combo
+        index = combo.findData(name)
+        if index >= 0 and combo.currentIndex() != index:
+            combo.setCurrentIndex(index)   # fires the tab's song load
+
+    def is_playing(self) -> bool:
+        return bool(self._tab.is_playing)
+
+    def play(self) -> None:
+        if not self._tab.is_playing:
+            self._tab._start_playback()
+
+    def stop(self) -> None:
+        if self._tab.is_playing:
+            self._tab._on_stop_clicked()
+
+    def position(self) -> float:
+        return self._tab._get_current_position()
+
+    def duration(self) -> float:
+        structure = self._tab.song_structure
+        return structure.get_total_duration() if structure else 0.0
+
+
 class ShowsTab(BaseTab):
     """Timeline-based show management tab.
 
@@ -163,6 +218,10 @@ class ShowsTab(BaseTab):
         # Generation inspector
         self._generation_report = None
         self._inspector_window = None
+        # The running autogen worker and the AutogenJob it was launched
+        # for (song + config snapshot); see _on_autogenerate.
+        self._autogen_worker = None
+        self._autogen_job = None
 
         # Selection manager for multi-select
         self.selection_manager = SelectionManager()
@@ -484,12 +543,20 @@ class ShowsTab(BaseTab):
 
         toolbar.addStretch()
 
-        # Save button - a bordered display-caps text action (uniform with
-        # Inspector / POP OUT); not accent-filled, so Autogen stays the
-        # sole CTA of the strip.
-        self.save_btn = QPushButton("SAVE")
-        self.save_btn.setProperty("role", "cta-outline")
-        toolbar.addWidget(self.save_btn)
+        # LOCK chip (v1.5) - in the slot the SAVE button held until
+        # 2026-07-22 (save_to_config runs on every edit via the
+        # undo-stack/block_edited fan-in, so manual SAVE was a no-op
+        # relic). Checkable, snap_chip treatment; checked = the current
+        # song refuses timeline/structure edits everywhere.
+        self.lock_chip = QPushButton("LOCK")
+        self.lock_chip.setCheckable(True)
+        self.lock_chip.setProperty("role", "output-select")
+        self.lock_chip.setFont(mono_font(8, tracking_em=0.05))
+        self.lock_chip.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.lock_chip.setToolTip(
+            "Lock this song against timeline and structure edits · "
+            "playback, export and mute/solo stay live")
+        toolbar.addWidget(self.lock_chip)
 
         # 3D-pane chevron (right-pane collapse affordance, kept in the
         # always-visible toolbar so a collapsed pane can be re-opened).
@@ -775,15 +842,19 @@ class ShowsTab(BaseTab):
         return "1"
 
     def _update_status_line(self):
-        """"<n> LANES · <n> BLOCKS · GRID 1/4 · ZOOM 1.0x"."""
+        """"<n> LANES · <n> BLOCKS · GRID 1/4 · ZOOM 1.0x" (+ LOCKED)."""
         if not hasattr(self, "status_line"):
             return
         lanes = len(self.lane_widgets)
         blocks = sum(len(w.lane.light_blocks) for w in self.lane_widgets)
         zoom = self.zoom_slider.value() / 100.0
+        # The lock is toggled on the Structure tab's song header (the
+        # toolbar row is width-critical at 720p, no room for a chip);
+        # here it reads as footer state.
+        locked = " · LOCKED" if self.is_current_song_locked() else ""
         self.status_line.setText(
             f"{lanes} LANES · {blocks} BLOCKS · "
-            f"GRID {self._grid_label()} · ZOOM {zoom:.1f}X"
+            f"GRID {self._grid_label()} · ZOOM {zoom:.1f}X{locked}"
         )
 
     @staticmethod
@@ -917,6 +988,8 @@ class ShowsTab(BaseTab):
         self.inspector_rows.setVisible(True)
         self.inspector_stats_row.setVisible(True)
 
+    # ── Cross-tab movement-target selection (v1.5a click-to-aim) ──────
+
     def _apply_chrome_icons(self):
         """(Re)rasterize the toolbar/transport line icons.
 
@@ -955,7 +1028,7 @@ class ShowsTab(BaseTab):
         self.autogen_btn.clicked.connect(self._on_autogenerate)
         self.inspector_btn.toggled.connect(self._on_inspector_toggled)
         self.zoom_slider.valueChanged.connect(self._on_zoom_changed)
-        self.save_btn.clicked.connect(self.save_to_config)
+        self.lock_chip.clicked.connect(self._on_lock_chip_clicked)
         self.pane_toggle_btn.toggled.connect(self._on_pane_toggle)
 
         # Grid chips are the single global GRID control (the master's own
@@ -1069,6 +1142,8 @@ class ShowsTab(BaseTab):
                 # cheaply, keeping the selected song by data.
                 self._populate_show_combo(
                     select=self.show_combo.currentData() or "")
+            # Lock may have been toggled from the Structure tab.
+            self._refresh_lock_ui()
         finally:
             self._is_activating = False
 
@@ -1110,44 +1185,61 @@ class ShowsTab(BaseTab):
     def _on_audio_file_loaded(self, file_path: str):
         """Handle audio file loaded.
 
-        Copies the audio file to the local audiofiles/ folder if not already there,
-        then updates the audio player with the local copy.
+        Copies the file into the project's audio bundle
+        (Configuration.audio_bundle_dir: <config dir>/audiofiles/, the
+        same place loading resolves from) and stores the basename in
+        the show. shows_directory is deliberately NOT the copy target:
+        a project that travelled from another machine carries that
+        machine's absolute path, and makedirs on it walks into a
+        PermissionError (hit on the Stellwerk gig kit 2026-07-17).
+        Any bundle failure falls back to referencing the original
+        location with a user warning instead of crashing.
         """
         import shutil
 
         local_path = file_path
         basename = os.path.basename(file_path)
 
-        # Copy to local audiofiles folder if shows_directory is set
-        if self.config.shows_directory:
-            audiofiles_dir = os.path.join(self.config.shows_directory, "audiofiles")
-            local_path = os.path.join(audiofiles_dir, basename)
+        audiofiles_dir = None
+        try:
+            audiofiles_dir = self.config.audio_bundle_dir(create=True)
+        except OSError as e:
+            user_warnings.warn(
+                f"Audio bundle folder could not be created; the project "
+                f"keeps referencing the original location: {e}",
+                category="audio")
 
-            # Check if file is already in the audiofiles folder
-            if os.path.normpath(file_path) != os.path.normpath(local_path):
-                # Create audiofiles directory if needed
-                os.makedirs(audiofiles_dir, exist_ok=True)
-
-                # Copy the file to local folder
+        if audiofiles_dir:
+            bundled = os.path.join(audiofiles_dir, basename)
+            if os.path.normpath(file_path) != os.path.normpath(bundled):
                 try:
                     if os.path.exists(file_path):
-                        shutil.copy2(file_path, local_path)
-                        print(f"Copied audio file to: {local_path}")
+                        shutil.copy2(file_path, bundled)
+                        print(f"Copied audio file to: {bundled}")
+                        local_path = bundled
 
                         # Update the audio lane to use the local copy
-                        self.audio_lane.audio_file_path = local_path
+                        self.audio_lane.audio_file_path = bundled
                         self.audio_lane.file_path_edit.setText(basename)
-                        self.audio_lane.file_path_edit.setToolTip(local_path)
+                        self.audio_lane.file_path_edit.setToolTip(bundled)
                 except Exception as e:
                     user_warnings.warn(f"Audio file could not be copied into the project; the project keeps referencing the original location: {e}", category="audio")
                     local_path = file_path  # Fall back to original
+            else:
+                local_path = bundled
 
-            # Update the show's timeline_data to store just the filename
-            if self.current_song_name and self.current_song_name in self.config.songs:
-                show = self.config.songs[self.current_song_name]
-                if show.timeline_data:
-                    show.timeline_data.audio_file_path = basename
-                    print(f"Stored audio filename in show: {basename}")
+        # Store the basename when the file sits in the bundle (loading
+        # resolves it via audio_bundle_dir); keep the full path when the
+        # bundle copy failed so the reference still resolves.
+        stored = basename if local_path != file_path or (
+            audiofiles_dir
+            and os.path.normpath(file_path) == os.path.normpath(
+                os.path.join(audiofiles_dir, basename))) else file_path
+        if self.current_song_name and self.current_song_name in self.config.songs:
+            show = self.config.songs[self.current_song_name]
+            if show.timeline_data:
+                show.timeline_data.audio_file_path = stored
+                print(f"Stored audio reference in show: {stored}")
 
         # Update simple audio player if it exists
         if self.simple_audio_player:
@@ -1226,17 +1318,22 @@ class ShowsTab(BaseTab):
                     if bundle_dir and basename else None
                 )
 
-                # Priority 1: bundle dir lookup
+                # Priority 1: bundle dir lookup. (Success paths log at
+                # debug; only the not-found case below is user-facing,
+                # via user_warnings - the v1.4 audit taxonomy.)
                 if local_audio_path and os.path.exists(local_audio_path):
-                    print(f"Using local audio file: {local_audio_path}")
+                    _audio_logger.debug("using local audio file: %s",
+                                        local_audio_path)
                     self.audio_lane.load_audio_file(local_audio_path)
                     # Migrate old absolute paths to filename-only on first read.
                     if os.path.isabs(audio_filename):
                         show.timeline_data.audio_file_path = basename
-                        print(f"Stored audio filename in show: {basename}")
+                        _audio_logger.debug(
+                            "stored audio filename in show: %s", basename)
                 # Priority 2: legacy absolute path stored directly in YAML
                 elif os.path.isabs(audio_filename) and os.path.exists(audio_filename):
-                    print(f"Using audio file from original path: {audio_filename}")
+                    _audio_logger.debug("using audio file from original "
+                                        "path: %s", audio_filename)
                     self.audio_lane.load_audio_file(audio_filename)
                 # Priority 3: not found anywhere
                 else:
@@ -1272,6 +1369,7 @@ class ShowsTab(BaseTab):
         # Footer + bar readout now that the structure and lanes are in place.
         self._update_status_line()
         self._update_playhead_display(self.playhead_position)
+        self._refresh_lock_ui()
 
     def _clear_timeline(self):
         """Clear all timeline data."""
@@ -1280,6 +1378,47 @@ class ShowsTab(BaseTab):
         self._clear_light_lanes()
         self.master_timeline.timeline_widget.set_song_structure(None)
         self.audio_lane.set_song_structure(None)
+        self._refresh_lock_ui()
+
+    # -- Song lock (v1.5) ---------------------------------------------------
+    # Toggled here (the LOCK chip in the SAVE button's old slot) and on
+    # the Structure tab's song header; enforced by guarded handlers +
+    # disabled edit chrome + the LOCKED footer tag + statusbar flashes.
+
+    def is_current_song_locked(self) -> bool:
+        """Public: lane widgets duck-type this through _get_shows_tab."""
+        song = self.config.songs.get(self.current_song_name) \
+            if self.current_song_name else None
+        return bool(song is not None and getattr(song, "locked", False))
+
+    def _on_lock_chip_clicked(self, checked: bool) -> None:
+        song = self.config.songs.get(self.current_song_name) \
+            if self.current_song_name else None
+        if song is None:
+            self.lock_chip.setChecked(False)
+            return
+        song.locked = bool(checked)
+        self.mark_config_dirty()
+        self._refresh_lock_ui()
+        structure_tab = getattr(self.window(), "structure_tab", None)
+        if structure_tab is not None and hasattr(structure_tab,
+                                                 "refresh_lock_ui"):
+            structure_tab.refresh_lock_ui()
+
+    def _refresh_lock_ui(self) -> None:
+        """Sync the chip and the cheap-to-disable edit chrome with the
+        current song's lock. Handlers stay guarded regardless - this is
+        the visible half of the fence, not the fence."""
+        locked = self.is_current_song_locked()
+        self.lock_chip.setChecked(locked)
+        self.lock_chip.setEnabled(bool(self.current_song_name))
+        self.add_lane_btn.setEnabled(not locked)
+        if self.autogen_btn.text() != "GENERATING...":
+            self.autogen_btn.setEnabled(not locked)
+        for lane_widget in self.lane_widgets:
+            if hasattr(lane_widget, "set_locked"):
+                lane_widget.set_locked(locked)
+        self._update_status_line()
 
     def _clear_light_lanes(self):
         """Remove all light lane widgets.
@@ -1372,6 +1511,9 @@ class ShowsTab(BaseTab):
                 QMessageBox.StandardButton.Ok
             )
             return
+        if self.is_current_song_locked():
+            flash_locked(self)
+            return
 
         # Show status indicator
         progress = get_progress_manager()
@@ -1394,11 +1536,36 @@ class ShowsTab(BaseTab):
         if progress:
             progress.finish_status()
 
+    def _autogen_running(self) -> bool:
+        """A run is in flight: its worker is still running, or its
+        result is queued but not handled yet."""
+        if getattr(self, "_autogen_job", None) is not None:
+            return True
+        worker = getattr(self, "_autogen_worker", None)
+        return worker is not None and worker.isRunning()
+
+    def _on_autogen_thread_done(self):
+        """QThread.finished of the autogen worker: the safety net for a
+        run that ended without delivering a result or an error, so the
+        button never stays stuck on GENERATING..."""
+        if self.sender() is not self._autogen_worker:
+            return
+        if self._autogen_job is not None:
+            self._autogen_job = None
+            self._reset_autogen_button()
+
     def _on_autogenerate(self):
         """Open auto-generation dialog and generate show."""
+        if self._autogen_running():
+            # One run at a time: replacing the worker reference would
+            # let Python destroy a QThread that is still running.
+            return
         if not self.current_song_name:
             QMessageBox.warning(self, "No Show Selected",
                 "Please select a show first.", QMessageBox.StandardButton.Ok)
+            return
+        if self.is_current_song_locked():
+            flash_locked(self)
             return
 
         show = self.config.songs.get(self.current_song_name)
@@ -1436,7 +1603,8 @@ class ShowsTab(BaseTab):
             return
 
         # Open config dialog
-        from gui.dialogs.autogen_dialog import AutogenDialog, AutogenWorker
+        from gui.dialogs.autogen_dialog import (
+            AutogenDialog, AutogenJob, AutogenWorker)
         dialog = AutogenDialog(self)
         if dialog.exec() != QDialog.DialogCode.Accepted:
             return
@@ -1453,23 +1621,51 @@ class ShowsTab(BaseTab):
         self.autogen_btn.setEnabled(False)
         self.autogen_btn.setText("GENERATING...")
 
-        # Run in background thread
+        # Run in background thread, bound to THIS song: the user may
+        # switch songs (or edit the rig) while the worker runs, so the
+        # result goes to the launch song and the worker reads a
+        # snapshot, never the live config.
+        self._autogen_job = AutogenJob(self.config, show)
         self._autogen_worker = AutogenWorker(
-            audio_path, song_structure, self.config, autogen_config, key_signature,
-            song_palette,
+            audio_path, song_structure, self._autogen_job.snapshot,
+            autogen_config, key_signature, song_palette,
         )
-        self._autogen_worker.finished.connect(self._on_autogen_finished)
+        self._autogen_worker.generated.connect(self._on_autogen_finished)
         self._autogen_worker.error.connect(self._on_autogen_error)
+        self._autogen_worker.finished.connect(self._on_autogen_thread_done)
         self._autogen_worker.start()
 
-    def _on_autogen_finished(self, lanes, report=None):
-        """Handle generated lanes from background worker."""
-        self.autogen_btn.setEnabled(True)
+    def _reset_autogen_button(self):
+        """Back from GENERATING... on every exit path of a run."""
         self.autogen_btn.setText("AUTOGEN")
+        self.autogen_btn.setEnabled(not self.is_current_song_locked())
 
-        # Store generation report for inspector
-        self._generation_report = report
-        self.inspector_btn.setEnabled(report is not None)
+    def _on_autogen_finished(self, lanes, report=None):
+        """Handle generated lanes from background worker. They land on
+        the song the run was launched for, which need not be the song
+        open now."""
+        job, self._autogen_job = self._autogen_job, None
+        self._reset_autogen_button()
+        song_name = job.song_name(self.config) if job is not None else None
+        if song_name is None:
+            QMessageBox.information(self, "Auto-Generate",
+                "The song this generation was started for is no longer "
+                "in the project. The result was discarded.",
+                QMessageBox.StandardButton.Ok)
+            return
+        song = job.song
+        if getattr(song, "locked", False):
+            # A worker started pre-lock finished post-lock: drop it.
+            flash_locked(self)
+            return
+        is_current = (song_name == self.current_song_name
+                      and self.config.songs.get(song_name) is song)
+
+        # Store generation report for inspector (it describes the open
+        # song only when the run was for the open song)
+        if is_current:
+            self._generation_report = report
+            self.inspector_btn.setEnabled(report is not None)
 
         if not lanes:
             QMessageBox.information(self, "Auto-Generate",
@@ -1478,17 +1674,41 @@ class ShowsTab(BaseTab):
             return
 
         # Ask user whether to replace or append
+        where = "" if is_current else f" for \"{song_name}\""
         result = QMessageBox.question(
             self, "Auto-Generate Complete",
-            f"Generated {len(lanes)} lanes with light blocks.\n\n"
+            f"Generated {len(lanes)} lanes with light blocks{where}.\n\n"
             "Replace existing lanes or append to them?",
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No | QMessageBox.StandardButton.Cancel,
         )
 
         if result == QMessageBox.StandardButton.Cancel:
             return
+        replace = result == QMessageBox.StandardButton.Yes
+        job.adopt_new_spots()
 
-        if result == QMessageBox.StandardButton.Yes:
+        if not is_current:
+            # Not on screen: write the song's timeline data directly
+            # (the timeline builds its lanes from it when it is opened).
+            if song.timeline_data is None:
+                song.timeline_data = TimelineData()
+            new_lanes = []
+            for lane_data in lanes:
+                lane = LightLane(lane_data.name)
+                lane.fixture_targets = lane_data.fixture_targets
+                lane.light_blocks = lane_data.light_blocks
+                new_lanes.append(lane.to_data_model())
+            if replace:
+                song.timeline_data.lanes = new_lanes
+            else:
+                song.timeline_data.lanes.extend(new_lanes)
+            QMessageBox.information(self, "Auto-Generate",
+                f"Successfully generated {len(lanes)} lanes for "
+                f"\"{song_name}\".",
+                QMessageBox.StandardButton.Ok)
+            return
+
+        if replace:
             # Replace: remove all existing lanes
             for widget in list(self.lane_widgets):
                 self._remove_lane_widget(widget)
@@ -1515,8 +1735,8 @@ class ShowsTab(BaseTab):
 
     def _on_autogen_error(self, error_msg):
         """Handle auto-generation error."""
-        self.autogen_btn.setEnabled(True)
-        self.autogen_btn.setText("AUTOGEN")
+        self._autogen_job = None
+        self._reset_autogen_button()
         QMessageBox.critical(self, "Auto-Generate Error",
             f"Generation failed:\n{error_msg}",
             QMessageBox.StandardButton.Ok)
@@ -1543,6 +1763,9 @@ class ShowsTab(BaseTab):
     def _on_lane_remove_requested(self, lane_widget: LightLaneWidget):
         """The lane header's "x": remove through the undo stack so
         Ctrl+Z brings the lane (and every block on it) back."""
+        if self.is_current_song_locked():
+            flash_locked(self)
+            return
         undo_stack = self._get_undo_stack()
         if undo_stack is not None:
             from timeline_ui.undo_commands import RemoveLaneCommand
@@ -1808,6 +2031,14 @@ class ShowsTab(BaseTab):
         Programmatic control only - it bypasses the operator's STOP
         hook, so a window exit never disarms the chase."""
         return TimelineChaseTransport(self)
+
+    def live_transport(self):
+        """The LIVE tab's show-transport adapter over this tab (the
+        busk surface starts/stops the show it busks over and shows
+        where it is). OPERATOR semantics, unlike chase_transport:
+        stop() goes through the STOP hook, so it also disarms an armed
+        chase - from the busk surface the human is always the master."""
+        return LiveShowTransport(self)
 
     def set_chase_armed(self, armed: bool, disarm=None) -> None:
         """While the LTC chase is armed the desk is the master: Play is
@@ -2419,8 +2650,8 @@ class ShowsTab(BaseTab):
                 pass
             self.tcp_server = None
 
-        # Clean up embedded visualizer (stops its FPS timer; the GL
-        # surface is destroyed via Qt's normal child teardown).
+        # Clean up embedded visualizer (stops its timers and releases
+        # the engine's GL resources with its context current).
         if hasattr(self, "embedded_visualizer") and self.embedded_visualizer:
             try:
                 self.embedded_visualizer.cleanup()
@@ -2920,6 +3151,9 @@ class ShowsTab(BaseTab):
 
     def _paste_at_playhead(self):
         """Paste clipboard blocks at playhead position."""
+        if self.is_current_song_locked():
+            flash_locked(self)
+            return
         if has_multi_clipboard_data():
             # Paste multiple blocks
             results = paste_multiple_effects(self.playhead_position, self.lane_widgets)
@@ -2971,6 +3205,9 @@ class ShowsTab(BaseTab):
     def _delete_selected_blocks(self):
         """Delete all selected blocks - one undo macro, so a single
         Ctrl+Z restores the whole selection."""
+        if self.is_current_song_locked():
+            flash_locked(self)
+            return
         selected = self.selection_manager.get_selected_blocks()
         if not selected:
             return
@@ -3001,6 +3238,17 @@ class ShowsTab(BaseTab):
     def _clear_selection(self):
         """Clear all selection."""
         self.selection_manager.clear_selection()
+
+        # ...including the per-widget SUBLANE highlight, which is a
+        # separate system from the SelectionManager's envelope selection
+        # and used to survive Escape entirely (2026-08-09).
+        for lane in self.lane_widgets:
+            for widget in getattr(lane, "light_block_widgets", []):
+                if widget.selected_sublane_block is not None or \
+                        widget.selected_sublane_type is not None:
+                    widget.selected_sublane_type = None
+                    widget.selected_sublane_block = None
+                    widget.update()
 
         # Also cancel any in-progress rubber-band
         if self._is_selecting:

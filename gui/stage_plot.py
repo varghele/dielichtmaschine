@@ -30,6 +30,7 @@ from PyQt6.QtGui import (
     QPdfWriter, QPen,
 )
 
+from config.models import primary_group
 from utils.fixture_capabilities import chassis_from_legacy_type
 from gui.stage_items import projected_bar_angle_2d
 from gui.widgets.fixture_icons import (
@@ -376,7 +377,7 @@ class StagePlotRenderer:
         label_jobs = []
 
         for fixture in self.config.fixtures:
-            group = self.config.groups.get(fixture.group) if fixture.group else None
+            group = primary_group(self.config, fixture)
             group_color = QColor(group.color) if group else QColor(160, 160, 160)
             _, yaw, pitch, roll = fixture.get_effective_orientation(group)
 

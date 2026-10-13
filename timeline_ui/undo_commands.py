@@ -3,6 +3,7 @@
 
 from PyQt6.QtGui import QUndoCommand
 from config.models import LightBlock
+from utils.timeline_edit_lock import TIMELINE_EDIT_LOCK
 from typing import List, TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -151,16 +152,18 @@ class MoveBlockCommand(QUndoCommand):
         if self._skip_first_redo:
             self._skip_first_redo = False
             return
-        self.block.start_time = self.new_start
-        self.block.end_time = self.new_end
-        self._update_sublane_times(self.old_start, self.new_start)
+        with TIMELINE_EDIT_LOCK:
+            self.block.start_time = self.new_start
+            self.block.end_time = self.new_end
+            self._update_sublane_times(self.old_start, self.new_start)
         self._update_block_widget()
 
     def undo(self):
         """Revert the move."""
-        self.block.start_time = self.old_start
-        self.block.end_time = self.old_end
-        self._update_sublane_times(self.new_start, self.old_start)
+        with TIMELINE_EDIT_LOCK:
+            self.block.start_time = self.old_start
+            self.block.end_time = self.old_end
+            self._update_sublane_times(self.new_start, self.old_start)
         self._update_block_widget()
 
     def _update_sublane_times(self, old_start: float, new_start: float):
@@ -188,6 +191,42 @@ class MoveBlockCommand(QUndoCommand):
         for widget in self.lane_widget.light_block_widgets:
             if widget.block is self.block:
                 widget.update_position()
+                break
+
+
+class EnvelopeEditCommand(QUndoCommand):
+    """An envelope-edge trim or stretch (utils/envelope_edit): restores
+    whole EnvelopeState snapshots, so a trim's dropped sublane blocks come
+    back as the same objects on undo. Pushed already applied (the drag
+    changed the block live), so the push-time redo is skipped."""
+
+    def __init__(self, lane_widget: 'LightLaneWidget', block: LightBlock,
+                 before, after, description: str = None):
+        super().__init__(description or "Trim Block")
+        self.lane_widget = lane_widget
+        self.block = block
+        self.before = before
+        self.after = after
+        self._skip_first_redo = True
+
+    def redo(self):
+        if self._skip_first_redo:
+            self._skip_first_redo = False
+            return
+        with TIMELINE_EDIT_LOCK:
+            self.after.restore(self.block)
+        self._update_block_widget()
+
+    def undo(self):
+        with TIMELINE_EDIT_LOCK:
+            self.before.restore(self.block)
+        self._update_block_widget()
+
+    def _update_block_widget(self):
+        for widget in self.lane_widget.light_block_widgets:
+            if widget.block is self.block:
+                widget.update_position()
+                widget.update()
                 break
 
 
@@ -219,14 +258,16 @@ class ResizeBlockCommand(QUndoCommand):
 
     def redo(self):
         """Apply the resize."""
-        self.block.start_time = self.new_start
-        self.block.end_time = self.new_end
+        with TIMELINE_EDIT_LOCK:
+            self.block.start_time = self.new_start
+            self.block.end_time = self.new_end
         self._update_block_widget()
 
     def undo(self):
         """Revert the resize."""
-        self.block.start_time = self.old_start
-        self.block.end_time = self.old_end
+        with TIMELINE_EDIT_LOCK:
+            self.block.start_time = self.old_start
+            self.block.end_time = self.old_end
         self._update_block_widget()
 
     def _update_block_widget(self):

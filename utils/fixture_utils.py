@@ -51,12 +51,21 @@ def get_cached_fixture_definitions(models_in_config=None):
     return _fixture_definitions_cache
 
 
-def clear_fixture_definitions_cache():
-    """Clear the fixture definitions cache (useful when fixture files change)."""
+def _clear_legacy_dict_cache():
+    """Drop this module's legacy-dict cache only (invalidate_fixture_caches
+    calls it). Rebound, NOT cleared in place: a running playback
+    controller or render worker holds the old dict and must keep its
+    complete (if stale) definitions rather than see them vanish."""
     global _fixture_definitions_cache, _cache_initialized
     _fixture_definitions_cache = {}
     _cache_initialized = False
-    clear_library_cache()
+
+
+def clear_fixture_definitions_cache():
+    """Clear every fixture-definition cache (useful when fixture files
+    change); same as utils.fixture_library.invalidate_fixture_caches."""
+    from utils.fixture_library import invalidate_fixture_caches
+    invalidate_fixture_caches()
 
 
 def load_fixture_definitions_from_qlc(models_in_config, use_cache=True):
@@ -74,6 +83,25 @@ def load_fixture_definitions_from_qlc(models_in_config, use_cache=True):
         if defn is not None:
             fixture_definitions[f"{manufacturer}_{model}"] = defn.to_legacy_dict()
     return fixture_definitions
+
+
+def _mode_channels(fixture_def, mode_name):
+    """The channel dicts of ``mode_name``, in mode order: the set
+    FixtureChannelMap drives (get_channels_by_property matches mode
+    channels to definitions by name). Falls back to every channel the
+    definition declares when it carries no modes or none by that name
+    (hand-built dicts, a config predating mode reconciliation), which
+    is the historical whole-definition analysis."""
+    channels = fixture_def.get('channels', [])
+    mode = next((m for m in fixture_def.get('modes') or []
+                 if m.get('name') == mode_name), None)
+    if mode is None:
+        return channels
+    by_name = {}
+    for channel in channels:
+        by_name.setdefault(channel.get('name'), channel)
+    return [by_name[ref['name']] for ref in mode.get('channels', [])
+            if ref.get('name') in by_name]
 
 
 def detect_fixture_group_capabilities(fixtures, fixture_definitions=None):
@@ -112,8 +140,9 @@ def detect_fixture_group_capabilities(fixtures, fixture_definitions=None):
         if fixture_key in fixture_definitions:
             fixture_def = fixture_definitions[fixture_key]
 
-            # Check all channels for their presets and group attributes
-            for channel in fixture_def.get('channels', []):
+            # Check the patched mode's channels for presets and group attributes
+            for channel in _mode_channels(fixture_def,
+                                          getattr(fixture, 'current_mode', None)):
                 preset = channel.get('preset')
                 group = channel.get('group')
 
@@ -165,6 +194,32 @@ def detect_fixture_group_capabilities(fixtures, fixture_definitions=None):
     return capabilities
 
 
+_RGB_PRESETS = ("IntensityRed", "IntensityGreen", "IntensityBlue")
+
+
+def group_has_rgb(fixtures, fixture_definitions=None) -> bool:
+    """True when any fixture's PATCHED mode has an RGB channel (preset
+    IntensityRed / Green / Blue). Unknown definitions count as RGB, so a
+    fixture the library cannot resolve never locks the colour editor."""
+    if fixture_definitions is None:
+        models_in_config = {(f.manufacturer, f.model) for f in fixtures}
+        fixture_definitions = get_cached_fixture_definitions(models_in_config)
+    known = False
+    for fixture in fixtures:
+        fixture_key = f"{fixture.manufacturer}_{fixture.model}"
+        if fixture_key not in fixture_definitions:
+            fixture_key = f"{fixture.manufacturer}_{fixture.model.replace(' ', '_')}"
+        fixture_def = fixture_definitions.get(fixture_key)
+        if not fixture_def:
+            continue
+        known = True
+        for channel in _mode_channels(fixture_def,
+                                      getattr(fixture, 'current_mode', None)):
+            if (channel.get('preset') or '') in _RGB_PRESETS:
+                return True
+    return not known
+
+
 def get_color_wheel_options(fixtures, fixture_definitions=None):
     """
     Extract color wheel options from fixtures that have a color wheel channel.
@@ -193,8 +248,9 @@ def get_color_wheel_options(fixtures, fixture_definitions=None):
         if fixture_key in fixture_definitions:
             fixture_def = fixture_definitions[fixture_key]
 
-            # Look for color wheel channels
-            for channel in fixture_def.get('channels', []):
+            # Look for color wheel channels in the patched mode
+            for channel in _mode_channels(fixture_def,
+                                          getattr(fixture, 'current_mode', None)):
                 channel_name = channel.get('name', '') or ''
                 group = channel.get('group', '') or ''
 

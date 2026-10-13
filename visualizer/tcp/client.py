@@ -57,6 +57,15 @@ class VisualizerTCPClient(QObject):
         self.running = False
         self.is_connected = False
 
+        # Connection bookkeeping shared with the receive thread. Every
+        # connect()/disconnect() bumps the generation; a receive loop
+        # only touches the shared state (socket, is_connected, the
+        # disconnected signal) while its generation is current, so a
+        # loop still winding down after disconnect() can never close or
+        # disown the NEXT connection's socket.
+        self._state_lock = threading.Lock()
+        self._generation = 0
+
         # Buffer for incomplete messages
         self.buffer = ""
 
@@ -74,56 +83,83 @@ class VisualizerTCPClient(QObject):
         Returns:
             True if connection initiated, False if already connected
         """
-        if self.is_connected:
-            return False
-
-        self.running = True
-        self.receive_thread = threading.Thread(target=self._receive_loop, daemon=True)
+        with self._state_lock:
+            if self.is_connected:
+                return False
+            self._generation += 1
+            generation = self._generation
+            self.running = True
+            self.buffer = ""
+        self.receive_thread = threading.Thread(
+            target=self._receive_loop, args=(generation,), daemon=True)
         self.receive_thread.start()
         return True
 
     def disconnect(self):
         """Disconnect from server."""
-        self.running = False
-
-        if self.socket:
-            try:
-                self.socket.shutdown(socket.SHUT_RDWR)
-            except OSError:
-                pass
-            try:
-                self.socket.close()
-            except OSError:
-                pass
-            self.socket = None
-
-        if self.is_connected:
+        with self._state_lock:
+            self.running = False
+            self._generation += 1
+            sock, self.socket = self.socket, None
+            was_connected = self.is_connected
             self.is_connected = False
+
+        if sock is not None:
+            # shutdown() wakes the receive thread out of recv(); it then
+            # finds its generation retired and exits without side effects.
+            try:
+                sock.shutdown(socket.SHUT_RDWR)
+            except OSError:
+                pass
+            try:
+                sock.close()
+            except OSError:
+                pass
+
+        if was_connected:
             self.disconnected.emit()
 
-    def _receive_loop(self):
-        """Background thread: connect and receive messages."""
+    def _is_current(self, generation: int) -> bool:
+        return self.running and generation == self._generation
+
+    def _receive_loop(self, generation: Optional[int] = None):
+        """Background thread: connect and receive messages.
+
+        Works on its OWN socket object: disconnect() nulls ``self.socket``
+        from the UI thread, so the loop never reads it back."""
+        if generation is None:
+            generation = self._generation
+        sock = None
         try:
             # Create socket and connect
-            self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            self.socket.settimeout(5.0)  # Connection timeout
+            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            with self._state_lock:
+                if not self._is_current(generation):
+                    return   # disconnected before we even started
+                self.socket = sock
+            sock.settimeout(5.0)  # Connection timeout
 
             print(f"Connecting to {self.host}:{self.port}...")
-            self.socket.connect((self.host, self.port))
+            sock.connect((self.host, self.port))
 
-            self.is_connected = True
-            self.socket.settimeout(None)  # No timeout for receiving
+            with self._state_lock:
+                if not self._is_current(generation):
+                    return   # disconnected while connecting
+                self.is_connected = True
+            sock.settimeout(None)  # No timeout for receiving
             self.connected.emit()
             print(f"Connected to Show Creator at {self.host}:{self.port}")
 
             # Receive loop
-            while self.running:
+            while self._is_current(generation):
                 try:
-                    data = self.socket.recv(self.BUFFER_SIZE)
+                    data = sock.recv(self.BUFFER_SIZE)
                     if not data:
                         # Server closed connection
                         print("Server closed connection")
                         break
+                    if not self._is_current(generation):
+                        break   # retired mid-recv: the buffer is not ours
 
                     # Decode and add to buffer
                     self.buffer += data.decode('utf-8')
@@ -137,36 +173,47 @@ class VisualizerTCPClient(QObject):
                     print("Connection reset by server")
                     break
                 except OSError as e:
-                    if self.running:
+                    if self._is_current(generation):
                         print(f"Socket error: {e}")
                     break
 
         except socket.timeout:
             error_msg = f"Connection timeout: {self.host}:{self.port}"
             print(error_msg)
-            self.connection_error.emit(error_msg)
+            if self._is_current(generation):
+                self.connection_error.emit(error_msg)
 
         except ConnectionRefusedError:
             error_msg = f"Connection refused: {self.host}:{self.port}"
             print(error_msg)
-            self.connection_error.emit(error_msg)
+            if self._is_current(generation):
+                self.connection_error.emit(error_msg)
 
         except OSError as e:
             error_msg = f"Connection error: {e}"
             print(error_msg)
-            self.connection_error.emit(error_msg)
+            if self._is_current(generation):
+                self.connection_error.emit(error_msg)
 
         finally:
-            if self.is_connected:
-                self.is_connected = False
+            # Only the CURRENT connection's loop owns the shared state; a
+            # retired loop (disconnect() already reset it, maybe a new
+            # connection is up) just closes its own socket.
+            with self._state_lock:
+                current = generation == self._generation
+                was_connected = current and self.is_connected
+                if current:
+                    self.is_connected = False
+                    if self.socket is sock:
+                        self.socket = None
+            if was_connected:
                 self.disconnected.emit()
 
-            if self.socket:
+            if sock is not None:
                 try:
-                    self.socket.close()
+                    sock.close()
                 except OSError:
                     pass
-                self.socket = None
 
     def _process_buffer(self):
         """Process complete messages from buffer."""

@@ -8,10 +8,10 @@ derived point - CENTRE, AUDIENCE, and one preset per placed element
 the catalog knows a focus for) or a PATTERN (each mover derives its
 own target from its own position - CROSS, FAN OUT, FLOOR, CEILING).
 
-Presets carry real target data from day one (``target_for``), but no
-pan/tilt math: converting a target into per-fixture pan/tilt is the
-v1.5a focus-geometry milestone, and making a light move is the output
-arbiter (todo.md). Same in-memory honesty as the whole Live surface.
+Presets carry real target data (``target_for``) but no pan/tilt math:
+converting a target into per-fixture pan/tilt is the v1.5a focus
+geometry (shipped), realized on the wire by the output arbiter and the
+Live busk layer. Same in-memory honesty as the whole Live surface.
 
 COORDINATE FRAME: config/stage space - X centered left-right, Y depth
 centered with NEGATIVE = front/audience, Z height, meters. Do NOT mix

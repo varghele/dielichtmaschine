@@ -8,11 +8,16 @@ Two formats, mirroring utils/show_io.py's CSV/YAML split:
 
 - **CSV** (.csv): one row per fixture, spec-sheet friendly. Columns:
   ``name, manufacturer, model, type, mode, channels, universe, address,
-  group, x, y, z, mounting, yaw, pitch, roll``. Z and orientation are the
+  group, groups, x, y, z, mounting, yaw, pitch, roll``. Z and orientation are the
   *effective* values (group defaults resolved), so the sheet reads as the
   physical truth; on import they become explicit per-fixture values.
   Only ``manufacturer, model, universe, address`` are required — a
   hand-written venue sheet with just those columns imports fine.
+  ``group`` is the primary group; ``groups`` lists every membership
+  separated by ``;`` (primary first). Readers take ``groups`` when it is
+  filled and fall back to ``group`` (also split on ``;``), so an old
+  single-group sheet imports unchanged and an older build reading a new
+  sheet still gets the primary.
 - **JSON** (.json): full fidelity. Fixture definitions (manufacturer,
   model, type, modes) are deduplicated into a ``definitions`` list that
   fixtures reference by index, group metadata (color, defaults, lighting
@@ -29,14 +34,18 @@ import json
 import os
 from typing import Dict, List, Optional, Tuple
 
-from config.models import Fixture, FixtureGroup, FixtureMode, StageLayer
+from config.models import (
+    Fixture, FixtureGroup, FixtureMode, StageLayer, primary_group,
+)
 from utils.dmx_conflicts import fixture_channel_count
 
 CSV_FIELDNAMES = [
     'name', 'manufacturer', 'model', 'type', 'mode', 'channels',
-    'universe', 'address', 'group', 'layer', 'x', 'y', 'z',
+    'universe', 'address', 'group', 'groups', 'layer', 'x', 'y', 'z',
     'mounting', 'yaw', 'pitch', 'roll',
 ]
+
+GROUPS_SEPARATOR = ';'
 
 JSON_FORMAT_NAME = 'lichtmaschine-fixture-list'
 # Rigs exported before the Die Lichtmaschine rebrand carry the old
@@ -65,6 +74,19 @@ def detect_format(path: str) -> str:
 # CSV
 # ---------------------------------------------------------------------------
 
+def parse_group_cells(group: Optional[str], groups: Optional[str] = None) -> List[str]:
+    """Group memberships from a sheet row: the ``groups`` cell when it
+    is filled, else the ``group`` cell. Both split on ``;``; blanks and
+    repeats drop, order is kept (first = primary)."""
+    cell = groups if (groups or '').strip() else group
+    names: List[str] = []
+    for part in (cell or '').split(GROUPS_SEPARATOR):
+        name = part.strip()
+        if name and name not in names:
+            names.append(name)
+    return names
+
+
 def write_fixture_list_csv(path: str, config) -> None:
     """Write config.fixtures as a flat CSV rig sheet.
 
@@ -76,7 +98,7 @@ def write_fixture_list_csv(path: str, config) -> None:
         writer = csv.DictWriter(f, fieldnames=CSV_FIELDNAMES)
         writer.writeheader()
         for fixture in config.fixtures:
-            group = config.groups.get(fixture.group) if fixture.group else None
+            group = primary_group(config, fixture)
             mounting, yaw, pitch, roll = fixture.get_effective_orientation(group)
             writer.writerow({
                 'name': fixture.name,
@@ -88,6 +110,7 @@ def write_fixture_list_csv(path: str, config) -> None:
                 'universe': fixture.universe,
                 'address': fixture.address,
                 'group': fixture.group,
+                'groups': GROUPS_SEPARATOR.join(fixture.groups),
                 'layer': fixture.layer,
                 'x': fixture.x,
                 'y': fixture.y,
@@ -126,7 +149,8 @@ def read_fixture_list_csv(path: str) -> List[Fixture]:
                     manufacturer=manufacturer,
                     model=model,
                     name=(row.get('name') or '').strip() or model,
-                    group=(row.get('group') or '').strip(),
+                    groups=parse_group_cells(row.get('group'),
+                                             row.get('groups')),
                     layer=(row.get('layer') or '').strip(),
                     current_mode=mode,
                     available_modes=[FixtureMode(name=mode, channels=channels)],
@@ -468,5 +492,11 @@ def apply_fixture_list(config, fixtures: List[Fixture],
                         setattr(group, key, value)
                 config.groups[group_name] = group
             config.groups[group_name].fixtures.append(fixture)
+
+    # Canonical topology: imported groups keep their import order
+    # (manual mode) but snapshot it; pre-existing groups re-apply
+    # theirs with the newcomers appended.
+    for group in config.groups.values():
+        group.apply_fixture_order()
 
     config.ensure_universes_for_fixtures()

@@ -332,17 +332,17 @@ def sparkle(ctx: DimmerContext) -> DimmerResult:
     next_step = current_step + 1
     transition_progress = step_float - current_step
 
+    # Local Random instances: this runs on the arbiter thread and must
+    # never reseed the global RNG other code draws from.
     segment_intensities = []
     for seg_idx in range(ctx.num_segments):
         seed_str = f"{ctx.fixture_name}_seg{seg_idx}_{current_step}"
         seed_hash = int(hashlib.md5(seed_str.encode()).hexdigest()[:8], 16)
-        random.seed(seed_hash)
-        current_variation = random.random() * 0.7 + 0.3
+        current_variation = random.Random(seed_hash).random() * 0.7 + 0.3
 
         seed_str = f"{ctx.fixture_name}_seg{seg_idx}_{next_step}"
         seed_hash = int(hashlib.md5(seed_str.encode()).hexdigest()[:8], 16)
-        random.seed(seed_hash)
-        next_variation = random.random() * 0.7 + 0.3
+        next_variation = random.Random(seed_hash).random() * 0.7 + 0.3
 
         t = transition_progress
         smooth_t = t * t * (3 - 2 * t)
@@ -391,10 +391,11 @@ def throb(ctx: DimmerContext) -> DimmerResult:
 
 
 def waterfall(ctx: DimmerContext) -> DimmerResult:
-    """Light cascades through segments with drifting offset.
+    """Light cascades through segments with drifting offset, or across
+    the lane's fixtures when they have no segments.
 
-    direction="down": head moves from last to first segment.
-    direction="up": head moves from first to last segment.
+    direction="down": head moves from last to first segment (fixture).
+    direction="up": head moves from first to last segment (fixture).
     """
     seconds_per_beat = 60.0 / ctx.bpm
     time_per_step = seconds_per_beat / ctx.speed_multiplier
@@ -434,8 +435,23 @@ def waterfall(ctx: DimmerContext) -> DimmerResult:
             segment_intensities.append(intensity_factor)
 
         return DimmerResult(segment_intensities=segment_intensities)
-    else:
+
+    # No segments: one coherent sweep across the lane's fixtures in lane
+    # order, one beat per fixture at speed 1, with the same decaying tail
+    # as on a bar (no per-fixture offset or drift: those keep separate
+    # BARS out of lockstep, here they would break the sweep apart).
+    total = ctx.total_fixtures
+    if total <= 1:
         return DimmerResult(intensity_multiplier=1.0)
+    cycle_progress = (ctx.time_in_block / (time_per_step * total)) % 1.0
+    head_position = cycle_progress * total
+    if direction_down:
+        head_position = (total - 1) - head_position
+        raw_distance = ctx.fixture_index - head_position
+    else:
+        raw_distance = head_position - ctx.fixture_index
+    normalized_dist = (raw_distance % total) / total
+    return DimmerResult(intensity_multiplier=math.exp(-1.5 * normalized_dist))
 
 
 def wave(ctx: DimmerContext) -> DimmerResult:

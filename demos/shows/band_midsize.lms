@@ -1,0 +1,2314 @@
+block_defs:
+  colour:
+    c0:
+      amber: 0.0
+      blue: 38.0
+      color_mode: RGB
+      color_wheel_position: 0
+      cyan: 0.0
+      green: 113.0
+      hue: 0.0
+      lime: 0.0
+      magenta: 0.0
+      red: 225.0
+      saturation: 0.0
+      uv: 0.0
+      value: 0.0
+      white: 0.0
+      yellow: 0.0
+    c1:
+      amber: 0.0
+      blue: 42.0
+      color_mode: RGB
+      color_wheel_position: 0
+      cyan: 0.0
+      green: 195.0
+      hue: 0.0
+      lime: 0.0
+      magenta: 0.0
+      red: 118.0
+      saturation: 0.0
+      uv: 0.0
+      value: 0.0
+      white: 0.0
+      yellow: 0.0
+  dimmer:
+    d0:
+      effect_speed: '1'
+      effect_type: pulse
+      intensity: 90.03313528593307
+      iris: 255.0
+      strobe_speed: 0.0
+    d1:
+      direction: in
+      effect_speed: '1'
+      effect_type: fade
+      intensity: 208.6750728225243
+      iris: 255.0
+      strobe_speed: 0.0
+    d10:
+      effect_speed: '1'
+      effect_type: throb
+      intensity: 237.64589401877024
+      iris: 255.0
+      strobe_speed: 0.0
+    d11:
+      effect_speed: '2'
+      effect_type: cascade
+      intensity: 90.03313528593307
+      iris: 255.0
+      strobe_speed: 0.0
+    d12:
+      effect_speed: '2'
+      effect_type: strobe
+      intensity: 208.6750728225243
+      iris: 255.0
+      strobe_speed: 0.0
+    d13:
+      effect_speed: '4'
+      effect_type: stroke
+      intensity: 213.8813046168932
+      iris: 255.0
+      strobe_speed: 0.0
+    d14:
+      effect_speed: '4'
+      effect_type: random_stroke
+      intensity: 213.8813046168932
+      iris: 255.0
+      strobe_speed: 0.0
+    d15:
+      effect_speed: '1'
+      effect_type: random_stroke
+      intensity: 208.6750728225243
+      iris: 255.0
+      strobe_speed: 0.0
+    d16:
+      effect_speed: '1'
+      effect_type: pulse
+      intensity: 208.6750728225243
+      iris: 255.0
+      strobe_speed: 0.0
+    d2:
+      effect_speed: '1'
+      effect_type: throb
+      intensity: 208.6750728225243
+      iris: 255.0
+      strobe_speed: 0.0
+    d3:
+      effect_speed: '2'
+      effect_type: strobe
+      intensity: 69.2562579122562
+      iris: 255.0
+      strobe_speed: 0.0
+    d4:
+      effect_speed: '2'
+      effect_type: fill
+      intensity: 208.6750728225243
+      iris: 255.0
+      strobe_speed: 0.0
+    d5:
+      effect_speed: '2'
+      effect_type: throb
+      intensity: 208.6750728225243
+      iris: 255.0
+      strobe_speed: 0.0
+    d6:
+      direction: in
+      effect_speed: '4'
+      effect_type: fade
+      intensity: 69.2562579122562
+      iris: 255.0
+      strobe_speed: 0.0
+    d7:
+      effect_speed: '4'
+      effect_type: pulse
+      intensity: 208.6750728225243
+      iris: 255.0
+      strobe_speed: 0.0
+    d8:
+      effect_speed: '4'
+      effect_type: throb
+      intensity: 208.6750728225243
+      iris: 255.0
+      strobe_speed: 0.0
+    d9:
+      effect_speed: '1'
+      effect_type: ping_pong
+      intensity: 237.64589401877024
+      iris: 255.0
+      strobe_speed: 0.0
+  movement:
+    m0:
+      effect_speed: 1/2
+      effect_type: linear_sweep
+      interpolate_from_previous: true
+      lissajous_ratio: '1:2'
+      pan: 127.5
+      pan_amplitude: 49.91683234077956
+      pan_fine: 0.0
+      pan_max: 255.0
+      pan_min: 0.0
+      phase_offset_degrees: 0.0
+      phase_offset_enabled: false
+      speed: 255.0
+      target_plane_name: null
+      target_point: null
+      target_spot_name: Stage
+      tilt: 127.5
+      tilt_amplitude: 49.91683234077956
+      tilt_fine: 0.0
+      tilt_max: 255.0
+      tilt_min: 0.0
+    m1:
+      effect_speed: 1/2
+      effect_type: figure_8
+      interpolate_from_previous: true
+      lissajous_ratio: '1:2'
+      pan: 127.5
+      pan_amplitude: 80.0
+      pan_fine: 0.0
+      pan_max: 255.0
+      pan_min: 0.0
+      phase_offset_degrees: 0.0
+      phase_offset_enabled: false
+      speed: 255.0
+      target_plane_name: null
+      target_point: null
+      target_spot_name: Crowd
+      tilt: 127.5
+      tilt_amplitude: 80.0
+      tilt_fine: 0.0
+      tilt_max: 255.0
+      tilt_min: 0.0
+    m2:
+      effect_speed: '2'
+      effect_type: linear_sweep
+      interpolate_from_previous: true
+      lissajous_ratio: '1:2'
+      pan: 127.5
+      pan_amplitude: 41.597360283982965
+      pan_fine: 0.0
+      pan_max: 255.0
+      pan_min: 0.0
+      phase_offset_degrees: 0.0
+      phase_offset_enabled: false
+      speed: 255.0
+      target_plane_name: null
+      target_point: null
+      target_spot_name: Stage
+      tilt: 127.5
+      tilt_amplitude: 41.597360283982965
+      tilt_fine: 0.0
+      tilt_max: 255.0
+      tilt_min: 0.0
+    m3:
+      effect_speed: '2'
+      effect_type: figure_8
+      interpolate_from_previous: true
+      lissajous_ratio: '1:2'
+      pan: 127.5
+      pan_amplitude: 80.0
+      pan_fine: 0.0
+      pan_max: 255.0
+      pan_min: 0.0
+      phase_offset_degrees: 0.0
+      phase_offset_enabled: false
+      speed: 255.0
+      target_plane_name: null
+      target_point: null
+      target_spot_name: Crowd
+      tilt: 127.5
+      tilt_amplitude: 80.0
+      tilt_fine: 0.0
+      tilt_max: 255.0
+      tilt_min: 0.0
+fixtures:
+- address: 1
+  available_modes:
+  - channels: 4
+    name: 4 Channel
+  - channels: 6
+    name: 6 Channel
+  - channels: 8
+    name: 8 Channel
+  calibration: {}
+  current_mode: 8 Channel
+  definition_source: qxf
+  docked_to: ''
+  gdtf_fixture_type_id: null
+  group: Front PARs
+  groups:
+  - Front PARs
+  invert_pan: false
+  invert_tilt: false
+  layer: ''
+  manufacturer: Stairville
+  model: 'Retro Flat Par 18x12W RGBW '
+  mounting: hanging
+  name: Front PARs 1
+  orientation_uses_group_default: true
+  pitch: 90.0
+  roll: 0.0
+  type: WASH
+  universe: 1
+  x: -4.4
+  y: -3.0
+  yaw: 0.0
+  z: 3.0
+  z_uses_group_default: false
+- address: 9
+  available_modes:
+  - channels: 4
+    name: 4 Channel
+  - channels: 6
+    name: 6 Channel
+  - channels: 8
+    name: 8 Channel
+  calibration: {}
+  current_mode: 8 Channel
+  definition_source: qxf
+  docked_to: ''
+  gdtf_fixture_type_id: null
+  group: Front PARs
+  groups:
+  - Front PARs
+  invert_pan: false
+  invert_tilt: false
+  layer: ''
+  manufacturer: Stairville
+  model: 'Retro Flat Par 18x12W RGBW '
+  mounting: hanging
+  name: Front PARs 2
+  orientation_uses_group_default: true
+  pitch: 90.0
+  roll: 0.0
+  type: WASH
+  universe: 1
+  x: -1.47
+  y: -3.0
+  yaw: 0.0
+  z: 3.0
+  z_uses_group_default: false
+- address: 17
+  available_modes:
+  - channels: 4
+    name: 4 Channel
+  - channels: 6
+    name: 6 Channel
+  - channels: 8
+    name: 8 Channel
+  calibration: {}
+  current_mode: 8 Channel
+  definition_source: qxf
+  docked_to: ''
+  gdtf_fixture_type_id: null
+  group: Front PARs
+  groups:
+  - Front PARs
+  invert_pan: false
+  invert_tilt: false
+  layer: ''
+  manufacturer: Stairville
+  model: 'Retro Flat Par 18x12W RGBW '
+  mounting: hanging
+  name: Front PARs 3
+  orientation_uses_group_default: true
+  pitch: 90.0
+  roll: 0.0
+  type: WASH
+  universe: 1
+  x: 1.47
+  y: -3.0
+  yaw: 0.0
+  z: 3.0
+  z_uses_group_default: false
+- address: 25
+  available_modes:
+  - channels: 4
+    name: 4 Channel
+  - channels: 6
+    name: 6 Channel
+  - channels: 8
+    name: 8 Channel
+  calibration: {}
+  current_mode: 8 Channel
+  definition_source: qxf
+  docked_to: ''
+  gdtf_fixture_type_id: null
+  group: Front PARs
+  groups:
+  - Front PARs
+  invert_pan: false
+  invert_tilt: false
+  layer: ''
+  manufacturer: Stairville
+  model: 'Retro Flat Par 18x12W RGBW '
+  mounting: hanging
+  name: Front PARs 4
+  orientation_uses_group_default: true
+  pitch: 90.0
+  roll: 0.0
+  type: WASH
+  universe: 1
+  x: 4.4
+  y: -3.0
+  yaw: 0.0
+  z: 3.0
+  z_uses_group_default: false
+- address: 33
+  available_modes:
+  - channels: 4
+    name: 4 Channel
+  - channels: 6
+    name: 6 Channel
+  - channels: 8
+    name: 8 Channel
+  calibration: {}
+  current_mode: 8 Channel
+  definition_source: qxf
+  docked_to: ''
+  gdtf_fixture_type_id: null
+  group: Back PARs
+  groups:
+  - Back PARs
+  invert_pan: false
+  invert_tilt: false
+  layer: ''
+  manufacturer: Stairville
+  model: 'Retro Flat Par 18x12W RGBW '
+  mounting: hanging
+  name: Back PARs 1
+  orientation_uses_group_default: true
+  pitch: 90.0
+  roll: 0.0
+  type: WASH
+  universe: 1
+  x: -4.4
+  y: 3.0
+  yaw: 0.0
+  z: 3.0
+  z_uses_group_default: false
+- address: 41
+  available_modes:
+  - channels: 4
+    name: 4 Channel
+  - channels: 6
+    name: 6 Channel
+  - channels: 8
+    name: 8 Channel
+  calibration: {}
+  current_mode: 8 Channel
+  definition_source: qxf
+  docked_to: ''
+  gdtf_fixture_type_id: null
+  group: Back PARs
+  groups:
+  - Back PARs
+  invert_pan: false
+  invert_tilt: false
+  layer: ''
+  manufacturer: Stairville
+  model: 'Retro Flat Par 18x12W RGBW '
+  mounting: hanging
+  name: Back PARs 2
+  orientation_uses_group_default: true
+  pitch: 90.0
+  roll: 0.0
+  type: WASH
+  universe: 1
+  x: -1.47
+  y: 3.0
+  yaw: 0.0
+  z: 3.0
+  z_uses_group_default: false
+- address: 49
+  available_modes:
+  - channels: 4
+    name: 4 Channel
+  - channels: 6
+    name: 6 Channel
+  - channels: 8
+    name: 8 Channel
+  calibration: {}
+  current_mode: 8 Channel
+  definition_source: qxf
+  docked_to: ''
+  gdtf_fixture_type_id: null
+  group: Back PARs
+  groups:
+  - Back PARs
+  invert_pan: false
+  invert_tilt: false
+  layer: ''
+  manufacturer: Stairville
+  model: 'Retro Flat Par 18x12W RGBW '
+  mounting: hanging
+  name: Back PARs 3
+  orientation_uses_group_default: true
+  pitch: 90.0
+  roll: 0.0
+  type: WASH
+  universe: 1
+  x: 1.47
+  y: 3.0
+  yaw: 0.0
+  z: 3.0
+  z_uses_group_default: false
+- address: 57
+  available_modes:
+  - channels: 4
+    name: 4 Channel
+  - channels: 6
+    name: 6 Channel
+  - channels: 8
+    name: 8 Channel
+  calibration: {}
+  current_mode: 8 Channel
+  definition_source: qxf
+  docked_to: ''
+  gdtf_fixture_type_id: null
+  group: Back PARs
+  groups:
+  - Back PARs
+  invert_pan: false
+  invert_tilt: false
+  layer: ''
+  manufacturer: Stairville
+  model: 'Retro Flat Par 18x12W RGBW '
+  mounting: hanging
+  name: Back PARs 4
+  orientation_uses_group_default: true
+  pitch: 90.0
+  roll: 0.0
+  type: WASH
+  universe: 1
+  x: 4.4
+  y: 3.0
+  yaw: 0.0
+  z: 3.0
+  z_uses_group_default: false
+- address: 65
+  available_modes:
+  - channels: 8
+    name: 8 Channel
+  - channels: 14
+    name: 14 Channel
+  calibration: {}
+  current_mode: 14 Channel
+  definition_source: qxf
+  docked_to: ''
+  gdtf_fixture_type_id: null
+  group: Spots
+  groups:
+  - Spots
+  invert_pan: false
+  invert_tilt: false
+  layer: ''
+  manufacturer: Varytec
+  model: Hero Spot 60
+  mounting: hanging
+  name: Spots 1
+  orientation_uses_group_default: true
+  pitch: 90.0
+  roll: 0.0
+  type: MH
+  universe: 1
+  x: -4.4
+  y: 0.0
+  yaw: 0.0
+  z: 3.4
+  z_uses_group_default: false
+- address: 79
+  available_modes:
+  - channels: 8
+    name: 8 Channel
+  - channels: 14
+    name: 14 Channel
+  calibration: {}
+  current_mode: 14 Channel
+  definition_source: qxf
+  docked_to: ''
+  gdtf_fixture_type_id: null
+  group: Spots
+  groups:
+  - Spots
+  invert_pan: false
+  invert_tilt: false
+  layer: ''
+  manufacturer: Varytec
+  model: Hero Spot 60
+  mounting: hanging
+  name: Spots 2
+  orientation_uses_group_default: true
+  pitch: 90.0
+  roll: 0.0
+  type: MH
+  universe: 1
+  x: -1.47
+  y: 0.0
+  yaw: 0.0
+  z: 3.4
+  z_uses_group_default: false
+- address: 93
+  available_modes:
+  - channels: 8
+    name: 8 Channel
+  - channels: 14
+    name: 14 Channel
+  calibration: {}
+  current_mode: 14 Channel
+  definition_source: qxf
+  docked_to: ''
+  gdtf_fixture_type_id: null
+  group: Spots
+  groups:
+  - Spots
+  invert_pan: false
+  invert_tilt: false
+  layer: ''
+  manufacturer: Varytec
+  model: Hero Spot 60
+  mounting: hanging
+  name: Spots 3
+  orientation_uses_group_default: true
+  pitch: 90.0
+  roll: 0.0
+  type: MH
+  universe: 1
+  x: 1.47
+  y: 0.0
+  yaw: 0.0
+  z: 3.4
+  z_uses_group_default: false
+- address: 107
+  available_modes:
+  - channels: 8
+    name: 8 Channel
+  - channels: 14
+    name: 14 Channel
+  calibration: {}
+  current_mode: 14 Channel
+  definition_source: qxf
+  docked_to: ''
+  gdtf_fixture_type_id: null
+  group: Spots
+  groups:
+  - Spots
+  invert_pan: false
+  invert_tilt: false
+  layer: ''
+  manufacturer: Varytec
+  model: Hero Spot 60
+  mounting: hanging
+  name: Spots 4
+  orientation_uses_group_default: true
+  pitch: 90.0
+  roll: 0.0
+  type: MH
+  universe: 1
+  x: 4.4
+  y: 0.0
+  yaw: 0.0
+  z: 3.4
+  z_uses_group_default: false
+- address: 121
+  available_modes:
+  - channels: 25
+    name: Extended
+  - channels: 14
+    name: Standard
+  calibration: {}
+  current_mode: Standard
+  definition_source: qxf
+  docked_to: ''
+  gdtf_fixture_type_id: null
+  group: Moving Wash
+  groups:
+  - Moving Wash
+  invert_pan: false
+  invert_tilt: false
+  layer: ''
+  manufacturer: Martin
+  model: MAC Aura
+  mounting: hanging
+  name: Moving Wash 1
+  orientation_uses_group_default: true
+  pitch: 90.0
+  roll: 0.0
+  type: MH
+  universe: 1
+  x: -4.4
+  y: 3.2
+  yaw: 0.0
+  z: 3.4
+  z_uses_group_default: false
+- address: 135
+  available_modes:
+  - channels: 25
+    name: Extended
+  - channels: 14
+    name: Standard
+  calibration: {}
+  current_mode: Standard
+  definition_source: qxf
+  docked_to: ''
+  gdtf_fixture_type_id: null
+  group: Moving Wash
+  groups:
+  - Moving Wash
+  invert_pan: false
+  invert_tilt: false
+  layer: ''
+  manufacturer: Martin
+  model: MAC Aura
+  mounting: hanging
+  name: Moving Wash 2
+  orientation_uses_group_default: true
+  pitch: 90.0
+  roll: 0.0
+  type: MH
+  universe: 1
+  x: 4.4
+  y: 3.2
+  yaw: 0.0
+  z: 3.4
+  z_uses_group_default: false
+- address: 149
+  available_modes:
+  - channels: 3
+    name: 3 Channels
+  - channels: 4
+    name: 4 Channels
+  - channels: 5
+    name: 5 Channels
+  - channels: 8
+    name: 8 Channels
+  - channels: 10
+    name: 10 Channels
+  - channels: 48
+    name: 48 Channels
+  - channels: 51
+    name: 51 Channels
+  calibration: {}
+  current_mode: 8 Channels
+  definition_source: qxf
+  docked_to: ''
+  gdtf_fixture_type_id: null
+  group: LED Bars
+  groups:
+  - LED Bars
+  invert_pan: false
+  invert_tilt: false
+  layer: ''
+  manufacturer: Varytec
+  model: Giga Bar 5 LED RGBW
+  mounting: standing
+  name: LED Bars 1
+  orientation_uses_group_default: true
+  pitch: -90.0
+  roll: 0.0
+  type: PIXELBAR
+  universe: 1
+  x: -4.4
+  y: 3.6
+  yaw: 0.0
+  z: 0.2
+  z_uses_group_default: false
+- address: 157
+  available_modes:
+  - channels: 3
+    name: 3 Channels
+  - channels: 4
+    name: 4 Channels
+  - channels: 5
+    name: 5 Channels
+  - channels: 8
+    name: 8 Channels
+  - channels: 10
+    name: 10 Channels
+  - channels: 48
+    name: 48 Channels
+  - channels: 51
+    name: 51 Channels
+  calibration: {}
+  current_mode: 8 Channels
+  definition_source: qxf
+  docked_to: ''
+  gdtf_fixture_type_id: null
+  group: LED Bars
+  groups:
+  - LED Bars
+  invert_pan: false
+  invert_tilt: false
+  layer: ''
+  manufacturer: Varytec
+  model: Giga Bar 5 LED RGBW
+  mounting: standing
+  name: LED Bars 2
+  orientation_uses_group_default: true
+  pitch: -90.0
+  roll: 0.0
+  type: PIXELBAR
+  universe: 1
+  x: -1.47
+  y: 3.6
+  yaw: 0.0
+  z: 0.2
+  z_uses_group_default: false
+- address: 165
+  available_modes:
+  - channels: 3
+    name: 3 Channels
+  - channels: 4
+    name: 4 Channels
+  - channels: 5
+    name: 5 Channels
+  - channels: 8
+    name: 8 Channels
+  - channels: 10
+    name: 10 Channels
+  - channels: 48
+    name: 48 Channels
+  - channels: 51
+    name: 51 Channels
+  calibration: {}
+  current_mode: 8 Channels
+  definition_source: qxf
+  docked_to: ''
+  gdtf_fixture_type_id: null
+  group: LED Bars
+  groups:
+  - LED Bars
+  invert_pan: false
+  invert_tilt: false
+  layer: ''
+  manufacturer: Varytec
+  model: Giga Bar 5 LED RGBW
+  mounting: standing
+  name: LED Bars 3
+  orientation_uses_group_default: true
+  pitch: -90.0
+  roll: 0.0
+  type: PIXELBAR
+  universe: 1
+  x: 1.47
+  y: 3.6
+  yaw: 0.0
+  z: 0.2
+  z_uses_group_default: false
+- address: 173
+  available_modes:
+  - channels: 3
+    name: 3 Channels
+  - channels: 4
+    name: 4 Channels
+  - channels: 5
+    name: 5 Channels
+  - channels: 8
+    name: 8 Channels
+  - channels: 10
+    name: 10 Channels
+  - channels: 48
+    name: 48 Channels
+  - channels: 51
+    name: 51 Channels
+  calibration: {}
+  current_mode: 8 Channels
+  definition_source: qxf
+  docked_to: ''
+  gdtf_fixture_type_id: null
+  group: LED Bars
+  groups:
+  - LED Bars
+  invert_pan: false
+  invert_tilt: false
+  layer: ''
+  manufacturer: Varytec
+  model: Giga Bar 5 LED RGBW
+  mounting: standing
+  name: LED Bars 4
+  orientation_uses_group_default: true
+  pitch: -90.0
+  roll: 0.0
+  type: PIXELBAR
+  universe: 1
+  x: 4.4
+  y: 3.6
+  yaw: 0.0
+  z: 0.2
+  z_uses_group_default: false
+- address: 181
+  available_modes:
+  - channels: 1
+    name: 1 Channel Mode
+  - channels: 2
+    name: 2 Channels Mode
+  - channels: 5
+    name: 5 Channels Mode
+  - channels: 10
+    name: 10 Channels Mode
+  calibration: {}
+  current_mode: 10 Channels Mode
+  definition_source: qxf
+  docked_to: ''
+  gdtf_fixture_type_id: null
+  group: Blinders
+  groups:
+  - Blinders
+  invert_pan: false
+  invert_tilt: false
+  layer: ''
+  manufacturer: Showtec
+  model: Sunstrip Active
+  mounting: hanging
+  name: Blinders 1
+  orientation_uses_group_default: true
+  pitch: 90.0
+  roll: 0.0
+  type: SUNSTRIP
+  universe: 1
+  x: -4.4
+  y: 3.5
+  yaw: 0.0
+  z: 2.2
+  z_uses_group_default: false
+- address: 191
+  available_modes:
+  - channels: 1
+    name: 1 Channel Mode
+  - channels: 2
+    name: 2 Channels Mode
+  - channels: 5
+    name: 5 Channels Mode
+  - channels: 10
+    name: 10 Channels Mode
+  calibration: {}
+  current_mode: 10 Channels Mode
+  definition_source: qxf
+  docked_to: ''
+  gdtf_fixture_type_id: null
+  group: Blinders
+  groups:
+  - Blinders
+  invert_pan: false
+  invert_tilt: false
+  layer: ''
+  manufacturer: Showtec
+  model: Sunstrip Active
+  mounting: hanging
+  name: Blinders 2
+  orientation_uses_group_default: true
+  pitch: 90.0
+  roll: 0.0
+  type: SUNSTRIP
+  universe: 1
+  x: 4.4
+  y: 3.5
+  yaw: 0.0
+  z: 2.2
+  z_uses_group_default: false
+- address: 201
+  available_modes:
+  - channels: 1
+    name: 1-Channel
+  - channels: 26
+    name: 26-Channel
+  - channels: 28
+    name: 28-Channel
+  - channels: 4
+    name: 4-Channel
+  calibration: {}
+  current_mode: 26-Channel
+  definition_source: qxf
+  docked_to: ''
+  gdtf_fixture_type_id: null
+  group: Matrix
+  groups:
+  - Matrix
+  invert_pan: false
+  invert_tilt: false
+  layer: ''
+  manufacturer: Stairville
+  model: LED Matrix Blinder 5x5
+  mounting: hanging
+  name: Matrix 1
+  orientation_uses_group_default: true
+  pitch: 90.0
+  roll: 0.0
+  type: SUNSTRIP
+  universe: 1
+  x: 0.0
+  y: 0.0
+  yaw: 0.0
+  z: 4.0
+  z_uses_group_default: false
+grid_size: 0.5
+groups:
+  Back PARs:
+    color: '#5588dd'
+    default_mounting: hanging
+    default_pitch: 90.0
+    default_roll: 0.0
+    default_yaw: 0.0
+    default_z_height: 3.0
+    export_intensity: 255
+    fixture_order:
+    - Back PARs 1
+    - Back PARs 2
+    - Back PARs 3
+    - Back PARs 4
+    fixtures:
+    - address: 33
+      available_modes:
+      - channels: 4
+        name: 4 Channel
+      - channels: 6
+        name: 6 Channel
+      - channels: 8
+        name: 8 Channel
+      calibration: {}
+      current_mode: 8 Channel
+      definition_source: qxf
+      docked_to: ''
+      gdtf_fixture_type_id: null
+      group: Back PARs
+      groups:
+      - Back PARs
+      invert_pan: false
+      invert_tilt: false
+      layer: ''
+      manufacturer: Stairville
+      model: 'Retro Flat Par 18x12W RGBW '
+      mounting: hanging
+      name: Back PARs 1
+      orientation_uses_group_default: true
+      pitch: 90.0
+      roll: 0.0
+      type: WASH
+      universe: 1
+      x: -4.4
+      y: 3.0
+      yaw: 0.0
+      z: 3.0
+      z_uses_group_default: false
+    - address: 41
+      available_modes:
+      - channels: 4
+        name: 4 Channel
+      - channels: 6
+        name: 6 Channel
+      - channels: 8
+        name: 8 Channel
+      calibration: {}
+      current_mode: 8 Channel
+      definition_source: qxf
+      docked_to: ''
+      gdtf_fixture_type_id: null
+      group: Back PARs
+      groups:
+      - Back PARs
+      invert_pan: false
+      invert_tilt: false
+      layer: ''
+      manufacturer: Stairville
+      model: 'Retro Flat Par 18x12W RGBW '
+      mounting: hanging
+      name: Back PARs 2
+      orientation_uses_group_default: true
+      pitch: 90.0
+      roll: 0.0
+      type: WASH
+      universe: 1
+      x: -1.47
+      y: 3.0
+      yaw: 0.0
+      z: 3.0
+      z_uses_group_default: false
+    - address: 49
+      available_modes:
+      - channels: 4
+        name: 4 Channel
+      - channels: 6
+        name: 6 Channel
+      - channels: 8
+        name: 8 Channel
+      calibration: {}
+      current_mode: 8 Channel
+      definition_source: qxf
+      docked_to: ''
+      gdtf_fixture_type_id: null
+      group: Back PARs
+      groups:
+      - Back PARs
+      invert_pan: false
+      invert_tilt: false
+      layer: ''
+      manufacturer: Stairville
+      model: 'Retro Flat Par 18x12W RGBW '
+      mounting: hanging
+      name: Back PARs 3
+      orientation_uses_group_default: true
+      pitch: 90.0
+      roll: 0.0
+      type: WASH
+      universe: 1
+      x: 1.47
+      y: 3.0
+      yaw: 0.0
+      z: 3.0
+      z_uses_group_default: false
+    - address: 57
+      available_modes:
+      - channels: 4
+        name: 4 Channel
+      - channels: 6
+        name: 6 Channel
+      - channels: 8
+        name: 8 Channel
+      calibration: {}
+      current_mode: 8 Channel
+      definition_source: qxf
+      docked_to: ''
+      gdtf_fixture_type_id: null
+      group: Back PARs
+      groups:
+      - Back PARs
+      invert_pan: false
+      invert_tilt: false
+      layer: ''
+      manufacturer: Stairville
+      model: 'Retro Flat Par 18x12W RGBW '
+      mounting: hanging
+      name: Back PARs 4
+      orientation_uses_group_default: true
+      pitch: 90.0
+      roll: 0.0
+      type: WASH
+      universe: 1
+      x: 4.4
+      y: 3.0
+      yaw: 0.0
+      z: 3.0
+      z_uses_group_default: false
+    lighting_role: backbone
+    name: Back PARs
+    order_mode: manual
+  Blinders:
+    color: '#ccaa33'
+    default_mounting: hanging
+    default_pitch: 90.0
+    default_roll: 0.0
+    default_yaw: 0.0
+    default_z_height: 2.2
+    export_intensity: 255
+    fixture_order:
+    - Blinders 1
+    - Blinders 2
+    fixtures:
+    - address: 181
+      available_modes:
+      - channels: 1
+        name: 1 Channel Mode
+      - channels: 2
+        name: 2 Channels Mode
+      - channels: 5
+        name: 5 Channels Mode
+      - channels: 10
+        name: 10 Channels Mode
+      calibration: {}
+      current_mode: 10 Channels Mode
+      definition_source: qxf
+      docked_to: ''
+      gdtf_fixture_type_id: null
+      group: Blinders
+      groups:
+      - Blinders
+      invert_pan: false
+      invert_tilt: false
+      layer: ''
+      manufacturer: Showtec
+      model: Sunstrip Active
+      mounting: hanging
+      name: Blinders 1
+      orientation_uses_group_default: true
+      pitch: 90.0
+      roll: 0.0
+      type: SUNSTRIP
+      universe: 1
+      x: -4.4
+      y: 3.5
+      yaw: 0.0
+      z: 2.2
+      z_uses_group_default: false
+    - address: 191
+      available_modes:
+      - channels: 1
+        name: 1 Channel Mode
+      - channels: 2
+        name: 2 Channels Mode
+      - channels: 5
+        name: 5 Channels Mode
+      - channels: 10
+        name: 10 Channels Mode
+      calibration: {}
+      current_mode: 10 Channels Mode
+      definition_source: qxf
+      docked_to: ''
+      gdtf_fixture_type_id: null
+      group: Blinders
+      groups:
+      - Blinders
+      invert_pan: false
+      invert_tilt: false
+      layer: ''
+      manufacturer: Showtec
+      model: Sunstrip Active
+      mounting: hanging
+      name: Blinders 2
+      orientation_uses_group_default: true
+      pitch: 90.0
+      roll: 0.0
+      type: SUNSTRIP
+      universe: 1
+      x: 4.4
+      y: 3.5
+      yaw: 0.0
+      z: 2.2
+      z_uses_group_default: false
+    lighting_role: effect
+    name: Blinders
+    order_mode: manual
+  Front PARs:
+    color: '#4477cc'
+    default_mounting: hanging
+    default_pitch: 90.0
+    default_roll: 0.0
+    default_yaw: 0.0
+    default_z_height: 3.0
+    export_intensity: 255
+    fixture_order:
+    - Front PARs 1
+    - Front PARs 2
+    - Front PARs 3
+    - Front PARs 4
+    fixtures:
+    - address: 1
+      available_modes:
+      - channels: 4
+        name: 4 Channel
+      - channels: 6
+        name: 6 Channel
+      - channels: 8
+        name: 8 Channel
+      calibration: {}
+      current_mode: 8 Channel
+      definition_source: qxf
+      docked_to: ''
+      gdtf_fixture_type_id: null
+      group: Front PARs
+      groups:
+      - Front PARs
+      invert_pan: false
+      invert_tilt: false
+      layer: ''
+      manufacturer: Stairville
+      model: 'Retro Flat Par 18x12W RGBW '
+      mounting: hanging
+      name: Front PARs 1
+      orientation_uses_group_default: true
+      pitch: 90.0
+      roll: 0.0
+      type: WASH
+      universe: 1
+      x: -4.4
+      y: -3.0
+      yaw: 0.0
+      z: 3.0
+      z_uses_group_default: false
+    - address: 9
+      available_modes:
+      - channels: 4
+        name: 4 Channel
+      - channels: 6
+        name: 6 Channel
+      - channels: 8
+        name: 8 Channel
+      calibration: {}
+      current_mode: 8 Channel
+      definition_source: qxf
+      docked_to: ''
+      gdtf_fixture_type_id: null
+      group: Front PARs
+      groups:
+      - Front PARs
+      invert_pan: false
+      invert_tilt: false
+      layer: ''
+      manufacturer: Stairville
+      model: 'Retro Flat Par 18x12W RGBW '
+      mounting: hanging
+      name: Front PARs 2
+      orientation_uses_group_default: true
+      pitch: 90.0
+      roll: 0.0
+      type: WASH
+      universe: 1
+      x: -1.47
+      y: -3.0
+      yaw: 0.0
+      z: 3.0
+      z_uses_group_default: false
+    - address: 17
+      available_modes:
+      - channels: 4
+        name: 4 Channel
+      - channels: 6
+        name: 6 Channel
+      - channels: 8
+        name: 8 Channel
+      calibration: {}
+      current_mode: 8 Channel
+      definition_source: qxf
+      docked_to: ''
+      gdtf_fixture_type_id: null
+      group: Front PARs
+      groups:
+      - Front PARs
+      invert_pan: false
+      invert_tilt: false
+      layer: ''
+      manufacturer: Stairville
+      model: 'Retro Flat Par 18x12W RGBW '
+      mounting: hanging
+      name: Front PARs 3
+      orientation_uses_group_default: true
+      pitch: 90.0
+      roll: 0.0
+      type: WASH
+      universe: 1
+      x: 1.47
+      y: -3.0
+      yaw: 0.0
+      z: 3.0
+      z_uses_group_default: false
+    - address: 25
+      available_modes:
+      - channels: 4
+        name: 4 Channel
+      - channels: 6
+        name: 6 Channel
+      - channels: 8
+        name: 8 Channel
+      calibration: {}
+      current_mode: 8 Channel
+      definition_source: qxf
+      docked_to: ''
+      gdtf_fixture_type_id: null
+      group: Front PARs
+      groups:
+      - Front PARs
+      invert_pan: false
+      invert_tilt: false
+      layer: ''
+      manufacturer: Stairville
+      model: 'Retro Flat Par 18x12W RGBW '
+      mounting: hanging
+      name: Front PARs 4
+      orientation_uses_group_default: true
+      pitch: 90.0
+      roll: 0.0
+      type: WASH
+      universe: 1
+      x: 4.4
+      y: -3.0
+      yaw: 0.0
+      z: 3.0
+      z_uses_group_default: false
+    lighting_role: backbone
+    name: Front PARs
+    order_mode: manual
+  LED Bars:
+    color: '#44cccc'
+    default_mounting: standing
+    default_pitch: -90.0
+    default_roll: 0.0
+    default_yaw: 0.0
+    default_z_height: 0.2
+    export_intensity: 255
+    fixture_order:
+    - LED Bars 1
+    - LED Bars 2
+    - LED Bars 3
+    - LED Bars 4
+    fixtures:
+    - address: 149
+      available_modes:
+      - channels: 3
+        name: 3 Channels
+      - channels: 4
+        name: 4 Channels
+      - channels: 5
+        name: 5 Channels
+      - channels: 8
+        name: 8 Channels
+      - channels: 10
+        name: 10 Channels
+      - channels: 48
+        name: 48 Channels
+      - channels: 51
+        name: 51 Channels
+      calibration: {}
+      current_mode: 8 Channels
+      definition_source: qxf
+      docked_to: ''
+      gdtf_fixture_type_id: null
+      group: LED Bars
+      groups:
+      - LED Bars
+      invert_pan: false
+      invert_tilt: false
+      layer: ''
+      manufacturer: Varytec
+      model: Giga Bar 5 LED RGBW
+      mounting: standing
+      name: LED Bars 1
+      orientation_uses_group_default: true
+      pitch: -90.0
+      roll: 0.0
+      type: PIXELBAR
+      universe: 1
+      x: -4.4
+      y: 3.6
+      yaw: 0.0
+      z: 0.2
+      z_uses_group_default: false
+    - address: 157
+      available_modes:
+      - channels: 3
+        name: 3 Channels
+      - channels: 4
+        name: 4 Channels
+      - channels: 5
+        name: 5 Channels
+      - channels: 8
+        name: 8 Channels
+      - channels: 10
+        name: 10 Channels
+      - channels: 48
+        name: 48 Channels
+      - channels: 51
+        name: 51 Channels
+      calibration: {}
+      current_mode: 8 Channels
+      definition_source: qxf
+      docked_to: ''
+      gdtf_fixture_type_id: null
+      group: LED Bars
+      groups:
+      - LED Bars
+      invert_pan: false
+      invert_tilt: false
+      layer: ''
+      manufacturer: Varytec
+      model: Giga Bar 5 LED RGBW
+      mounting: standing
+      name: LED Bars 2
+      orientation_uses_group_default: true
+      pitch: -90.0
+      roll: 0.0
+      type: PIXELBAR
+      universe: 1
+      x: -1.47
+      y: 3.6
+      yaw: 0.0
+      z: 0.2
+      z_uses_group_default: false
+    - address: 165
+      available_modes:
+      - channels: 3
+        name: 3 Channels
+      - channels: 4
+        name: 4 Channels
+      - channels: 5
+        name: 5 Channels
+      - channels: 8
+        name: 8 Channels
+      - channels: 10
+        name: 10 Channels
+      - channels: 48
+        name: 48 Channels
+      - channels: 51
+        name: 51 Channels
+      calibration: {}
+      current_mode: 8 Channels
+      definition_source: qxf
+      docked_to: ''
+      gdtf_fixture_type_id: null
+      group: LED Bars
+      groups:
+      - LED Bars
+      invert_pan: false
+      invert_tilt: false
+      layer: ''
+      manufacturer: Varytec
+      model: Giga Bar 5 LED RGBW
+      mounting: standing
+      name: LED Bars 3
+      orientation_uses_group_default: true
+      pitch: -90.0
+      roll: 0.0
+      type: PIXELBAR
+      universe: 1
+      x: 1.47
+      y: 3.6
+      yaw: 0.0
+      z: 0.2
+      z_uses_group_default: false
+    - address: 173
+      available_modes:
+      - channels: 3
+        name: 3 Channels
+      - channels: 4
+        name: 4 Channels
+      - channels: 5
+        name: 5 Channels
+      - channels: 8
+        name: 8 Channels
+      - channels: 10
+        name: 10 Channels
+      - channels: 48
+        name: 48 Channels
+      - channels: 51
+        name: 51 Channels
+      calibration: {}
+      current_mode: 8 Channels
+      definition_source: qxf
+      docked_to: ''
+      gdtf_fixture_type_id: null
+      group: LED Bars
+      groups:
+      - LED Bars
+      invert_pan: false
+      invert_tilt: false
+      layer: ''
+      manufacturer: Varytec
+      model: Giga Bar 5 LED RGBW
+      mounting: standing
+      name: LED Bars 4
+      orientation_uses_group_default: true
+      pitch: -90.0
+      roll: 0.0
+      type: PIXELBAR
+      universe: 1
+      x: 4.4
+      y: 3.6
+      yaw: 0.0
+      z: 0.2
+      z_uses_group_default: false
+    lighting_role: accent
+    name: LED Bars
+    order_mode: manual
+  Matrix:
+    color: '#cc4444'
+    default_mounting: hanging
+    default_pitch: 90.0
+    default_roll: 0.0
+    default_yaw: 0.0
+    default_z_height: 4.0
+    export_intensity: 255
+    fixture_order:
+    - Matrix 1
+    fixtures:
+    - address: 201
+      available_modes:
+      - channels: 1
+        name: 1-Channel
+      - channels: 26
+        name: 26-Channel
+      - channels: 28
+        name: 28-Channel
+      - channels: 4
+        name: 4-Channel
+      calibration: {}
+      current_mode: 26-Channel
+      definition_source: qxf
+      docked_to: ''
+      gdtf_fixture_type_id: null
+      group: Matrix
+      groups:
+      - Matrix
+      invert_pan: false
+      invert_tilt: false
+      layer: ''
+      manufacturer: Stairville
+      model: LED Matrix Blinder 5x5
+      mounting: hanging
+      name: Matrix 1
+      orientation_uses_group_default: true
+      pitch: 90.0
+      roll: 0.0
+      type: SUNSTRIP
+      universe: 1
+      x: 0.0
+      y: 0.0
+      yaw: 0.0
+      z: 4.0
+      z_uses_group_default: false
+    lighting_role: effect
+    name: Matrix
+    order_mode: manual
+  Moving Wash:
+    color: '#cc44aa'
+    default_mounting: hanging
+    default_pitch: 90.0
+    default_roll: 0.0
+    default_yaw: 0.0
+    default_z_height: 3.4
+    export_intensity: 255
+    fixture_order:
+    - Moving Wash 1
+    - Moving Wash 2
+    fixtures:
+    - address: 121
+      available_modes:
+      - channels: 25
+        name: Extended
+      - channels: 14
+        name: Standard
+      calibration: {}
+      current_mode: Standard
+      definition_source: qxf
+      docked_to: ''
+      gdtf_fixture_type_id: null
+      group: Moving Wash
+      groups:
+      - Moving Wash
+      invert_pan: false
+      invert_tilt: false
+      layer: ''
+      manufacturer: Martin
+      model: MAC Aura
+      mounting: hanging
+      name: Moving Wash 1
+      orientation_uses_group_default: true
+      pitch: 90.0
+      roll: 0.0
+      type: MH
+      universe: 1
+      x: -4.4
+      y: 3.2
+      yaw: 0.0
+      z: 3.4
+      z_uses_group_default: false
+    - address: 135
+      available_modes:
+      - channels: 25
+        name: Extended
+      - channels: 14
+        name: Standard
+      calibration: {}
+      current_mode: Standard
+      definition_source: qxf
+      docked_to: ''
+      gdtf_fixture_type_id: null
+      group: Moving Wash
+      groups:
+      - Moving Wash
+      invert_pan: false
+      invert_tilt: false
+      layer: ''
+      manufacturer: Martin
+      model: MAC Aura
+      mounting: hanging
+      name: Moving Wash 2
+      orientation_uses_group_default: true
+      pitch: 90.0
+      roll: 0.0
+      type: MH
+      universe: 1
+      x: 4.4
+      y: 3.2
+      yaw: 0.0
+      z: 3.4
+      z_uses_group_default: false
+    lighting_role: accent
+    name: Moving Wash
+    order_mode: manual
+  Spots:
+    color: '#44cc77'
+    default_mounting: hanging
+    default_pitch: 90.0
+    default_roll: 0.0
+    default_yaw: 0.0
+    default_z_height: 3.4
+    export_intensity: 255
+    fixture_order:
+    - Spots 1
+    - Spots 2
+    - Spots 3
+    - Spots 4
+    fixtures:
+    - address: 65
+      available_modes:
+      - channels: 8
+        name: 8 Channel
+      - channels: 14
+        name: 14 Channel
+      calibration: {}
+      current_mode: 14 Channel
+      definition_source: qxf
+      docked_to: ''
+      gdtf_fixture_type_id: null
+      group: Spots
+      groups:
+      - Spots
+      invert_pan: false
+      invert_tilt: false
+      layer: ''
+      manufacturer: Varytec
+      model: Hero Spot 60
+      mounting: hanging
+      name: Spots 1
+      orientation_uses_group_default: true
+      pitch: 90.0
+      roll: 0.0
+      type: MH
+      universe: 1
+      x: -4.4
+      y: 0.0
+      yaw: 0.0
+      z: 3.4
+      z_uses_group_default: false
+    - address: 79
+      available_modes:
+      - channels: 8
+        name: 8 Channel
+      - channels: 14
+        name: 14 Channel
+      calibration: {}
+      current_mode: 14 Channel
+      definition_source: qxf
+      docked_to: ''
+      gdtf_fixture_type_id: null
+      group: Spots
+      groups:
+      - Spots
+      invert_pan: false
+      invert_tilt: false
+      layer: ''
+      manufacturer: Varytec
+      model: Hero Spot 60
+      mounting: hanging
+      name: Spots 2
+      orientation_uses_group_default: true
+      pitch: 90.0
+      roll: 0.0
+      type: MH
+      universe: 1
+      x: -1.47
+      y: 0.0
+      yaw: 0.0
+      z: 3.4
+      z_uses_group_default: false
+    - address: 93
+      available_modes:
+      - channels: 8
+        name: 8 Channel
+      - channels: 14
+        name: 14 Channel
+      calibration: {}
+      current_mode: 14 Channel
+      definition_source: qxf
+      docked_to: ''
+      gdtf_fixture_type_id: null
+      group: Spots
+      groups:
+      - Spots
+      invert_pan: false
+      invert_tilt: false
+      layer: ''
+      manufacturer: Varytec
+      model: Hero Spot 60
+      mounting: hanging
+      name: Spots 3
+      orientation_uses_group_default: true
+      pitch: 90.0
+      roll: 0.0
+      type: MH
+      universe: 1
+      x: 1.47
+      y: 0.0
+      yaw: 0.0
+      z: 3.4
+      z_uses_group_default: false
+    - address: 107
+      available_modes:
+      - channels: 8
+        name: 8 Channel
+      - channels: 14
+        name: 14 Channel
+      calibration: {}
+      current_mode: 14 Channel
+      definition_source: qxf
+      docked_to: ''
+      gdtf_fixture_type_id: null
+      group: Spots
+      groups:
+      - Spots
+      invert_pan: false
+      invert_tilt: false
+      layer: ''
+      manufacturer: Varytec
+      model: Hero Spot 60
+      mounting: hanging
+      name: Spots 4
+      orientation_uses_group_default: true
+      pitch: 90.0
+      roll: 0.0
+      type: MH
+      universe: 1
+      x: 4.4
+      y: 0.0
+      yaw: 0.0
+      z: 3.4
+      z_uses_group_default: false
+    lighting_role: movement
+    name: Spots
+    order_mode: manual
+light_block_defs:
+  lb0:
+    colour_blocks:
+    - end: 1.0
+      offset: 0.0
+      ref: c0
+    dimmer_blocks:
+    - end: 1.0
+      offset: 0.0
+      ref: d0
+    effect_name: auto.pulse
+    movement_blocks:
+    - end: 1.0
+      offset: 0.0
+      ref: m0
+    name: null
+    riff_source: null
+    riff_version: null
+    special_blocks: []
+  lb1:
+    colour_blocks:
+    - end: 1.0
+      offset: 0.0
+      ref: c0
+    dimmer_blocks:
+    - end: 1.0
+      offset: 0.0
+      ref: d1
+    effect_name: auto.fade
+    movement_blocks:
+    - end: 1.0
+      offset: 0.0
+      ref: m1
+    name: null
+    riff_source: null
+    riff_version: null
+    special_blocks: []
+  lb10:
+    colour_blocks:
+    - end: 1.0
+      offset: 0.0
+      ref: c0
+    dimmer_blocks:
+    - end: 1.0
+      offset: 0.0
+      ref: d10
+    effect_name: auto.throb
+    movement_blocks: []
+    name: null
+    riff_source: null
+    riff_version: null
+    special_blocks: []
+  lb11:
+    colour_blocks:
+    - end: 1.0
+      offset: 0.0
+      ref: c0
+    dimmer_blocks:
+    - end: 1.0
+      offset: 0.0
+      ref: d11
+    effect_name: auto.cascade
+    movement_blocks: []
+    name: null
+    riff_source: null
+    riff_version: null
+    special_blocks: []
+  lb12:
+    colour_blocks:
+    - end: 1.0
+      offset: 0.0
+      ref: c1
+    dimmer_blocks:
+    - end: 1.0
+      offset: 0.0
+      ref: d12
+    effect_name: auto.strobe
+    movement_blocks: []
+    name: null
+    riff_source: null
+    riff_version: null
+    special_blocks: []
+  lb13:
+    colour_blocks:
+    - end: 1.0
+      offset: 0.0
+      ref: c0
+    dimmer_blocks:
+    - end: 1.0
+      offset: 0.0
+      ref: d13
+    effect_name: auto.stroke
+    movement_blocks:
+    - end: 1.0
+      offset: 0.0
+      ref: m3
+    name: null
+    riff_source: null
+    riff_version: null
+    special_blocks: []
+  lb14:
+    colour_blocks:
+    - end: 1.0
+      offset: 0.0
+      ref: c0
+    dimmer_blocks:
+    - end: 1.0
+      offset: 0.0
+      ref: d14
+    effect_name: auto.random_stroke
+    movement_blocks:
+    - end: 1.0
+      offset: 0.0
+      ref: m3
+    name: null
+    riff_source: null
+    riff_version: null
+    special_blocks: []
+  lb15:
+    colour_blocks:
+    - end: 1.0
+      offset: 0.0
+      ref: c0
+    dimmer_blocks:
+    - end: 1.0
+      offset: 0.0
+      ref: d15
+    effect_name: auto.random_stroke
+    movement_blocks:
+    - end: 1.0
+      offset: 0.0
+      ref: m1
+    name: null
+    riff_source: null
+    riff_version: null
+    special_blocks: []
+  lb16:
+    colour_blocks:
+    - end: 1.0
+      offset: 0.0
+      ref: c0
+    dimmer_blocks:
+    - end: 1.0
+      offset: 0.0
+      ref: d16
+    effect_name: auto.pulse
+    movement_blocks:
+    - end: 1.0
+      offset: 0.0
+      ref: m1
+    name: null
+    riff_source: null
+    riff_version: null
+    special_blocks: []
+  lb2:
+    colour_blocks:
+    - end: 1.0
+      offset: 0.0
+      ref: c0
+    dimmer_blocks:
+    - end: 1.0
+      offset: 0.0
+      ref: d2
+    effect_name: auto.throb
+    movement_blocks:
+    - end: 1.0
+      offset: 0.0
+      ref: m1
+    name: null
+    riff_source: null
+    riff_version: null
+    special_blocks: []
+  lb3:
+    colour_blocks:
+    - end: 1.0
+      offset: 0.0
+      ref: c0
+    dimmer_blocks:
+    - end: 1.0
+      offset: 0.0
+      ref: d3
+    effect_name: auto.strobe
+    movement_blocks: []
+    name: null
+    riff_source: null
+    riff_version: null
+    special_blocks: []
+  lb4:
+    colour_blocks:
+    - end: 1.0
+      offset: 0.0
+      ref: c1
+    dimmer_blocks:
+    - end: 1.0
+      offset: 0.0
+      ref: d4
+    effect_name: auto.fill
+    movement_blocks: []
+    name: null
+    riff_source: null
+    riff_version: null
+    special_blocks: []
+  lb5:
+    colour_blocks:
+    - end: 1.0
+      offset: 0.0
+      ref: c1
+    dimmer_blocks:
+    - end: 1.0
+      offset: 0.0
+      ref: d5
+    effect_name: auto.throb
+    movement_blocks: []
+    name: null
+    riff_source: null
+    riff_version: null
+    special_blocks: []
+  lb6:
+    colour_blocks:
+    - end: 1.0
+      offset: 0.0
+      ref: c0
+    dimmer_blocks:
+    - end: 1.0
+      offset: 0.0
+      ref: d6
+    effect_name: auto.fade
+    movement_blocks:
+    - end: 1.0
+      offset: 0.0
+      ref: m2
+    name: null
+    riff_source: null
+    riff_version: null
+    special_blocks: []
+  lb7:
+    colour_blocks:
+    - end: 1.0
+      offset: 0.0
+      ref: c0
+    dimmer_blocks:
+    - end: 1.0
+      offset: 0.0
+      ref: d7
+    effect_name: auto.pulse
+    movement_blocks:
+    - end: 1.0
+      offset: 0.0
+      ref: m3
+    name: null
+    riff_source: null
+    riff_version: null
+    special_blocks: []
+  lb8:
+    colour_blocks:
+    - end: 1.0
+      offset: 0.0
+      ref: c0
+    dimmer_blocks:
+    - end: 1.0
+      offset: 0.0
+      ref: d8
+    effect_name: auto.throb
+    movement_blocks:
+    - end: 1.0
+      offset: 0.0
+      ref: m3
+    name: null
+    riff_source: null
+    riff_version: null
+    special_blocks: []
+  lb9:
+    colour_blocks:
+    - end: 1.0
+      offset: 0.0
+      ref: c0
+    dimmer_blocks:
+    - end: 1.0
+      offset: 0.0
+      ref: d9
+    effect_name: auto.ping_pong
+    movement_blocks: []
+    name: null
+    riff_source: null
+    riff_version: null
+    special_blocks: []
+midi_input_devices: null
+pause_show: null
+setlist:
+  entries:
+  - pause_after:
+      duration_s: 0.0
+      level: 20
+      mode: hold_last
+      until: trigger
+    song: Demo
+    trigger:
+      channel: 1
+      mode: manual
+      timecode: ''
+      value: 0
+  name: ''
+  sync_device: ''
+  sync_mode: manual
+shows_directory: null
+songs:
+  Demo:
+    effects: []
+    parts:
+    - bpm: 192.0
+      color: '#ffff00'
+      name: prechorus1
+      num_bars: 8
+      signature: 4/4
+      transition: instant
+    - bpm: 192.0
+      color: '#ff0080'
+      name: chorus1
+      num_bars: 11
+      signature: 4/4
+      transition: instant
+    timeline_data:
+      audio_file_path: monsters_demo.ogg
+      lanes:
+      - fixture_targets:
+        - Back PARs
+        lane_id: c992ee1dc8f8469488e06194a1aa39e8
+        light_blocks:
+        - end: 5.0
+          ref: lb0
+          start: 3.75
+        - end: 10.0
+          ref: lb0
+          start: 8.75
+        - end: 13.75
+          ref: lb1
+          start: 10.0
+        - end: 15.0
+          ref: lb2
+          start: 13.75
+        - end: 18.75
+          ref: lb1
+          start: 15.0
+        - end: 20.0
+          ref: lb2
+          start: 18.75
+        - end: 23.75
+          ref: lb1
+          start: 20.0
+        muted: false
+        name: Auto - Back PARs
+        solo: false
+      - fixture_targets:
+        - Blinders
+        lane_id: f2e510d85414457e9141d2f45ba24d6c
+        light_blocks:
+        - end: 3.75
+          ref: lb3
+          start: 0.0
+        - end: 8.75
+          ref: lb3
+          start: 5.0
+        - end: 13.75
+          ref: lb4
+          start: 10.0
+        - end: 15.0
+          ref: lb5
+          start: 13.75
+        - end: 18.75
+          ref: lb4
+          start: 15.0
+        - end: 20.0
+          ref: lb5
+          start: 18.75
+        - end: 23.75
+          ref: lb4
+          start: 20.0
+        muted: false
+        name: Auto - Blinders
+        solo: false
+      - fixture_targets:
+        - Front PARs
+        lane_id: 6ee7b5011915427f99d0aa3dfa65e908
+        light_blocks:
+        - end: 3.75
+          ref: lb6
+          start: 0.0
+        - end: 8.75
+          ref: lb6
+          start: 5.0
+        - end: 13.75
+          ref: lb7
+          start: 10.0
+        - end: 15.0
+          ref: lb8
+          start: 13.75
+        - end: 18.75
+          ref: lb7
+          start: 15.0
+        - end: 20.0
+          ref: lb8
+          start: 18.75
+        - end: 23.75
+          ref: lb7
+          start: 20.0
+        muted: false
+        name: Auto - Front PARs
+        solo: false
+      - fixture_targets:
+        - LED Bars
+        lane_id: 68a9e364110145369a2b1209c64ebbdf
+        light_blocks:
+        - end: 13.75
+          ref: lb9
+          start: 10.0
+        - end: 15.0
+          ref: lb10
+          start: 13.75
+        - end: 18.75
+          ref: lb9
+          start: 15.0
+        - end: 20.0
+          ref: lb10
+          start: 18.75
+        - end: 23.75
+          ref: lb9
+          start: 20.0
+        muted: false
+        name: Auto - LED Bars
+        solo: false
+      - fixture_targets:
+        - Matrix
+        lane_id: 6a13ab7c18f14eecbc7e5c8263b8c55c
+        light_blocks:
+        - end: 5.0
+          ref: lb11
+          start: 3.75
+        - end: 10.0
+          ref: lb11
+          start: 8.75
+        - end: 13.75
+          ref: lb12
+          start: 10.0
+        - end: 15.0
+          ref: lb5
+          start: 13.75
+        - end: 18.75
+          ref: lb12
+          start: 15.0
+        - end: 20.0
+          ref: lb5
+          start: 18.75
+        - end: 23.75
+          ref: lb12
+          start: 20.0
+        muted: false
+        name: Auto - Matrix
+        solo: false
+      - fixture_targets:
+        - Moving Wash
+        lane_id: a9e03a0edaf04563b84cdbe02bcd616b
+        light_blocks:
+        - end: 13.75
+          ref: lb13
+          start: 10.0
+        - end: 15.0
+          ref: lb14
+          start: 13.75
+        - end: 18.75
+          ref: lb13
+          start: 15.0
+        - end: 20.0
+          ref: lb14
+          start: 18.75
+        - end: 23.75
+          ref: lb13
+          start: 20.0
+        muted: false
+        name: Auto - Moving Wash
+        solo: false
+      - fixture_targets:
+        - Spots
+        lane_id: f5b1b01ee3c74c399ded6db3ba9c35b2
+        light_blocks:
+        - end: 5.0
+          ref: lb0
+          start: 3.75
+        - end: 10.0
+          ref: lb0
+          start: 8.75
+        - end: 13.75
+          ref: lb15
+          start: 10.0
+        - end: 15.0
+          ref: lb16
+          start: 13.75
+        - end: 18.75
+          ref: lb15
+          start: 15.0
+        - end: 20.0
+          ref: lb16
+          start: 18.75
+        - end: 23.75
+          ref: lb15
+          start: 20.0
+        muted: false
+        name: Auto - Spots
+        solo: false
+    trigger_channel: null
+    trigger_device: null
+spots:
+  Crowd:
+    name: Crowd
+    x: 0.0
+    y: 0.0
+    z: 0.0
+  Stage:
+    name: Stage
+    x: 0.0
+    y: 4.0
+    z: 0.0
+stage_elements: []
+stage_height: 8.0
+stage_layers: []
+stage_width: 10.0
+universes:
+  '1':
+    name: Universe 1
+    output:
+      line: '0'
+      parameters:
+        ip: 192.168.1.1
+        port: '6454'
+        subnet: '0'
+        universe: '1'
+      plugin: E1.31
+workspace_path: null

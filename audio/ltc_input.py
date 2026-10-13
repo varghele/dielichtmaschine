@@ -87,7 +87,16 @@ class LTCInputService(QObject):
         self._decoder: Optional[LTCDecoder] = None
         self._chase: Optional[TimecodeChase] = None
         self._samples_fed = 0
+        # The rate the open stream ACTUALLY runs at (start() may adopt
+        # the device's native rate); the requested rate until then.
+        self._active_rate = int(sample_rate)
         self._lock = threading.Lock()
+        # Serialises the signal emits of the reader thread and the UI
+        # thread: the last-emitted check-and-set is atomic, and a drain
+        # that read its state before stop() cannot emit it afterwards
+        # (stop() swaps the input out under this lock). Reentrant so a
+        # directly connected slot may call start()/stop().
+        self._emit_lock = threading.RLock()
         self._thread: Optional[threading.Thread] = None
         self._running = False
         self._last_state_emitted = NO_SIGNAL
@@ -124,7 +133,12 @@ class LTCInputService(QObject):
 
         with self._lock:
             self._audio = audio
-            self._decoder = LTCDecoder(sample_rate=self.sample_rate)
+            # The stream may have fallen back to the device's native
+            # rate (Invalid-sample-rate devices, 2026-07-22): decode
+            # at the rate the stream ACTUALLY runs at.
+            self._active_rate = int(getattr(audio, "sample_rate",
+                                            self.sample_rate))
+            self._decoder = LTCDecoder(sample_rate=self._active_rate)
             self._chase = None
             self._samples_fed = 0
         self._running = True
@@ -141,7 +155,7 @@ class LTCInputService(QObject):
         thread, self._thread = self._thread, None
         if thread is not None and thread.is_alive():
             thread.join(timeout=2.0)
-        with self._lock:
+        with self._emit_lock, self._lock:
             audio, self._audio = self._audio, None
             self._decoder = None
             self._chase = None
@@ -204,9 +218,10 @@ class LTCInputService(QObject):
                     if rate is not None:
                         self._chase = TimecodeChase(rate)
                 if self._chase is not None:
+                    rate = self._active_rate
                     for frame in decoded:
                         lag = (self._samples_fed - frame.end_sample) \
-                            / self.sample_rate
+                            / rate
                         self._chase.feed(frame, now - lag)
             chase = self._chase
             state = chase.state(now).value if chase else NO_SIGNAL
@@ -214,10 +229,14 @@ class LTCInputService(QObject):
             if chase is not None and chase.last_timecode is not None:
                 label = str(chase.last_timecode)
 
-        self._emit_state(state)
-        if label and now - self._last_display_emit >= self.display_interval:
-            self._last_display_emit = now
-            self.timecode.emit(label)
+        with self._emit_lock:
+            if self._audio is not audio:
+                return   # stopped (or restarted) since this drain read
+            self._emit_state(state)
+            if label and \
+                    now - self._last_display_emit >= self.display_interval:
+                self._last_display_emit = now
+                self.timecode.emit(label)
 
     def _reader_loop(self) -> None:
         while self._running:
@@ -233,6 +252,7 @@ class LTCInputService(QObject):
         return self._clock() if now is None else now
 
     def _emit_state(self, state: str, force: bool = False) -> None:
-        if force or state != self._last_state_emitted:
-            self._last_state_emitted = state
-            self.state_changed.emit(state)
+        with self._emit_lock:
+            if force or state != self._last_state_emitted:
+                self._last_state_emitted = state
+                self.state_changed.emit(state)

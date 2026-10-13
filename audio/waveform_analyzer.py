@@ -190,66 +190,70 @@ class WaveformAnalyzer:
         return os.path.join(self.cache_dir, f"{file_hash}.waveform")
 
     def _save_to_cache(self, waveform_data: WaveformData):
-        """Save waveform data to cache"""
+        """Save waveform data to cache.
+
+        Binary npz since 2026-07-16: the old JSON cache serialized
+        ~500k floats per song (a multi-second dump, ~1 s parse), and
+        the write was NOT atomic - an interrupted write left a
+        truncated file that failed to parse forever after, so every
+        song load re-analyzed and re-wrote. npz round-trips in tens of
+        milliseconds and the tmp+replace write can never leave a torn
+        cache. Old JSON caches simply miss and regenerate once.
+        """
         try:
             cache_path = self._get_cache_path(waveform_data.file_path)
-
-            # Convert to serializable format
-            cache_data = {
-                'file_path': waveform_data.file_path,
-                'sample_rate': waveform_data.sample_rate,
-                'duration': waveform_data.duration,
-                'peak_levels': {}
-            }
-
+            arrays = {}
             for resolution, peaks in waveform_data.peak_levels.items():
-                cache_data['peak_levels'][str(resolution)] = {
-                    'resolution': peaks.resolution,
-                    'min_peaks': peaks.min_peaks,
-                    'max_peaks': peaks.max_peaks,
-                    'rms_peaks': peaks.rms_peaks
-                }
-
-            # Save to file
-            with open(cache_path, 'w') as f:
-                json.dump(cache_data, f, separators=(',', ':'))
-
+                arrays[f"min_{resolution}"] = np.asarray(peaks.min_peaks,
+                                                         dtype=np.float32)
+                arrays[f"max_{resolution}"] = np.asarray(peaks.max_peaks,
+                                                         dtype=np.float32)
+                arrays[f"rms_{resolution}"] = np.asarray(peaks.rms_peaks,
+                                                         dtype=np.float32)
+            arrays["_meta_sample_rate"] = np.array(
+                [waveform_data.sample_rate], dtype=np.float64)
+            arrays["_meta_duration"] = np.array(
+                [waveform_data.duration], dtype=np.float64)
+            tmp = cache_path + ".tmp"
+            with open(tmp, "wb") as f:
+                np.savez(f, **arrays)
+            os.replace(tmp, cache_path)
+            return
         except Exception as e:
             print(f"Error saving waveform cache: {e}")
 
     def _load_from_cache(self, file_path: str) -> Optional[WaveformData]:
-        """Load waveform data from cache"""
+        """Load waveform data from the npz cache. Anything unreadable
+        (including a pre-2026-07-16 JSON cache) misses quietly and
+        regenerates."""
         try:
             cache_path = self._get_cache_path(file_path)
 
             if not os.path.exists(cache_path):
                 return None
 
-            # Load from file
-            with open(cache_path, 'r') as f:
-                cache_data = json.load(f)
-
-            # Reconstruct waveform data
-            waveform_data = WaveformData(
-                cache_data['file_path'],
-                cache_data['sample_rate'],
-                cache_data['duration']
-            )
-
-            for resolution_str, peak_data in cache_data['peak_levels'].items():
-                peaks = WaveformPeaks(
-                    resolution=peak_data['resolution'],
-                    min_peaks=peak_data['min_peaks'],
-                    max_peaks=peak_data['max_peaks'],
-                    rms_peaks=peak_data['rms_peaks']
+            with np.load(cache_path, allow_pickle=False) as data:
+                waveform_data = WaveformData(
+                    file_path,
+                    float(data["_meta_sample_rate"][0]),
+                    float(data["_meta_duration"][0]),
                 )
-                waveform_data.add_peak_level(peaks)
-
+                resolutions = sorted(
+                    int(name[4:]) for name in data.files
+                    if name.startswith("min_"))
+                if not resolutions:
+                    return None
+                for resolution in resolutions:
+                    waveform_data.add_peak_level(WaveformPeaks(
+                        resolution=resolution,
+                        min_peaks=data[f"min_{resolution}"],
+                        max_peaks=data[f"max_{resolution}"],
+                        rms_peaks=data[f"rms_{resolution}"],
+                    ))
             return waveform_data
 
-        except Exception as e:
-            print(f"Error loading waveform cache: {e}")
-            return None
+        except Exception:
+            return None      # miss: regenerate (and re-save as npz)
 
     def clear_cache(self):
         """Clear all cached waveform data"""

@@ -21,8 +21,15 @@ permissions:
   contents: write
 
 jobs:
+  tests:
+    # The full Tests workflow (unit, e2e, visual on Linux; unit, e2e on
+    # Windows). Nothing is built, let alone released, on a red suite.
+    name: Tests
+    uses: ./.github/workflows/tests.yml
+
   build:
     name: Build (${{ matrix.os }})
+    needs: tests
     runs-on: ${{ matrix.os }}
     strategy:
       # Don't cancel sibling jobs if one OS fails; the other artifact is still useful.

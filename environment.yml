@@ -1,11 +1,18 @@
 name: lichtmaschine
+# conda-forge only: `nodefaults` keeps the Anaconda `defaults` channels
+# out of the solve even where the conda install lists them (mixing the
+# two channels' binaries breaks environments). Miniconda still demands
+# its channels' Terms of Service before ANY create; see README.md >
+# Install. Package names follow conda-forge where they differ from PyPI;
+# tests/unit/test_repo_infra.py keeps this file and requirements.txt in
+# step.
 channels:
   - conda-forge
+  - nodefaults
 dependencies:
   - python>=3.12
 
-  # Core
-  - pyqt>=6.5
+  # Core (PyQt6 comes from pip, see the bottom of the file)
   - pyyaml>=6.0
   - numpy>=1.24
   - pandas>=2.0
@@ -13,8 +20,8 @@ dependencies:
   - requests>=2.28
 
   # Audio
-  - sounddevice>=0.4.6
-  - soundfile>=0.12
+  - python-sounddevice>=0.4.6
+  - pysoundfile>=0.12
   - librosa>=0.10
   - scipy>=1.10
   - pygame>=2.5
@@ -38,8 +45,12 @@ dependencies:
   # Tests
   - pytest>=7.0
   - pytest-xdist>=3.0
+  - pytest-timeout>=2.2
 
-  # GDTF fixture definitions (DIN SPEC 15800); not on conda-forge
   - pip
   - pip:
+      # conda-forge's `pyqt` is the Qt5 binding and its pyqt6 build lags
+      # the pip wheel that requirements.txt and CI run against
+      - PyQt6>=6.5
+      # GDTF fixture definitions (DIN SPEC 15800); not on conda-forge
       - pygdtf>=1.4.5

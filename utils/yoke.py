@@ -30,8 +30,7 @@ generation time (utils/to_xml, 2026-07-13) so QLC+ playback aims like
 native output.
 """
 
-from functools import lru_cache
-from typing import Tuple
+from typing import Dict, Tuple
 
 from utils.orientation import (
     calculate_pan_tilt,
@@ -52,7 +51,20 @@ def solver_to_gdtf_axes(pan_deg: float, tilt_deg: float,
     return _impl(pan_deg, tilt_deg, flipped)
 
 
-@lru_cache(maxsize=256)
+# (manufacturer, model, mode) -> (convert, flipped). Only answers for a
+# RESOLVED definition are stored: a lookup that found no definition is
+# retried (cheap, the library memoizes the miss until its next clear), so
+# a definition that lands mid-session (GDTF autopull, Share download) is
+# picked up. utils.fixture_library.invalidate_fixture_caches clears it.
+_YOKE_CACHE: Dict[Tuple[str, str, str], Tuple[bool, bool]] = {}
+
+
+def clear_yoke_cache() -> None:
+    """Drop the yoke and physical-range lookups (fixture files changed)."""
+    _YOKE_CACHE.clear()
+    _PHYSICAL_RANGES_CACHE.clear()
+
+
 def fixture_yoke(manufacturer: str, model: str,
                  mode: str) -> Tuple[bool, bool]:
     """``(convert, flipped)`` for a fixture identity.
@@ -73,39 +85,74 @@ def fixture_yoke(manufacturer: str, model: str,
     caller additionally gates on the map having pan+tilt channels, so
     non-movers never reach the conversion).
 
-    Cached by identity; the lazy imports keep the DMX thread clear of
-    the renderer package until a mover is actually on the wire.
+    Cached by identity once the definition resolves; the lazy imports
+    keep the DMX thread clear of the renderer package until a mover is
+    actually on the wire.
     """
+    key = (manufacturer, model, mode)
+    cached = _YOKE_CACHE.get(key)
+    if cached is not None:
+        return cached
     try:
         from utils.fixture_library import get_definition
         defn = get_definition(manufacturer, model)
-        if defn is None:
-            return (False, False)
-        if getattr(defn, "gdtf", None) is None:
-            return (True, True)   # synthetic standard yoke for .qxf
-        from visualizer.renderer.gdtf_draw_plan import build_draw_plan
-        plan = build_draw_plan(defn.gdtf, mode)
-        return (True, bool(getattr(plan, "flipped", False)))
     except Exception:
         return (False, False)
+    if defn is None:
+        return (False, False)
+    try:
+        if getattr(defn, "gdtf", None) is None:
+            result = (True, True)   # synthetic standard yoke for .qxf
+        else:
+            from visualizer.renderer.gdtf_draw_plan import build_draw_plan
+            plan = build_draw_plan(defn.gdtf, mode)
+            result = (True, bool(getattr(plan, "flipped", False)))
+    except Exception:
+        # A resolved definition whose chain cannot be built: cached like
+        # a success, so the 44 Hz output loop does not rebuild it every
+        # frame; the next invalidation retries it.
+        result = (False, False)
+    _YOKE_CACHE[key] = result
+    return result
 
 
+# lru_cache-compatible alias: callers and tests clear with
+# fixture_yoke.cache_clear().
+fixture_yoke.cache_clear = _YOKE_CACHE.clear
 
 
+# (manufacturer, model) -> (pan_range, tilt_range); like _YOKE_CACHE,
+# only resolved definitions are stored.
+_PHYSICAL_RANGES_CACHE: Dict[Tuple[str, str], Tuple[float, float]] = {}
 
 
-@lru_cache(maxsize=256)
 def _physical_ranges(manufacturer: str, model: str) -> Tuple[float, float]:
     """(pan_range, tilt_range) from the definition's <Physical><Focus>,
     with the historical 540/270 defaults when absent or zero."""
+    key = (manufacturer, model)
+    cached = _PHYSICAL_RANGES_CACHE.get(key)
+    if cached is not None:
+        return cached
     try:
         from utils.fixture_library import get_definition
         defn = get_definition(manufacturer, model)
         pan = float(getattr(defn, "pan_max", 0.0) or 0.0)
         tilt = float(getattr(defn, "tilt_max", 0.0) or 0.0)
-        return (pan or 540.0, tilt or 270.0)
     except Exception:
         return (540.0, 270.0)
+    result = (pan or 540.0, tilt or 270.0)
+    if defn is not None:
+        _PHYSICAL_RANGES_CACHE[key] = result
+    return result
+
+
+_physical_ranges.cache_clear = _PHYSICAL_RANGES_CACHE.clear
+
+
+def physical_ranges(manufacturer: str, model: str) -> Tuple[float, float]:
+    """Public accessor for the definition's physical pan/tilt travel
+    (utils/movement_migration.py decodes stored solver DMX with it)."""
+    return _physical_ranges(manufacturer, model)
 
 
 def export_aim_dmx(fixture, fixture_z: float,
@@ -134,7 +181,14 @@ def export_aim_dmx(fixture, fixture_z: float,
                                     getattr(fixture, "current_mode", ""))
     if convert:
         pan_deg, tilt_deg = solver_to_gdtf_axes(pan_deg, tilt_deg, flipped)
-    return pan_tilt_to_dmx(pan_deg, tilt_deg, pan_range, tilt_range)
+    pan_out, tilt_out = pan_tilt_to_dmx(pan_deg, tilt_deg,
+                                        pan_range, tilt_range)
+    # Per-fixture DMX direction inversion (v1.5a).
+    if getattr(fixture, "invert_pan", False):
+        pan_out = 255 - pan_out
+    if getattr(fixture, "invert_tilt", False):
+        tilt_out = 255 - tilt_out
+    return pan_out, tilt_out
 
 
 def export_solver_aim_dmx(fixture, fixture_z: float,
@@ -178,14 +232,23 @@ def convert_solver_dmx(fixture, pan_dmx: float,
     convert, flipped = fixture_yoke(fixture.manufacturer, fixture.model,
                                     getattr(fixture, "current_mode", ""))
     if not convert:
-        return int(pan_dmx), int(tilt_dmx)
-    pan_range, tilt_range = _physical_ranges(fixture.manufacturer,
-                                             fixture.model)
-    # Inverse of pan_tilt_to_dmx's 8-bit encode (127 = centre).
-    pan_deg = (pan_dmx - 127.0) / 127.0 * (pan_range / 2.0)
-    tilt_deg = (tilt_dmx - 127.0) / 127.0 * (tilt_range / 2.0)
-    pan_g, tilt_g = solver_to_gdtf_axes(pan_deg, tilt_deg, flipped)
-    return pan_tilt_to_dmx(pan_g, tilt_g, pan_range, tilt_range)
+        pan_out, tilt_out = int(pan_dmx), int(tilt_dmx)
+    else:
+        pan_range, tilt_range = _physical_ranges(fixture.manufacturer,
+                                                 fixture.model)
+        # Inverse of pan_tilt_to_dmx's 8-bit encode (127 = centre).
+        pan_deg = (pan_dmx - 127.0) / 127.0 * (pan_range / 2.0)
+        tilt_deg = (tilt_dmx - 127.0) / 127.0 * (tilt_range / 2.0)
+        pan_g, tilt_g = solver_to_gdtf_axes(pan_deg, tilt_deg, flipped)
+        pan_out, tilt_out = pan_tilt_to_dmx(pan_g, tilt_g,
+                                            pan_range, tilt_range)
+    # Per-fixture DMX direction inversion (v1.5a) - physical truth,
+    # applied whether or not a yoke chain resolved.
+    if getattr(fixture, "invert_pan", False):
+        pan_out = 255 - pan_out
+    if getattr(fixture, "invert_tilt", False):
+        tilt_out = 255 - tilt_out
+    return pan_out, tilt_out
 
 
 def _decode16(buf, fmap, coarse_offsets, fine_offsets, rng: float) -> float:
@@ -211,19 +274,54 @@ def _write(buf, fmap, offsets, value: int) -> None:
             buf[ch] = value
 
 
-def apply_yoke_to_universe(buf: bytearray, fmap, flipped: bool) -> None:
+def _read16(buf, fmap, coarse_offsets, fine_offsets) -> Tuple[int, int]:
+    coarse, fine = 0, 0
+    if coarse_offsets:
+        _, ch = fmap.get_absolute_address(coarse_offsets[0])
+        if 0 <= ch < 512:
+            coarse = buf[ch]
+    if fine_offsets:
+        _, ch = fmap.get_absolute_address(fine_offsets[0])
+        if 0 <= ch < 512:
+            fine = buf[ch]
+    return coarse, fine
+
+
+def _invert16(coarse: int, fine: int) -> Tuple[int, int]:
+    value = 65535 - (coarse * 256 + fine)
+    return (value >> 8) & 0xFF, value & 0xFF
+
+
+def apply_yoke_to_universe(buf: bytearray, fmap, flipped: bool,
+                           convert: bool = True,
+                           invert_pan: bool = False,
+                           invert_tilt: bool = False) -> None:
     """In place: rewrite one mover's pan/tilt (coarse + fine) in a
-    universe buffer from solver convention to the real yoke. No-op if
-    the map has no pan/tilt channels."""
+    universe buffer from solver convention to the real yoke, then apply
+    the per-fixture DMX direction inversion (v1.5a: a head whose
+    physical rotation runs opposite to its definition). ``convert=False``
+    skips the yoke math (no resolvable chain) but still inverts. No-op
+    if the map has no pan/tilt channels."""
     if not (fmap.pan_channels and fmap.tilt_channels):
         return
-    pan_solver = _decode16(buf, fmap, fmap.pan_channels,
-                           fmap.pan_fine_channels, fmap.pan_range)
-    tilt_solver = _decode16(buf, fmap, fmap.tilt_channels,
-                            fmap.tilt_fine_channels, fmap.tilt_range)
-    pan_g, tilt_g = solver_to_gdtf_axes(pan_solver, tilt_solver, flipped)
-    pan_c, pan_f, tilt_c, tilt_f = pan_tilt_to_dmx16(
-        pan_g, tilt_g, fmap.pan_range, fmap.tilt_range)
+    if convert:
+        pan_solver = _decode16(buf, fmap, fmap.pan_channels,
+                               fmap.pan_fine_channels, fmap.pan_range)
+        tilt_solver = _decode16(buf, fmap, fmap.tilt_channels,
+                                fmap.tilt_fine_channels, fmap.tilt_range)
+        pan_g, tilt_g = solver_to_gdtf_axes(pan_solver, tilt_solver,
+                                            flipped)
+        pan_c, pan_f, tilt_c, tilt_f = pan_tilt_to_dmx16(
+            pan_g, tilt_g, fmap.pan_range, fmap.tilt_range)
+    else:
+        pan_c, pan_f = _read16(buf, fmap, fmap.pan_channels,
+                               fmap.pan_fine_channels)
+        tilt_c, tilt_f = _read16(buf, fmap, fmap.tilt_channels,
+                                 fmap.tilt_fine_channels)
+    if invert_pan:
+        pan_c, pan_f = _invert16(pan_c, pan_f)
+    if invert_tilt:
+        tilt_c, tilt_f = _invert16(tilt_c, tilt_f)
     _write(buf, fmap, fmap.pan_channels, pan_c)
     _write(buf, fmap, fmap.pan_fine_channels, pan_f)
     _write(buf, fmap, fmap.tilt_channels, tilt_c)

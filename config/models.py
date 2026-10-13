@@ -4,7 +4,27 @@ from dataclasses import dataclass, field, asdict, InitVar
 from typing import Dict, List, Optional, Tuple
 import yaml
 import xml.etree.ElementTree as ET
+import errno
+import inspect
 import os
+import stat
+import sys
+import tempfile
+import time
+import uuid
+
+# Prefer libyaml's C emitter/parser when the extension is present: the
+# output text is IDENTICAL to the pure-python Dumper's (verified on real
+# projects), but dumping is ~4x and parsing ~6x faster. On a real-sized
+# project the pure-python path made every autosave a near-second UI
+# freeze (2026-07-16 performance pass). The fallbacks keep environments
+# without libyaml working unchanged.
+try:
+    _YAML_DUMPER = yaml.CDumper
+    _YAML_SAFE_LOADER = yaml.CSafeLoader
+except AttributeError:      # PyYAML built without libyaml
+    _YAML_DUMPER = yaml.Dumper
+    _YAML_SAFE_LOADER = yaml.SafeLoader
 
 
 @dataclass
@@ -70,6 +90,21 @@ class Fixture:
     definition_source: str = "qxf"
     gdtf_fixture_type_id: Optional[str] = None
 
+    # Per-fixture DMX direction inversion (the last v1.5a yoke sliver):
+    # a head whose physical pan/tilt runs opposite to its definition's
+    # convention. Applied at the WIRE and EXPORT boundaries only (the
+    # same places the yoke conversion lives) - solver/visualizer math
+    # never sees it. Defaults keep every existing config identical.
+    invert_pan: bool = False
+    invert_tilt: bool = False
+
+    # Venue calibration captured by the pre-flight (design doc 7.1):
+    # physical-truth values the operator captured on site, e.g.
+    # {"focus": 132, "zoom": 90}. Recorded per fixture in the CONFIG,
+    # never in show blocks. Consumers arrive with the pre-flight
+    # screen; empty dict = never calibrated.
+    calibration: Dict = field(default_factory=dict)
+
     def __post_init__(self, group: Optional[str]):
         # Defensive: a YAML `groups:` key that is present but null.
         if self.groups is None:
@@ -133,6 +168,16 @@ def fixture_asdict(fixture: Fixture) -> dict:
     d = asdict(fixture)
     d['group'] = fixture.group
     return d
+
+
+def primary_group(config, fixture) -> Optional['FixtureGroup']:
+    """The fixture's PRIMARY group object (groups[0], "first group
+    wins": data colour, orientation defaults, role, export intensity),
+    or None when the fixture is ungrouped or its primary group name is
+    not in ``config.groups``. The one lookup every consumer shares;
+    only reads ``config.groups``, so duck-typed configs work too."""
+    name = fixture.group
+    return config.groups.get(name) if name else None
 
 
 @dataclass
@@ -214,6 +259,44 @@ class FixtureGroup:
 
     # Max DMX intensity for export (0-255), used for brightness balancing across groups
     export_intensity: int = 255
+
+    # Deterministic topology (v1.5 morphing prerequisite, decided
+    # 2026-07-15): ``fixtures`` IS the canonical order every consumer
+    # reads (Group:N targets, chase direction, morph routing).
+    # ``fixture_order`` persists that order as a name list so it
+    # survives fixture-list reshuffles; groups loaded without one
+    # snapshot their derived order (zero behavior change for existing
+    # configs). ``order_mode`` records how the order is maintained:
+    # "manual" (the list as-is, user-arranged) or "spatial" (stage X,
+    # then Y - the default for NEWLY created groups).
+    fixture_order: List[str] = field(default_factory=list)
+    order_mode: str = "manual"  # "manual" | "spatial"
+
+    def apply_fixture_order(self) -> None:
+        """Bring ``fixtures`` into the canonical order.
+
+        Spatial mode re-derives from geometry; manual mode follows
+        ``fixture_order`` (unknown names keep their current relative
+        order, appended after the ordered ones). Always re-snapshots
+        ``fixture_order`` to the resulting membership."""
+        if self.order_mode == "spatial":
+            self.fixtures.sort(key=lambda f: (f.x, f.y, f.name))
+        elif self.fixture_order:
+            index = {name: i for i, name in enumerate(self.fixture_order)}
+            self.fixtures.sort(
+                key=lambda f: index.get(f.name, len(index)))
+        self.fixture_order = [f.name for f in self.fixtures]
+
+    def sort_spatially(self) -> None:
+        """Switch the group to spatial order (stage X, then Y)."""
+        self.order_mode = "spatial"
+        self.apply_fixture_order()
+
+    def set_manual_order(self, names: List[str]) -> None:
+        """Pin an explicit order (switches the group to manual mode)."""
+        self.order_mode = "manual"
+        self.fixture_order = list(names)
+        self.apply_fixture_order()
 
 
 @dataclass
@@ -327,8 +410,15 @@ class ColourBlock:
 
     modified: bool = False  # True if user edited this block after riff insertion
 
+    # Palette role (v1.5, decided 2026-07-15): the block's INTENT
+    # ("primary", "accent", ...). The literal channel values above stay
+    # authoritative for every consumer (playback, export, visualizer) -
+    # the role is metadata that Song.apply_palette() and the morph
+    # compile re-resolve into literals. "" = literal-only block.
+    palette_role: str = ""
+
     def to_dict(self) -> Dict:
-        return {
+        data = {
             "start_time": self.start_time,
             "end_time": self.end_time,
             "color_mode": self.color_mode,
@@ -348,6 +438,9 @@ class ColourBlock:
             "color_wheel_position": self.color_wheel_position,
             "modified": self.modified
         }
+        if self.palette_role:
+            data["palette_role"] = self.palette_role
+        return data
 
     @classmethod
     def from_dict(cls, data: Dict) -> 'ColourBlock':
@@ -369,7 +462,8 @@ class ColourBlock:
             saturation=data.get("saturation", 0.0),
             value=data.get("value", 0.0),
             color_wheel_position=data.get("color_wheel_position", 0),
-            modified=data.get("modified", False)
+            modified=data.get("modified", False),
+            palette_role=data.get("palette_role", "")
         )
 
 
@@ -418,6 +512,13 @@ class MovementBlock:
     # Target plane for world-space movement (takes priority over target_spot_name)
     target_plane_name: Optional[str] = None  # Name of stage plane ("Floor", "Front", etc.)
 
+    # Ad-hoc world-space aim point in stage coordinates (x, y, z metres)
+    # - v1.5a focus geometry. Resolution priority: plane > spot > point
+    # > manual pan/tilt. Unlike a named spot this needs no entry in
+    # Configuration.spots (click-to-aim writes here); like a spot, the
+    # per-fixture pan/tilt resolve from geometry at playback/export.
+    target_point: Optional[List[float]] = None
+
     modified: bool = False  # True if user edited this block after riff insertion
 
     def to_dict(self) -> Dict:
@@ -443,6 +544,8 @@ class MovementBlock:
             "phase_offset_degrees": self.phase_offset_degrees,
             "target_spot_name": self.target_spot_name,
             "target_plane_name": self.target_plane_name,
+            "target_point": (list(self.target_point)
+                             if self.target_point else None),
             "modified": self.modified
         }
 
@@ -470,6 +573,8 @@ class MovementBlock:
             phase_offset_degrees=data.get("phase_offset_degrees", 0.0),
             target_spot_name=data.get("target_spot_name"),
             target_plane_name=data.get("target_plane_name"),
+            target_point=(list(data["target_point"])
+                          if data.get("target_point") else None),
             modified=data.get("modified", False)
         )
 
@@ -753,6 +858,12 @@ class Scene:
     color: str = ""
     # The fixture groups this look spans.
     groups: List[str] = field(default_factory=list)
+    # Optional mover aims: group name -> position id in the Live
+    # POSITION pool's namespace ("mark:<spot>", "preset:centre",
+    # "preset:cross", ...). Staging the scene also aims those groups'
+    # movers (2026-07-17); an explicit user-held position on a group
+    # still wins, and the aim releases with the scene.
+    positions: Dict[str, str] = field(default_factory=dict)
     # Metadata.
     tags: List[str] = field(default_factory=list)
     author: str = ""
@@ -766,6 +877,8 @@ class Scene:
             "description": self.description,
             "color": self.color,
             "groups": self.groups,
+            # Only when set - pre-aim scene files stay stable.
+            **({"positions": self.positions} if self.positions else {}),
             "tags": self.tags,
             "author": self.author,
             "version": self.version,
@@ -780,6 +893,7 @@ class Scene:
             description=data.get("description", ""),
             color=data.get("color", ""),
             groups=data.get("groups", []),
+            positions=data.get("positions", {}) or {},
             tags=data.get("tags", []),
             author=data.get("author", ""),
             version=data.get("version", "1.0"),
@@ -1096,6 +1210,12 @@ class LightBlock:
     # User-defined name for the effect block
     name: Optional[str] = None  # Custom name set by user (displays as "base" if None)
 
+    # Morph provenance (v1.5b, design doc 5.3): "" = authored in the
+    # editor; "morphed:<edge_id>" = written by a morph compile;
+    # "hand_edited" = a morphed block the editor touched afterwards.
+    # Re-morph uses this to list exactly what a replace will destroy.
+    provenance: str = ""
+
     # Legacy support (deprecated, kept for migration)
     duration: Optional[float] = None  # Deprecated: use end_time - start_time
     parameters: Dict[str, any] = field(default_factory=dict)  # Deprecated
@@ -1133,6 +1253,8 @@ class LightBlock:
             "riff_version": self.riff_version,
             # User-defined name
             "name": self.name,
+            # Morph provenance (only when set - keeps old files stable)
+            **({"provenance": self.provenance} if self.provenance else {}),
             # Legacy fields
             "duration": self.get_duration(),
             "parameters": self.parameters
@@ -1157,6 +1279,7 @@ class LightBlock:
             riff_source=data.get("riff_source"),
             riff_version=data.get("riff_version"),
             name=data.get("name"),
+            provenance=data.get("provenance", ""),
             duration=data.get("duration"),
             parameters=data.get("parameters", {})
         )
@@ -1195,6 +1318,10 @@ class LightLane:
     muted: bool = False
     solo: bool = False
     light_blocks: List[LightBlock] = field(default_factory=list)
+    # Stable identity (v1.5 morphing): plans key edges by lane_id so a
+    # renamed lane keeps its routing. Assigned on creation / first load;
+    # never shown in the UI.
+    lane_id: str = field(default_factory=lambda: uuid.uuid4().hex)
 
     @property
     def fixture_group(self) -> str:
@@ -1209,6 +1336,7 @@ class LightLane:
     def to_dict(self) -> Dict:
         return {
             "name": self.name,
+            "lane_id": self.lane_id,
             "fixture_targets": self.fixture_targets,
             "muted": self.muted,
             "solo": self.solo,
@@ -1222,6 +1350,9 @@ class LightLane:
             muted=data.get("muted", False),
             solo=data.get("solo", False)
         )
+        # Lanes from before v1.5 get an id on first load; it persists on
+        # the next save.
+        lane.lane_id = data.get("lane_id") or lane.lane_id
         # Migration: handle old fixture_group format
         if "fixture_targets" in data:
             lane.fixture_targets = data["fixture_targets"]
@@ -1269,12 +1400,52 @@ class Song:
     timeline_data: Optional[TimelineData] = None  # NEW: Timeline representation
     trigger_device: str = ""    # MIDI input profile name (e.g. "Akai APC Mini mk2"), empty = no trigger
     trigger_channel: int = -1   # MIDI channel number (-1 = no trigger)
+    # Palette (v1.5): role -> (r, g, b) 0-255. Colour blocks carrying a
+    # palette_role are re-resolved by apply_palette(); blocks without a
+    # role are untouched literals. Empty dict = no palette defined.
+    palette: Dict[str, List[int]] = field(default_factory=dict)
+    # Morph lineage (v1.5b, design doc 5.3): set by the morph compile on
+    # songs it writes - source show hash, plan hash, config hashes, app
+    # version, timestamp. Empty dict = not a morphed song.
+    lineage: Dict[str, str] = field(default_factory=dict)
+    # Cached per-section audio metrics (v1.5b, design doc 5.7): every
+    # SectionAnalysis scalar + the 32-float flux envelope, keyed by an
+    # audio content hash - lets the morph's autogen regeneration run
+    # without the audio file. utils/morph/analysis_cache.py owns the
+    # shape. Empty dict = never analyzed.
+    analysis_cache: Dict = field(default_factory=dict)
+    # Lock (v1.5): a finished song refuses timeline/structure edits in
+    # the UI until unlocked. Playback, export, morphing and the setlist
+    # are untouched - the lock is an editor fence, not a data seal.
+    locked: bool = False
+
+    def apply_palette(self) -> int:
+        """Re-resolve every role-tagged colour block against ``palette``.
+
+        Only the RGB literals are rewritten (the role stays); blocks
+        whose role is not in the palette are left alone. Returns the
+        number of blocks updated. Consumers (playback, export,
+        visualizer) keep reading literals - this is the realization
+        boundary the v1.5 design demands."""
+        updated = 0
+        if not self.timeline_data:
+            return updated
+        for lane in self.timeline_data.lanes:
+            for block in lane.light_blocks:
+                for cb in block.colour_blocks:
+                    rgb = self.palette.get(cb.palette_role)
+                    if not cb.palette_role or not rgb:
+                        continue
+                    cb.red, cb.green, cb.blue = (
+                        float(rgb[0]), float(rgb[1]), float(rgb[2]))
+                    updated += 1
+        return updated
 
     def to_dict(self) -> Dict:
         """Serialize this song's contents (excludes `name`; that's the key in
         Configuration.songs). For a standalone song file, include the name
         at the caller: ``{'name': song.name, **song.to_dict()}``."""
-        return {
+        data = {
             'parts': [
                 {k: v for k, v in asdict(part).items() if k not in ('start_time', 'duration')}
                 for part in self.parts
@@ -1284,6 +1455,16 @@ class Song:
             'trigger_device': self.trigger_device if self.trigger_device else None,
             'trigger_channel': self.trigger_channel if self.trigger_channel >= 0 else None,
         }
+        if self.palette:
+            data['palette'] = {role: list(rgb)
+                               for role, rgb in self.palette.items()}
+        if self.lineage:
+            data['lineage'] = dict(self.lineage)
+        if self.analysis_cache:
+            data['analysis_cache'] = dict(self.analysis_cache)
+        if self.locked:
+            data['locked'] = True
+        return data
 
     @classmethod
     def from_dict(cls, name: str, data: Dict) -> 'Song':
@@ -1322,6 +1503,11 @@ class Song:
             parts=parts,
             effects=effects,
             timeline_data=timeline_data,
+            palette={role: list(rgb) for role, rgb
+                     in (data.get('palette') or {}).items()},
+            lineage=dict(data.get('lineage') or {}),
+            analysis_cache=dict(data.get('analysis_cache') or {}),
+            locked=bool(data.get('locked', False)),
             trigger_device=data.get('trigger_device', '') or '',
             trigger_channel=(
                 data.get('trigger_channel', -1)
@@ -1369,16 +1555,20 @@ class SongTrigger:
 class PauseLook:
     """The look on stage between two setlist songs.
 
-    Modes: "blackout", "warm_white" (``level`` percent), "hold_last"
-    (freeze the previous song's last look), "ambient_loop" (reuses the
-    screensaver rig behaviour once the engine lands). ``until`` decides
-    how the pause ends: "trigger" (next song's start trigger) or
-    "duration" (``duration_s`` seconds, then follow on).
+    Modes: "blackout", "warm_white" (``level`` percent), "scene" (a
+    SceneLibrary look by "category/name" key in ``scene``; ``level``
+    scales its intensity - the minimal pause engine of 2026-07-17
+    renders blackout / warm_white / scene), "hold_last" (freeze the
+    previous song's last look) and "ambient_loop" (screensaver rig
+    behaviour) stay data-only until the full v1.8 engine. ``until``
+    decides how the pause ends: "trigger" (next song's start trigger)
+    or "duration" (``duration_s`` seconds, then follow on).
     """
-    mode: str = "hold_last"   # "blackout" | "warm_white" | "hold_last" | "ambient_loop"
-    level: int = 20           # percent, used by warm_white
+    mode: str = "hold_last"   # "blackout" | "warm_white" | "scene" | "hold_last" | "ambient_loop"
+    level: int = 20           # percent, used by warm_white and scene
     until: str = "trigger"    # "trigger" | "duration"
     duration_s: float = 0.0   # used when until == "duration"
+    scene: str = ""           # "category/name" key, used by mode "scene"
 
     def to_dict(self) -> Dict:
         return {
@@ -1386,6 +1576,9 @@ class PauseLook:
             "level": self.level,
             "until": self.until,
             "duration_s": self.duration_s,
+            # Only when set - files from before the scene mode stay
+            # byte-identical.
+            **({"scene": self.scene} if self.scene else {}),
         }
 
     @classmethod
@@ -1395,6 +1588,7 @@ class PauseLook:
             level=data.get("level", 20),
             until=data.get("until", "trigger"),
             duration_s=data.get("duration_s", 0.0),
+            scene=data.get("scene", ""),
         )
 
 
@@ -1504,6 +1698,86 @@ class UniverseOutput:
 
 
 
+def _process_umask() -> int:
+    # os.umask can only be read by setting it; done once at import (on
+    # the main thread) because the autosave worker also saves configs.
+    current = os.umask(0)
+    os.umask(current)
+    return current
+
+
+_UMASK = _process_umask()
+
+
+def _atomic_write_yaml(filename: str, data) -> None:
+    """Dump ``data`` to ``filename`` atomically: temp file in the same
+    directory, fsync, then os.replace. A crash or exception mid-dump
+    leaves the previous file untouched (a plain open('w') truncates
+    it first). Symlinks are followed so the link survives; an existing
+    file keeps its permission bits, a new one gets the umask default
+    (mkstemp would otherwise leave it private)."""
+    target = os.path.realpath(filename)
+    directory = os.path.dirname(target)
+    # The rename would happily replace a read-only file (only the
+    # directory's permissions matter); refuse like open('w') did.
+    if os.path.exists(target) and not os.access(target, os.W_OK):
+        raise PermissionError(errno.EACCES, os.strerror(errno.EACCES),
+                              filename)
+    fd, tmp = tempfile.mkstemp(
+        prefix='.' + os.path.basename(target) + '.', suffix='.tmp',
+        dir=directory)
+    try:
+        with os.fdopen(fd, 'w') as f:
+            yaml.dump(data, f, Dumper=_YAML_DUMPER,
+                      default_flow_style=False)
+            f.flush()
+            os.fsync(f.fileno())
+        try:
+            mode = stat.S_IMODE(os.stat(target).st_mode)
+        except FileNotFoundError:
+            mode = 0o666 & ~_UMASK
+        os.chmod(tmp, mode)
+        _replace_with_retry(tmp, target)
+    except BaseException:
+        try:
+            os.unlink(tmp)
+        except OSError:
+            pass
+        raise
+
+
+def _replace_with_retry(src: str, dst: str) -> None:
+    # Windows refuses the rename while another process (indexer, virus
+    # scanner, a sync client) briefly holds the target open; retry a
+    # few times before giving up.
+    attempts = 5 if sys.platform == 'win32' else 1
+    for attempt in range(attempts):
+        try:
+            os.replace(src, dst)
+            return
+        except PermissionError:
+            if attempt == attempts - 1:
+                raise
+            time.sleep(0.1)
+
+
+def _from_known_keys(cls, data: dict, label: str, unknown: Dict[str, set]):
+    """``cls(**data)`` minus the keys ``cls`` does not accept.
+
+    A file written by a newer build can carry fields this one does not
+    know; they are dropped (collected into ``unknown[label]`` for one
+    warning per kind) instead of crashing the whole load with a
+    TypeError. InitVars such as Fixture's legacy ``group`` count as
+    known: they are constructor parameters."""
+    accepted = inspect.signature(cls).parameters
+    extra = [key for key in data if key not in accepted]
+    if extra:
+        unknown.setdefault(label, set()).update(extra)
+        data = {key: value for key, value in data.items()
+                if key in accepted}
+    return cls(**data)
+
+
 @dataclass
 class Configuration:
     fixtures: List[Fixture] = field(default_factory=list)
@@ -1586,6 +1860,9 @@ class Configuration:
                     config.groups[group_name] = FixtureGroup(group_name, [])
                 config.groups[group_name].fixtures.append(fixture)
 
+        for group in config.groups.values():
+            group.apply_fixture_order()
+
         return config
 
     def audio_bundle_dir(self, create: bool = False) -> Optional[str]:
@@ -1641,6 +1918,10 @@ class Configuration:
                     'default_z_height': group.default_z_height,
                     'lighting_role': group.lighting_role,
                     'export_intensity': group.export_intensity,
+                    # Canonical topology (v1.5): the order every indexed
+                    # target and chase consumes, pinned by name.
+                    'fixture_order': [f.name for f in group.fixtures],
+                    'order_mode': group.order_mode,
                     'fixtures': [fixture_asdict(f) for f in group.fixtures]
                 }
                 for name, group in self.groups.items()
@@ -1679,8 +1960,7 @@ class Configuration:
         from config.compact_serializer import compact_serialize
         data = compact_serialize(data)
 
-        with open(filename, 'w') as f:
-            yaml.dump(data, f, default_flow_style=False)
+        _atomic_write_yaml(filename, data)
 
         # Track save location so audio_bundle_dir resolves correctly after
         # Save As (file moved relative to where audio was last written).
@@ -1690,7 +1970,7 @@ class Configuration:
     def load(cls, filename: str) -> 'Configuration':
         """Load configuration from YAML file"""
         with open(filename, 'r') as f:
-            data = yaml.safe_load(f)
+            data = yaml.load(f, Loader=_YAML_SAFE_LOADER)
 
         # Legacy key migration: configs written before the setlist rework
         # store the songs under a top-level `shows:` key. Accept it forever;
@@ -1702,6 +1982,10 @@ class Configuration:
 
         from config.compact_serializer import expand_compact
         data = expand_compact(data)
+
+        # Keys a newer build wrote that this one does not know, per
+        # kind; dropped on construction, reported once below.
+        unknown_keys: Dict[str, set] = {}
 
         # Convert dictionary back to Configuration object
         fixtures = []
@@ -1720,7 +2004,8 @@ class Configuration:
             f_data.pop('direction', None)
             f_data.pop('rotation', None)
 
-            fixtures.append(Fixture(**f_data))
+            fixtures.append(
+                _from_known_keys(Fixture, f_data, 'Fixtures', unknown_keys))
 
         # Reconcile stored mode names against the resolved definitions.
         # A GDTF definition can shadow a same-identity .qxf and carry
@@ -1771,7 +2056,13 @@ class Configuration:
                 default_z_height=group_data.get('default_z_height', 3.0),
                 lighting_role=group_data.get('lighting_role', ''),
                 export_intensity=group_data.get('export_intensity', 255),
+                # Deterministic topology: a stored order re-applies; a
+                # config from before the field snapshots its derived
+                # order (identical to today's behavior, now pinned).
+                fixture_order=group_data.get('fixture_order', []),
+                order_mode=group_data.get('order_mode', 'manual'),
             )
+            groups[name].apply_fixture_order()
 
         # Handle songs (legacy `shows:` was migrated to `songs` above)
         songs = {}
@@ -1812,17 +2103,22 @@ class Configuration:
         spots = {}
         if 'spots' in data:
             for spot_name, spot_data in data['spots'].items():
-                spots[spot_name] = Spot(**spot_data)
+                spots[spot_name] = _from_known_keys(
+                    Spot, spot_data, 'Marks', unknown_keys)
 
         # Handle MIDI input devices
         midi_input_devices = []
         if 'midi_input_devices' in data and data['midi_input_devices']:
             for dev_data in data['midi_input_devices']:
-                midi_input_devices.append(MidiInputDevice(**dev_data))
+                midi_input_devices.append(_from_known_keys(
+                    MidiInputDevice, dev_data, 'MIDI input devices',
+                    unknown_keys))
 
         # Handle pause show config
         pause_show_data = data.get('pause_show')
-        pause_show = PauseShowConfig(**pause_show_data) if pause_show_data else PauseShowConfig()
+        pause_show = _from_known_keys(
+            PauseShowConfig, pause_show_data, 'Pause show', unknown_keys) \
+            if pause_show_data else PauseShowConfig()
 
         config = cls(
             fixtures=fixtures,
@@ -1841,11 +2137,13 @@ class Configuration:
             stage_height=data.get('stage_height', 6.0),
             grid_size=data.get('grid_size', 0.5),
             stage_layers=[
-                StageLayer(**layer_data)
+                _from_known_keys(StageLayer, layer_data, 'Stage layers',
+                                 unknown_keys)
                 for layer_data in data.get('stage_layers', [])
             ],
             stage_elements=[
-                StageElement(**element_data)
+                _from_known_keys(StageElement, element_data,
+                                 'Stage elements', unknown_keys)
                 for element_data in data.get('stage_elements', [])
             ],
         )
@@ -1855,6 +2153,25 @@ class Configuration:
         # by filename land under <config_dir>/audiofiles/ regardless of where
         # the user copied the config from.
         config._loaded_from = os.path.abspath(filename)
+
+        for label, keys in unknown_keys.items():
+            user_warnings.warn(
+                f"{label}: ignored keys this version does not know "
+                f"(file written by a newer build?): "
+                f"{', '.join(sorted(keys))}",
+                category="config-load")
+
+        # Heal a shows_directory that travelled from another machine:
+        # the field stores an ABSOLUTE path verbatim, so a hand-copied
+        # project carries the other PC's user directory (the Stellwerk
+        # kit's C:/Users/<other user>/... walked makedirs into a
+        # PermissionError, 2026-07-17). When the stored directory does
+        # not exist HERE, the config's own directory is the only
+        # sensible anchor; an existing directory is kept - legacy
+        # layouts point it elsewhere on purpose.
+        if config.shows_directory \
+                and not os.path.isdir(config.shows_directory):
+            config.shows_directory = os.path.dirname(config._loaded_from)
 
         return config
 

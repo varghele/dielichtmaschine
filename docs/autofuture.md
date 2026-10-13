@@ -21,3 +21,21 @@ The auto-generation algorithm is currently a black box. When it produces unexpec
 
 ### When to implement:
 After the core algorithm is stable and producing reasonable results. The investigation system helps fine-tune, not build.
+
+## 3D flux / transient plot in the Generation Inspector
+
+**Status: built, not wired up (kept on purpose, 2026-10-12)**
+
+`FluxPlot3DWidget` in `gui/dialogs/generation_inspector.py` draws a
+song's audio trajectory in 3D (X = time, Y = spectral flux, Z =
+transient sharpness), coloured by section, with an orbit camera, zoom
+and a playback cursor. It takes the per-frame features the
+`GenerationReport` already carries (`frame_times`, `frame_flux`,
+`frame_transient`, `sections`). Nothing opens it yet; a smoke test
+(`tests/unit/test_generation_inspector.py::test_flux_plot_orbit_and_zoom`)
+keeps it painting while it waits.
+
+### When to implement:
+With the Generation Inspector UI pass (ROADMAP v1.10). It would sit
+next to the existing feature-curve plot as a second view of the same
+song, sharing its cursor.

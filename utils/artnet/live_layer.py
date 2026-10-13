@@ -20,6 +20,11 @@ busk programmer actually drives:
   colour - selection-independent, same level/strobe treatment - but
   BELOW explicit swatches: a touched swatch on a group overrides the
   scene on that group. Second touch releases (the state contract).
+- A group with a COLOUR FX (LiveState.colour_fx, per group, e.g.
+  "rainbow") claims colour like a swatch but from a PROCEDURAL,
+  time-cycling source (overriding the static swatch/scene on that
+  group). The hue fans across the group's fixtures by stage X, so the
+  group reads as a moving rainbow.
 - A group HELD ON FLASH without a colour claims only dimmer +
   shutter - the show's colour keeps showing through underneath at
   busk intensity (dimmer merges HTP in the arbiter).
@@ -59,6 +64,7 @@ timeline/Auto playback too.
 
 from typing import Callable, Dict, Optional, Tuple
 
+from config.models import primary_group
 from utils.orientation import calculate_pan_tilt, pan_tilt_to_dmx16
 from utils.position_presets import (
     compute_presets, group_has_movers, resolve_position_target,
@@ -72,6 +78,23 @@ from .dmx_manager import rgb_to_color_wheel
 STROBE_MIN_HZ = 1.0
 STROBE_MAX_HZ = 10.0
 
+# COLOUR FX "rainbow": seconds for one full hue rotation, and the hue
+# spread across a group's fixtures (by stage-X order) so the group reads
+# as a moving rainbow rather than one flat colour cycling in unison.
+RAINBOW_PERIOD_S = 6.0
+RAINBOW_SPREAD = 1.0
+
+
+def _rainbow_rgb(now: float, index: int, total: int) -> Tuple[int, int, int]:
+    """Full-saturation rainbow colour at wall time ``now`` for fixture
+    ``index`` of ``total`` in the group: the hue advances one full turn
+    per RAINBOW_PERIOD_S and fans RAINBOW_SPREAD across the group."""
+    import colorsys
+    fan = (index / total) * RAINBOW_SPREAD if total else 0.0
+    hue = ((now / RAINBOW_PERIOD_S) + fan) % 1.0
+    red, green, blue = colorsys.hsv_to_rgb(hue, 1.0, 1.0)
+    return (round(red * 255), round(green * 255), round(blue * 255))
+
 
 def _hex_to_rgb(hex_color: str) -> Tuple[int, int, int]:
     value = (hex_color or "").lstrip("#")
@@ -81,6 +104,91 @@ def _hex_to_rgb(hex_color: str) -> Tuple[int, int, int]:
         return tuple(int(value[i:i + 2], 16) for i in (0, 2, 4))
     except ValueError:
         return (0, 0, 0)
+
+
+def level_local(submasters, flash, blackout, group: str) -> float:
+    """The PRE-GRANDMASTER 0..1 busk level of ``group``: unknown groups
+    0, a held flash forces full, the soft blackout zeroes, else the
+    submaster. The one copy of the rule - LiveState.group_level_local
+    delegates here. A single ``get`` (never "in" then "[...]") so a
+    submaster table rebuilt mid-call cannot raise KeyError."""
+    level = submasters.get(group)
+    if level is None:
+        return 0.0
+    if group in flash:
+        return 1.0
+    if blackout:
+        return 0.0
+    return level / 100.0
+
+
+class BuskStateSnapshot:
+    """One frame's copy of the LiveState fields the busk layer reads.
+
+    render() runs on the arbiter thread while the Live tab mutates the
+    state on the UI thread (a swatch released, RELEASE ALL, a config
+    sync rebuilding the tables). Reading the live object meant a key
+    could vanish between an "in" check and the lookup after it - a
+    KeyError that cost the busk layer its whole frame. Each container
+    is copied once here (``dict()``/``frozenset()`` of str-keyed
+    containers is one atomic C-level copy under the GIL) and the frame
+    renders from the copies.
+    """
+
+    __slots__ = ("scene", "colours", "colour_fx", "flash", "positions",
+                 "submasters", "blackout", "strobe_on", "strobe_rate")
+
+    def __init__(self, state) -> None:
+        self.scene = getattr(state, "scene", None)
+        self.colours = dict(getattr(state, "colours", None) or {})
+        self.colour_fx = dict(getattr(state, "colour_fx", None) or {})
+        self.flash = frozenset(getattr(state, "flash", None) or ())
+        self.positions = dict(getattr(state, "positions", None) or {})
+        self.submasters = dict(getattr(state, "submasters", None) or {})
+        self.blackout = bool(getattr(state, "blackout", False))
+        self.strobe_on = bool(getattr(state, "strobe_on", False))
+        self.strobe_rate = getattr(state, "strobe_rate", 50)
+
+    def group_level_local(self, group: str) -> float:
+        return level_local(self.submasters, self.flash, self.blackout,
+                           group)
+
+
+def aim_fixture_at_position(write, config, presets_by_id, position_id,
+                            fixture, fixture_map) -> None:
+    """Aim one mover at a POSITION-pool id, writing through ``write``
+    (``write(fixture_map, offsets, value)``). Shared by the busk
+    layer's position palettes and the pause-look layer's scene aims so
+    both aim EXACTLY alike (2026-07-17)."""
+    if not (fixture_map.pan_channels or fixture_map.tilt_channels):
+        return
+    target = resolve_position_target(config, presets_by_id, position_id,
+                                     fixture)
+    if target is None:
+        return
+    # Orientation comes from the PRIMARY group (groups[0] drives
+    # orientation - locked first-group-wins), same as the playback
+    # layer's spot targeting.
+    primary = primary_group(config, fixture)
+    mounting, yaw, pitch, roll = fixture.get_effective_orientation(primary)
+    fixture_z = fixture.get_effective_z(primary)
+    pan_deg, tilt_deg = calculate_pan_tilt(
+        fixture_x=fixture.x, fixture_y=fixture.y, fixture_z=fixture_z,
+        target_x=target[0], target_y=target[1], target_z=target[2],
+        mounting=mounting, yaw=yaw, pitch=pitch, roll=roll,
+        pan_range=fixture_map.pan_range,
+        tilt_range=fixture_map.tilt_range,
+    )
+    # 16-bit aim: the coarse byte alone quantizes a 540-degree pan to
+    # ~2 degrees (~18 cm at 5 m); writing the fine bytes takes the aim
+    # to the fixture's real resolution. Claiming the fines also keeps a
+    # movement block underneath from jittering the busked aim.
+    pan_c, pan_f, tilt_c, tilt_f = pan_tilt_to_dmx16(
+        pan_deg, tilt_deg, fixture_map.pan_range, fixture_map.tilt_range)
+    write(fixture_map, fixture_map.pan_channels, pan_c)
+    write(fixture_map, fixture_map.tilt_channels, tilt_c)
+    write(fixture_map, fixture_map.pan_fine_channels, pan_f)
+    write(fixture_map, fixture_map.tilt_fine_channels, tilt_f)
 
 
 class LiveBuskLayer:
@@ -139,7 +247,9 @@ class LiveBuskLayer:
     # -- the arbiter layer contract -----------------------------------------
 
     def render(self, now: float) -> Frame:
-        state = self._state
+        # Render from a per-frame copy: the UI thread mutates LiveState
+        # while this runs on the arbiter thread (BuskStateSnapshot).
+        state = BuskStateSnapshot(self._state)
         config = self._config_provider()
         # The engine's slot frame (running riffs/intensity FX/shapes)
         # is the layer's BASE: explicit busk writes below overlay it,
@@ -157,11 +267,18 @@ class LiveBuskLayer:
         # unknown key renders nothing.
         scene_hex = ""
         scene_groups: set = set()
+        scene_positions: dict = {}
         if state.scene and self._scene_provider is not None:
             scene = self._scene_provider(state.scene)
-            if scene is not None and getattr(scene, "color", ""):
-                scene_hex = scene.color
-                scene_groups = set(getattr(scene, "groups", ()) or ())
+            if scene is not None:
+                if getattr(scene, "color", ""):
+                    scene_hex = scene.color
+                    scene_groups = set(getattr(scene, "groups", ()) or ())
+                # Scene aims (2026-07-17): the scene's per-group mover
+                # positions apply while it is staged, released with it.
+                # Independent of the colour (an aim-only scene works).
+                scene_positions = dict(
+                    getattr(scene, "positions", None) or {})
 
         # Groups a MOVEMENT SHAPE currently covers: their held position
         # is the shape's anchor (rendered by the engine), so the static
@@ -180,14 +297,19 @@ class LiveBuskLayer:
 
         claimed_groups = []
         position_groups = []
-        for group_name, group in getattr(config, "groups", {}).items():
+        colour_fx = state.colour_fx
+        for group_name, group in list(
+                (getattr(config, "groups", None) or {}).items()):
             has_swatch = group_name in state.colours
             has_scene = bool(scene_hex) and group_name in scene_groups
             has_flash = group_name in state.flash
-            if has_swatch or has_scene or has_flash:
+            has_fx = group_name in colour_fx
+            if has_swatch or has_scene or has_flash or has_fx:
                 claimed_groups.append(
-                    (group_name, group, has_swatch or has_scene))
-            position_id = state.positions.get(group_name)
+                    (group_name, group, has_swatch or has_scene or has_fx))
+            # An explicitly held position beats the staged scene's aim.
+            position_id = state.positions.get(group_name) \
+                or scene_positions.get(group_name)
             if position_id and group_name not in shape_groups \
                     and group_has_movers(group):
                 position_groups.append((group, position_id))
@@ -221,8 +343,12 @@ class LiveBuskLayer:
         for group_name, group, has_colour in claimed_groups:
             level = state.group_level_local(group_name)
             effective = level if strobe_open else 0.0
+            # A COLOUR FX on the group is a procedural colour that
+            # overrides the swatch/scene (a deliberate "cycle this
+            # group" touch); computed per fixture in the loop below.
+            fx_id = colour_fx.get(group_name)
             primary_hex, secondary_hex = (None, None)
-            if has_colour:
+            if has_colour and not fx_id:
                 if group_name in state.colours:      # swatch beats scene
                     primary_hex, secondary_hex = self._swatch_colors.get(
                         state.colours[group_name], (None, None))
@@ -242,7 +368,9 @@ class LiveBuskLayer:
                 if fixture_map is None:
                     continue
 
-                if has_colour and primary_hex:
+                if fx_id == "rainbow":
+                    red, green, blue = _rainbow_rgb(now, index, len(fixtures))
+                elif has_colour and primary_hex:
                     hex_color = secondary_hex \
                         if (secondary_hex and index % 2) else primary_hex
                     red, green, blue = _hex_to_rgb(hex_color)
@@ -307,7 +435,7 @@ class LiveBuskLayer:
         # against a closed shutter and never emit.
         claimed_names = {name for name, _g, _c in claimed_groups}
         for group_name in engine_dimmer_groups - claimed_names:
-            group = (getattr(config, "groups", {}) or {}).get(group_name)
+            group = (getattr(config, "groups", None) or {}).get(group_name)
             for fixture in (getattr(group, "fixtures", None) or []):
                 fixture_map = self._fixture_maps.get(fixture.name)
                 if fixture_map is not None:
@@ -325,46 +453,9 @@ class LiveBuskLayer:
                     fixture_map = self._fixture_maps.get(fixture.name)
                     if fixture_map is None:
                         continue
-                    if not (fixture_map.pan_channels
-                            or fixture_map.tilt_channels):
-                        continue
-                    target = self._target_for(config, presets_by_id,
-                                              position_id, fixture)
-                    if target is None:
-                        continue
-                    # Orientation comes from the PRIMARY group (groups[0]
-                    # drives orientation - locked first-group-wins), same
-                    # as the playback layer's spot targeting.
-                    primary = config.groups.get(fixture.group) \
-                        if fixture.group else None
-                    mounting, yaw, pitch, roll = \
-                        fixture.get_effective_orientation(primary)
-                    fixture_z = fixture.get_effective_z(primary)
-                    pan_deg, tilt_deg = calculate_pan_tilt(
-                        fixture_x=fixture.x, fixture_y=fixture.y,
-                        fixture_z=fixture_z,
-                        target_x=target[0], target_y=target[1],
-                        target_z=target[2],
-                        mounting=mounting, yaw=yaw, pitch=pitch,
-                        roll=roll,
-                        pan_range=fixture_map.pan_range,
-                        tilt_range=fixture_map.tilt_range,
-                    )
-                    # 16-bit aim: the coarse byte alone quantizes a
-                    # 540-degree pan to ~2 degrees (~18 cm at 5 m);
-                    # writing the fine bytes takes the aim to the
-                    # fixture's real resolution. Claiming the fines also
-                    # keeps a movement block underneath from jittering
-                    # the busked aim.
-                    pan_c, pan_f, tilt_c, tilt_f = pan_tilt_to_dmx16(
-                        pan_deg, tilt_deg,
-                        fixture_map.pan_range, fixture_map.tilt_range)
-                    _write(fixture_map, fixture_map.pan_channels, pan_c)
-                    _write(fixture_map, fixture_map.tilt_channels, tilt_c)
-                    _write(fixture_map, fixture_map.pan_fine_channels,
-                           pan_f)
-                    _write(fixture_map, fixture_map.tilt_fine_channels,
-                           tilt_f)
+                    aim_fixture_at_position(_write, config, presets_by_id,
+                                            position_id, fixture,
+                                            fixture_map)
 
         return {u: (bytes(values[u]), bytes(masks[u])) for u in values}
 

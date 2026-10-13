@@ -1,9 +1,11 @@
 # Releasing
 
 Releases are cut from a git tag. The GitHub Actions workflow
-([`.github/workflows/release.yml`](../.github/workflows/release.yml)) builds the
-binaries and drafts the GitHub Release; the release notes come straight from
-[`CHANGELOG.md`](../CHANGELOG.md), so there is one place to keep current.
+([`.github/workflows/release.yml`](../.github/workflows/release.yml)) runs the
+full test suite (it calls [`tests.yml`](../.github/workflows/tests.yml)), builds
+the binaries only once that is green, and drafts the GitHub Release; the release
+notes come straight from [`CHANGELOG.md`](../CHANGELOG.md), so there is one
+place to keep current.
 
 ## Day to day
 
@@ -17,21 +19,27 @@ short and user-facing (what changed for someone using the app), not a commit log
 2. **Update the changelog:** rename `## [Unreleased]` to `## [X.Y.Z] - YYYY-MM-DD`,
    add a fresh empty `## [Unreleased]` above it, and add a link line at the
    bottom (`[X.Y.Z]: https://github.com/varghele/dielichtmaschine/releases/tag/vX.Y.Z`).
-3. **Bump `_version.py`** to `"X.Y.Z"`.
-4. **Commit** those together, e.g. `chore(release): vX.Y.Z`.
-5. *(Optional, first time / risky changes)* dry-run the build: GitHub -> **Actions**
-   -> "Release Build" -> **Run workflow**. This builds artifacts but creates no
-   release.
-6. **Tag and push:**
+3. **Bump `_version.py`** to `"X.Y.Z"` (dropping the `-dev` suffix - a
+   milestone branch carries the next version as `"X.Y.Z-dev"`, whose
+   release notes resolve to the `[Unreleased]` section; after tagging,
+   set the next cycle's `"X.Y+1.0-dev"`).
+4. **Re-render the brand assets** (`python scripts/render_brand_assets.py`) -
+   the README banner's rating plate stamps the version at render time -
+   and commit the regenerated PNGs.
+5. **Commit** those together, e.g. `chore(release): vX.Y.Z`.
+6. *(Optional, first time / risky changes)* dry-run the build: GitHub -> **Actions**
+   -> "Release Build" -> **Run workflow**. This runs the tests and builds
+   artifacts but creates no release.
+7. **Tag and push:**
    ```sh
    git push
    git tag vX.Y.Z
    git push origin vX.Y.Z
    ```
-7. The workflow builds Windows + Linux, then drafts a GitHub Release whose notes
-   are the `## [X.Y.Z]` changelog section (via
+8. The workflow runs the test suite, builds Windows + Linux, then drafts a
+   GitHub Release whose notes are the `## [X.Y.Z]` changelog section (via
    [`scripts/changelog_release_notes.py`](../scripts/changelog_release_notes.py)).
-8. **Publish:** GitHub -> **Releases** -> open the `vX.Y.Z` draft -> review -> **Publish**.
+9. **Publish:** GitHub -> **Releases** -> open the `vX.Y.Z` draft -> review -> **Publish**.
 
 ## Notes
 

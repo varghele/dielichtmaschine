@@ -119,8 +119,8 @@ def _set_library_dir(key: str, path: str) -> None:
     settings.sync()
     # Deferred import: fixture_library must stay importable without Qt,
     # so it may not be imported here at module level either way round.
-    from utils.fixture_library import clear_library_cache
-    clear_library_cache()
+    from utils.fixture_library import invalidate_fixture_caches
+    invalidate_fixture_caches()
 
 
 def migrate_legacy_settings() -> int:

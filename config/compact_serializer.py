@@ -199,12 +199,20 @@ def compact_serialize(data: dict) -> dict:
                 lb_key = _lightblock_content_key(lb_template)
                 lb_id = lb_registry.register(lb_key, lb_template)
 
-                # Preserve original ordering: one entry per block
-                compact_entries.append({
+                # Preserve original ordering: one entry per block.
+                # Morph provenance ("morphed:<edge>"/"hand_edited") is
+                # PER-INSTANCE state, so it rides on the entry - it can
+                # never live in the dedup template, where two identical
+                # blocks with different provenance share one def. Only
+                # written when set, so pre-provenance files are stable.
+                compact_entry = {
                     'ref': lb_id,
                     'start': round(lb_start, 6),
                     'end': round(lb_end, 6),
-                })
+                }
+                if lb.get('provenance'):
+                    compact_entry['provenance'] = lb['provenance']
+                compact_entries.append(compact_entry)
 
             lane['light_blocks'] = compact_entries
 
@@ -280,7 +288,9 @@ def expand_compact(data: dict) -> dict:
                 for placement in placement_list:
                     abs_start, abs_end = placement[0], placement[1]
 
-                    # Build full inline LightBlock dict
+                    # Build full inline LightBlock dict. Provenance is
+                    # per-instance and lives on the ENTRY (absent in
+                    # files written before 2026-07-17 -> "").
                     lb_dict = {
                         'start_time': abs_start,
                         'end_time': abs_end,
@@ -289,6 +299,7 @@ def expand_compact(data: dict) -> dict:
                         'name': lb_template.get('name'),
                         'riff_source': lb_template.get('riff_source'),
                         'riff_version': lb_template.get('riff_version'),
+                        'provenance': entry.get('provenance', ''),
                         'duration': round(abs_end - abs_start, 6),
                         'parameters': {},
                     }

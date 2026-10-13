@@ -44,7 +44,9 @@ from PyQt6.QtWidgets import (
 )
 from PyQt6.QtGui import QFont
 from PyQt6.QtCore import Qt
-from config.models import Configuration, Fixture, FixtureMode, FixtureGroup
+from config.models import (
+    Configuration, Fixture, FixtureMode, FixtureGroup, primary_group,
+)
 from utils.fixture_utils import get_cached_fixture_definitions
 from utils.dmx_conflicts import (
     AddressConflict,
@@ -104,6 +106,30 @@ GROUP_PALETTE = (
 )
 
 LIGHTING_ROLES = ("", "wash", "key", "texture", "accent")
+
+
+class DefinitionCacheWorker(QtCore.QThread):
+    """Parses one fixture definition into the cache off the UI thread
+    (the add-fixture loading dialog waits on it).
+
+    Waiters connect QThread's own ``finished``, which fires on every
+    exit path of run(). The worker used to redeclare ``finished`` and
+    emit it as run()'s last line, which shadowed the real signal: an
+    exception while loading the definition skipped it and the loading
+    dialog's wait loop hung forever.
+    """
+
+    def __init__(self, manufacturer, model, parent=None):
+        super().__init__(parent)
+        self.manufacturer = manufacturer
+        self.model = model
+        self.error = None
+
+    def run(self):
+        try:
+            get_cached_fixture_definitions({(self.manufacturer, self.model)})
+        except Exception as e:
+            self.error = e
 
 
 # ---------------------------------------------------------------------------
@@ -343,70 +369,9 @@ def _active_tokens() -> dict:
     return THEMES["dark"]
 
 
-class _FlowLayout(QtWidgets.QLayout):
-    """Minimal left-to-right wrapping layout for the capability chips."""
-
-    def __init__(self, parent=None, hspacing: int = 6, vspacing: int = 6):
-        super().__init__(parent)
-        self._items = []
-        self._h = hspacing
-        self._v = vspacing
-        self.setContentsMargins(0, 0, 0, 0)
-
-    def addItem(self, item):
-        self._items.append(item)
-
-    def count(self):
-        return len(self._items)
-
-    def itemAt(self, index):
-        if 0 <= index < len(self._items):
-            return self._items[index]
-        return None
-
-    def takeAt(self, index):
-        if 0 <= index < len(self._items):
-            return self._items.pop(index)
-        return None
-
-    def expandingDirections(self):
-        return QtCore.Qt.Orientation(0)
-
-    def hasHeightForWidth(self):
-        return True
-
-    def heightForWidth(self, width):
-        return self._do_layout(QtCore.QRect(0, 0, width, 0), True)
-
-    def setGeometry(self, rect):
-        super().setGeometry(rect)
-        self._do_layout(rect, False)
-
-    def sizeHint(self):
-        return self.minimumSize()
-
-    def minimumSize(self):
-        size = QtCore.QSize()
-        for item in self._items:
-            size = size.expandedTo(item.minimumSize())
-        margins = self.contentsMargins()
-        size += QtCore.QSize(margins.left() + margins.right(),
-                             margins.top() + margins.bottom())
-        return size
-
-    def _do_layout(self, rect, test_only: bool) -> int:
-        x, y, line_height = rect.x(), rect.y(), 0
-        for item in self._items:
-            hint = item.sizeHint()
-            if x + hint.width() > rect.right() + 1 and line_height > 0:
-                x = rect.x()
-                y += line_height + self._v
-                line_height = 0
-            if not test_only:
-                item.setGeometry(QtCore.QRect(QtCore.QPoint(x, y), hint))
-            x += hint.width() + self._h
-            line_height = max(line_height, hint.height())
-        return y + line_height - rect.y()
+# The wrapping chip layout moved to gui/widgets/flow_layout.py when the
+# morph patchbay needed it too; the alias keeps this tab's call sites.
+from gui.widgets.flow_layout import FlowLayout as _FlowLayout  # noqa: E402
 
 
 class _GroupRow(QtWidgets.QWidget):
@@ -1251,8 +1216,10 @@ class FixturesTab(BaseTab):
     def _create_group(self, name: str, role: str = ""):
         """Create (or re-role) a group; empty groups persist until used."""
         if name not in self.config.groups:
+            # Newly created groups order spatially by default (v1.5
+            # topology decision); imported/derived groups stay manual.
             self.config.groups[name] = FixtureGroup(
-                name, [], lighting_role=role)
+                name, [], lighting_role=role, order_mode="spatial")
             self._manual_groups.add(name)
             self._ensure_group_color(name)
         elif role:
@@ -1277,6 +1244,10 @@ class FixturesTab(BaseTab):
                 'default_roll': getattr(group, 'default_roll', 0.0),
                 'default_z_height': getattr(group, 'default_z_height', 3.0),
                 'lighting_role': getattr(group, 'lighting_role', ''),
+                # Topology survives the rebuild: the LIVE order (list
+                # as-is) is the truth, not the possibly-stale snapshot.
+                'fixture_order': [f.name for f in group.fixtures],
+                'order_mode': getattr(group, 'order_mode', 'manual'),
             }
             for name, group in self.config.groups.items()
         }
@@ -1293,6 +1264,8 @@ class FixturesTab(BaseTab):
                 default_roll=props.get('default_roll', 0.0),
                 default_z_height=props.get('default_z_height', 3.0),
                 lighting_role=props.get('lighting_role', ''),
+                fixture_order=props.get('fixture_order', []),
+                order_mode=props.get('order_mode', 'manual'),
             )
 
         self.config.groups = {}
@@ -1303,6 +1276,10 @@ class FixturesTab(BaseTab):
                 if group_name not in self.config.groups:
                     self.config.groups[group_name] = build_group(group_name)
                 self.config.groups[group_name].fixtures.append(fixture)
+        # Re-establish each group's canonical order (manual: preserved
+        # order with newcomers appended; spatial: re-sorted).
+        for group in self.config.groups.values():
+            group.apply_fixture_order()
 
         for name in list(self._manual_groups):
             if name in self.config.groups:
@@ -1410,7 +1387,7 @@ class FixturesTab(BaseTab):
             self.insp_group.blockSignals(False)
 
         if not self.insp_role.hasFocus():
-            group = self.config.groups.get(fixture.group)
+            group = primary_group(self.config, fixture)
             role = getattr(group, "lighting_role", "") if group else ""
             self.insp_role.blockSignals(True)
             index = self.insp_role.findText(role or "")
@@ -1418,7 +1395,7 @@ class FixturesTab(BaseTab):
             self.insp_role.blockSignals(False)
             self.insp_role.setEnabled(bool(fixture.group))
 
-        group = self.config.groups.get(fixture.group)
+        group = primary_group(self.config, fixture)
         z = fixture.get_effective_z(group)
         self.insp_position.setText(
             f"X {fixture.x:.2f}   Y {fixture.y:.2f}   Z {z:.2f} m")
@@ -1599,7 +1576,7 @@ class FixturesTab(BaseTab):
         self._refresh_groups_panel()
         self._update_status_strip()
         # Role editor follows the (possibly new) group.
-        group = self.config.groups.get(fixture.group)
+        group = primary_group(self.config, fixture)
         role = getattr(group, "lighting_role", "") if group else ""
         self.insp_role.blockSignals(True)
         index = self.insp_role.findText(role or "")
@@ -1614,7 +1591,7 @@ class FixturesTab(BaseTab):
         if row < 0 or self._is_rebuilding:
             return
         fixture = self.config.fixtures[row]
-        group = self.config.groups.get(fixture.group)
+        group = primary_group(self.config, fixture)
         if group is None or group.lighting_role == text:
             return
         group.lighting_role = text
@@ -1894,7 +1871,30 @@ class FixturesTab(BaseTab):
         delete_action = menu.addAction("Delete group")
         delete_action.triggered.connect(
             lambda: self._delete_group(name))
+        menu.addSeparator()
+        # Deterministic topology (v1.5): the group's fixture order is
+        # what Group:N targets and chases run along.
+        group = self.config.groups.get(name)
+        spatial_action = menu.addAction("Order spatially (stage X, Y)")
+        spatial_action.setCheckable(True)
+        spatial_action.setChecked(
+            getattr(group, "order_mode", "manual") == "spatial")
+        spatial_action.triggered.connect(
+            lambda checked: self._set_group_order_mode(name, checked))
         menu.exec(global_pos)
+
+    def _set_group_order_mode(self, name: str, spatial: bool):
+        """Toggle a group between spatial and manual (current-order) mode."""
+        group = self.config.groups.get(name)
+        if group is None:
+            return
+        if spatial:
+            group.sort_spatially()
+        else:
+            # Manual mode pins whatever order is current.
+            group.set_manual_order([f.name for f in group.fixtures])
+        self._sync_fingerprint()
+        self._notify_main_window()
 
     def _show_groups_panel_menu(self, panel, pos):
         """Right-click on empty groups-panel space: offer Add group."""
@@ -2079,21 +2079,7 @@ class FixturesTab(BaseTab):
             QtWidgets.QApplication.processEvents()
 
             # Run caching in a background thread
-            from PyQt6.QtCore import QThread, pyqtSignal
-
-            class CacheWorker(QThread):
-                finished = pyqtSignal()
-
-                def __init__(self, mfr, mdl):
-                    super().__init__()
-                    self.mfr = mfr
-                    self.mdl = mdl
-
-                def run(self):
-                    get_cached_fixture_definitions({(self.mfr, self.mdl)})
-                    self.finished.emit()
-
-            worker = CacheWorker(manufacturer, model)
+            worker = DefinitionCacheWorker(manufacturer, model)
             worker.finished.connect(loading_dialog.accept)
             # A loading dialog is a progress indicator, not a question, so
             # never QDialog.exec() - the test suite's modal guard bans it
@@ -2106,6 +2092,10 @@ class FixturesTab(BaseTab):
             worker.start()
             wait_loop.exec()
             worker.wait()  # Ensure thread is fully done
+            if worker.error is not None:
+                user_warnings.warn(
+                    f"Loading the definition of {manufacturer} {model} "
+                    f"failed: {worker.error}", category="fixture-library")
         else:
             # Already cached, no need for loading dialog
             get_cached_fixture_definitions({(manufacturer, model)})
@@ -2260,6 +2250,7 @@ class FixturesTab(BaseTab):
         for group_name in new_fixture.groups:
             if group_name in self.config.groups:
                 self.config.groups[group_name].fixtures.append(new_fixture)
+                self.config.groups[group_name].apply_fixture_order()
 
         # Refresh table
         self.update_from_config(force=True)

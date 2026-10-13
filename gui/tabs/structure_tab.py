@@ -159,6 +159,7 @@ TRIGGER_MODE_HINTS = {
 PAUSE_MODE_TEXTS = {
     "blackout": "Blackout",
     "warm_white": "Warm white",
+    "scene": "Scene",
     "hold_last": "Hold last look",
     "ambient_loop": "Ambient loop",
 }
@@ -196,6 +197,8 @@ def pause_look_line(pause) -> str:
     text = PAUSE_MODE_TEXTS.get(pause.mode, pause.mode)
     if pause.mode == "warm_white":
         text = f"{text} {pause.level}%"
+    elif pause.mode == "scene" and getattr(pause, "scene", ""):
+        text = f"{text} · {pause.scene.split('/')[-1]}"
     tail = ("until trigger" if pause.until == "trigger"
             else f"{pause.duration_s:g}s")
     return f"PAUSE LOOK · {text} · {tail}"
@@ -924,6 +927,10 @@ class StructureTab(BaseTab):
         # Generation report from this tab's own autogen run (the sibling
         # Shows tab's report is used when we have none of our own).
         self._autogen_report = None
+        # This tab's own running autogen worker and the AutogenJob it
+        # was launched for (see _open_autogen_dialog).
+        self._autogen_worker = None
+        self._autogen_job = None
 
         # Playback state
         self.is_playing = False
@@ -983,6 +990,14 @@ class StructureTab(BaseTab):
         left_column = QVBoxLayout(left_host)
         left_column.setContentsMargins(28, 28, 28, 28)
         left_column.setSpacing(28)
+        # 720p floor (2026-07-18): the centre column's layout demands
+        # ~589x578, which put the tab ~30px over the height a 720p
+        # display leaves under the shell chrome - and the tab minimum
+        # propagates into the WM-enforced window minimum. The explicit
+        # minimum overrides the hint (qSmartMinSize); squeezed the
+        # column just compresses its 28px gaps, pinned by the 720p
+        # golden in tests/visual/test_720p_layout.py.
+        left_host.setMinimumSize(560, 500)
 
         # Song title row: name + meta line + rename/delete chips.
         left_column.addLayout(self._create_title_row())
@@ -1277,24 +1292,16 @@ class StructureTab(BaseTab):
         sync_row.addWidget(segment_host)
         sync_row.addStretch(1)
         header_column.addLayout(sync_row)
-        # Device + ARM row (docs/ltc-plan.md phase 3). Own row: inline
-        # after four segments it overflows 330px and squeezes the
-        # SMPTE/MANUAL glyphs. The combo lists audio inputs only when
-        # SMPTE is the sync mode (device enumeration is not free and
-        # the other modes read their devices elsewhere); ARM CHASE asks
-        # the shell to start/stop the LTC chase - the SHELL owns the
-        # policy, this row only requests and reflects.
+        # ARM row (docs/ltc-plan.md phase 3). Own row: inline after
+        # four segments it overflows 330px and squeezes the SMPTE/
+        # MANUAL glyphs. The sync input DEVICE moved to the Live tab's
+        # SYNC cluster 2026-07-22 (a venue concern, not show
+        # structure); ARM CHASE asks the shell to start/stop the LTC
+        # chase - the SHELL owns the policy, this row only requests
+        # and reflects.
         device_row = QHBoxLayout()
         device_row.setSpacing(8)
-        self.sync_device_combo = QComboBox()
-        self.sync_device_combo.setObjectName("SyncDeviceCombo")
-        self.sync_device_combo.setProperty("role", "lane-chip")
-        self.sync_device_combo.setFont(mono_font(8))
-        self.sync_device_combo.setToolTip(
-            "Audio input carrying the LTC signal")
-        self.sync_device_combo.currentIndexChanged.connect(
-            self._on_sync_device_selected)
-        device_row.addWidget(self.sync_device_combo, stretch=1)
+        device_row.addStretch(1)
         self.chase_arm_btn = QPushButton("ARM CHASE")
         self.chase_arm_btn.setCheckable(True)
         self.chase_arm_btn.setProperty("role", "cta-outline")
@@ -1519,40 +1526,18 @@ class StructureTab(BaseTab):
     # -- LTC chase row (docs/ltc-plan.md phase 3) ----------------------
 
     def _refresh_sync_chase_row(self):
-        """Device combo + ARM CHASE reflect the setlist. Both only show
-        in SMPTE mode (the other modes read their devices elsewhere,
-        and audio enumeration is not free); ARM is offered only when a
-        chase could do something - at least one SMPTE trigger."""
+        """ARM CHASE reflects the setlist. Only shows in SMPTE mode;
+        offered only when a chase could do something - at least one
+        SMPTE trigger. (The sync input DEVICE is picked on the Live
+        tab's SYNC cluster - a venue concern, not show structure.)"""
         setlist = self.config.setlist
         smpte = setlist.sync_mode == "smpte"
-        combo = self.sync_device_combo
-        combo.blockSignals(True)
-        if smpte and combo.count() == 0:
-            combo.addItem("Default input", "")
-            try:
-                from audio.device_manager import DeviceManager
-                for dev in DeviceManager().enumerate_input_devices():
-                    combo.addItem(dev.display_name or dev.name, dev.name)
-            except Exception:
-                pass    # enumeration failed: default input only
-        if combo.count():
-            index = combo.findData(setlist.sync_device or "")
-            combo.setCurrentIndex(index if index >= 0 else 0)
-        combo.setVisible(smpte)
-        combo.blockSignals(False)
         armable = smpte and any(
             e.trigger.mode == "smpte" and e.trigger.timecode
             for e in setlist.entries)
         self.chase_arm_btn.setVisible(smpte)
         self.chase_arm_btn.setEnabled(
             armable or self.chase_arm_btn.isChecked())
-
-    def _on_sync_device_selected(self, index: int):
-        value = self.sync_device_combo.itemData(index) or ""
-        if self.config.setlist.sync_device == value:
-            return
-        self.config.setlist.sync_device = value
-        self._auto_save()
 
     def _on_chase_arm_toggled(self, checked: bool):
         self.chase_arm_requested.emit(bool(checked))
@@ -2191,6 +2176,14 @@ class StructureTab(BaseTab):
         row.addWidget(self.song_meta)
         row.addStretch(1)
 
+        self.lock_song_btn = QPushButton("LOCK")
+        self.lock_song_btn.setObjectName("LockSongChip")
+        self.lock_song_btn.setCheckable(True)
+        self.lock_song_btn.setProperty("role", "output-select")
+        self.lock_song_btn.setToolTip(
+            "Lock this song against timeline and structure edits · "
+            "playback, export and mute/solo stay live")
+        self.lock_song_btn.toggled.connect(self._on_lock_toggled)
         self.rename_show_btn = QPushButton("RENAME SONG")
         self.rename_show_btn.setObjectName("RenameSongChip")
         self.rename_show_btn.setProperty("role", "cta-outline")
@@ -2203,7 +2196,8 @@ class StructureTab(BaseTab):
         chip_font = display_font(10, QFont.Weight.DemiBold,
                                  tracking_em=0.08)
         metrics = QFontMetrics(chip_font)
-        for chip in (self.rename_show_btn, self.delete_show_btn):
+        for chip in (self.lock_song_btn, self.rename_show_btn,
+                     self.delete_show_btn):
             chip.setFont(chip_font)
             chip.setCursor(Qt.CursorShape.PointingHandCursor)
             # Width from the font's own metrics (+ theme padding slack)
@@ -2214,12 +2208,54 @@ class StructureTab(BaseTab):
 
         return row
 
+    # -- Song lock (v1.5) ---------------------------------------------------
+
+    def _locked(self) -> bool:
+        return bool(self.current_show is not None
+                    and getattr(self.current_show, "locked", False))
+
+    def refresh_lock_ui(self) -> None:
+        """Public: re-derive every lock-driven enable state (called by
+        the Shows tab when its LOCK chip toggles, and internally)."""
+        self._update_title_row()
+        self._refresh_inspector()
+
+    def _on_lock_toggled(self, checked: bool) -> None:
+        if self.current_show is None:
+            return
+        self.current_show.locked = bool(checked)
+        delegate = self._shows_tab_delegate()
+        if delegate is not None and hasattr(delegate, "mark_config_dirty"):
+            delegate.mark_config_dirty()
+        if delegate is not None and hasattr(delegate, "_refresh_lock_ui"):
+            delegate._refresh_lock_ui()
+        self.refresh_lock_ui()
+
+    def _flash_locked(self) -> None:
+        from timeline_ui.locking import flash_locked
+        flash_locked(self)
+
     def _update_title_row(self):
         """Song name + the mono meta line: the leading part's tempo and
         signature, then the song totals (the S2a duration math)."""
         has_song = self.current_show is not None
-        self.rename_show_btn.setEnabled(has_song)
-        self.delete_show_btn.setEnabled(has_song)
+        locked = self._locked()
+        self.lock_song_btn.blockSignals(True)
+        self.lock_song_btn.setChecked(locked)
+        self.lock_song_btn.blockSignals(False)
+        self.lock_song_btn.setEnabled(has_song)
+        self.rename_show_btn.setEnabled(has_song and not locked)
+        self.delete_show_btn.setEnabled(has_song and not locked)
+        # Lock-only gating: with no song these stay enabled as before
+        # (their handlers own the "No Song Selected" warning - pinned
+        # behavior).
+        for widget_name in ("add_part_tile", "autogen_btn",
+                            "load_audio_btn"):
+            widget = getattr(self, widget_name, None)
+            if widget_name == "autogen_btn" and self._autogen_running():
+                continue           # stays GENERATING... until the run ends
+            if widget is not None:
+                widget.setEnabled(not locked)
         if not has_song:
             self.song_title.setText("No song")
             self.song_meta.setText("no song loaded")
@@ -2327,11 +2363,14 @@ class StructureTab(BaseTab):
         lane's own (hidden) load button - file dialog, background load,
         then the grid-level audio_file_changed signal bundles the file
         next to the config."""
+        if self._locked():
+            self._flash_locked()
+            return
         file_path, _ = QFileDialog.getOpenFileName(
             self, "Select Audio File", "",
             "Audio Files (*.wav *.mp3 *.flac *.ogg);;All Files (*)")
         if file_path:
-            self.audio_lane.load_audio_file(file_path)
+            self.audio_lane.load_audio_file(file_path, force=True)
 
     def _create_playback_controls(self):
         """Compact transport row under the master grid: play/stop, the
@@ -2603,6 +2642,24 @@ class StructureTab(BaseTab):
             return shows_tab
         return None
 
+    def _autogen_running(self) -> bool:
+        """A run is in flight: its worker is still running, or its
+        result is queued but not handled yet."""
+        if getattr(self, "_autogen_job", None) is not None:
+            return True
+        worker = getattr(self, "_autogen_worker", None)
+        return worker is not None and worker.isRunning()
+
+    def _on_autogen_thread_done(self):
+        """QThread.finished of the autogen worker: the safety net for a
+        run that ended without delivering a result or an error, so the
+        button never stays stuck on GENERATING..."""
+        if self.sender() is not self._autogen_worker:
+            return
+        if self._autogen_job is not None:
+            self._autogen_job = None
+            self._reset_autogen_button()
+
     def _on_autogenerate(self):
         """Run the same AutogenDialog flow the Timeline tab exposes.
 
@@ -2611,6 +2668,13 @@ class StructureTab(BaseTab):
         ``autogenerate_requested``, else run the dialog + worker here and
         write the lanes into the show's timeline data.
         """
+        if self._locked():
+            self._flash_locked()
+            return
+        if self._autogen_running():
+            # One run at a time: replacing the worker reference would
+            # let Python destroy a QThread that is still running.
+            return
         if not self.current_show:
             QMessageBox.warning(self, "No Song Selected",
                                 "Please select a song first.")
@@ -2645,7 +2709,8 @@ class StructureTab(BaseTab):
         Timeline tab, result written into ``show.timeline_data.lanes``
         (the Timeline tab picks them up on its next refresh)."""
         from PyQt6.QtWidgets import QDialog
-        from gui.dialogs.autogen_dialog import AutogenDialog, AutogenWorker
+        from gui.dialogs.autogen_dialog import (
+            AutogenDialog, AutogenJob, AutogenWorker)
 
         show = self.current_show
         if not show.parts:
@@ -2672,48 +2737,73 @@ class StructureTab(BaseTab):
 
         self.autogen_btn.setEnabled(False)
         self.autogen_btn.setText("GENERATING...")
+        # Bound to THIS song, reading a snapshot: the user may switch
+        # songs or edit the rig while the worker runs.
+        self._autogen_job = AutogenJob(self.config, show)
         self._autogen_worker = AutogenWorker(
-            audio_path, song_structure, self.config, dialog.result_config,
-            dialog.result_key_signature, dialog.result_palette,
+            audio_path, song_structure, self._autogen_job.snapshot,
+            dialog.result_config, dialog.result_key_signature,
+            dialog.result_palette,
         )
-        self._autogen_worker.finished.connect(self._on_autogen_finished)
+        self._autogen_worker.generated.connect(self._on_autogen_finished)
         self._autogen_worker.error.connect(self._on_autogen_error)
+        self._autogen_worker.finished.connect(self._on_autogen_thread_done)
         self._autogen_worker.start()
 
     def _reset_autogen_button(self):
-        self.autogen_btn.setEnabled(True)
+        """Back from GENERATING... on every exit path of a run."""
         self.autogen_btn.setText("AUTOGENERATE SONG...")
+        self.autogen_btn.setEnabled(not self._locked())
 
     def _on_autogen_finished(self, lanes, report=None):
-        """Store generated lanes on the show (the Timeline tab renders
-        them) and keep the report for the AUDIO ANALYSIS rows."""
+        """Store generated lanes on the song the run was launched for
+        (the Timeline tab renders them) and keep the report for the
+        AUDIO ANALYSIS rows when that song is the open one."""
+        job, self._autogen_job = self._autogen_job, None
+        self._reset_autogen_button()
+        song_name = job.song_name(self.config) if job is not None else None
+        if song_name is None:
+            QMessageBox.information(
+                self, "Auto-Generate",
+                "The song this generation was started for is no longer "
+                "in the project. The result was discarded.")
+            return
+        song = job.song
+        if getattr(song, "locked", False):
+            self._flash_locked()
+            return
         from config.models import LightLane
 
-        self._reset_autogen_button()
-        self._autogen_report = report
+        is_current = song is self.current_show
+        if is_current:
+            self._autogen_report = report
         if not lanes:
             QMessageBox.information(self, "Auto-Generate",
                                     "No lanes were generated. Check fixture "
                                     "groups and song structure.")
             return
-        if self.current_show.timeline_data is None:
-            self.current_show.timeline_data = TimelineData()
+        if song.timeline_data is None:
+            song.timeline_data = TimelineData()
         new_lanes = []
         for lane_data in lanes:
             lane = LightLane(lane_data.name)
             lane.fixture_targets = lane_data.fixture_targets
             lane.light_blocks = lane_data.light_blocks
             new_lanes.append(lane)
-        self.current_show.timeline_data.lanes = new_lanes
+        song.timeline_data.lanes = new_lanes
+        job.adopt_new_spots()
         self._auto_save()
-        self._refresh_inspector()
-        self._update_audio_readout()
+        if is_current:
+            self._refresh_inspector()
+            self._update_audio_readout()
+        where = "" if is_current else f" for \"{song_name}\""
         QMessageBox.information(
             self, "Auto-Generate",
-            f"Generated {len(new_lanes)} lanes. Open the Timeline tab to "
-            "review them.")
+            f"Generated {len(new_lanes)} lanes{where}. Open the Timeline "
+            "tab to review them.")
 
     def _on_autogen_error(self, error_msg):
+        self._autogen_job = None
         self._reset_autogen_button()
         QMessageBox.critical(self, "Auto-Generate Error",
                              f"Generation failed:\n{error_msg}")
@@ -2771,12 +2861,13 @@ class StructureTab(BaseTab):
     def _refresh_inspector(self):
         """Load the selected part into the inspector editors."""
         part = self._selected_part()
+        locked = self._locked()
         editors = (self.part_name_edit, self.bpm_spin, self.signature_widget,
                    self.bars_spin, self.transition_combo, self.part_color_btn,
                    self.move_left_btn, self.move_right_btn,
                    self.delete_part_btn)
         for widget in editors:
-            widget.setEnabled(part is not None)
+            widget.setEnabled(part is not None and not locked)
 
         self._update_stat_tiles(part)
         self._update_analysis_rows(part)
@@ -2808,12 +2899,17 @@ class StructureTab(BaseTab):
             widget.blockSignals(False)
 
         parts = self.current_show.parts
-        self.move_left_btn.setEnabled(self._selected_index > 0)
+        locked = self._locked()
+        self.move_left_btn.setEnabled(self._selected_index > 0
+                                      and not locked)
         self.move_right_btn.setEnabled(
-            self._selected_index < len(parts) - 1)
+            self._selected_index < len(parts) - 1 and not locked)
 
     def _add_new_part(self):
         """Add a new part to the current show."""
+        if self._locked():
+            self._flash_locked()
+            return
         if not self.current_show:
             QMessageBox.warning(self, "No Song", "Please create or select a song first.")
             return
@@ -2845,6 +2941,8 @@ class StructureTab(BaseTab):
 
     def _on_part_name_edited(self, text: str):
         """Handle name edit from the inspector."""
+        if self._locked():
+            return
         part = self._selected_part()
         if part is None:
             return
@@ -2857,6 +2955,8 @@ class StructureTab(BaseTab):
 
     def _on_bpm_changed(self, value: float):
         """Handle BPM spinbox change."""
+        if self._locked():
+            return
         part = self._selected_part()
         if part is None:
             return
@@ -2871,6 +2971,8 @@ class StructureTab(BaseTab):
 
     def _on_signature_changed(self, signature: str):
         """Handle time signature widget change."""
+        if self._locked():
+            return
         part = self._selected_part()
         if part is None:
             return
@@ -2885,6 +2987,8 @@ class StructureTab(BaseTab):
 
     def _on_bars_changed(self, value: int):
         """Handle bars spinbox change."""
+        if self._locked():
+            return
         part = self._selected_part()
         if part is None:
             return
@@ -2899,6 +3003,8 @@ class StructureTab(BaseTab):
 
     def _on_transition_changed(self, transition: str):
         """Handle transition combobox change."""
+        if self._locked():
+            return
         part = self._selected_part()
         if part is None:
             return
@@ -2936,6 +3042,9 @@ class StructureTab(BaseTab):
     def _set_transition_out(self, index: int, transition: str):
         """Write a transition picked from a chip menu into the model
         (same write path as the inspector combo)."""
+        if self._locked():
+            self._flash_locked()
+            return
         parts = self.current_show.parts if self.current_show else []
         if not (0 <= index < len(parts)):
             return
@@ -2949,6 +3058,8 @@ class StructureTab(BaseTab):
 
     def _on_color_changed(self, color: str):
         """Handle color button change."""
+        if self._locked():
+            return
         part = self._selected_part()
         if part is None:
             return
@@ -2962,6 +3073,9 @@ class StructureTab(BaseTab):
 
     def _move_part(self, delta: int):
         """Reorder: swap the selected part with its neighbor."""
+        if self._locked():
+            self._flash_locked()
+            return
         parts = self.current_show.parts if self.current_show else []
         source = self._selected_index
         target = source + delta
@@ -2976,6 +3090,9 @@ class StructureTab(BaseTab):
     def _reorder_part(self, source: int, target: int):
         """Move the part at ``source`` to the slot of the card dropped on
         (``target``). Driven by drag-and-drop between part cards."""
+        if self._locked():
+            self._flash_locked()
+            return
         parts = self.current_show.parts if self.current_show else []
         if not (0 <= source < len(parts)) or source == target:
             return
@@ -3120,6 +3237,9 @@ class StructureTab(BaseTab):
 
     def _rename_show(self):
         """Rename the current song."""
+        if self._locked():
+            self._flash_locked()
+            return
         if not self.current_song_name:
             QMessageBox.warning(self, "No Song Selected", "Please select a song to rename.")
             return
@@ -3189,6 +3309,9 @@ class StructureTab(BaseTab):
 
     def _delete_show(self):
         """Delete the current song (from config and disk)."""
+        if self._locked():
+            self._flash_locked()
+            return
         if not self.current_song_name:
             QMessageBox.warning(self, "No Song Selected", "Please select a song to delete.")
             return
@@ -3321,6 +3444,9 @@ class StructureTab(BaseTab):
 
     def _delete_part(self):
         """Delete the selected part."""
+        if self._locked():
+            self._flash_locked()
+            return
         if self._selected_part() is None:
             QMessageBox.warning(self, "No Selection", "Please select a part to delete.")
             return
@@ -3362,6 +3488,9 @@ class StructureTab(BaseTab):
 
     def _import_from_csv(self):
         """Import show structure from CSV file."""
+        if self._locked():
+            self._flash_locked()
+            return
         if not self.current_song_name:
             QMessageBox.warning(self, "No Show Selected", "Please select a show first.")
             return

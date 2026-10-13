@@ -87,6 +87,54 @@ def qapp():
 
 
 # ---------------------------------------------------------------------------
+# Actually free widget trees that a test scheduled with deleteLater().
+#
+# QCoreApplication.processEvents() does NOT deliver DeferredDelete at this
+# nesting level - the suite never spins an event loop - so the widespread
+# teardown shape `w.deleteLater(); qapp.processEvents()` frees NOTHING.
+# Measured 2026-08-08: six LiveTab setup/teardown cycles left all
+# 6 x 251 widgets alive; with the explicit flush below, every cycle
+# returns to zero.
+#
+# The leak is per-worker and cross-file, and ThemeManager.apply()
+# re-polishes app.allWidgets() on every call, so a later apply eventually
+# walks a huge pile of dead-but-referenced widgets and takes a native
+# access violation. That is the CI crash in test_live_tab.py (Windows
+# workers gw1/gw2) and the earlier offscreen-Linux one; LiveTab is simply
+# the heaviest tab, so it dies first rather than being the actual culprit.
+#
+# tests/e2e/conftest.py's main_window fixture already does this explicitly
+# and documents the same finding. This is the suite-wide net, so unit
+# fixtures written later cannot silently re-introduce the leak.
+# ---------------------------------------------------------------------------
+def flush_deferred_deletes() -> None:
+    """Deliver pending DeferredDelete events, actually freeing widget
+    trees that were scheduled with ``deleteLater()``.
+
+    Importable so a test can pin the behaviour (see
+    ``tests/unit/test_live_tab.py::TestTeardownHygiene``) rather than
+    trusting the autouse fixture silently. No-op when Qt was never
+    imported or no QApplication exists.
+    """
+    # Nothing to free if Qt was never imported (pure-logic tests) - and
+    # importing it here just to check would slow every one of them down.
+    if "PyQt6.QtWidgets" not in sys.modules:
+        return
+    from PyQt6.QtCore import QEvent
+    from PyQt6.QtWidgets import QApplication
+    if QApplication.instance() is None:
+        return
+    QApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete.value)
+    QApplication.processEvents()
+
+
+@pytest.fixture(autouse=True)
+def _flush_deferred_deletes():
+    yield
+    flush_deferred_deletes()
+
+
+# ---------------------------------------------------------------------------
 # Sample data model fixtures
 # ---------------------------------------------------------------------------
 @pytest.fixture

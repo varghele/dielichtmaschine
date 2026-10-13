@@ -101,3 +101,31 @@ class TestInstantiate:
 
         instantiate_template(club_band, str(tmp_path / "p.yaml"), include_show=True)
         assert existing.read_bytes() == b"user-version"
+
+
+class TestSidecarsAreNotTemplates:
+    """Found 2026-08-08: running Venue Pre-Flight and saving next to a
+    demo rig put band_midsize.preflight.yaml in the rigs directory, and
+    New from Template listed it as a broken 0-fixture starter."""
+
+    def test_preflight_sidecar_is_ignored(self, tmp_path, monkeypatch):
+        from utils import templates as mod
+        rigs = tmp_path / "rigs"
+        rigs.mkdir()
+        (tmp_path / "shows").mkdir()
+        (rigs / "band_midsize.preflight.yaml").write_text(
+            "preflight: {}\n", encoding="utf-8")
+        (rigs / "morphed.morphplan.yaml").write_text(
+            "morphplan: 2\n", encoding="utf-8")
+        monkeypatch.setattr(mod, "templates_root", lambda: str(tmp_path))
+        assert mod.list_templates() == []
+
+    def test_any_fixtureless_yaml_is_ignored(self, tmp_path, monkeypatch):
+        """The general guard, not just our own sidecar names."""
+        from utils import templates as mod
+        rigs = tmp_path / "rigs"
+        rigs.mkdir()
+        (tmp_path / "shows").mkdir()
+        (rigs / "notes.yaml").write_text("hello: world\n", encoding="utf-8")
+        monkeypatch.setattr(mod, "templates_root", lambda: str(tmp_path))
+        assert mod.list_templates() == []

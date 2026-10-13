@@ -38,6 +38,10 @@ class AutoModeSettings:
     # "ASIO"). Resilient to missing or stale APIs — the AutoTab falls
     # back to "Curated" if the saved API isn't currently available.
     input_host_api: str = "Curated (recommended)"
+    # Linear input gain 0.1..10 (= +/-20 dB), applied in the capture
+    # callback before analysis. The tab clamps on use - a hand-edited
+    # JSON value must never become a 1000x multiplier.
+    input_gain: float = 1.0
 
     # Engine controls
     bpm: int = 120

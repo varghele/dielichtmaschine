@@ -69,9 +69,20 @@ class MasterTimelineWidget(TimelineWidget):
         # `MasterTimelineWidget` selector — no inline stylesheet here.
 
     def set_playhead_position(self, position: float):
-        """Set playhead position and update display."""
+        """Set playhead position and repaint ONLY the playhead strips.
+
+        Same dirty-rect discipline as TimelineWidget (the playback
+        visual tick calls this at ~30 FPS; a full update() was part of
+        the 2026-07-16 playback-lag finding). The strip is wider here:
+        the ruler carries the grab handle polygon at the line's top.
+        """
+        old = self.playhead_position
         self.playhead_position = position
-        self.update()
+        if old != position:
+            height = self.height()
+            for pos in (old, position):
+                x = round(self.time_to_pixel(pos))
+                self.update(x - 12, 0, 25, height)
 
         # Auto-scroll to keep playhead visible
         self.ensure_playhead_visible()
@@ -112,6 +123,11 @@ class MasterTimelineWidget(TimelineWidget):
 
         width = self.width()
         height = self.height()
+        # Cull to the exposed region: playback invalidates narrow
+        # playhead strips at ~30 FPS (2026-07-16 lag fix), and the
+        # ruler is the full song wide.
+        painter.setClipRect(event.rect())
+        clip = event.rect()
 
         # Draw song structure parts as colored backgrounds
         if self.song_structure and hasattr(self.song_structure, 'parts') and self.song_structure.parts:
@@ -121,7 +137,7 @@ class MasterTimelineWidget(TimelineWidget):
                 print(f"Error drawing song structure: {e}")
 
         # Draw grid
-        self.draw_grid(painter, width, height)
+        self.draw_grid(painter, width, height, clip)
 
         # Draw playhead
         self.draw_playhead(painter, width, height)
@@ -264,10 +280,13 @@ class MasterTimelineWidget(TimelineWidget):
         except Exception as e:
             print(f"Error in _draw_parts_band: {e}")
 
-    def draw_grid(self, painter, width, height):
-        """Draw time-based grid with beat lines and optional sub-beat lines."""
+    def draw_grid(self, painter, width, height, clip=None):
+        """Draw time-based grid with beat lines and optional sub-beat
+        lines, culled to the exposed x-range (``clip``; None = all)."""
         has_structure = (self.song_structure and
                         hasattr(self.song_structure, 'parts') and self.song_structure.parts)
+        clip_left = clip.left() - 2 if clip is not None else 0
+        clip_right = clip.right() + 2 if clip is not None else width
         if has_structure:
             try:
                 # Semi-transparent gray reads on both dark and light themes.
@@ -285,13 +304,25 @@ class MasterTimelineWidget(TimelineWidget):
                     total_beats_in_part = int(part.num_bars * beats_per_bar)
                     seconds_per_beat = 60.0 / part.bpm
 
+                    start_x = round(self.time_to_pixel(part.start_time))
+                    if start_x > clip_right:
+                        break            # parts are time-ordered
+                    end_x = round(self.time_to_pixel(
+                        part.start_time
+                        + total_beats_in_part * seconds_per_beat))
+                    if end_x < clip_left:
+                        continue
+
                     is_last_part = (part_idx == num_parts - 1)
                     for step_time, kind in iter_grid_steps(
                             part.start_time, seconds_per_beat, beats_per_bar,
                             total_beats_in_part, subdivision, swing,
                             is_last_part, self.pixels_per_second, min_px):
                         step_x_rounded = round(self.time_to_pixel(step_time))
-                        if not (0 <= step_x_rounded <= width):
+                        if step_x_rounded > clip_right:
+                            break        # steps are time-ordered
+                        if step_x_rounded < clip_left or \
+                                not (0 <= step_x_rounded <= width):
                             continue
                         if kind == "bar":
                             painter.setPen(bar_pen)

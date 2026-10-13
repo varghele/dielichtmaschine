@@ -1157,8 +1157,9 @@ def chassis_from_legacy_type(legacy_type: Optional[str]) -> Chassis:
 # the data is derivable from the QXF). Instead, callers ask the module for a
 # cached :class:`FixtureCapabilities` keyed by (manufacturer, model, mode).
 #
-# Cache is invalidated when the fixture-definition cache in
-# ``fixture_utils.py`` is cleared (e.g. when QXF files change on disk).
+# Cleared by ``utils.fixture_library.invalidate_fixture_caches`` (the
+# rescan paths call it when fixture files change on disk). Clearing only
+# the library cache does NOT clear this one.
 
 
 _FIXTURE_CAPABILITIES_CACHE: Dict[Tuple[str, str, str], 'FixtureCapabilities'] = {}
@@ -1177,7 +1178,10 @@ def get_capabilities_for_fixture(fixture) -> 'FixtureCapabilities':
     QLC+ fixture directories), parses it, and runs :func:`detect_capabilities`.
 
     Returns a safe-default ``FixtureCapabilities`` (chassis=OTHER, no
-    components) if the QXF can't be located or parsed.
+    components) if the QXF can't be located or parsed. The default is not
+    cached (like ``utils.yoke.fixture_yoke``): a definition that lands
+    later is picked up as soon as the library resolves it, and the miss
+    stays cheap because the library memoizes "not found" itself.
     """
     key = (fixture.manufacturer, fixture.model, fixture.current_mode)
     cached = _FIXTURE_CAPABILITIES_CACHE.get(key)
@@ -1186,10 +1190,9 @@ def get_capabilities_for_fixture(fixture) -> 'FixtureCapabilities':
 
     qxf_root = _find_and_parse_qxf(fixture.manufacturer, fixture.model)
     if qxf_root is None:
-        caps = _safe_default_capabilities(fixture.current_mode)
-    else:
-        caps = detect_capabilities(qxf_root, fixture.current_mode)
+        return _safe_default_capabilities(fixture.current_mode)
 
+    caps = detect_capabilities(qxf_root, fixture.current_mode)
     _FIXTURE_CAPABILITIES_CACHE[key] = caps
     return caps
 

@@ -98,11 +98,32 @@ ArtNet playback, PyQt6 + ModernGL, developed primarily on Windows.
 
 ## Current state (update when it changes)
 
-As of 2026-07-06: **v1.1 "Stage tab and rig data" is reopened.** All 8
-items shipped a first pass on branch `v1.1-stage-rig-data` (894 tests
-green, nothing pushed), but stage plot export and stage layers have
-gaps in real-world use and are un-ticked in ROADMAP.md until a
-follow-up lands. No v1.1.0 tag yet.
+As of 2026-10-13: **v1.5.5 hardening** on branch `v1.5.5-hardening`,
+cut from `v1.5-focus-morphing` at `32dbd1e` (2026-10-06), PUSHED to
+origin and CI green on both jobs. Fixes only: correctness,
+thread-safety and lifetime bugs plus test/env infra, eleven groups
+G1-G11 (Linux run, 2026-10-07) and a Windows follow-up plus the five
+product decisions (2026-10-12, see the last dated note); plan, gate
+rules, commit hashes and the open handover checklist (desk checks,
+unfixed bugs, cleanup) in `docs/v1.5.5-hardening-plan.md`, done-notes and the deferred
+structural items in ROADMAP.md v1.5.5. Its ground rules
+still apply to any follow-up here: no rendered-pixel changes (win32
+goldens cannot be regenerated on Linux), export hash changes are named
+in the CHANGELOG. **v1.5.0 is SKIPPED (decision 2026-10-13):** its
+alpha shipped 2026-07-27, the final never did, and **v1.5.5 carries
+the 1.5 work plus the hardening.** The release commit is prepped on
+this branch (`_version.py` 1.5.5, CHANGELOG `[1.5.0]` + `[Unreleased]`
+folded into `[1.5.5] - 2026-10-13`, banner + About golden regenerated);
+the user merges `--no-ff` to `main`, tags `v1.5.5` and publishes. The
+rig-blocked gate checks moved to the post-release hardware list in
+ROADMAP. The v1.4.0 GitHub release is still an unpublished DRAFT. The
+dated notes below are history, oldest first; where one disagrees with
+a later note or the code, the later one wins.
+
+**v1.1 reopened (2026-07-06):** all 8 items shipped a first pass on
+branch `v1.1-stage-rig-data`, but stage plot export and stage layers
+had gaps in real-world use. Closed 2026-07-14 with those follow-ups
+moved to v1.6 "Stage refinement".
 
 **Direction change (July 2026):** the QLC+ extension route was
 rejected upstream; the app continues as a standalone tool. Native
@@ -126,9 +147,10 @@ and demo `.gdtf` files are authored in-repo.
 all fixture-definition discovery/parsing/caching unified in
 `utils/fixture_library.py` (canonical `FixtureDefinition`, byte-identical
 export proven via `scripts/export_hash_check.py`; needs PYTHONHASHSEED=0
-+ seeded RNG because `preset_scenes_to_xml` samples the global RNG
-unseeded). Phase 1 - `utils/gdtf_loader.py` transpiles .gdtf (pygdtf)
-into the same canonical model; `gdtf_fixtures/` scanned first so GDTF
+only - the export draws from its own `random.Random` instances since
+v1.5.5 G3, `tests/unit/test_rng_determinism.py`). Phase 1 -
+`utils/gdtf_loader.py` transpiles .gdtf (pygdtf) into the same
+canonical model; `gdtf_fixtures/` scanned first so GDTF
 wins identity clashes. Phase 2 - `Fixture.definition_source` +
 `gdtf_fixture_type_id` (YAML schema bump, defaults keep old configs
 loading), companion .qxf generation on export for fixtures QLC+ lacks.
@@ -208,8 +230,9 @@ design pass against screens 05b/06b):** the data model is
 SHOW(SETLIST) -> SONGS -> PARTS. `Show` was renamed `Song`
 (config.songs); `Setlist`/`SetlistEntry`/`SongTrigger`/`PauseLook` are
 new in config/models.py; YAML writes `songs:` + `setlist:` and loads
-legacy `shows:` forever (synthesized setlist; demo YAMLs deliberately
-stay legacy as fixtures). Export is byte-identical (hash-checked).
+legacy `shows:` forever (synthesized setlist; the legacy-load fixture
+is tests/fixtures/legacy_band_midsize.yaml - the demos themselves
+converted to .lms 2026-07-16). Export is byte-identical (hash-checked).
 Structure tab = setlist rail (numbered cards, triggers, pause rows,
 sync segment, drag reorder) + song editor centre + trigger/pause-look
 inspector (LEARN disabled until the v1.7 engine; analysis bars read
@@ -471,3 +494,334 @@ the milestone rests on todo.md's manual gate list. Suite: 2632+ unit,
 e2e+visual green;
 three stale goldens regenerated 2026-07-15 (structure tab device-hint
 row removal, riff tags + dimmer-rudiment riffs) after diff review.
+
+**v1.4.0 TAGGED (2026-07-15, evening):** the bench session was
+postponed by the user - the todo.md gate list became post-release
+verification (bench kit ready in the repo root: bench_kit.lms,
+bench_ltc_25fps_01h.wav, bench_kit.qxw; findings land as patch
+releases). v1.4-standalone-switch merged to main (--no-ff), tag
+v1.4.0 pushed, GitHub repo renamed to dielichtmaschine (remote URLs,
+env name, doc links all swept). Work continues on
+**v1.5-focus-morphing** (v1.5a focus geometry + v1.5b morphing =
+v1.5.0); the user is supplying a morphing-theory md to reconcile
+against the ROADMAP v1.5a/b sections before planning.
+
+**v1.5 code-complete (2026-07-16, branch `v1.5-focus-morphing`, ~19
+commits, 2861 unit + 111 e2e/visual green):** the user's design doc
+`docs/design-show-morphing.md` is the morphing authority;
+`docs/focus-morphing-plan.md` is the task derivation with a CLOSED
+status log recording every decision - read both before touching v1.5
+code. Shipped: deterministic group topology (fixture_order/order_mode;
+legacy configs snapshot, new groups spatial), stable lane ids, colour
+palette roles (ColourBlock.palette_role + Song.palette/apply_palette +
+editor role picker/EDIT PALETTE in the colour block dialog),
+world-space movement targets (target_point everywhere; export gained
+the world-plane path; Tools > Convert Movement to World Targets; AIM
+click-to-aim on the Stage tab; spot/plane/point combo in the movement
+editor), the WHOLE morph engine (utils/morph/: plan, compile, checker,
+analysis_cache, preview, preflight + morph_cli; `python main.py morph`),
+the patchbay + Morph to Venue flow (gui/dialogs/morph_patchbay.py +
+gui/screens/morph_screen.py, per mockup 15-morph-patch-flow-6d;
+REWORKED 2026-07-16 on the user's first desktop check: the modal
+wizard became a page-stack SCREEN under Tools > Morph to Venue -
+leaving keeps the in-progress plan, the menu resumes it, a project
+load discards stale screens - and the patchbay got drag-and-drop
+wiring alongside click-click plus the layout pass: names lead rows,
+chips size to their text, arrow expanders, FlowLayout edge chips
+via the promoted gui/widgets/flow_layout.py;
+gui/dialogs/morph_wizard.py is GONE), the pre-flight
+screen (gui/dialogs/preflight_dialog.py + utils/artnet/preflight_layer
+on the arbiter's exclusive slot; capture -> Fixture.calibration ONLY;
+export guard live in create_workspace + export CLI), per-fixture DMX
+invert flags (orientation panel; wire+export boundaries only), and
+Fixture.calibration. KEY TRAPS: morphed lane ids are DERIVED for
+determinism; the morph compile MUTATES config B in two reported cases
+(subset groups, default spots) - deepcopy B for dry runs; two live
+standalone moderngl contexts on one thread are unsafe (preview renders
+sequentially); the range-aware-export roadmap claim was STALE - the
+export has aimed at real Focus ranges since the yoke work (pinned in
+test_dmx_invert.py). Remaining for v1.5.0: the user's desktop/bench
+checks (todo.md) + release ritual. Bench artifacts (tester.lms,
+bench_kit.*, scenes/bench/) are untracked ON PURPOSE and live only on
+the desk PC.
+
+**Testing round on the recovered SBD project (2026-07-16, same
+branch):** the user's real project (shoo_bee_doom/, untracked;
+recovered from archive/conf_v7.yaml) exposed what demo-sized data
+never could. Fixed: patchbay capability gating was a no-op on loaded
+configs (now detected from definitions), the compile errored per
+edge x song on per-song lanes (now skips silently), morphed songs
+lost their audio reference, dimmer-only lanes were crushed in the
+timeline grid (mute/solo unreachable), and three timer-driven
+UI-thread costs made real projects stutter (libyaml C dumper/loader -
+output text-identical, pinned; autosave snapshot-then-worker via
+utils/autosave.write_snapshot; pickle-based dirty fingerprint).
+Added: the Live tab's SHOW transport strip (LiveShowTransport adapter,
+operator semantics - its STOP disarms an armed chase) and six
+manual-authored house fixture .qxfs in custom_fixtures (Cameo
+HydraBeam 4000 RGBW is modelled PER HEAD, 4x14ch per bar). PERF RULE
+learned: anything on a timer that walks the whole config must be
+measured against a ~1 MB project, not the demos.
+
+**Testing round, second half (2026-07-16 evening, same branch):**
+playback perf (the 30 FPS visual tick demanded 4.1 s of paint per
+second: dirty-rect playhead strips bypassing the sublane-label update
+hook, clip-culled grid painters with time-ordered early-break, the
+audio waveform renders once into a cached pixmap, and the waveform
+peak cache is atomic npz now - the old JSON cache was non-atomic and
+a torn write forced re-analysis on every song load forever); GDTF
+AUTO-PULL on project load (utils.gdtf_share.pull_missing_gdtf, worker
+in gui._start_gdtf_autopull, gated on stored credentials +
+gdtf_share/auto_pull; keep gates: exact internal identity + channel
+footprint + geometry, because a GDTF shadow swaps the whole
+definition); morph spot baking (a movement block aiming a NAMED spot
+the target rig lacks bakes the SOURCE spot's position into
+target_point; dmx_manager's resolution now falls through a dangling
+spot name to the world point per the documented plane > spot > point
+> manual chain); the morph adopts the SOURCE SETLIST when the target
+has none (order, triggers, pause looks - the setlist IS the gig).
+GIG KIT (all machine-local, gitignored, must be copied by hand):
+shoo_bee_doom/ = SBD master (world-targeted, SMPTE triggers) +
+stellwerk_hinten rig/morphed configs (venue-true geometry: hall
+16x5m, 4m ceiling, 5x5m stage at 0.5m; builder + morph scripts with
+TARGET_COMPRESS look-squeeze option) + ltc/ per-song 25fps WAVs
+(song N = hour N, trigger at NN:00:02:00) + audio + rider PDF;
+gdtf_fixtures/ = auto-pulled Share GDTFs (Hero Spot 60 + TourLED +
+ROOT PARs and more - TourLED/ROOT PAR 4 shadow the manual .qxfs,
+verified wire-compatible 2026-07-17); dist/Lichtmaschine/ =
+the rehearsal .exe (rebuild: pyinstaller lichtmaschine.spec).
+Share credentials live in the per-machine Windows vault - re-enter
+via Settings > GDTF Share Account on any new PC.
+
+**Gig-day additions (2026-07-17 afternoon, app code + gig data):**
+the minimal pause-look engine shipped (utils/artnet/pause_layer.py on
+the arbiter's pause slot, BELOW playback - the next LTC-fired song
+covers it; gui._ltc_tick drives activate/clear from armed+is_playing;
+disarm removes the layer; PauseLook gained mode "scene" + scene key)
+and scenes carry mover aims (Scene.positions {group: position id},
+rendered by the busk layer's position pass - held positions win - and
+by the pause layer through the shared live_layer.aim_fixture_at_
+position). Venue data: all 12 entries pause to stellwerk/Red Room at
+level 100 until trigger; scenes/stellwerk/ grew to 18 (six Beams
+scenes aim via mark:Spot1/Spot2/SpotLeft/FloorCentre + preset:cross/
+audience; Red Room + Floor Party gained aims). Also that day: the
+viewer's ArtNet listener got a per-universe source lock (loopback
+mirror wins - the broadcast hw frame + solver mirror both arriving
+locally flapped every mover between two poses at idle), timeline
+playback finally receives stage planes, provenance persists through
+the .lms serializer, shows_directory heals on load, and audio loading
+bundles via audio_bundle_dir instead of makedirs-ing a foreign
+shows_directory.
+
+**Gig-prep night pass (2026-07-17, gig-data only, no app code):**
+both .lms setlists are sync_mode smpte (make_ltc.py set triggers but
+never sync_mode - ARM CHASE is hidden without it); all 12 ltc/ WAVs
+decoder-verified (hour N, 25 fps, trigger inside file); every audio
+ref is a basename resolving in shoo_bee_doom/audiofiles/ (three
+C:/LICHT absolutes copied in, two empty refs filled). Head aims obey
+the user's floor-or-stage rule via named venue spots (drag on site,
+show follows): SpotLeft + Spot2 replace the two baked out-of-room
+points (shoo_bee_doom/retarget_heads.py), FloorCentre/StageCentre
+rescue geometry-impossible far throws and amplitudes are scaled into
+the room per block (shoo_bee_doom/tame_head_envelopes.py; both
+scripts MUST RE-RUN after any re-morph, in that order). Verified by
+replaying playback math: 0 aim misses, 0 dominant side/ceiling
+blocks, per-song 75-95% of sampled beams land on stage/floor/
+backdrop. scenes/stellwerk/ = 12-scene busk cluster for the support
+band (smoke-tested through LiveBuskLayer). Two v1.5 bugs exposed and
+parked in todo.md: shows playback never gets stage planes;
+LightBlock.provenance is dropped by the compact serializer.
+Pre-pass backups: shoo_bee_doom/backup_20260717/.
+
+**todo.md folded into ROADMAP and deleted (2026-07-23):** the working
+agenda had drifted a release behind (header still said "next tag
+v1.4.0", carried the completed v1.4 build-order as history). Its live
+remainder - the v1.5.0 desktop checks, the release ritual, and the
+post-release hardware verification - moved into a new **"## v1.5.0
+release gate"** section in ROADMAP.md (after v1.5b), and the deferred
+non-blocking polish (song-switch waveform stall, structure-rail
+rebuild cost, per-fixture mixed-rig beam axes, LIVE pool label
+truncation) moved to ROADMAP v1.6. Any historical "todo.md" mention
+above or in docs/ refers to that gate list or the v1.6 deferred block
+now. The 2026-07-16 morphing sweep also shipped a run of v1.5
+hardening (per-group Live pools, the SMPTE busk cluster with its own
+input picker, the Song lock, the Auto input meter + gain, the
+native-sample-rate audio fallback, the branded About dialog) - all in
+CHANGELOG [Unreleased], all CI-green on origin; only geometry/morph
+code-completeness was the 2026-07-16 line.
+
+**Live EFFECTS became composites + a COLOUR FX pool (2026-07-24):**
+the per-group EFFECTS pool (riff-per-group, its own engine slot) was
+REPLACED by COMPOSITE macros - a composite is a fixed (intensity FX,
+movement shape) pair (`COMPOSITE_EFFECTS` in gui/tabs/live_tab.py,
+split LOOPS/HITS) and `stage_composite` WRITES `state.intensities` +
+`state.shapes` for the selected groups, so composites render through
+the SURVIVING intensity + movement binders - there is NO effect
+engine slot driven by production anymore (the engine still supports
+"effect" as a generic slot; the low-level tests use it). Rationale:
+an effect-as-riff-with-movement fights the busk position aim (which
+overrides engine movement) and swings raw pan/tilt around centre, not
+the aimed target - the macro reuses the correct dimmer + world-
+anchored-movement rendering. Colour stays with the swatch; a new
+COLOUR FX subsection under the colour pool (`COLOUR_FX`, currently
+RAINBOW) writes `state.colour_fx` per group and renders as a moving
+procedural hue in utils/artnet/live_layer.py (`_rainbow_rgb`,
+overrides the static swatch). `LiveState` lost `stage_effect` /
+`active_effect_keys` / `state.effects`; the gui.py effect-binder
+instance is gone (intensity binder renamed `_live_intensity_binder`).
+The riff library files (riffs/{builds,drops,fills,loops,movement})
+were KEPT - they still back the riff browser, autogen and timeline.
+Tests: test_live_tab.py TestCompositeEffectsPool + TestColourFXPool,
+test_live_engine.py TestPerGroupIntensityBinder, test_live_busk_layer
+TestColourFX; two live goldens regenerated.
+
+**v1.5.0 desktop checks, 4 of 6 (2026-08-08/09, branch
+`v1.5-focus-morphing`, 32 commits since the release commit, 3185 unit
++ 134 visual/e2e green):** the release is PREPPED but NOT tagged -
+`_version.py` is `1.5.0`, CHANGELOG `[1.5.0]` is complete and
+`[Unreleased]` empty, brand assets + About golden current. Nothing is
+pushed. The last two gate checks (bench pre-flight, INVERT DMX) are
+BLOCKED on rig access, not on code.
+
+THE PATTERN, and the reason these checks were worth running: the
+engine maths was correct every single time (morph routing, lissajous
+aiming, `Song.apply_palette`); every defect was the UI around it
+misreporting state. Do not assume a green suite means a working
+surface.
+
+What changed, by area:
+
+- **Morph patchbay edges are GROUP-keyed, not lane-keyed** (`ab9e283`).
+  `MorphEdge.source_group` is a group selector (`"WASH"`, `"WASH:0"`);
+  format 2 plans. Format 1 keyed by `LightLane.lane_id` (a per-lane
+  uuid4), so every wire was per-song: the real 12-song gig needed 293
+  edges to express 39 wires. `MorphPlan.migrate_legacy_edges()`
+  collapses old plans on load, wired into the compile, CLI and screen.
+  CAREFUL: the collapse BROADENS coverage (union semantics, user call)
+  - format 1 gave each song a different subset of the wires, so a
+  re-morph of shoo_bee_doom changes 9 of 12 songs. Verified old-vs-new
+  block for block from a git worktree: 5413 -> 5525 spans.
+- **Patchbay UX**: cable follows the cursor while dragging
+  (`1796ecb`), four ways to unpatch (`c61117d` × chip, `0ebf813`
+  Delete, `ce2e83a` click-the-wire, `9d07c30` drag-off), unpatch-all
+  at three scopes (`dd1d3b7`), and snapshot-based undo/redo on the
+  patchbay's OWN QUndoStack (`72e830f`) - grouped edits undo as one
+  step; nine inverse operations would have drifted.
+- **Morph preview batches** (`33372b5`). `capture_stills` walks the
+  song ONCE and only pays for kept frames, so cost tracks how far in
+  you go, NOT how many frames: 1 still at 90% = 7.1 s, 20 stills
+  across the song = 7.3 s. RENDER SCRUB renders every 2 s (140 frames
+  per rig, 18.4 s both rigs on a 4:39 song) then the slider is
+  instant. Lowering resolution saves ~1.5% - it is NOT the lever.
+- **Marks replaced anonymous aim points.** AIM became PLACE MARK
+  (`9a2e4fc`, `7f42ac5`): Stage tab PLACES marks (one per arm, Shift
+  to keep placing, snaps to grid, Delete removes one selected on the
+  plan `a2acbd5`); the movement block dialog PICKS which mark a block
+  aims at; the Live POSITION pool AIMS real movers at one (it now
+  refreshes on tab activation `f2d35b6` - it only refreshed on project
+  load, so a new mark was invisible until reload). One job per
+  surface: an earlier pass had aiming do all three and it duplicated
+  both the MARKS `+` button and the dialog. `target_point` still
+  resolves for existing shows; migrating the 255 SBD point-blocks onto
+  ~8 marks is a v1.6 item (it would break `retarget_heads.py` /
+  `tame_head_envelopes.py`, which match on points).
+- **Palette roles**: tagging a block with a role now APPLIES that
+  role's colour and previews it on pick (`3f9c681`); a palette edit
+  repaints every tagged block, not just the open one (`6dda226`);
+  sub-block selection is exclusive across clips and clears on Escape
+  (`097c60e`) - it was per-widget and nothing ever cleared it.
+- **Test-suite fixes, both latent and CI-only**: `processEvents()`
+  never delivered `DeferredDelete`, so every UI fixture leaked its
+  whole widget tree and `ThemeManager.apply` eventually crashed on the
+  pile (`4c344c3`, suite-wide autouse flush; qt-gotchas #9). Side
+  effect: the unit suite went 193 s -> 34 s. And the GDTF companion
+  tests raced on a shared repo-root directory under xdist (`9be8d67`).
+
+Confirmed NOT bugs: a lissajous DOES follow a re-aim on both playback
+and export (`45c3844`) - a cross-stage re-aim moves a hung mover's
+tilt ~7 degrees against a +/-106 degree sweep at default amplitude, so
+it just looks unchanged; and Tools > Convert Movement to World Targets
+finds nothing to convert in ANY project we have (all blocks already
+carry a target), so that gate item is closed as not-exercisable.
+
+**v1.5.5 Windows follow-up (2026-10-12, same branch, pushed):** the
+handover's Windows checks passed (unit, e2e, visual with every win32
+golden matching; demo export hashes changed exactly as G5 predicted)
+and four leftovers were fixed: per-client send lock in the visualizer
+feed (`utils/tcp/server.py`, a client registers under its lock so its
+config precedes any update), the orientation preview releasing every
+buffer + VAO of its fixture geometry on a type change, capabilities no
+longer caching the not-found default, and ~720 lines of dead code out
+of `shows_to_xml.py`. CI was red on the branch since 2026-10-07 and is
+green now. Traps learned: (1) the Windows OFFSCREEN platform hands back
+a QOpenGLContext wrapper but never initialises a QOpenGLWidget
+(`isValid()` False, initializeGL never runs) - GL widget tests must
+skip on that, not on `context() is None`; this desk DOES have a real
+standalone moderngl context (GL 3.3) for real-GL tests. (2) Compare
+export hashes base vs head on ONE machine: the desk's user GDTF dir and
+gitignored `gdtf_fixtures/` shadow definitions, so absolute hashes
+differ from Linux, and a git worktree lacks `gdtf_fixtures/` (swap the
+old file into the main tree instead). (3) On Mesa (Ubuntu CI) moderngl's
+`simple_framebuffer` leaves GL_INVALID_OPERATION behind; drain
+`ctx.error` before asserting on the code under test. (4) Python locks
+are not fair: a concurrency test whose writers spin on a lock starves
+the other thread on a slow runner - bound the writers. (5) Running
+several GL test processes at once can crash the Windows GL driver
+inside `create_standalone_context` (access violation); normal `-n auto`
+runs never hit it. Open: one Windows e2e run died silently after four
+`test_dirty_marker.py` tests (exit 1, no traceback; rerun and 12 local
+runs green); the Windows e2e step now runs `-v` so a repeat names the
+test.
+
+**v1.5.5 product decisions (2026-10-12, same branch, pushed, CI green
+at `5ae1b3b`):** all five handover decisions were made and shipped
+(done-notes in ROADMAP v1.5.5 and the handover): (1) a waterfall on
+segment-less fixtures is a coherent sweep across the lane, natively
+and in the export (the export's hash-jitter multiplier is gone); (2)
+the export runs every dimmer effect per segment on pixel bars and
+sunstrips, classified like native (`_segmented_dimmer_plan` in
+`utils/to_xml/unified_sequence.py`; four demo show exports changed,
+named in the CHANGELOG); (3) movement counts in beats whatever the
+meter (`effects.timing.movement_seconds_per_bar`, export now matches
+native); (4) the colour editor has an explicit RGB / WHEEL output
+switch, locked to WHEEL for groups without RGB
+(`utils/fixture_utils.group_has_rgb`); (5) the playback
+synchronizer's self-comparing drift check is removed (a real drift
+monitor is a v1.8 item). Also: `FluxPlot3DWidget` is kept unwired on
+purpose (`docs/autofuture.md`, v1.10), and `docs/bug-reports.md` now
+holds ONE open bug, the CSV rig sheet dropping secondary groups
+(strict xfail in `test_fixture_io.py`). Second open CI intermittent:
+Ubuntu `test_screensaver.py::test_grid_and_corner_marks_are_painted`
+once read a light-grey (239) background instead of SCREENSAVER_BG
+(run 38260792643 attempt 1; passes alone on both platforms, rerun
+green, cause unknown, likely xdist order). The Ubuntu unit step now
+runs `-v` so a repeat shows what ran before it on that worker. NEXT,
+from the handover checklist: the desk checks (G9 real-GL, VISUALIZER
+OPEN port flow, release.yml, merge/tag decision), then the unfixed
+bugs (GDTF auto-pull on quit, drag during playback, GL context
+recreation, CSV rig sheet, lime + default-white export gaps) and the
+cleanup items. New PC: `pip install -r requirements.txt` (pytest-timeout is in it
+and the suite's 120 s timeout needs it); the
+two untracked files in the repo root and `demos/rigs/` are scratch
+from this desk, not needed.
+
+**v1.5.5 code items closed (2026-10-13, same branch, NOT pushed):** every
+handover bug and cleanup that needed no desk is fixed: CSV rig sheet
+`groups` column (`Front;Side`, `group` stays primary; bug-reports.md is
+now EMPTY), export lime + no invented white without a colour block
+(native wins, demos byte-identical), GDTF auto-pull on a cancellable
+DAEMON thread that quit never joins (staged + `.part` downloads, never
+an unchecked file in the library dir), drag during playback via ONE
+`utils/timeline_edit_lock.TIMELINE_EDIT_LOCK` (render holds it around
+scheduling + update_dmx; UI interval writes hold it; never take the
+controller's `_render_lock` inside it), RenderEngine replays its last
+fixtures/grid/plane/DMX on every initializeGL (`_replay_state`), plus
+the shift-drag copy offset bug, typed rudiment lookups, CCW cylinder,
+autosave wrap removed, legacy shaders declared divergent. Gate on this
+desk: unit 3640, e2e 48, visual 88 + 1 skipped. OPEN: the desk checks
+(G9 real-GL, VISUALIZER OPEN port flow), release.yml on first release,
+and the merge/tag decision. Envelope edges (same day, decided): drag
+TRIMS, Alt-drag STRETCHES to any beat (`utils/envelope_edit.py`, handles
+at the header strip's ends via `_envelope_edge_at`). One e2e run on
+this desk again reported 20 errors with no traceback, then four clean
+reruns: the known Windows e2e intermittent, still unexplained.

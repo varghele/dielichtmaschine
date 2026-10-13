@@ -61,6 +61,17 @@ class TestPauseLook:
     def test_from_empty_dict_uses_defaults(self):
         assert PauseLook.from_dict({}) == PauseLook()
 
+    def test_scene_mode_round_trips_and_stays_off_old_looks(self):
+        """Mode "scene" (2026-07-17 minimal pause engine): the scene
+        key round-trips, and looks without one write no key so
+        pre-scene files stay byte-identical."""
+        p = PauseLook(mode="scene", level=100, until="trigger",
+                      scene="stellwerk/Red Room")
+        back = PauseLook.from_dict(p.to_dict())
+        assert back == p and back.scene == "stellwerk/Red Room"
+        assert "scene" not in PauseLook().to_dict()
+        assert PauseLook.from_dict({"mode": "blackout"}).scene == ""
+
 
 class TestSetlistEntry:
 
@@ -264,11 +275,13 @@ shows:
 
 
 class TestDemoLegacyLoad:
-    """The bundled demo configs still carry the legacy `shows:` key and
-    must load through the legacy path forever."""
+    """Legacy `shows:` configs must load through the legacy path
+    forever. The bundled demos converted to the current .lms format
+    2026-07-16, so the legacy fixture is a preserved copy of the old
+    band_midsize demo under tests/fixtures/."""
 
-    DEMO = os.path.join(os.path.dirname(__file__), "..", "..",
-                        "demos", "shows", "band_midsize.yaml")
+    DEMO = os.path.join(os.path.dirname(__file__), "..",
+                        "fixtures", "legacy_band_midsize.yaml")
 
     def test_band_midsize_loads_songs_and_setlist(self):
         config = Configuration.load(os.path.abspath(self.DEMO))

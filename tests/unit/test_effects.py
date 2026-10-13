@@ -263,10 +263,41 @@ class TestWaterfall:
         assert result.segment_intensities is not None
         assert len(result.segment_intensities) == 8
 
-    def test_non_segmented_is_static(self):
-        ctx = _make_dimmer_ctx(is_segmented=False)
-        result = waterfall(ctx)
-        assert result.intensity_multiplier == 1.0
+    # Non-segmented fixtures: one sweep across the lane's fixtures, one
+    # beat (0.5 s at 120 BPM, speed 1) per fixture (decision 2026-10-12;
+    # it used to be static natively while the export cascaded).
+
+    @staticmethod
+    def _levels(time_s, direction="down", total=4):
+        return [waterfall(_make_dimmer_ctx(
+            is_segmented=False, fixture_index=i, total_fixtures=total,
+            time_in_block=time_s, direction=direction)).intensity_multiplier
+            for i in range(total)]
+
+    def test_non_segmented_down_starts_at_the_last_fixture(self):
+        levels = self._levels(0.0)
+        assert levels.index(max(levels)) == 3
+        assert max(levels) == pytest.approx(1.0)
+
+    def test_non_segmented_head_steps_one_fixture_per_beat(self):
+        heads = [max(range(4), key=self._levels(beat * 0.5).__getitem__)
+                 for beat in range(5)]
+        assert heads == [3, 2, 1, 0, 3]
+
+    def test_non_segmented_up_runs_the_other_way(self):
+        heads = [max(range(4), key=self._levels(beat * 0.5, "up").__getitem__)
+                 for beat in range(5)]
+        assert heads == [0, 1, 2, 3, 0]
+
+    def test_non_segmented_has_a_decaying_tail_not_a_blackout(self):
+        levels = self._levels(0.0)
+        assert all(0.2 < level <= 1.0 for level in levels)
+        # Behind the head (down: towards higher indices, wrapping) the
+        # level falls off monotonically.
+        assert levels[3] > levels[0] > levels[1] > levels[2]
+
+    def test_single_fixture_stays_static(self):
+        assert self._levels(0.37, total=1) == [1.0]
 
 
 class TestChase:

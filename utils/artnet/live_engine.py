@@ -38,7 +38,17 @@ from typing import Callable, Dict, List, Optional, Tuple
 
 Frame = Dict[int, Tuple[bytes, bytes]]
 
+#: Slot CATEGORIES, in merge order. A slot key is either a bare
+#: category ("intensity", "movement") or a namespaced
+#: "category:suffix" ("effect:Front Pars" - the per-group effects,
+#: 2026-07-22): every group runs its own slot with its own loop
+#: length, clock and pause flag, so different riffs coexist and
+#: pausing one never freezes another.
 SLOTS = ("effect", "intensity", "movement")
+
+
+def _slot_category(slot: str) -> str:
+    return slot.split(":", 1)[0]
 
 _SUBLANES = ("dimmer", "colour", "movement", "special")
 
@@ -91,9 +101,10 @@ class LiveEngine:
 
     def stage(self, slot: str, lanes, loop_beats: float,
               bpm: float, config_override=None,
-              stage_planes=None) -> None:
+              stage_planes=None, phase_from: Optional[str] = None) -> None:
         """Stage synthetic lanes into a slot, replacing what ran there.
 
+        ``slot`` is a bare category or "category:suffix" (see SLOTS).
         ``lanes``: iterable of (fixtures, light_blocks) pairs;
         ``loop_beats``: loop length in beats; ``bpm``: the tempo the
         blocks' second-times were built against (usually the live bpm
@@ -104,8 +115,13 @@ class LiveEngine:
         manager's world-space movement path - the movement binder's
         orbit planes live here, one per fixture, so shapes trace in
         METERS around their anchor instead of raw DMX amplitude.
+        ``phase_from`` names an existing slot whose clock the new slot
+        adopts - a group JOINING an already-running riff starts in
+        phase with it instead of at beat 0 (paused donors freeze the
+        joiner at the same pose: the binder re-applies the paused flag
+        right after staging).
         """
-        if slot not in SLOTS:
+        if _slot_category(slot) not in SLOTS:
             raise ValueError(f"unknown live slot: {slot!r}")
         if loop_beats <= 0 or bpm <= 0:
             raise ValueError("loop_beats and bpm must be positive")
@@ -113,11 +129,25 @@ class LiveEngine:
                                         config_override)
         if stage_planes:
             manager.set_stage_planes(dict(stage_planes))
-        self._slots[slot] = _Slot(manager, lanes, loop_beats, bpm)
+        record = _Slot(manager, lanes, loop_beats, bpm)
+        donor = self._slots.get(phase_from) if phase_from else None
+        if donor is not None:
+            # Same riff, hence same loop length; the modulo makes a
+            # mismatch safe rather than wrong.
+            record.beat_pos = donor.beat_pos % record.loop_beats
+            record.last_now = None if donor.paused else donor.last_now
+        self._slots[slot] = record
 
     def kill(self, slot: str) -> None:
         """Drop a slot: its claims vanish on the next render."""
         self._slots.pop(slot, None)
+
+    def kill_prefix(self, prefix: str) -> None:
+        """Drop the bare ``prefix`` slot and every ``prefix:...``
+        slot (the per-group effects family in one sweep)."""
+        for key in [k for k in self._slots
+                    if k == prefix or k.startswith(prefix + ":")]:
+            del self._slots[key]
 
     def kill_all(self) -> None:
         self._slots.clear()
@@ -151,16 +181,25 @@ class LiveEngine:
         return slot in self._slots
 
     def active_slots(self) -> List[str]:
-        return [s for s in SLOTS if s in self._slots]
+        return self._ordered_slots()
+
+    def _ordered_slots(self) -> List[str]:
+        """Deterministic total merge order: categories in SLOTS order
+        (intensity still overrides effect on shared channels), the
+        bare slot before its group slots, group slots sorted by name -
+        matching the old sorted-lane order, so shared-fixture
+        conflicts resolve exactly as before."""
+        return sorted(self._slots,
+                      key=lambda s: (SLOTS.index(_slot_category(s)), s))
 
     # -- rendering ---------------------------------------------------------
 
     def render(self, now: float) -> Frame:
         """The merged (values, mask) frame across all slots at wall
-        time ``now`` - later SLOTS entries override earlier ones per
-        claimed channel."""
+        time ``now`` - later entries in the slot order override
+        earlier ones per claimed channel."""
         frames = []
-        for slot_name in SLOTS:
+        for slot_name in self._ordered_slots():
             record = self._slots.get(slot_name)
             if record is None:
                 continue
@@ -252,112 +291,119 @@ class LiveEngine:
         return {u: (bytes(values[u]), bytes(masks[u])) for u in values}
 
 
-class LiveEffectsBinder:
-    """Maps a LiveState riff-staging field onto an engine slot -
-    EFFECTS on "effect" (phase 3) and, with the slot/state_attr/
-    record_kind parameters, INTENSITY FX on "intensity" (phase 5).
+class LiveGroupEffectsBinder:
+    """Maps a LiveState PER-GROUP riff mapping (2026-07-22) onto one
+    engine slot per group ("<category>:<group>") - different groups
+    run different riffs simultaneously, each on its own loop length
+    and pause flag. EFFECTS use the defaults; INTENSITY FX reuse the
+    class with category="intensity", state_attr="intensities",
+    record_kind="intensity" - each group's dimmer pattern runs under
+    its colour riff.
 
-    ``sync()`` is idempotent and cheap; the gui connects it to
-    ``LiveState.state_changed`` (Qt main thread - the engine's slot
-    swaps are build-then-assign, safe against the arbiter's render
-    thread). It:
-
-    - stages the riff behind ``state.effect`` when the key or the
-      SELECTION SCOPE changes (riff scoping rule: one synthetic lane
-      per selected group, blocks from Riff.to_light_block at the bpm
-      current at staging time, loop = riff.length_beats). A restage
-      restarts the loop at beat 0 - the plan's "restage on selection
-      change" call.
-    - follows LiveState.bpm every sync (phase-continuous - the engine
-      rescales, the lanes are NOT rebuilt).
-    - maps the "effect" running record's paused flag onto the slot
-      clock (the queue's pause row freezes the riff mid-pose).
-    - kills the slot when the effect clears (second touch, KILL row,
-      RELEASE ALL) or when the scope resolves to no fixtures - silence
-      is a kill, not an empty stage.
+    Semantics (the positions pattern): SELECTION scopes STAGING only -
+    a staged key keeps running on its group after deselection; silence
+    only when no group holds any key. ``sync()`` diffs the full
+    mapping against what was last staged: removed groups kill their
+    slot, added/changed groups stage a single-group lane (a group
+    JOINING a riff already running elsewhere adopts that slot's phase
+    via ``phase_from`` - no restart of the groups that did not
+    change). An unknown riff key or an empty group silences ONLY its
+    own slot. PAUSE maps per running record (one record per distinct
+    riff key with its ``groups`` list) onto that record's group slots.
     """
 
     def __init__(self, state, engine: LiveEngine,
                  config_provider: Callable,
                  riff_provider: Callable,
-                 slot: str = "effect",
-                 state_attr: str = "effect",
+                 category: str = "effect",
+                 state_attr: str = "effects",
                  record_kind: str = "effect") -> None:
         self._state = state
         self._engine = engine
         self._config_provider = config_provider
         self._riff_provider = riff_provider
-        # The INTENSITY FX pool reuses this binder verbatim on its own
-        # slot: same riff mechanics, different state field and running-
-        # stack kind (docs/live-output-plan.md phase 5).
-        self._slot = slot
+        self._category = category
         self._state_attr = state_attr
         self._record_kind = record_kind
-        # (staged key, frozenset of selected groups) actually staged.
-        self._staged: Optional[tuple] = None
-        self._dimmer_groups: frozenset = frozenset()
+        self._staged: Dict[str, str] = {}   # group -> ATTEMPTED riff key
+        self._dimmer: set = set()           # groups whose riff has dimmers
 
     def dimmer_groups(self) -> frozenset:
-        """Groups whose STAGED riff drives dimmer sublanes. The busk
-        layer lets the engine's pattern through on these (its own
-        static dimmer write yields; FLASH still forces full) and
-        claims shutter-open so the pattern can emit on shutter
-        fixtures over the LIVE blackout floor."""
-        return self._dimmer_groups
+        """Groups whose RUNNING riff drives dimmer sublanes - incl.
+        deselected groups still running one (the busk dimmer must
+        yield wherever the pattern actually runs). Same contract as
+        it always was for the busk layer."""
+        return frozenset(self._dimmer)
+
+    def _slot(self, group_name: str) -> str:
+        return f"{self._category}:{group_name}"
 
     def sync(self) -> None:
         state = self._state
         engine = self._engine
         engine.set_bpm(state.bpm)
 
-        key = getattr(state, self._state_attr, None)
-        if not key:
-            if self._staged is not None:
-                engine.kill(self._slot)
-                self._staged = None
-                self._dimmer_groups = frozenset()
-            return
+        effects = dict(getattr(state, self._state_attr, None) or {})
 
-        scope = frozenset(state.selected)
-        if (key, scope) != self._staged:
-            lanes, loop_beats, has_dimmer = self._build_lanes(
-                key, scope, state.bpm)
-            if lanes:
-                engine.stage(self._slot, lanes, loop_beats, state.bpm)
-                self._dimmer_groups = scope if has_dimmer \
-                    else frozenset()
+        for group_name in [g for g in self._staged if g not in effects]:
+            engine.kill(self._slot(group_name))
+            del self._staged[group_name]
+            self._dimmer.discard(group_name)
+
+        for group_name in sorted(effects):
+            key = effects[group_name]
+            if self._staged.get(group_name) == key:
+                continue
+            lane, loop_beats, has_dimmer = self._build_group_lane(
+                key, group_name, state.bpm)
+            if lane is not None:
+                donor = next(
+                    (self._slot(g) for g in sorted(self._staged)
+                     if g != group_name and self._staged[g] == key
+                     and engine.is_active(self._slot(g))), None)
+                engine.stage(self._slot(group_name), [lane], loop_beats,
+                             state.bpm, phase_from=donor)
+                if has_dimmer:
+                    self._dimmer.add(group_name)
+                else:
+                    self._dimmer.discard(group_name)
             else:
-                engine.kill(self._slot)
-                self._dimmer_groups = frozenset()
-            self._staged = (key, scope)
+                # Silence is a kill, not an empty stage - and it is
+                # scoped to THIS group only.
+                engine.kill(self._slot(group_name))
+                self._dimmer.discard(group_name)
+            # Record the ATTEMPT (also for failed builds): no re-probe
+            # of a dead key on every sync, mirroring the old binder.
+            self._staged[group_name] = key
 
-        record = next((r for r in state.running
-                       if r.get("kind") == self._record_kind), None)
-        engine.pause(self._slot, bool(record and record.get("paused")))
+        paused: Dict[str, bool] = {}
+        for record in state.running:
+            if record.get("kind") == self._record_kind:
+                for group_name in record.get("groups") or ():
+                    paused[group_name] = bool(record.get("paused"))
+        for group_name in self._staged:
+            engine.pause(self._slot(group_name),
+                         paused.get(group_name, False))
 
-    def _build_lanes(self, key: str, scope, bpm: float):
-        """(lanes, loop_beats, has_dimmer) for a riff key over the
-        selected groups; ([], 0, False) when the riff or every group
-        resolves empty."""
+    def _build_group_lane(self, key: str, group_name: str, bpm: float):
+        """(lane|None, loop_beats, has_dimmer) for ONE group - the
+        riff resolved, its fixtures gathered, one synthetic lane."""
         riff = self._riff_provider(key)
         config = self._config_provider()
         if riff is None or config is None:
-            return [], 0.0, False
+            return None, 0.0, False
         loop_beats = float(getattr(riff, "length_beats", 0.0) or 0.0)
         if loop_beats <= 0:
-            return [], 0.0, False
+            return None, 0.0, False
+        group = (getattr(config, "groups", {}) or {}).get(group_name)
+        fixtures = list(getattr(group, "fixtures", None) or []) \
+            if group is not None else []
+        if not fixtures:
+            return None, 0.0, False
         structure = OnePartStructure(bpm)
-        lanes = []
-        for group_name in sorted(scope):
-            group = (getattr(config, "groups", {}) or {}).get(group_name)
-            fixtures = list(getattr(group, "fixtures", None) or []) \
-                if group is not None else []
-            if not fixtures:
-                continue
-            lanes.append((fixtures,
-                          [riff.to_light_block(0.0, structure)]))
-        return lanes, loop_beats, bool(getattr(riff, "dimmer_blocks",
-                                               None))
+        lane = (fixtures, [riff.to_light_block(0.0, structure)])
+        return lane, loop_beats, bool(getattr(riff, "dimmer_blocks",
+                                              None))
 
 
 # Movement shapes loop over this many beats: at effect speed "1" the
@@ -393,12 +439,15 @@ class SpotOverlayConfig:
 
 
 class LiveMovementBinder:
-    """Maps LiveState's MOVEMENT SHAPES staging onto the engine's
-    "movement" slot (docs/live-output-plan.md phase 4).
+    """Maps LiveState's PER-GROUP movement shapes (state.shapes:
+    group -> MOVEMENT_REGISTRY rudiment id, 2026-07-22) onto one
+    engine slot per mover group ("movement:<group>") - each group
+    traces its own shape at its own anchor, and a shape keeps running
+    after deselection (the effects pattern; docs/live-output-plan.md
+    phase 4 for the orbit mechanics).
 
-    Staging a shape (state.shape, a MOVEMENT_REGISTRY rudiment id)
-    builds one synthetic lane PER FIXTURE of every selected mover
-    group: a single MovementBlock with effect_type = the rudiment and
+    Per group, staging builds one synthetic lane PER FIXTURE: a single
+    MovementBlock with effect_type = the rudiment and
     target_plane_name = a transient HORIZONTAL ORBIT PLANE centred at
     the fixture's HELD POSITION target (state.positions, falling back
     to the CENTRE preset) resolved through the shared
@@ -409,9 +458,11 @@ class LiveMovementBinder:
     radius of the anchor regardless of throw distance - raw DMX
     amplitude did not (bench finding 2026-07-13). The output arbiter
     applies the hardware yoke conversion on the wire like any aim.
-    Per-fixture lanes mean the per-group phase-offset spread is not
-    available here (the block defaults have it off); tempo rides the
-    engine clock.
+    Non-mover groups holding a shape id stay silent (their slot is
+    never staged). Anchor/radius/stagger changes restage only the
+    groups they affect (radius/stagger are global, so those restage
+    every group). PAUSE maps per running record onto that record's
+    group slots.
 
     Claims are pan/tilt coarse only (the playback movement path) -
     shapes can run dark, and the busk layer suppresses its own static
@@ -424,13 +475,14 @@ class LiveMovementBinder:
         self._state = state
         self._engine = engine
         self._config_provider = config_provider
-        self._staged: Optional[tuple] = None
-        self._covered: frozenset = frozenset()
+        # group -> (key, anchor, radius, stagger) actually attempted.
+        self._staged: Dict[str, tuple] = {}
+        self._covered: set = set()
 
     def active_groups(self) -> frozenset:
-        """Groups the staged shape currently covers - the busk layer
-        suppresses its static position aim for these."""
-        return self._covered
+        """Groups a shape currently covers (selected or not) - the
+        busk layer suppresses its static position aim for these."""
+        return frozenset(self._covered)
 
     def sync(self) -> None:
         from utils.position_presets import group_has_movers
@@ -438,43 +490,48 @@ class LiveMovementBinder:
         engine = self._engine
         engine.set_bpm(state.bpm)
 
-        key = getattr(state, "shape", None)
-        if not key:
-            if self._staged is not None:
-                engine.kill("movement")
-                self._staged = None
-                self._covered = frozenset()
-            return
-
         config = self._config_provider()
-        scope = frozenset(
-            g for g in state.selected
-            if group_has_movers((getattr(config, "groups", {})
-                                 or {}).get(g)))
-        anchors = tuple(sorted(
-            (g, state.positions.get(g, "")) for g in scope))
+        shapes = dict(getattr(state, "shapes", None) or {})
         radius = float(getattr(state, "shape_size", 0.0)
                        or SHAPE_ORBIT_RADIUS_M)
         stagger = max(0.0, min(1.0, float(
             getattr(state, "shape_stagger", 0)) / 100.0))
-        signature = (key, scope, anchors, radius, stagger)
-        if signature != self._staged:
-            lanes, planes = self._build_lanes(key, scope, config,
-                                              state.bpm, radius,
-                                              stagger)
+
+        for group_name in [g for g in self._staged if g not in shapes]:
+            engine.kill(f"movement:{group_name}")
+            del self._staged[group_name]
+            self._covered.discard(group_name)
+
+        for group_name in sorted(shapes):
+            key = shapes[group_name]
+            signature = (key, state.positions.get(group_name, ""),
+                         radius, stagger)
+            if self._staged.get(group_name) == signature:
+                continue
+            group = (getattr(config, "groups", {}) or {}).get(group_name)
+            lanes, planes = ([], {})
+            if group_has_movers(group):
+                lanes, planes = self._build_lanes(
+                    key, frozenset({group_name}), config, state.bpm,
+                    radius, stagger)
             if lanes:
                 engine.stage(
-                    "movement", lanes, SHAPE_LOOP_BEATS, state.bpm,
-                    stage_planes=planes)
-                self._covered = scope
+                    f"movement:{group_name}", lanes, SHAPE_LOOP_BEATS,
+                    state.bpm, stage_planes=planes)
+                self._covered.add(group_name)
             else:
-                engine.kill("movement")
-                self._covered = frozenset()
-            self._staged = signature
+                engine.kill(f"movement:{group_name}")
+                self._covered.discard(group_name)
+            self._staged[group_name] = signature
 
-        record = next((r for r in state.running
-                       if r.get("kind") == "shape"), None)
-        engine.pause("movement", bool(record and record.get("paused")))
+        paused: Dict[str, bool] = {}
+        for record in state.running:
+            if record.get("kind") == "shape":
+                for group_name in record.get("groups") or ():
+                    paused[group_name] = bool(record.get("paused"))
+        for group_name in self._staged:
+            engine.pause(f"movement:{group_name}",
+                         paused.get(group_name, False))
 
     def _build_lanes(self, key: str, scope, config, bpm: float,
                      radius: float, stagger: float = 0.0):

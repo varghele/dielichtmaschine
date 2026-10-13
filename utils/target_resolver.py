@@ -66,7 +66,10 @@ def resolve_target(target: str, config) -> List:
 
     group_name, index = parse_target(target)
 
-    if group_name not in config.groups:
+    # One lookup, not "in" then "[...]": playback resolves targets on the
+    # output thread while the UI may delete the group in between.
+    group = config.groups.get(group_name)
+    if group is None:
         if group_name not in _warned_groups:
             _warned_groups.add(group_name)
             available = list(config.groups.keys())
@@ -76,7 +79,7 @@ def resolve_target(target: str, config) -> List:
                 category="targets")
         return []
 
-    fixtures = config.groups[group_name].fixtures
+    fixtures = list(group.fixtures)
 
     if index is not None:
         if 0 <= index < len(fixtures):
@@ -91,7 +94,7 @@ def resolve_target(target: str, config) -> List:
                     category="targets")
             return []
 
-    return list(fixtures)
+    return fixtures
 
 
 def resolve_targets(targets: List[str], config) -> List:

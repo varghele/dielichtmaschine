@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="de"><head><meta charset="utf-8"><title>Die Lichtmaschine · Patch-Flow (6d)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700;800;900&family=Barlow:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>*,*::before,*::after{box-sizing:border-box}html{background:#0e0e10}body{margin:0;font-family:Barlow,system-ui,sans-serif;display:flex;justify-content:center;align-items:flex-start;min-height:100vh;padding:24px}
+.dv-opt{display:block}.dv-card{background:#141416;border:1px solid rgba(255,255,255,.1)}</style>
+</head><body>
+<div class="dv-opt" id="6d">
+    <div class="dv-card" style="width:880px;padding:22px">
+    <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:4px">
+      <span style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:18px;letter-spacing:0.06em;color:#f4f1ea">PATCH-FLOW · CAPABILITY → CAPABILITY</span>
+      <span style="font-family:'IBM Plex Mono',monospace;font-size:9px;color:#5c6068">ZIEHEN: QUELLE → ZIEL · NUR GLEICHE CAPABILITY ANDOCKBAR</span>
+    </div>
+    <div style="font-family:'IBM Plex Mono',monospace;font-size:9px;color:#8d9299;margin-bottom:14px">DURCHGEZOGEN = 1:1-MAPPING · GESTRICHELT = LANE-PATCH · ◐ = CAPABILITY-FILTER AKTIV</div>
+    <div style="display:flex;align-items:stretch">
+      <!-- source column -->
+      <div style="width:270px;flex:none;display:flex;flex-direction:column;gap:8px">
+        <div style="font-family:'IBM Plex Mono',monospace;font-size:9px;letter-spacing:0.1em;color:#5c6068;height:16px">QUELLE · KULTURHAUS</div>
+        <div style="height:40px;display:flex;align-items:center;gap:8px;padding:0 10px;background:#1e1e1e;border:1px solid #2d2d2d;border-left:3px solid #d9a441"><span style="font-size:12px;font-weight:600;color:#f4f1ea">FRONT PARS</span><span style="margin-left:auto;font-family:'IBM Plex Mono',monospace;font-size:9px;color:#8d9299;border:1px solid #3a3a3a;padding:2px 6px">INTENSITY</span></div>
+        <div style="height:40px;display:flex;align-items:center;gap:8px;padding:0 10px;background:#1e1e1e;border:1px solid #2d2d2d;border-left:3px solid #d9a441"><span style="font-size:12px;font-weight:600;color:#f4f1ea">FRONT PARS</span><span style="margin-left:auto;font-family:'IBM Plex Mono',monospace;font-size:9px;color:#8d9299;border:1px solid #3a3a3a;padding:2px 6px">COLOUR</span></div>
+        <div style="height:40px;display:flex;align-items:center;gap:8px;padding:0 10px;background:#1e1e1e;border:1px solid #2d2d2d;border-left:3px solid #4ecbd4"><span style="font-size:12px;font-weight:600;color:#f4f1ea">REAR WASH</span><span style="margin-left:auto;font-family:'IBM Plex Mono',monospace;font-size:9px;color:#8d9299;border:1px solid #3a3a3a;padding:2px 6px">COLOUR</span></div>
+        <div style="height:40px;display:flex;align-items:center;gap:8px;padding:0 10px;background:#1e1e1e;border:1px solid #2d2d2d;border-left:3px solid #c95fd0"><span style="font-size:12px;font-weight:600;color:#f4f1ea">MOVERS</span><span style="margin-left:auto;font-family:'IBM Plex Mono',monospace;font-size:9px;color:#8d9299;border:1px solid #3a3a3a;padding:2px 6px">POSITION</span></div>
+        <div style="height:40px;display:flex;align-items:center;gap:8px;padding:0 10px;background:#1e1e1e;border:1px solid #2d2d2d;border-left:3px solid #c95fd0"><span style="font-size:12px;font-weight:600;color:#f4f1ea">MOVERS</span><span style="margin-left:auto;font-family:'IBM Plex Mono',monospace;font-size:9px;color:#8d9299;border:1px solid #3a3a3a;padding:2px 6px">BEAM</span></div>
+        <div style="height:40px;display:flex;align-items:center;gap:8px;padding:0 10px;background:#1e1e1e;border:1px solid #2d2d2d;border-left:3px solid #6f9e4c"><span style="font-size:12px;font-weight:600;color:#f4f1ea">PIXEL BAR</span><span style="margin-left:auto;font-family:'IBM Plex Mono',monospace;font-size:9px;color:#8d9299;border:1px solid #3a3a3a;padding:2px 6px">INTENSITY</span></div>
+      </div>
+      <!-- arrows -->
+      <div style="flex:1;position:relative">
+        <svg style="position:absolute;left:0;top:24px;width:100%;height:336px" viewBox="0 0 240 336" preserveAspectRatio="none" fill="none">
+          <path d="M0,20 C90,20 150,20 240,20" stroke="#d9a441" stroke-width="2"></path>
+          <path d="M0,20 C110,20 130,212 240,212" stroke="#d9a441" stroke-width="1.5" stroke-dasharray="6 4"></path>
+          <path d="M0,68 C90,68 150,68 240,68" stroke="#d9a441" stroke-width="2"></path>
+          <path d="M0,116 C90,116 150,116 240,116" stroke="#4ecbd4" stroke-width="2"></path>
+          <path d="M0,164 C90,164 150,260 240,260" stroke="#c95fd0" stroke-width="2"></path>
+          <path d="M0,212 C90,212 150,308 240,308" stroke="#c95fd0" stroke-width="2"></path>
+          <path d="M0,260 C110,260 130,164 240,164" stroke="#6f9e4c" stroke-width="1.5" stroke-dasharray="6 4"></path>
+        </svg>
+        <svg style="position:absolute;right:-1px;top:24px;width:8px;height:336px" viewBox="0 0 8 336" fill="#8d9299"><path d="M0 16l8 4-8 4zM0 64l8 4-8 4zM0 112l8 4-8 4zM0 160l8 4-8 4zM0 208l8 4-8 4zM0 256l8 4-8 4zM0 304l8 4-8 4z"></path></svg>
+        <span style="position:absolute;left:50%;top:134px;transform:translateX(-50%);font-family:'IBM Plex Mono',monospace;font-size:8px;color:#d9a441;background:#141416;padding:1px 5px;border:1px solid #2d2d2d">LANE-PATCH · 4→2 GESPREIZT</span>
+        <span style="position:absolute;left:50%;top:232px;transform:translateX(-50%);font-family:'IBM Plex Mono',monospace;font-size:8px;color:#6f9e4c;background:#141416;padding:1px 5px;border:1px solid #2d2d2d">◐ NUR DIMMER-ANTEIL</span>
+      </div>
+      <!-- target column -->
+      <div style="width:270px;flex:none;display:flex;flex-direction:column;gap:8px">
+        <div style="font-family:'IBM Plex Mono',monospace;font-size:9px;letter-spacing:0.1em;color:#5c6068;height:16px;text-align:right">ZIEL · JUZ HALLE</div>
+        <div style="height:40px;display:flex;align-items:center;gap:8px;padding:0 10px;background:#1e1e1e;border:1px solid #2d2d2d;border-left:3px solid #d9a441"><span style="font-family:'IBM Plex Mono',monospace;font-size:9px;color:#8d9299;border:1px solid #3a3a3a;padding:2px 6px">INTENSITY</span><span style="margin-left:auto;font-size:12px;font-weight:600;color:#f4f1ea">FRONT PARS <span style="font-family:'IBM Plex Mono',monospace;font-size:9px;color:#5c6068">6×</span></span></div>
+        <div style="height:40px;display:flex;align-items:center;gap:8px;padding:0 10px;background:#1e1e1e;border:1px solid #2d2d2d;border-left:3px solid #d9a441"><span style="font-family:'IBM Plex Mono',monospace;font-size:9px;color:#8d9299;border:1px solid #3a3a3a;padding:2px 6px">COLOUR</span><span style="margin-left:auto;font-size:12px;font-weight:600;color:#f4f1ea">FRONT PARS</span></div>
+        <div style="height:40px;display:flex;align-items:center;gap:8px;padding:0 10px;background:#1e1e1e;border:1px solid #2d2d2d;border-left:3px solid #4ecbd4"><span style="font-family:'IBM Plex Mono',monospace;font-size:9px;color:#8d9299;border:1px solid #3a3a3a;padding:2px 6px">COLOUR</span><span style="margin-left:auto;font-size:12px;font-weight:600;color:#f4f1ea">REAR WASH <span style="font-family:'IBM Plex Mono',monospace;font-size:9px;color:#5c6068">2×</span></span></div>
+        <div style="height:40px;display:flex;align-items:center;gap:8px;padding:0 10px;background:#1e1e1e;border:1px solid #2d2d2d;border-left:3px solid #8d9299"><span style="font-family:'IBM Plex Mono',monospace;font-size:9px;color:#8d9299;border:1px solid #3a3a3a;padding:2px 6px">INTENSITY</span><span style="margin-left:auto;font-size:12px;font-weight:600;color:#f4f1ea">SUNSTRIP</span></div>
+        <div style="height:40px;display:flex;align-items:center;gap:8px;padding:0 10px;background:rgba(33,150,243,0.08);border:1px solid #2196f3;border-left:3px solid #2196f3"><span style="font-family:'IBM Plex Mono',monospace;font-size:9px;color:#8d9299;border:1px solid #3a3a3a;padding:2px 6px">INTENSITY</span><span style="margin-left:auto;font-size:12px;font-weight:600;color:#f4f1ea">BLINDER <span style="font-family:'IBM Plex Mono',monospace;font-size:9px;color:#2196f3">NEU</span></span></div>
+        <div style="height:40px;display:flex;align-items:center;gap:8px;padding:0 10px;background:#1e1e1e;border:1px solid #2d2d2d;border-left:3px solid #c95fd0"><span style="font-family:'IBM Plex Mono',monospace;font-size:9px;color:#8d9299;border:1px solid #3a3a3a;padding:2px 6px">POSITION</span><span style="margin-left:auto;font-size:12px;font-weight:600;color:#f4f1ea">MOVERS <span style="font-family:'IBM Plex Mono',monospace;font-size:9px;color:#5c6068">4×</span></span></div>
+        <div style="height:40px;display:flex;align-items:center;gap:8px;padding:0 10px;background:#1e1e1e;border:1px solid #2d2d2d;border-left:3px solid #c95fd0"><span style="font-family:'IBM Plex Mono',monospace;font-size:9px;color:#8d9299;border:1px solid #3a3a3a;padding:2px 6px">BEAM</span><span style="margin-left:auto;font-size:12px;font-weight:600;color:#f4f1ea">MOVERS</span></div>
+      </div>
+    </div>
+    <div style="margin-top:14px;font-family:'IBM Plex Mono',monospace;font-size:9px;color:#5c6068;line-height:1.7">GEPATCHT WIRD AUF CAPABILITY-EBENE (INTENSITY / COLOUR / POSITION / BEAM), NICHT AUF GRUPPEN-EBENE: EINE VERBINDUNG DOCKT NUR AN GLEICHER CAPABILITY AN · INKOMPATIBLES IST GAR NICHT ERST VERBINDBAR. MEHRERE AUSGÄNGE PRO QUELLE ERLAUBT (FRONT-PARS-INTENSITY SPEIST AUCH BLINDER). GLEICHES DATENMODELL WIE <a href="#6c" style="color:#8d9299">6c</a> · NUR ANDERE DARSTELLUNG.</div>
+  </div>
+</div>
+</body></html>

@@ -8,7 +8,9 @@ from enum import Enum
 from typing import Dict, List, Optional
 from dataclasses import dataclass
 
-from config.models import Configuration, FixtureGroup, Spot, StagePlane
+from config.models import (
+    Configuration, FixtureGroup, Spot, StagePlane, primary_group,
+)
 
 
 class ActivationRole(Enum):
@@ -421,7 +423,7 @@ def compute_stage_planes(config: Configuration) -> List[StagePlane]:
     # Compute max Z from fixtures
     max_z = 3.0  # default minimum
     for fixture in config.fixtures:
-        group = config.groups.get(fixture.group) if fixture.group else None
+        group = primary_group(config, fixture)
         z = fixture.get_effective_z(group)
         if z > max_z:
             max_z = z

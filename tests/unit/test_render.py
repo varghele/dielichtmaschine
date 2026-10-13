@@ -89,9 +89,18 @@ class TestOfflineRendererGLContext:
     """Test that standalone GL context works (requires GPU)."""
 
     def test_standalone_context_creation(self):
-        """Verify ModernGL standalone context can be created."""
+        """Verify ModernGL standalone context can be created.
+
+        Environment probe, not a code test: on a machine with no GL
+        (a display-less CI runner - glcontext's Linux default is the
+        X11 backend) it SKIPS, matching the visual tier's GL tests;
+        offline rendering simply is not available there.
+        """
         import moderngl
-        ctx = moderngl.create_context(standalone=True)
+        try:
+            ctx = moderngl.create_context(standalone=True)
+        except Exception as e:
+            pytest.skip(f"Could not create standalone GL context: {e}")
         assert ctx is not None
 
         # Create an FBO

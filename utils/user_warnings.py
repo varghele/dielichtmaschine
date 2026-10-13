@@ -51,7 +51,11 @@ class UserWarningsLog:
         self._clock = clock
         self._lock = threading.Lock()
         self._entries: list = []
-        self._op_stack: list = []  # (name, run_id)
+        # thread id -> [(name, run_id), ...]. Operations nest PER
+        # THREAD: a warning raised on the output or loader thread while
+        # the UI thread runs "Export" belongs to no operation, not to
+        # the export.
+        self._op_stacks: dict = {}
         self._last_op: tuple = ("", 0)  # (name, run_id)
         self._run_counter: int = 0
         self._once: dict = {}  # (run_id, once_key) -> WarningEntry
@@ -63,8 +67,8 @@ class UserWarningsLog:
              once_key: str = None) -> None:
         """Record one user-visible warning; also writes the file log."""
         with self._lock:
-            operation, run_id = (self._op_stack[-1] if self._op_stack
-                                 else ("", 0))
+            stack = self._op_stacks.get(threading.get_ident())
+            operation, run_id = stack[-1] if stack else ("", 0)
             if once_key is not None:
                 folded = self._once.get((run_id, once_key))
                 if folded is not None:
@@ -90,18 +94,23 @@ class UserWarningsLog:
     def operation(self, name: str):
         """Group warnings under one user action. Every entry to this
         context is a fresh RUN: last_operation() reports only the
-        newest run's entries, and once-keys start over."""
+        newest run's entries, and once-keys start over. The grouping
+        covers warnings raised on the calling thread only."""
+        thread_id = threading.get_ident()
         with self._lock:
             self._run_counter += 1
             run = (name, self._run_counter)
-            self._op_stack.append(run)
+            self._op_stacks.setdefault(thread_id, []).append(run)
             self._last_op = run
         try:
             yield self
         finally:
             with self._lock:
-                if run in self._op_stack:
-                    self._op_stack.remove(run)
+                stack = self._op_stacks.get(thread_id)
+                if stack and run in stack:
+                    stack.remove(run)
+                if not stack:
+                    self._op_stacks.pop(thread_id, None)
 
     # -- reading ----------------------------------------------------------
 

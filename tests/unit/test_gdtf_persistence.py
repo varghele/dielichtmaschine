@@ -117,25 +117,28 @@ def test_pre_gdtf_config_defaults_to_qxf(tmp_path):
 # Companion .qxf generation on .qxw export
 # ---------------------------------------------------------------------------
 
-def _export(config):
+def _export(config, out_dir):
+    """Export into a PER-TEST directory.
+
+    This used to write workspace.qxw + gdtf_companion_fixtures/ into the
+    REPO ROOT, which every xdist worker shares: two tests exporting at
+    once raced, and one deleted the files the other was still reading
+    (WinError 32, seen 2026-08-08). The export takes an output_path
+    precisely so tests need not touch the repo root.
+    """
     from utils.create_workspace import create_qlc_workspace
-    workspace_out = os.path.join(REPO_ROOT, "workspace.qxw")
-    companion_dir = os.path.join(REPO_ROOT, "gdtf_companion_fixtures")
-    try:
-        create_qlc_workspace(config, None)
-        companions = sorted(os.listdir(companion_dir)) \
-            if os.path.isdir(companion_dir) else []
-        contents = {}
-        for fname in companions:
-            with open(os.path.join(companion_dir, fname), encoding="utf-8") as f:
-                contents[fname] = f.read()
-    finally:
-        if os.path.exists(workspace_out):
-            os.remove(workspace_out)
-        if os.path.isdir(companion_dir):
-            for fname in os.listdir(companion_dir):
-                os.remove(os.path.join(companion_dir, fname))
-            os.rmdir(companion_dir)
+    out_dir = str(out_dir)
+    os.makedirs(out_dir, exist_ok=True)
+    workspace_out = os.path.join(out_dir, "workspace.qxw")
+    companion_dir = os.path.join(out_dir, "gdtf_companion_fixtures")
+    create_qlc_workspace(config, None, output_path=workspace_out)
+    companions = sorted(os.listdir(companion_dir)) \
+        if os.path.isdir(companion_dir) else []
+    contents = {}
+    for fname in companions:
+        with open(os.path.join(companion_dir, fname),
+                  encoding="utf-8") as f:
+            contents[fname] = f.read()
     return companions, contents
 
 
@@ -144,7 +147,7 @@ def test_companion_qxf_written_for_unknown_gdtf_fixture(gdtf_dir, tmp_path):
     fixture_utils.clear_fixture_definitions_cache()
 
     config = _config_with(_spot_fixture())
-    companions, contents = _export(config)
+    companions, contents = _export(config, tmp_path / "export")
 
     assert companions == ["Testlight-Test-Spot-60.qxf"]
     text = contents[companions[0]]
@@ -176,7 +179,7 @@ def test_no_companion_when_qxf_twin_exists(tmp_path, monkeypatch, capsys):
     fixture_utils.clear_fixture_definitions_cache()
 
     config = _config_with(_spot_fixture())
-    companions, _contents = _export(config)
+    companions, _contents = _export(config, tmp_path / "export")
     assert companions == []
     assert "no companion needed" in capsys.readouterr().out
 

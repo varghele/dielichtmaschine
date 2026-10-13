@@ -457,6 +457,34 @@ def clear_library_cache() -> None:
     _full_scan_done = False
 
 
+# Caches DERIVED from definitions, as (module, clear function). They are
+# reached through sys.modules: a module that was never imported holds no
+# cache, and this module stays free of import cycles and of Qt / numpy.
+_DERIVED_CACHE_CLEARERS = (
+    ('utils.fixture_utils', '_clear_legacy_dict_cache'),
+    ('utils.fixture_capabilities', 'clear_capabilities_cache'),
+    ('utils.yoke', 'clear_yoke_cache'),
+    ('utils.tcp.protocol', 'clear_visualizer_definition_cache'),
+    ('utils.gdtf_mesh', 'clear_mesh_cache'),
+)
+
+
+def invalidate_fixture_caches() -> None:
+    """Drop the library caches AND every cache derived from them.
+
+    The one call for "fixture files changed on disk" (library dir
+    changed, GDTF Share download, GDTF autopull): clearing only the
+    library left capabilities, yoke, legacy-dict and visualizer caches
+    serving the stale, or cached "not found", answer until restart.
+    """
+    import sys
+    clear_library_cache()
+    for module_name, func_name in _DERIVED_CACHE_CLEARERS:
+        module = sys.modules.get(module_name)
+        if module is not None:
+            getattr(module, func_name)()
+
+
 def _read_header(path: str) -> Tuple[Optional[str], Optional[str]]:
     """Cheap (manufacturer, model) read, early exit; format-dispatched."""
     if path.lower().endswith('.gdtf'):

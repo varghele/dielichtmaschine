@@ -8,6 +8,10 @@ from PyQt6.QtGui import (
     QPainter, QColor, QPen, QBrush, QMouseEvent, QFont, QLinearGradient,
 )
 from config.models import LightBlock
+from utils import envelope_edit
+from utils.envelope_edit import EnvelopeState
+from utils.timeline_edit_lock import TIMELINE_EDIT_LOCK
+from .locking import flash_locked
 from .timeline_widget import STRIP_ZONE_HEIGHT, sublane_band_geometry
 
 # Glutorange, the brand accent (gui/theme_tokens.py); selection marks in
@@ -301,6 +305,58 @@ def elided(metrics, text: str, width: float) -> str:
     return out
 
 
+def repaint_block_widgets_from(lane_widget) -> bool:
+    """Repaint every block widget in the tab hosting ``lane_widget``.
+
+    Walks up to whoever owns ``lane_widgets`` (the Shows tab) and
+    repaints all of its lanes' block widgets. Returns False when there
+    is no such host, so the caller can fall back to repainting itself.
+
+    Exists because Song.apply_palette() rewrites role-tagged colour
+    blocks across the WHOLE song: repainting only the block whose dialog
+    was open left its siblings showing the old colour (2026-08-09).
+    Module-level so it is testable without building a real widget.
+    """
+    host = lane_widget
+    while host is not None and not hasattr(host, "lane_widgets"):
+        host = host.parent() if hasattr(host, "parent") else None
+    if host is None:
+        return False
+    for lane in host.lane_widgets:
+        for widget in getattr(lane, "light_block_widgets", []):
+            widget.update()
+    return True
+
+
+def clear_sublane_selection(lane_widget, keep=None) -> bool:
+    """Clear the sublane highlight on every block widget except ``keep``.
+
+    Sublane selection (``selected_sublane_type`` / ``selected_sublane_block``)
+    lives on EACH LightBlockWidget and was never exclusive: selecting a
+    colour block in one clip left the previously selected sub-block in
+    another clip still highlighted, and Escape did not clear it either
+    (it only clears the SelectionManager's envelope selection). Reported
+    2026-08-09 as "some sort of selection gets stuck".
+
+    Returns False when no host owning ``lane_widgets`` is above the
+    given lane widget.
+    """
+    host = lane_widget
+    while host is not None and not hasattr(host, "lane_widgets"):
+        host = host.parent() if hasattr(host, "parent") else None
+    if host is None:
+        return False
+    for lane in host.lane_widgets:
+        for widget in getattr(lane, "light_block_widgets", []):
+            if widget is keep:
+                continue
+            if widget.selected_sublane_block is not None or                     widget.selected_sublane_type is not None:
+                widget.selected_sublane_type = None
+                widget.selected_sublane_block = None
+                widget.update()
+    return True
+
+
 class LightBlockWidget(QWidget):
     """Visual representation of a light effect block on the timeline.
 
@@ -341,6 +397,8 @@ class LightBlockWidget(QWidget):
         self.dragging = False
         self.resizing_left = False
         self.resizing_right = False
+        self._envelope_drag_state = None   # EnvelopeState during an edge drag
+        self._envelope_drag_stretch = False
         self.drag_start_pos = None
         self.drag_start_time = None
         self.drag_start_duration = None
@@ -408,6 +466,25 @@ class LightBlockWidget(QWidget):
     def update_display(self):
         """Update the display after block data changes."""
         self.update()  # Trigger repaint
+
+    def _flip_morph_provenance(self):
+        """The editor's hand-edit hook (morph design doc 5.3): a block
+        a morph compile wrote (provenance ``morphed:<edges>``) becomes
+        ``hand_edited`` on first touch, so a re-morph can list exactly
+        what its replace would destroy. Authored blocks (empty
+        provenance) are never tagged - only morphed ones change state.
+        """
+        if self.block.provenance.startswith("morphed:"):
+            self.block.provenance = "hand_edited"
+
+    def _mark_hand_edit(self):
+        """Every sublane content edit funnels through here instead of
+        setting ``block.modified`` directly, so the morph provenance
+        flip cannot be forgotten by a new edit path. ``modified`` keeps
+        its original meaning (content diverged from the riff source);
+        envelope moves/resizes call _flip_morph_provenance alone."""
+        self.block.modified = True
+        self._flip_morph_provenance()
 
     @property
     def is_multi_selected(self) -> bool:
@@ -1414,6 +1491,11 @@ class LightBlockWidget(QWidget):
     def mousePressEvent(self, event: QMouseEvent):
         """Handle mouse press for dragging/resizing envelope or sublane blocks."""
         if event.button() == Qt.MouseButton.RightButton:
+            if self._locked():
+                # No marquee pickup (its only action is bulk delete); a
+                # plain right-click still reaches contextMenuEvent,
+                # whose mutating items are disabled when locked.
+                return
             # Track press position. If the user drags, mouseMoveEvent activates
             # a marquee for sublane blocks. A plain right-click (no drag) falls
             # through to the existing contextMenuEvent.
@@ -1431,10 +1513,23 @@ class LightBlockWidget(QWidget):
             # FIRST: Check for intensity handle click (takes priority over header zone)
             # This allows adjusting dimmer intensity even when the handle is in the header area
             sublane_type, sublane_block = self._get_sublane_block_at_pos(pos)
+
+            if self._locked():
+                # LOCKED: selection only. No drag flag is ever picked
+                # up, so the whole mutation family rooted here (move,
+                # resize, drag-to-create, intensity drag, shift-copy)
+                # is unreachable while copy/save-as-riff keep working.
+                self.selected_sublane_type = sublane_type
+                self.selected_sublane_block = sublane_block
+                self._make_sublane_selection_exclusive()
+                self.update()
+                flash_locked(self)
+                return
             if sublane_block is not None and self._is_on_intensity_handle(pos, sublane_type, sublane_block):
                 # Clicking on intensity handle - start intensity drag
                 self.selected_sublane_type = sublane_type
                 self.selected_sublane_block = sublane_block
+                self._make_sublane_selection_exclusive()
                 self.dragging_intensity_handle = sublane_block
                 self.drag_start_pos = event.globalPosition().toPoint()
                 self.update()
@@ -1447,14 +1542,23 @@ class LightBlockWidget(QWidget):
                 self.selected_sublane_block = None
                 self.update()
 
-                # Header zone always moves entire effect (no resize from here)
-                self.dragging = True
-                if shift_held:
-                    self.shift_drag_copying = True
+                # The header's edges trim (Alt: stretch) the effect, the
+                # rest of the header moves it.
+                edge = self._envelope_edge_at(pos)
+                if edge == "left":
+                    self.resizing_left = True
+                elif edge == "right":
+                    self.resizing_right = True
+                else:
+                    self.dragging = True
+                    if shift_held:
+                        self.shift_drag_copying = True
 
                 self.drag_start_pos = event.globalPosition().toPoint()
                 self.drag_start_time = self.block.start_time
                 self.drag_start_duration = self.block.end_time - self.block.start_time
+                self._envelope_drag_state = (
+                    EnvelopeState.capture(self.block) if edge else None)
                 return
 
             # Below header: handle sublane block interactions
@@ -1465,6 +1569,7 @@ class LightBlockWidget(QWidget):
                 self.clicked_sublane_type = sublane_type
                 self.selected_sublane_type = sublane_type
                 self.selected_sublane_block = sublane_block  # Store block reference
+                self._make_sublane_selection_exclusive()
                 self.update()  # Trigger repaint to show selection
 
                 # Store initial sublane times for resizing
@@ -1501,18 +1606,12 @@ class LightBlockWidget(QWidget):
                     self.create_start_time = click_time
                     self.create_end_time = click_time  # Will be updated in mouseMoveEvent
                 else:
-                    # Not in a sublane row - check envelope resize handles
-                    x = pos.x()
-
-                    if x <= self.RESIZE_HANDLE_WIDTH:
-                        self.resizing_left = True
-                    elif x >= self.width() - self.RESIZE_HANDLE_WIDTH:
-                        self.resizing_right = True
-                    else:
-                        self.dragging = True
-                        # Check if shift is held for copy operation
-                        if shift_held:
-                            self.shift_drag_copying = True
+                    # Not in a sublane row: move the effect (the envelope
+                    # edges live in the header, _envelope_edge_at).
+                    self.dragging = True
+                    # Check if shift is held for copy operation
+                    if shift_held:
+                        self.shift_drag_copying = True
 
             self.drag_start_pos = event.globalPosition().toPoint()
             self.drag_start_time = self.block.start_time
@@ -1559,9 +1658,8 @@ class LightBlockWidget(QWidget):
                     self.setCursor(Qt.CursorShape.SizeHorCursor)
                     return
 
-            # Check envelope edges
-            x = pos.x()
-            if x <= self.RESIZE_HANDLE_WIDTH or x >= self.width() - self.RESIZE_HANDLE_WIDTH:
+            # Envelope edges (header only, where the press honours them)
+            if self._envelope_edge_at(pos):
                 self.setCursor(Qt.CursorShape.SizeHorCursor)
             else:
                 self.setCursor(Qt.CursorShape.PointingHandCursor)
@@ -1581,58 +1679,48 @@ class LightBlockWidget(QWidget):
             # Calculate actual delta to apply to sublane blocks
             actual_delta = new_time - self.block.start_time
 
-            # Move entire effect (envelope + all sublane blocks) by the same delta
-            if actual_delta != 0:
-                # Move envelope
-                self.block.end_time += actual_delta
+            # Move entire effect (envelope + all sublane blocks) by the
+            # same delta, as one step for the playback thread.
+            with TIMELINE_EDIT_LOCK:
+                if actual_delta != 0:
+                    # Move envelope
+                    self.block.end_time += actual_delta
 
-                # Move all sublane blocks
-                for sublane_block in self.block.dimmer_blocks:
-                    sublane_block.start_time += actual_delta
-                    sublane_block.end_time += actual_delta
-                for sublane_block in self.block.colour_blocks:
-                    sublane_block.start_time += actual_delta
-                    sublane_block.end_time += actual_delta
-                for sublane_block in self.block.movement_blocks:
-                    sublane_block.start_time += actual_delta
-                    sublane_block.end_time += actual_delta
-                for sublane_block in self.block.special_blocks:
-                    sublane_block.start_time += actual_delta
-                    sublane_block.end_time += actual_delta
+                    # Move all sublane blocks
+                    for sublane_block in self.block.dimmer_blocks:
+                        sublane_block.start_time += actual_delta
+                        sublane_block.end_time += actual_delta
+                    for sublane_block in self.block.colour_blocks:
+                        sublane_block.start_time += actual_delta
+                        sublane_block.end_time += actual_delta
+                    for sublane_block in self.block.movement_blocks:
+                        sublane_block.start_time += actual_delta
+                        sublane_block.end_time += actual_delta
+                    for sublane_block in self.block.special_blocks:
+                        sublane_block.start_time += actual_delta
+                        sublane_block.end_time += actual_delta
 
-            self.block.start_time = new_time
+                self.block.start_time = new_time
             self.update_position()
             self.position_changed.emit(self, new_time)
 
-        elif self.resizing_left:
-            # Resize from left edge (changes start time and duration)
-            new_start = self.drag_start_time + delta_time
-            new_duration = self.drag_start_duration - delta_time
-
+        elif (self.resizing_left or self.resizing_right) and \
+                getattr(self, "_envelope_drag_state", None) is not None:
+            # Envelope edge: plain drag TRIMS the sublane blocks at the
+            # edge, Alt-drag STRETCHES them around the opposite edge;
+            # both snap to any beat (decision 2026-10-13).
+            state = self._envelope_drag_state
+            edge = "left" if self.resizing_left else "right"
+            origin = state.start if edge == "left" else state.end
+            new_time = origin + delta_time
             if self.snap_to_grid:
-                new_start = self.timeline_widget.find_nearest_beat_time(new_start)
-                new_duration = (self.drag_start_time + self.drag_start_duration) - new_start
-
-            if new_start >= 0 and new_duration >= 0.1:
-                self.block.start_time = new_start
-                self.block.duration = new_duration
-                self.update_position()
-                self.position_changed.emit(self, new_start)
-                self.duration_changed.emit(self, new_duration)
-
-        elif self.resizing_right:
-            # Resize from right edge (changes duration only)
-            new_duration = self.drag_start_duration + delta_time
-
-            if self.snap_to_grid:
-                new_end = self.block.start_time + new_duration
-                new_end = self.timeline_widget.find_nearest_beat_time(new_end)
-                new_duration = new_end - self.block.start_time
-
-            if new_duration >= 0.1:
-                self.block.duration = new_duration
-                self.update_position()
-                self.duration_changed.emit(self, new_duration)
+                new_time = self.timeline_widget.find_nearest_beat_time(new_time)
+            stretch = bool(event.modifiers() & Qt.KeyboardModifier.AltModifier)
+            with TIMELINE_EDIT_LOCK:
+                envelope_edit.apply(self.block, state, edge, new_time, stretch)
+            self._envelope_drag_stretch = stretch
+            self.update_position()
+            self.update()
 
         elif self.resizing_sublane:
             # Resize sublane block.
@@ -1647,10 +1735,11 @@ class LightBlockWidget(QWidget):
 
                 # Don't allow shrinking below minimum duration
                 if new_start >= 0 and (self.drag_start_sublane_end - new_start) >= 0.1:
-                    sublane_block.start_time = new_start
-                    # Update envelope bounds
-                    self.block.update_envelope_bounds()
-                    self.block.modified = True
+                    with TIMELINE_EDIT_LOCK:
+                        sublane_block.start_time = new_start
+                        # Update envelope bounds
+                        self.block.update_envelope_bounds()
+                    self._mark_hand_edit()
                     self.update_position()
                     self.update()  # Redraw
 
@@ -1663,10 +1752,11 @@ class LightBlockWidget(QWidget):
 
                 # Don't allow shrinking below minimum duration
                 if (new_end - self.drag_start_sublane_start) >= 0.1:
-                    sublane_block.end_time = new_end
-                    # Update envelope bounds
-                    self.block.update_envelope_bounds()
-                    self.block.modified = True
+                    with TIMELINE_EDIT_LOCK:
+                        sublane_block.end_time = new_end
+                        # Update envelope bounds
+                        self.block.update_envelope_bounds()
+                    self._mark_hand_edit()
                     self.update_position()
                     self.update()  # Redraw
 
@@ -1686,11 +1776,12 @@ class LightBlockWidget(QWidget):
 
             # Don't allow negative start time
             if new_start >= 0:
-                sublane_block.start_time = new_start
-                sublane_block.end_time = new_end
-                # Update envelope bounds
-                self.block.update_envelope_bounds()
-                self.block.modified = True
+                with TIMELINE_EDIT_LOCK:
+                    sublane_block.start_time = new_start
+                    sublane_block.end_time = new_end
+                    # Update envelope bounds
+                    self.block.update_envelope_bounds()
+                self._mark_hand_edit()
                 self.update_position()
                 self.update()  # Redraw
 
@@ -1748,7 +1839,7 @@ class LightBlockWidget(QWidget):
             self.dragging_intensity_handle.intensity = new_intensity
 
             # Mark block as modified
-            self.block.modified = True
+            self._mark_hand_edit()
 
             # Redraw to update handle position and label
             self.update()
@@ -1812,6 +1903,8 @@ class LightBlockWidget(QWidget):
             start_time: Start time for the block
             end_time: End time for the block
         """
+        if self._locked():
+            return
         from config.models import DimmerBlock, ColourBlock, MovementBlock, SpecialBlock
 
         # Reject mouse-slip-tiny blocks that would be near-impossible to grab afterward.
@@ -1859,7 +1952,7 @@ class LightBlockWidget(QWidget):
 
         # Update envelope bounds and mark as modified
         self.block.update_envelope_bounds()
-        self.block.modified = True
+        self._mark_hand_edit()
         self.update_position()
         self.update()
 
@@ -1886,11 +1979,12 @@ class LightBlockWidget(QWidget):
             if self.shift_drag_copying and self.dragging:
                 # Create a copy of the effect at the new position
                 new_start_time = self.block.start_time  # Current position after drag
-                # Reset original block to its starting position
-                self.block.start_time = self.drag_start_time
-                self.block.end_time = self.drag_start_time + self.drag_start_duration
-                # Update sublane blocks back to original times
-                self._restore_sublane_times()
+                with TIMELINE_EDIT_LOCK:
+                    # Reset original block to its starting position
+                    self.block.start_time = self.drag_start_time
+                    self.block.end_time = self.drag_start_time + self.drag_start_duration
+                    # Update sublane blocks back to original times
+                    self._restore_sublane_times(new_start_time)
                 self.update_position()
 
                 # Create copy at new position via lane widget
@@ -1923,6 +2017,8 @@ class LightBlockWidget(QWidget):
             self.dragging = False
             self.resizing_left = False
             self.resizing_right = False
+            self._envelope_drag_state = None
+            self._envelope_drag_stretch = False
             self.drag_start_pos = None
 
             # Clear sublane interaction state
@@ -1947,6 +2043,9 @@ class LightBlockWidget(QWidget):
         resized = self.resizing_left or self.resizing_right
         if not (moved or resized):
             return
+        if resized:
+            self._push_envelope_edge_undo()
+            return
         old_start = self.drag_start_time
         old_end = self.drag_start_time + self.drag_start_duration
         new_start, new_end = self.block.start_time, self.block.end_time
@@ -1967,10 +2066,56 @@ class LightBlockWidget(QWidget):
                 stack.push(ResizeBlockCommand(
                     self.lane_widget, self.block, old_start, old_end,
                     new_start, new_end))
+        # Envelope moves/resizes are hand edits too: flip morphed
+        # provenance at the drag's single finalize point. They do NOT
+        # set block.modified - that flag means "content diverged from
+        # the riff source" and a move keeps content intact.
+        self._flip_morph_provenance()
+        self.block_edited.emit()
+
+    def _envelope_edge_at(self, pos):
+        """"left" / "right" when ``pos`` is on an envelope edge handle,
+        else None. The handles sit at the ends of the header strip (below
+        it, a click belongs to the sublane rows), and a block too narrow
+        for two handles plus a grab area has none: it only moves."""
+        if pos.y() >= self.HEADER_HEIGHT:
+            return None
+        if self.width() < 3 * self.RESIZE_HANDLE_WIDTH:
+            return None
+        if pos.x() <= self.RESIZE_HANDLE_WIDTH:
+            return "left"
+        if pos.x() >= self.width() - self.RESIZE_HANDLE_WIDTH:
+            return "right"
+        return None
+
+    def _push_envelope_edge_undo(self):
+        """Finish an envelope-edge trim/stretch: ONE already-applied
+        EnvelopeEditCommand, the hand-edit marks (the sublane content
+        changed), block_edited. An edge drag that changed nothing pushes
+        nothing."""
+        before = getattr(self, "_envelope_drag_state", None)
+        if before is None:
+            return
+        after = EnvelopeState.capture(self.block)
+        if after == before:
+            return
+        stack = None
+        if hasattr(self.lane_widget, "_get_undo_stack"):
+            stack = self.lane_widget._get_undo_stack()
+        if stack is not None:
+            from .undo_commands import EnvelopeEditCommand
+            label = ("Stretch Block" if getattr(self, "_envelope_drag_stretch",
+                                                False) else "Trim Block")
+            stack.push(EnvelopeEditCommand(self.lane_widget, self.block,
+                                           before, after, label))
+        self._mark_hand_edit()
         self.block_edited.emit()
 
     def mouseDoubleClickEvent(self, event: QMouseEvent):
         """Handle double-click to open effect editor or sublane block editor."""
+        if self._locked():
+            flash_locked(self)
+            return
         if event.button() == Qt.MouseButton.LeftButton:
             pos = event.position().toPoint()
             sublane_type, sublane_block = self._get_sublane_block_at_pos(pos)
@@ -1992,6 +2137,10 @@ class LightBlockWidget(QWidget):
         from PyQt6.QtWidgets import QMenu
         menu = QMenu(self)
 
+        # LOCKED: mutating items are disabled in place (Copy and Save
+        # as Riff stay live - they read, never write).
+        locked = self._locked()
+
         # Check if right-clicked on a sublane block
         pos = self.mapFromGlobal(event.globalPos())
         sublane_type, sublane_block = self._get_sublane_block_at_pos(pos)
@@ -2010,16 +2159,19 @@ class LightBlockWidget(QWidget):
             edit_sublane_action.triggered.connect(
                 lambda: self.open_sublane_dialog(sublane_type, sublane_block)
             )
+            edit_sublane_action.setEnabled(not locked)
 
             delete_sublane_action = menu.addAction(f"Delete {label} Block")
             delete_sublane_action.triggered.connect(
                 lambda: self._delete_sublane_block(sublane_type, sublane_block)
             )
+            delete_sublane_action.setEnabled(not locked)
 
             menu.addSeparator()
 
         set_name_action = menu.addAction("Set Name...")
         set_name_action.triggered.connect(self.set_block_name)
+        set_name_action.setEnabled(not locked)
 
         menu.addSeparator()
 
@@ -2053,6 +2205,7 @@ class LightBlockWidget(QWidget):
 
         delete_action = menu.addAction(delete_label)
         delete_action.triggered.connect(self._delete_effect_or_selection)
+        delete_action.setEnabled(not locked)
 
         menu.exec(event.globalPos())
 
@@ -2086,6 +2239,9 @@ class LightBlockWidget(QWidget):
 
     def set_block_name(self):
         """Set or change the custom name for this effect block."""
+        if self._locked():
+            flash_locked(self)
+            return
         from PyQt6.QtWidgets import QInputDialog
 
         # Get current name (or empty string if None)
@@ -2112,6 +2268,11 @@ class LightBlockWidget(QWidget):
             sublane_type: Type of sublane ("dimmer", "colour", "movement", "special")
             sublane_block: The sublane block to edit
         """
+        if self._locked():
+            # Also fences the palette editor, which only opens from the
+            # colour block dialog.
+            flash_locked(self)
+            return
         dialog = None
 
         if sublane_type == "dimmer":
@@ -2121,7 +2282,12 @@ class LightBlockWidget(QWidget):
             from .colour_block_dialog import ColourBlockDialog
             # Get color wheel options from fixture if available
             color_wheel_options = self._get_color_wheel_options()
-            dialog = ColourBlockDialog(sublane_block, color_wheel_options=color_wheel_options, parent=self)
+            # The owning Song enables the palette-role picker (v1.5).
+            dialog = ColourBlockDialog(sublane_block,
+                                       color_wheel_options=color_wheel_options,
+                                       parent=self,
+                                       song=self._find_owning_song(),
+                                       has_rgb=self._group_has_rgb())
         elif sublane_type == "movement":
             from .movement_block_dialog import MovementBlockDialog
             # Pass config for spot selection
@@ -2133,9 +2299,64 @@ class LightBlockWidget(QWidget):
 
         if dialog and dialog.exec():
             # Mark effect as modified since sublane was changed
-            self.block.modified = True
+            self._mark_hand_edit()
             self.update_display()
+            if sublane_type == "colour":
+                # EDIT PALETTE re-resolves every role-tagged colour block
+                # in the SONG (Song.apply_palette), not just this one, so
+                # repainting only self left the other tagged blocks
+                # showing their old colour until something else forced a
+                # repaint (found 2026-08-09).
+                self._repaint_all_block_widgets()
             self.block_edited.emit()  # Trigger auto-save
+
+    def _make_sublane_selection_exclusive(self) -> None:
+        """Only one sub-block is selected at a time, across all clips."""
+        clear_sublane_selection(self.lane_widget, keep=self)
+
+    def _repaint_all_block_widgets(self) -> None:
+        if not repaint_block_widgets_from(self.lane_widget):
+            self.update()
+
+    def _find_owning_song(self):
+        """The Song whose timeline contains this envelope block, or None.
+
+        Identity lookup: the runtime lane shares its LightBlock objects
+        with the data model (timeline.light_lane copies the LIST, not
+        the blocks), so the block sitting in a song's timeline_data IS
+        self.block. Data-driven, so it works from any host tab.
+        """
+        config = getattr(self.lane_widget, "config", None)
+        for song in (getattr(config, "songs", None) or {}).values():
+            timeline = getattr(song, "timeline_data", None)
+            if timeline is None:
+                continue
+            for lane in timeline.lanes:
+                if any(b is self.block for b in lane.light_blocks):
+                    return song
+        return None
+
+    def _locked(self) -> bool:
+        """True when the owning song refuses edits (Song.locked). Data
+        driven via _find_owning_song, so the fence holds from any host;
+        blocks not (yet) in a song - e.g. mid-construction - are open."""
+        song = self._find_owning_song()
+        return bool(song is not None and getattr(song, "locked", False))
+
+    def _group_has_rgb(self) -> bool:
+        """Whether the lane's fixtures have RGB channels (True when the
+        group cannot be resolved, so the colour editor never locks)."""
+        try:
+            if not self.lane_widget or not self.lane_widget.config:
+                return True
+            group_name = self.lane_widget.lane.fixture_group
+            group = self.lane_widget.config.groups.get(group_name)
+            if group is None:
+                return True
+            from utils.fixture_utils import group_has_rgb
+            return group_has_rgb(group.fixtures)
+        except Exception:
+            return True
 
     def _get_color_wheel_options(self):
         """Get color wheel options from fixture group if available.
@@ -2170,6 +2391,8 @@ class LightBlockWidget(QWidget):
             sublane_type: Type of sublane
             sublane_block: The block to delete
         """
+        if self._locked():
+            return
         block_list = None
         if sublane_type == "dimmer":
             block_list = self.block.dimmer_blocks
@@ -2186,7 +2409,7 @@ class LightBlockWidget(QWidget):
             if self.selected_sublane_block == sublane_block:
                 self.selected_sublane_block = None
                 self.selected_sublane_type = None
-            self.block.modified = True
+            self._mark_hand_edit()
             self.update_display()
 
     # ── Right-click sublane marquee helpers ───────────────────────────────
@@ -2251,6 +2474,7 @@ class LightBlockWidget(QWidget):
             label = "Delete Block" if count == 1 else f"Delete {count} Blocks"
             delete = menu.addAction(label)
             delete.triggered.connect(lambda: self._bulk_delete_sublane_blocks(hits))
+            delete.setEnabled(not self._locked())
             menu.addSeparator()
             cancel = menu.addAction("Cancel")
             cancel.triggered.connect(lambda: None)
@@ -2266,21 +2490,19 @@ class LightBlockWidget(QWidget):
         self.update()
         self.block_edited.emit()
 
-    def _restore_sublane_times(self):
-        """Restore all sublane block times to match the original envelope position.
+    def _restore_sublane_times(self, dragged_start: float):
+        """Shift every sublane block back from the dragged envelope
+        position ``dragged_start`` to the drag's starting position.
 
-        Used when cancelling a shift+drag copy to reset the visual dragging.
+        Used when finishing a shift+drag copy: the live drag moved the
+        envelope AND its sublane blocks, and the original must return
+        whole before it is copied. The caller resets the envelope first,
+        so the offset comes from ``dragged_start`` (computing it from the
+        already-reset envelope gave 0 and left the sublane blocks at the
+        drop position, which the paste then shifted a second time).
         """
-        # Calculate the time offset that was applied during dragging
-        current_duration = self.block.end_time - self.block.start_time
-        original_duration = self.drag_start_duration
+        time_delta = self.drag_start_time - dragged_start
 
-        # The blocks were dragged with the envelope, so we need to restore them
-        # to match the original start time
-        time_delta = self.drag_start_time - self.block.start_time
-
-        # Since we already reset self.block.start_time and end_time,
-        # we need to adjust all sublane blocks to match
         for dimmer_block in self.block.dimmer_blocks:
             dimmer_block.start_time += time_delta
             dimmer_block.end_time += time_delta
@@ -2327,6 +2549,9 @@ class LightBlockWidget(QWidget):
 
     def _delete_effect_or_selection(self):
         """Delete this effect or all selected effects."""
+        if self._locked():
+            flash_locked(self)
+            return
         # Check if this block is part of a multi-selection
         if self._is_multi_selected:
             shows_tab = self._get_shows_tab()
@@ -2343,6 +2568,10 @@ class LightBlockWidget(QWidget):
 
         # Check if Ctrl is pressed and a dimmer or movement block is selected
         if event.modifiers() & Qt.KeyboardModifier.ControlModifier:
+            if self._locked():
+                event.accept()
+                flash_locked(self)
+                return
             if self.selected_sublane_type in ["dimmer", "movement"] and self.selected_sublane_block:
                 # Speed options in order
                 speed_options = ["1/16", "1/8", "1/4", "1/2", "1", "2", "4", "8", "16"]
@@ -2369,7 +2598,7 @@ class LightBlockWidget(QWidget):
                 self.selected_sublane_block.effect_speed = speed_options[new_index]
 
                 # Mark block as modified
-                self.block.modified = True
+                self._mark_hand_edit()
 
                 # Repaint to update grid
                 self.update()
@@ -2384,6 +2613,9 @@ class LightBlockWidget(QWidget):
     def keyPressEvent(self, event):
         """Handle key press for deletion."""
         if event.key() == Qt.Key.Key_Delete or event.key() == Qt.Key.Key_Backspace:
+            if self._locked():
+                flash_locked(self)
+                return
             self.remove_requested.emit(self)
         else:
             super().keyPressEvent(event)

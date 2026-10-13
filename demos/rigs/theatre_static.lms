@@ -1,0 +1,1249 @@
+fixtures:
+- address: 1
+  available_modes:
+  - channels: 4
+    name: 4 Channel
+  - channels: 6
+    name: 6 Channel
+  - channels: 8
+    name: 8 Channel
+  calibration: {}
+  current_mode: 8 Channel
+  definition_source: qxf
+  docked_to: ''
+  gdtf_fixture_type_id: null
+  group: Front Wash
+  groups:
+  - Front Wash
+  invert_pan: false
+  invert_tilt: false
+  layer: ''
+  manufacturer: Stairville
+  model: 'Retro Flat Par 18x12W RGBW '
+  mounting: hanging
+  name: Front Wash 1
+  orientation_uses_group_default: true
+  pitch: 90.0
+  roll: 0.0
+  type: WASH
+  universe: 1
+  x: -5.4
+  y: -3.0
+  yaw: 0.0
+  z: 4.0
+  z_uses_group_default: false
+- address: 9
+  available_modes:
+  - channels: 4
+    name: 4 Channel
+  - channels: 6
+    name: 6 Channel
+  - channels: 8
+    name: 8 Channel
+  calibration: {}
+  current_mode: 8 Channel
+  definition_source: qxf
+  docked_to: ''
+  gdtf_fixture_type_id: null
+  group: Front Wash
+  groups:
+  - Front Wash
+  invert_pan: false
+  invert_tilt: false
+  layer: ''
+  manufacturer: Stairville
+  model: 'Retro Flat Par 18x12W RGBW '
+  mounting: hanging
+  name: Front Wash 2
+  orientation_uses_group_default: true
+  pitch: 90.0
+  roll: 0.0
+  type: WASH
+  universe: 1
+  x: -3.24
+  y: -3.0
+  yaw: 0.0
+  z: 4.0
+  z_uses_group_default: false
+- address: 17
+  available_modes:
+  - channels: 4
+    name: 4 Channel
+  - channels: 6
+    name: 6 Channel
+  - channels: 8
+    name: 8 Channel
+  calibration: {}
+  current_mode: 8 Channel
+  definition_source: qxf
+  docked_to: ''
+  gdtf_fixture_type_id: null
+  group: Front Wash
+  groups:
+  - Front Wash
+  invert_pan: false
+  invert_tilt: false
+  layer: ''
+  manufacturer: Stairville
+  model: 'Retro Flat Par 18x12W RGBW '
+  mounting: hanging
+  name: Front Wash 3
+  orientation_uses_group_default: true
+  pitch: 90.0
+  roll: 0.0
+  type: WASH
+  universe: 1
+  x: -1.08
+  y: -3.0
+  yaw: 0.0
+  z: 4.0
+  z_uses_group_default: false
+- address: 25
+  available_modes:
+  - channels: 4
+    name: 4 Channel
+  - channels: 6
+    name: 6 Channel
+  - channels: 8
+    name: 8 Channel
+  calibration: {}
+  current_mode: 8 Channel
+  definition_source: qxf
+  docked_to: ''
+  gdtf_fixture_type_id: null
+  group: Front Wash
+  groups:
+  - Front Wash
+  invert_pan: false
+  invert_tilt: false
+  layer: ''
+  manufacturer: Stairville
+  model: 'Retro Flat Par 18x12W RGBW '
+  mounting: hanging
+  name: Front Wash 4
+  orientation_uses_group_default: true
+  pitch: 90.0
+  roll: 0.0
+  type: WASH
+  universe: 1
+  x: 1.08
+  y: -3.0
+  yaw: 0.0
+  z: 4.0
+  z_uses_group_default: false
+- address: 33
+  available_modes:
+  - channels: 4
+    name: 4 Channel
+  - channels: 6
+    name: 6 Channel
+  - channels: 8
+    name: 8 Channel
+  calibration: {}
+  current_mode: 8 Channel
+  definition_source: qxf
+  docked_to: ''
+  gdtf_fixture_type_id: null
+  group: Front Wash
+  groups:
+  - Front Wash
+  invert_pan: false
+  invert_tilt: false
+  layer: ''
+  manufacturer: Stairville
+  model: 'Retro Flat Par 18x12W RGBW '
+  mounting: hanging
+  name: Front Wash 5
+  orientation_uses_group_default: true
+  pitch: 90.0
+  roll: 0.0
+  type: WASH
+  universe: 1
+  x: 3.24
+  y: -3.0
+  yaw: 0.0
+  z: 4.0
+  z_uses_group_default: false
+- address: 41
+  available_modes:
+  - channels: 4
+    name: 4 Channel
+  - channels: 6
+    name: 6 Channel
+  - channels: 8
+    name: 8 Channel
+  calibration: {}
+  current_mode: 8 Channel
+  definition_source: qxf
+  docked_to: ''
+  gdtf_fixture_type_id: null
+  group: Front Wash
+  groups:
+  - Front Wash
+  invert_pan: false
+  invert_tilt: false
+  layer: ''
+  manufacturer: Stairville
+  model: 'Retro Flat Par 18x12W RGBW '
+  mounting: hanging
+  name: Front Wash 6
+  orientation_uses_group_default: true
+  pitch: 90.0
+  roll: 0.0
+  type: WASH
+  universe: 1
+  x: 5.4
+  y: -3.0
+  yaw: 0.0
+  z: 4.0
+  z_uses_group_default: false
+- address: 49
+  available_modes:
+  - channels: 6
+    name: 6 Channel
+  - channels: 2
+    name: 2 Channel 1
+  - channels: 2
+    name: 2 Channel 2
+  - channels: 3
+    name: 3 Channel 1
+  - channels: 3
+    name: 3 Channel 2
+  - channels: 4
+    name: 4 Channel
+  - channels: 1
+    name: 1 Channel
+  calibration: {}
+  current_mode: 6 Channel
+  definition_source: qxf
+  docked_to: ''
+  gdtf_fixture_type_id: null
+  group: Back Cyc Wash
+  groups:
+  - Back Cyc Wash
+  invert_pan: false
+  invert_tilt: false
+  layer: ''
+  manufacturer: Stairville
+  model: Wild Wash Pro 648 RGB LED
+  mounting: hanging
+  name: Back Cyc Wash 1
+  orientation_uses_group_default: true
+  pitch: 90.0
+  roll: 0.0
+  type: WASH
+  universe: 1
+  x: -5.4
+  y: 3.0
+  yaw: 0.0
+  z: 3.5
+  z_uses_group_default: false
+- address: 55
+  available_modes:
+  - channels: 6
+    name: 6 Channel
+  - channels: 2
+    name: 2 Channel 1
+  - channels: 2
+    name: 2 Channel 2
+  - channels: 3
+    name: 3 Channel 1
+  - channels: 3
+    name: 3 Channel 2
+  - channels: 4
+    name: 4 Channel
+  - channels: 1
+    name: 1 Channel
+  calibration: {}
+  current_mode: 6 Channel
+  definition_source: qxf
+  docked_to: ''
+  gdtf_fixture_type_id: null
+  group: Back Cyc Wash
+  groups:
+  - Back Cyc Wash
+  invert_pan: false
+  invert_tilt: false
+  layer: ''
+  manufacturer: Stairville
+  model: Wild Wash Pro 648 RGB LED
+  mounting: hanging
+  name: Back Cyc Wash 2
+  orientation_uses_group_default: true
+  pitch: 90.0
+  roll: 0.0
+  type: WASH
+  universe: 1
+  x: -3.24
+  y: 3.0
+  yaw: 0.0
+  z: 3.5
+  z_uses_group_default: false
+- address: 61
+  available_modes:
+  - channels: 6
+    name: 6 Channel
+  - channels: 2
+    name: 2 Channel 1
+  - channels: 2
+    name: 2 Channel 2
+  - channels: 3
+    name: 3 Channel 1
+  - channels: 3
+    name: 3 Channel 2
+  - channels: 4
+    name: 4 Channel
+  - channels: 1
+    name: 1 Channel
+  calibration: {}
+  current_mode: 6 Channel
+  definition_source: qxf
+  docked_to: ''
+  gdtf_fixture_type_id: null
+  group: Back Cyc Wash
+  groups:
+  - Back Cyc Wash
+  invert_pan: false
+  invert_tilt: false
+  layer: ''
+  manufacturer: Stairville
+  model: Wild Wash Pro 648 RGB LED
+  mounting: hanging
+  name: Back Cyc Wash 3
+  orientation_uses_group_default: true
+  pitch: 90.0
+  roll: 0.0
+  type: WASH
+  universe: 1
+  x: -1.08
+  y: 3.0
+  yaw: 0.0
+  z: 3.5
+  z_uses_group_default: false
+- address: 67
+  available_modes:
+  - channels: 6
+    name: 6 Channel
+  - channels: 2
+    name: 2 Channel 1
+  - channels: 2
+    name: 2 Channel 2
+  - channels: 3
+    name: 3 Channel 1
+  - channels: 3
+    name: 3 Channel 2
+  - channels: 4
+    name: 4 Channel
+  - channels: 1
+    name: 1 Channel
+  calibration: {}
+  current_mode: 6 Channel
+  definition_source: qxf
+  docked_to: ''
+  gdtf_fixture_type_id: null
+  group: Back Cyc Wash
+  groups:
+  - Back Cyc Wash
+  invert_pan: false
+  invert_tilt: false
+  layer: ''
+  manufacturer: Stairville
+  model: Wild Wash Pro 648 RGB LED
+  mounting: hanging
+  name: Back Cyc Wash 4
+  orientation_uses_group_default: true
+  pitch: 90.0
+  roll: 0.0
+  type: WASH
+  universe: 1
+  x: 1.08
+  y: 3.0
+  yaw: 0.0
+  z: 3.5
+  z_uses_group_default: false
+- address: 73
+  available_modes:
+  - channels: 6
+    name: 6 Channel
+  - channels: 2
+    name: 2 Channel 1
+  - channels: 2
+    name: 2 Channel 2
+  - channels: 3
+    name: 3 Channel 1
+  - channels: 3
+    name: 3 Channel 2
+  - channels: 4
+    name: 4 Channel
+  - channels: 1
+    name: 1 Channel
+  calibration: {}
+  current_mode: 6 Channel
+  definition_source: qxf
+  docked_to: ''
+  gdtf_fixture_type_id: null
+  group: Back Cyc Wash
+  groups:
+  - Back Cyc Wash
+  invert_pan: false
+  invert_tilt: false
+  layer: ''
+  manufacturer: Stairville
+  model: Wild Wash Pro 648 RGB LED
+  mounting: hanging
+  name: Back Cyc Wash 5
+  orientation_uses_group_default: true
+  pitch: 90.0
+  roll: 0.0
+  type: WASH
+  universe: 1
+  x: 3.24
+  y: 3.0
+  yaw: 0.0
+  z: 3.5
+  z_uses_group_default: false
+- address: 79
+  available_modes:
+  - channels: 6
+    name: 6 Channel
+  - channels: 2
+    name: 2 Channel 1
+  - channels: 2
+    name: 2 Channel 2
+  - channels: 3
+    name: 3 Channel 1
+  - channels: 3
+    name: 3 Channel 2
+  - channels: 4
+    name: 4 Channel
+  - channels: 1
+    name: 1 Channel
+  calibration: {}
+  current_mode: 6 Channel
+  definition_source: qxf
+  docked_to: ''
+  gdtf_fixture_type_id: null
+  group: Back Cyc Wash
+  groups:
+  - Back Cyc Wash
+  invert_pan: false
+  invert_tilt: false
+  layer: ''
+  manufacturer: Stairville
+  model: Wild Wash Pro 648 RGB LED
+  mounting: hanging
+  name: Back Cyc Wash 6
+  orientation_uses_group_default: true
+  pitch: 90.0
+  roll: 0.0
+  type: WASH
+  universe: 1
+  x: 5.4
+  y: 3.0
+  yaw: 0.0
+  z: 3.5
+  z_uses_group_default: false
+- address: 85
+  available_modes:
+  - channels: 4
+    name: 4 Channel
+  - channels: 6
+    name: 6 Channel
+  - channels: 8
+    name: 8 Channel
+  calibration: {}
+  current_mode: 8 Channel
+  definition_source: qxf
+  docked_to: ''
+  gdtf_fixture_type_id: null
+  group: Side Boom L
+  groups:
+  - Side Boom L
+  invert_pan: false
+  invert_tilt: false
+  layer: ''
+  manufacturer: Stairville
+  model: 'Retro Flat Par 18x12W RGBW '
+  mounting: wall_left
+  name: Side Boom L 1
+  orientation_uses_group_default: true
+  pitch: 0.0
+  roll: 0.0
+  type: WASH
+  universe: 1
+  x: -5.5
+  y: 0.0
+  yaw: 90.0
+  z: 1.5
+  z_uses_group_default: false
+- address: 93
+  available_modes:
+  - channels: 4
+    name: 4 Channel
+  - channels: 6
+    name: 6 Channel
+  - channels: 8
+    name: 8 Channel
+  calibration: {}
+  current_mode: 8 Channel
+  definition_source: qxf
+  docked_to: ''
+  gdtf_fixture_type_id: null
+  group: Side Boom L
+  groups:
+  - Side Boom L
+  invert_pan: false
+  invert_tilt: false
+  layer: ''
+  manufacturer: Stairville
+  model: 'Retro Flat Par 18x12W RGBW '
+  mounting: wall_left
+  name: Side Boom L 2
+  orientation_uses_group_default: true
+  pitch: 0.0
+  roll: 0.0
+  type: WASH
+  universe: 1
+  x: -5.5
+  y: 0.0
+  yaw: 90.0
+  z: 3.5
+  z_uses_group_default: false
+- address: 101
+  available_modes:
+  - channels: 4
+    name: 4 Channel
+  - channels: 6
+    name: 6 Channel
+  - channels: 8
+    name: 8 Channel
+  calibration: {}
+  current_mode: 8 Channel
+  definition_source: qxf
+  docked_to: ''
+  gdtf_fixture_type_id: null
+  group: Side Boom R
+  groups:
+  - Side Boom R
+  invert_pan: false
+  invert_tilt: false
+  layer: ''
+  manufacturer: Stairville
+  model: 'Retro Flat Par 18x12W RGBW '
+  mounting: wall_right
+  name: Side Boom R 1
+  orientation_uses_group_default: true
+  pitch: 0.0
+  roll: 0.0
+  type: WASH
+  universe: 1
+  x: 5.5
+  y: 0.0
+  yaw: -90.0
+  z: 1.5
+  z_uses_group_default: false
+- address: 109
+  available_modes:
+  - channels: 4
+    name: 4 Channel
+  - channels: 6
+    name: 6 Channel
+  - channels: 8
+    name: 8 Channel
+  calibration: {}
+  current_mode: 8 Channel
+  definition_source: qxf
+  docked_to: ''
+  gdtf_fixture_type_id: null
+  group: Side Boom R
+  groups:
+  - Side Boom R
+  invert_pan: false
+  invert_tilt: false
+  layer: ''
+  manufacturer: Stairville
+  model: 'Retro Flat Par 18x12W RGBW '
+  mounting: wall_right
+  name: Side Boom R 2
+  orientation_uses_group_default: true
+  pitch: 0.0
+  roll: 0.0
+  type: WASH
+  universe: 1
+  x: 5.5
+  y: 0.0
+  yaw: -90.0
+  z: 3.5
+  z_uses_group_default: false
+grid_size: 0.5
+groups:
+  Back Cyc Wash:
+    color: '#cc7744'
+    default_mounting: hanging
+    default_pitch: 90.0
+    default_roll: 0.0
+    default_yaw: 0.0
+    default_z_height: 3.5
+    export_intensity: 255
+    fixture_order:
+    - Back Cyc Wash 1
+    - Back Cyc Wash 2
+    - Back Cyc Wash 3
+    - Back Cyc Wash 4
+    - Back Cyc Wash 5
+    - Back Cyc Wash 6
+    fixtures:
+    - address: 49
+      available_modes:
+      - channels: 6
+        name: 6 Channel
+      - channels: 2
+        name: 2 Channel 1
+      - channels: 2
+        name: 2 Channel 2
+      - channels: 3
+        name: 3 Channel 1
+      - channels: 3
+        name: 3 Channel 2
+      - channels: 4
+        name: 4 Channel
+      - channels: 1
+        name: 1 Channel
+      calibration: {}
+      current_mode: 6 Channel
+      definition_source: qxf
+      docked_to: ''
+      gdtf_fixture_type_id: null
+      group: Back Cyc Wash
+      groups:
+      - Back Cyc Wash
+      invert_pan: false
+      invert_tilt: false
+      layer: ''
+      manufacturer: Stairville
+      model: Wild Wash Pro 648 RGB LED
+      mounting: hanging
+      name: Back Cyc Wash 1
+      orientation_uses_group_default: true
+      pitch: 90.0
+      roll: 0.0
+      type: WASH
+      universe: 1
+      x: -5.4
+      y: 3.0
+      yaw: 0.0
+      z: 3.5
+      z_uses_group_default: false
+    - address: 55
+      available_modes:
+      - channels: 6
+        name: 6 Channel
+      - channels: 2
+        name: 2 Channel 1
+      - channels: 2
+        name: 2 Channel 2
+      - channels: 3
+        name: 3 Channel 1
+      - channels: 3
+        name: 3 Channel 2
+      - channels: 4
+        name: 4 Channel
+      - channels: 1
+        name: 1 Channel
+      calibration: {}
+      current_mode: 6 Channel
+      definition_source: qxf
+      docked_to: ''
+      gdtf_fixture_type_id: null
+      group: Back Cyc Wash
+      groups:
+      - Back Cyc Wash
+      invert_pan: false
+      invert_tilt: false
+      layer: ''
+      manufacturer: Stairville
+      model: Wild Wash Pro 648 RGB LED
+      mounting: hanging
+      name: Back Cyc Wash 2
+      orientation_uses_group_default: true
+      pitch: 90.0
+      roll: 0.0
+      type: WASH
+      universe: 1
+      x: -3.24
+      y: 3.0
+      yaw: 0.0
+      z: 3.5
+      z_uses_group_default: false
+    - address: 61
+      available_modes:
+      - channels: 6
+        name: 6 Channel
+      - channels: 2
+        name: 2 Channel 1
+      - channels: 2
+        name: 2 Channel 2
+      - channels: 3
+        name: 3 Channel 1
+      - channels: 3
+        name: 3 Channel 2
+      - channels: 4
+        name: 4 Channel
+      - channels: 1
+        name: 1 Channel
+      calibration: {}
+      current_mode: 6 Channel
+      definition_source: qxf
+      docked_to: ''
+      gdtf_fixture_type_id: null
+      group: Back Cyc Wash
+      groups:
+      - Back Cyc Wash
+      invert_pan: false
+      invert_tilt: false
+      layer: ''
+      manufacturer: Stairville
+      model: Wild Wash Pro 648 RGB LED
+      mounting: hanging
+      name: Back Cyc Wash 3
+      orientation_uses_group_default: true
+      pitch: 90.0
+      roll: 0.0
+      type: WASH
+      universe: 1
+      x: -1.08
+      y: 3.0
+      yaw: 0.0
+      z: 3.5
+      z_uses_group_default: false
+    - address: 67
+      available_modes:
+      - channels: 6
+        name: 6 Channel
+      - channels: 2
+        name: 2 Channel 1
+      - channels: 2
+        name: 2 Channel 2
+      - channels: 3
+        name: 3 Channel 1
+      - channels: 3
+        name: 3 Channel 2
+      - channels: 4
+        name: 4 Channel
+      - channels: 1
+        name: 1 Channel
+      calibration: {}
+      current_mode: 6 Channel
+      definition_source: qxf
+      docked_to: ''
+      gdtf_fixture_type_id: null
+      group: Back Cyc Wash
+      groups:
+      - Back Cyc Wash
+      invert_pan: false
+      invert_tilt: false
+      layer: ''
+      manufacturer: Stairville
+      model: Wild Wash Pro 648 RGB LED
+      mounting: hanging
+      name: Back Cyc Wash 4
+      orientation_uses_group_default: true
+      pitch: 90.0
+      roll: 0.0
+      type: WASH
+      universe: 1
+      x: 1.08
+      y: 3.0
+      yaw: 0.0
+      z: 3.5
+      z_uses_group_default: false
+    - address: 73
+      available_modes:
+      - channels: 6
+        name: 6 Channel
+      - channels: 2
+        name: 2 Channel 1
+      - channels: 2
+        name: 2 Channel 2
+      - channels: 3
+        name: 3 Channel 1
+      - channels: 3
+        name: 3 Channel 2
+      - channels: 4
+        name: 4 Channel
+      - channels: 1
+        name: 1 Channel
+      calibration: {}
+      current_mode: 6 Channel
+      definition_source: qxf
+      docked_to: ''
+      gdtf_fixture_type_id: null
+      group: Back Cyc Wash
+      groups:
+      - Back Cyc Wash
+      invert_pan: false
+      invert_tilt: false
+      layer: ''
+      manufacturer: Stairville
+      model: Wild Wash Pro 648 RGB LED
+      mounting: hanging
+      name: Back Cyc Wash 5
+      orientation_uses_group_default: true
+      pitch: 90.0
+      roll: 0.0
+      type: WASH
+      universe: 1
+      x: 3.24
+      y: 3.0
+      yaw: 0.0
+      z: 3.5
+      z_uses_group_default: false
+    - address: 79
+      available_modes:
+      - channels: 6
+        name: 6 Channel
+      - channels: 2
+        name: 2 Channel 1
+      - channels: 2
+        name: 2 Channel 2
+      - channels: 3
+        name: 3 Channel 1
+      - channels: 3
+        name: 3 Channel 2
+      - channels: 4
+        name: 4 Channel
+      - channels: 1
+        name: 1 Channel
+      calibration: {}
+      current_mode: 6 Channel
+      definition_source: qxf
+      docked_to: ''
+      gdtf_fixture_type_id: null
+      group: Back Cyc Wash
+      groups:
+      - Back Cyc Wash
+      invert_pan: false
+      invert_tilt: false
+      layer: ''
+      manufacturer: Stairville
+      model: Wild Wash Pro 648 RGB LED
+      mounting: hanging
+      name: Back Cyc Wash 6
+      orientation_uses_group_default: true
+      pitch: 90.0
+      roll: 0.0
+      type: WASH
+      universe: 1
+      x: 5.4
+      y: 3.0
+      yaw: 0.0
+      z: 3.5
+      z_uses_group_default: false
+    lighting_role: ambient
+    name: Back Cyc Wash
+    order_mode: manual
+  Front Wash:
+    color: '#4477cc'
+    default_mounting: hanging
+    default_pitch: 90.0
+    default_roll: 0.0
+    default_yaw: 0.0
+    default_z_height: 4.0
+    export_intensity: 255
+    fixture_order:
+    - Front Wash 1
+    - Front Wash 2
+    - Front Wash 3
+    - Front Wash 4
+    - Front Wash 5
+    - Front Wash 6
+    fixtures:
+    - address: 1
+      available_modes:
+      - channels: 4
+        name: 4 Channel
+      - channels: 6
+        name: 6 Channel
+      - channels: 8
+        name: 8 Channel
+      calibration: {}
+      current_mode: 8 Channel
+      definition_source: qxf
+      docked_to: ''
+      gdtf_fixture_type_id: null
+      group: Front Wash
+      groups:
+      - Front Wash
+      invert_pan: false
+      invert_tilt: false
+      layer: ''
+      manufacturer: Stairville
+      model: 'Retro Flat Par 18x12W RGBW '
+      mounting: hanging
+      name: Front Wash 1
+      orientation_uses_group_default: true
+      pitch: 90.0
+      roll: 0.0
+      type: WASH
+      universe: 1
+      x: -5.4
+      y: -3.0
+      yaw: 0.0
+      z: 4.0
+      z_uses_group_default: false
+    - address: 9
+      available_modes:
+      - channels: 4
+        name: 4 Channel
+      - channels: 6
+        name: 6 Channel
+      - channels: 8
+        name: 8 Channel
+      calibration: {}
+      current_mode: 8 Channel
+      definition_source: qxf
+      docked_to: ''
+      gdtf_fixture_type_id: null
+      group: Front Wash
+      groups:
+      - Front Wash
+      invert_pan: false
+      invert_tilt: false
+      layer: ''
+      manufacturer: Stairville
+      model: 'Retro Flat Par 18x12W RGBW '
+      mounting: hanging
+      name: Front Wash 2
+      orientation_uses_group_default: true
+      pitch: 90.0
+      roll: 0.0
+      type: WASH
+      universe: 1
+      x: -3.24
+      y: -3.0
+      yaw: 0.0
+      z: 4.0
+      z_uses_group_default: false
+    - address: 17
+      available_modes:
+      - channels: 4
+        name: 4 Channel
+      - channels: 6
+        name: 6 Channel
+      - channels: 8
+        name: 8 Channel
+      calibration: {}
+      current_mode: 8 Channel
+      definition_source: qxf
+      docked_to: ''
+      gdtf_fixture_type_id: null
+      group: Front Wash
+      groups:
+      - Front Wash
+      invert_pan: false
+      invert_tilt: false
+      layer: ''
+      manufacturer: Stairville
+      model: 'Retro Flat Par 18x12W RGBW '
+      mounting: hanging
+      name: Front Wash 3
+      orientation_uses_group_default: true
+      pitch: 90.0
+      roll: 0.0
+      type: WASH
+      universe: 1
+      x: -1.08
+      y: -3.0
+      yaw: 0.0
+      z: 4.0
+      z_uses_group_default: false
+    - address: 25
+      available_modes:
+      - channels: 4
+        name: 4 Channel
+      - channels: 6
+        name: 6 Channel
+      - channels: 8
+        name: 8 Channel
+      calibration: {}
+      current_mode: 8 Channel
+      definition_source: qxf
+      docked_to: ''
+      gdtf_fixture_type_id: null
+      group: Front Wash
+      groups:
+      - Front Wash
+      invert_pan: false
+      invert_tilt: false
+      layer: ''
+      manufacturer: Stairville
+      model: 'Retro Flat Par 18x12W RGBW '
+      mounting: hanging
+      name: Front Wash 4
+      orientation_uses_group_default: true
+      pitch: 90.0
+      roll: 0.0
+      type: WASH
+      universe: 1
+      x: 1.08
+      y: -3.0
+      yaw: 0.0
+      z: 4.0
+      z_uses_group_default: false
+    - address: 33
+      available_modes:
+      - channels: 4
+        name: 4 Channel
+      - channels: 6
+        name: 6 Channel
+      - channels: 8
+        name: 8 Channel
+      calibration: {}
+      current_mode: 8 Channel
+      definition_source: qxf
+      docked_to: ''
+      gdtf_fixture_type_id: null
+      group: Front Wash
+      groups:
+      - Front Wash
+      invert_pan: false
+      invert_tilt: false
+      layer: ''
+      manufacturer: Stairville
+      model: 'Retro Flat Par 18x12W RGBW '
+      mounting: hanging
+      name: Front Wash 5
+      orientation_uses_group_default: true
+      pitch: 90.0
+      roll: 0.0
+      type: WASH
+      universe: 1
+      x: 3.24
+      y: -3.0
+      yaw: 0.0
+      z: 4.0
+      z_uses_group_default: false
+    - address: 41
+      available_modes:
+      - channels: 4
+        name: 4 Channel
+      - channels: 6
+        name: 6 Channel
+      - channels: 8
+        name: 8 Channel
+      calibration: {}
+      current_mode: 8 Channel
+      definition_source: qxf
+      docked_to: ''
+      gdtf_fixture_type_id: null
+      group: Front Wash
+      groups:
+      - Front Wash
+      invert_pan: false
+      invert_tilt: false
+      layer: ''
+      manufacturer: Stairville
+      model: 'Retro Flat Par 18x12W RGBW '
+      mounting: hanging
+      name: Front Wash 6
+      orientation_uses_group_default: true
+      pitch: 90.0
+      roll: 0.0
+      type: WASH
+      universe: 1
+      x: 5.4
+      y: -3.0
+      yaw: 0.0
+      z: 4.0
+      z_uses_group_default: false
+    lighting_role: backbone
+    name: Front Wash
+    order_mode: manual
+  Side Boom L:
+    color: '#44cc77'
+    default_mounting: wall_left
+    default_pitch: 0.0
+    default_roll: 0.0
+    default_yaw: 90.0
+    default_z_height: 1.5
+    export_intensity: 255
+    fixture_order:
+    - Side Boom L 1
+    - Side Boom L 2
+    fixtures:
+    - address: 85
+      available_modes:
+      - channels: 4
+        name: 4 Channel
+      - channels: 6
+        name: 6 Channel
+      - channels: 8
+        name: 8 Channel
+      calibration: {}
+      current_mode: 8 Channel
+      definition_source: qxf
+      docked_to: ''
+      gdtf_fixture_type_id: null
+      group: Side Boom L
+      groups:
+      - Side Boom L
+      invert_pan: false
+      invert_tilt: false
+      layer: ''
+      manufacturer: Stairville
+      model: 'Retro Flat Par 18x12W RGBW '
+      mounting: wall_left
+      name: Side Boom L 1
+      orientation_uses_group_default: true
+      pitch: 0.0
+      roll: 0.0
+      type: WASH
+      universe: 1
+      x: -5.5
+      y: 0.0
+      yaw: 90.0
+      z: 1.5
+      z_uses_group_default: false
+    - address: 93
+      available_modes:
+      - channels: 4
+        name: 4 Channel
+      - channels: 6
+        name: 6 Channel
+      - channels: 8
+        name: 8 Channel
+      calibration: {}
+      current_mode: 8 Channel
+      definition_source: qxf
+      docked_to: ''
+      gdtf_fixture_type_id: null
+      group: Side Boom L
+      groups:
+      - Side Boom L
+      invert_pan: false
+      invert_tilt: false
+      layer: ''
+      manufacturer: Stairville
+      model: 'Retro Flat Par 18x12W RGBW '
+      mounting: wall_left
+      name: Side Boom L 2
+      orientation_uses_group_default: true
+      pitch: 0.0
+      roll: 0.0
+      type: WASH
+      universe: 1
+      x: -5.5
+      y: 0.0
+      yaw: 90.0
+      z: 3.5
+      z_uses_group_default: false
+    lighting_role: accent
+    name: Side Boom L
+    order_mode: manual
+  Side Boom R:
+    color: '#44cc77'
+    default_mounting: wall_right
+    default_pitch: 0.0
+    default_roll: 0.0
+    default_yaw: -90.0
+    default_z_height: 1.5
+    export_intensity: 255
+    fixture_order:
+    - Side Boom R 1
+    - Side Boom R 2
+    fixtures:
+    - address: 101
+      available_modes:
+      - channels: 4
+        name: 4 Channel
+      - channels: 6
+        name: 6 Channel
+      - channels: 8
+        name: 8 Channel
+      calibration: {}
+      current_mode: 8 Channel
+      definition_source: qxf
+      docked_to: ''
+      gdtf_fixture_type_id: null
+      group: Side Boom R
+      groups:
+      - Side Boom R
+      invert_pan: false
+      invert_tilt: false
+      layer: ''
+      manufacturer: Stairville
+      model: 'Retro Flat Par 18x12W RGBW '
+      mounting: wall_right
+      name: Side Boom R 1
+      orientation_uses_group_default: true
+      pitch: 0.0
+      roll: 0.0
+      type: WASH
+      universe: 1
+      x: 5.5
+      y: 0.0
+      yaw: -90.0
+      z: 1.5
+      z_uses_group_default: false
+    - address: 109
+      available_modes:
+      - channels: 4
+        name: 4 Channel
+      - channels: 6
+        name: 6 Channel
+      - channels: 8
+        name: 8 Channel
+      calibration: {}
+      current_mode: 8 Channel
+      definition_source: qxf
+      docked_to: ''
+      gdtf_fixture_type_id: null
+      group: Side Boom R
+      groups:
+      - Side Boom R
+      invert_pan: false
+      invert_tilt: false
+      layer: ''
+      manufacturer: Stairville
+      model: 'Retro Flat Par 18x12W RGBW '
+      mounting: wall_right
+      name: Side Boom R 2
+      orientation_uses_group_default: true
+      pitch: 0.0
+      roll: 0.0
+      type: WASH
+      universe: 1
+      x: 5.5
+      y: 0.0
+      yaw: -90.0
+      z: 3.5
+      z_uses_group_default: false
+    lighting_role: accent
+    name: Side Boom R
+    order_mode: manual
+midi_input_devices: null
+pause_show: null
+setlist:
+  entries: []
+  name: ''
+  sync_device: ''
+  sync_mode: manual
+shows_directory: null
+songs: {}
+spots: {}
+stage_elements: []
+stage_height: 8.0
+stage_layers: []
+stage_width: 12.0
+universes:
+  '1':
+    name: Universe 1
+    output:
+      line: '0'
+      parameters:
+        ip: 192.168.1.1
+        port: '6454'
+        subnet: '0'
+        universe: '1'
+      plugin: E1.31
+workspace_path: null

@@ -8,13 +8,16 @@ session and a fake keyring module - no network, no OS vault.
 """
 
 import json
+import os
 import sys
 import types
 
 import pytest
 
 from utils import gdtf_share
-from utils.gdtf_share import GDTFShareClient, GDTFShareError, entry_filename
+from utils.gdtf_share import (
+    GDTFShareCancelled, GDTFShareClient, GDTFShareError, entry_filename,
+)
 
 PK = b"PK\x03\x04gdtf-bytes"
 
@@ -236,6 +239,52 @@ class TestDownload:
         with pytest.raises(GDTFShareError, match="did not return"):
             client.download(catalog_entries()[0], str(tmp_path))
         assert not list(tmp_path.glob("*.gdtf"))
+
+    def test_streams_through_a_part_file(self, tmp_path):
+        """A streamed body is joined from its chunks and lands via a
+        .part rename, so the library never sees a torn archive."""
+        class Streamed(FakeResponse):
+            def iter_content(self, size):
+                yield PK[:3]
+                yield PK[3:]
+        client, session = make_client(tmp_path, {
+            "downloadFile.php": Streamed()})
+        path = client.download(catalog_entries()[0], str(tmp_path / "d"))
+        with open(path, "rb") as f:
+            assert f.read() == PK
+        assert session.calls[0][1]["stream"] is True
+        assert os.listdir(str(tmp_path / "d")) == [os.path.basename(path)]
+
+    def test_cancel_mid_stream_leaves_no_file(self, tmp_path):
+        import threading
+        cancel = threading.Event()
+
+        class Streamed(FakeResponse):
+            def iter_content(self, size):
+                yield PK[:3]
+                cancel.set()            # quit lands mid-download
+                yield PK[3:]
+        session = FakeSession({"downloadFile.php": Streamed()})
+        client = GDTFShareClient(session=session,
+                                 cache_path=str(tmp_path / "c.json"),
+                                 cancel=cancel)
+        dest = tmp_path / "d"
+        with pytest.raises(GDTFShareCancelled):
+            client.download(catalog_entries()[0], str(dest))
+        assert not dest.exists() or os.listdir(str(dest)) == []
+
+    def test_failed_write_leaves_no_part_file(self, tmp_path, monkeypatch):
+        client, _ = make_client(tmp_path, {"downloadFile.php": FakeResponse(
+            content=PK)})
+        import utils.gdtf_share as gs
+
+        def boom(src, dst):
+            raise OSError("disk full")
+        monkeypatch.setattr(gs.os, "replace", boom)
+        dest = tmp_path / "d"
+        with pytest.raises(OSError):
+            client.download(catalog_entries()[0], str(dest))
+        assert os.listdir(str(dest)) == []
 
     def test_filename_sanitizes_hostile_names(self):
         name = entry_filename({"rid": 9, "manufacturer": "A/B:C",
@@ -504,3 +553,205 @@ class TestAccountDialog:
         assert dialog.account.user_edit.text() == "u"
         assert dialog.account.password_edit.text() == "p"
         assert dialog.account.remember_check.isChecked()
+
+
+class TestAutoPull:
+    """The project-load GDTF auto-pull (2026-07-16): exact-identity
+    matching only, and three keep gates - internal identity, channel
+    footprint, geometry presence. Everything drives fakes; nothing
+    touches the network or the real library."""
+
+    def _identity_entries(self):
+        return [
+            {"rid": 1, "manufacturer": "Varytec", "fixture": "Hero Spot 60",
+             "uploader": "Manufacturer", "rating": "5.0"},
+            {"rid": 2, "manufacturer": "Varytec", "fixture": "Hero_Spot_60",
+             "uploader": "User", "rating": "1.0"},
+            {"rid": 3, "manufacturer": "Cameo", "fixture": "Other Thing",
+             "uploader": "User", "rating": "5.0"},
+        ]
+
+    def test_candidates_match_exact_identity_only(self):
+        from utils.gdtf_share import autopull_candidates
+        result = autopull_candidates(
+            self._identity_entries(),
+            [("Varytec", "Hero Spot 60"), ("Stairville", "Wild Wash")])
+        assert list(result) == [("Varytec", "Hero Spot 60")]
+        # Underscored variant normalizes onto the same identity; the
+        # manufacturer upload outranks it.
+        assert result[("Varytec", "Hero Spot 60")]["rid"] == 1
+
+    def test_missing_identities_are_the_non_gdtf_ones(self, monkeypatch):
+        from types import SimpleNamespace
+        import utils.fixture_library as fl
+        from utils.gdtf_share import missing_gdtf_identities
+
+        def fake_get_definition(m, mo):
+            if mo == "HasGdtf":
+                return SimpleNamespace(gdtf=object())
+            if mo == "QxfOnly":
+                return SimpleNamespace(gdtf=None)
+            return None
+        monkeypatch.setattr(fl, "get_definition", fake_get_definition)
+
+        from config.models import Configuration, Fixture, FixtureMode, \
+            Universe
+
+        def fx(model):
+            return Fixture(universe=1, address=1, manufacturer="M",
+                           model=model, current_mode="Std",
+                           available_modes=[FixtureMode(name="Std",
+                                                        channels=5)],
+                           name=model, group="G")
+        cfg = Configuration(
+            fixtures=[fx("HasGdtf"), fx("QxfOnly"), fx("Unknown")],
+            groups={}, universes={1: Universe(id=1, name="U", output={})})
+        cfg.songs = {}
+        assert missing_gdtf_identities(cfg) == [
+            ("M", "QxfOnly"), ("M", "Unknown")]
+
+    def _pull_setup(self, tmp_path, monkeypatch, internal_model,
+                    mode_channels, has_geometry=True):
+        from types import SimpleNamespace
+        import utils.gdtf_share as gs
+        import utils.fixture_library as fl
+
+        monkeypatch.setattr(gs, "stored_username", lambda: "user")
+        monkeypatch.setattr(gs, "stored_password", lambda u: "pw")
+        monkeypatch.setattr(fl, "get_definition", lambda m, mo: None)
+
+        class FakeClient:
+            def login(self, user, password):
+                pass
+
+            def catalog(self, refresh=False):
+                return [{"rid": 9, "manufacturer": "Varytec",
+                         "fixture": "Hero Spot 60",
+                         "uploader": "Manufacturer", "rating": "5.0"}]
+
+            def download(self, entry, dest_dir):
+                path = os.path.join(dest_dir, "Varytec@Hero Spot 60.gdtf")
+                with open(path, "wb") as f:
+                    f.write(b"fake")
+                return path
+
+        fake_defn = SimpleNamespace(
+            manufacturer="Varytec", model=internal_model,
+            modes=[SimpleNamespace(name="14ch",
+                                   channels=[object()] * mode_channels)],
+            gdtf=object() if has_geometry else None)
+        import utils.gdtf_loader as gl
+        monkeypatch.setattr(gl, "parse_gdtf_file", lambda p: fake_defn)
+
+        from config.models import Configuration, Fixture, FixtureMode, \
+            Universe
+        fixture = Fixture(universe=1, address=1, manufacturer="Varytec",
+                          model="Hero Spot 60", current_mode="14 Channel",
+                          available_modes=[FixtureMode(name="14 Channel",
+                                                       channels=14)],
+                          name="MH1", group="MH")
+        cfg = Configuration(fixtures=[fixture], groups={},
+                            universes={1: Universe(id=1, name="U",
+                                                   output={})})
+        cfg.songs = {}
+        return gs, cfg, FakeClient()
+
+    def test_pull_keeps_a_compatible_gdtf(self, tmp_path, monkeypatch):
+        gs, cfg, client = self._pull_setup(tmp_path, monkeypatch,
+                                           "Hero Spot 60", 14)
+        kept = gs.pull_missing_gdtf(cfg, str(tmp_path), client=client)
+        assert len(kept) == 1 and os.path.exists(kept[0])
+
+    def test_pull_deletes_identity_mismatch(self, tmp_path, monkeypatch):
+        gs, cfg, client = self._pull_setup(tmp_path, monkeypatch,
+                                           "Hero Spot 90", 14)
+        kept = gs.pull_missing_gdtf(cfg, str(tmp_path), client=client)
+        assert kept == []
+        assert os.listdir(str(tmp_path)) == []
+
+    def test_pull_deletes_footprint_mismatch(self, tmp_path, monkeypatch):
+        """The shadow swaps the whole definition: a GDTF without a mode
+        matching the patched channel count would re-map the wire."""
+        gs, cfg, client = self._pull_setup(tmp_path, monkeypatch,
+                                           "Hero Spot 60", 12)
+        kept = gs.pull_missing_gdtf(cfg, str(tmp_path), client=client)
+        assert kept == []
+        assert os.listdir(str(tmp_path)) == []
+
+    def test_pull_deletes_geometryless_gdtf(self, tmp_path, monkeypatch):
+        gs, cfg, client = self._pull_setup(tmp_path, monkeypatch,
+                                           "Hero Spot 60", 14,
+                                           has_geometry=False)
+        kept = gs.pull_missing_gdtf(cfg, str(tmp_path), client=client)
+        assert kept == []
+
+    def test_pull_gates_files_outside_the_library_dir(
+            self, tmp_path, monkeypatch):
+        """The library scans dest_dir: a file still being checked (and
+        one a killed process would leave behind) must not be in it."""
+        gs, cfg, client = self._pull_setup(tmp_path, monkeypatch,
+                                           "Hero Spot 60", 14)
+        import utils.gdtf_loader as gl
+        parse = gl.parse_gdtf_file
+        seen = []
+
+        def checking_parse(path):
+            seen.append((os.path.dirname(path), os.listdir(str(tmp_path))))
+            return parse(path)
+        monkeypatch.setattr(gl, "parse_gdtf_file", checking_parse)
+        kept = gs.pull_missing_gdtf(cfg, str(tmp_path), client=client)
+        ((staging, library_during_parse),) = seen
+        assert os.path.normcase(staging) != os.path.normcase(str(tmp_path))
+        assert library_during_parse == []
+        assert [os.path.dirname(p) for p in kept] == [str(tmp_path)]
+        assert not os.path.exists(staging)
+
+    def test_cancelled_pull_moves_nothing_into_the_library(
+            self, tmp_path, monkeypatch):
+        import threading
+        gs, cfg, client = self._pull_setup(tmp_path, monkeypatch,
+                                           "Hero Spot 60", 14)
+        cancel = threading.Event()
+        import utils.gdtf_loader as gl
+        parse = gl.parse_gdtf_file
+
+        def parse_then_quit(path):
+            cancel.set()                # quit while the file is checked
+            return parse(path)
+        monkeypatch.setattr(gl, "parse_gdtf_file", parse_then_quit)
+        kept = gs.pull_missing_gdtf(cfg, str(tmp_path), client=client,
+                                    cancel=cancel)
+        assert kept == []
+        assert os.listdir(str(tmp_path)) == []
+
+    def test_pull_cancelled_up_front_never_logs_in(self, tmp_path,
+                                                   monkeypatch):
+        import threading
+        gs, cfg, client = self._pull_setup(tmp_path, monkeypatch,
+                                           "Hero Spot 60", 14)
+        calls = []
+        client.login = lambda u, p: calls.append("login")
+        cancel = threading.Event()
+        cancel.set()
+        assert gs.pull_missing_gdtf(cfg, str(tmp_path), client=client,
+                                    cancel=cancel) == []
+        assert calls == []
+
+    def test_pull_without_credentials_is_quiet(self, tmp_path,
+                                               monkeypatch):
+        import utils.gdtf_share as gs
+        import utils.fixture_library as fl
+        monkeypatch.setattr(gs, "stored_username", lambda: "")
+        monkeypatch.setattr(fl, "get_definition", lambda m, mo: None)
+        from config.models import Configuration, Fixture, FixtureMode, \
+            Universe
+        fixture = Fixture(universe=1, address=1, manufacturer="V",
+                          model="X", current_mode="Std",
+                          available_modes=[FixtureMode(name="Std",
+                                                       channels=1)],
+                          name="f", group="G")
+        cfg = Configuration(fixtures=[fixture], groups={},
+                            universes={1: Universe(id=1, name="U",
+                                                   output={})})
+        cfg.songs = {}
+        assert gs.pull_missing_gdtf(cfg, str(tmp_path)) == []

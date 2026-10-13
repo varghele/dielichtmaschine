@@ -137,26 +137,28 @@ class TestCallSitesMigrated:
             home.deleteLater()
 
     def test_timeline_toolbar_shares_one_family(self, qapp):
-        """SAVE / AUTOGEN / INSPECTOR / + LANE / POP OUT.
+        """AUTOGEN / INSPECTOR / + LANE / POP OUT / LOCK.
 
         Autogen is the sole accent-filled CTA (cta-accent); the other
         text actions read uniform as bordered display caps (cta-outline);
-        the Add action stays the success color. (Texts compacted to the
-        timeline v3 mock wording in stage T1.)
+        the Add action stays the success color; LOCK is a checkable
+        output-select chip (it took the removed SAVE button's slot
+        2026-07-22 - save_to_config runs on every edit, so manual SAVE
+        was a relic).
         """
         from config.models import Configuration
         from gui.tabs.shows_tab import ShowsTab
         tab = ShowsTab(Configuration(), parent=None)
         try:
             assert tab.autogen_btn.property("role") == "cta-accent"
-            assert tab.save_btn.property("role") == "cta-outline"
             assert tab.inspector_btn.property("role") == "cta-outline"
             assert tab.add_lane_btn.property("role") == "success"
             assert tab.pane_popout_btn.text() == "POP OUT"
             assert tab.pane_popout_btn.property("role") == "cta-outline"
+            assert tab.lock_chip.property("role") == "output-select"
             # Display-caps CTAs carry uppercase text.
             assert tab.autogen_btn.text() == "AUTOGEN"
-            assert tab.save_btn.text() == "SAVE"
             assert tab.inspector_btn.text() == "INSPECTOR"
+            assert tab.lock_chip.text() == "LOCK"
         finally:
             tab.deleteLater()

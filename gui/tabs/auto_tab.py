@@ -43,6 +43,7 @@ Two behavioural deltas worth knowing:
 Cleanup runs from ``MainWindow.closeEvent`` via :meth:`cleanup`.
 """
 
+import math
 from collections import deque
 from datetime import datetime
 from typing import Dict, Optional
@@ -62,7 +63,9 @@ from utils import user_warnings
 
 from config.models import Configuration
 from audio.device_manager import DeviceManager
-from audio.live_input import LiveAudioInput
+from audio.live_input import (GAIN_MAX, GAIN_MIN, LiveAudioInput,
+                              compute_auto_gain, gain_to_slider,
+                              level_to_fraction, slider_to_gain)
 from audio.realtime_spectral import RealtimeSpectralAnalyzer, LiveFeatureFrame
 from audio.live_feature_bridge import LiveFeatureBridge
 from gui.fonts import FONT_MONO
@@ -98,6 +101,24 @@ GROUP_PALETTE = (
     "#5F86C9", "#C96A5F", "#9A7FD0", "#8D9299",
 )
 VOCAL_COLOR = "#4ECBD4"
+# The raw input level meter (what the mic delivers, post-gain): amber,
+# first in the meter row - signal-chain order, input feeds analysis.
+INPUT_LEVEL_COLOR = "#D9A441"
+
+
+def _level_db_label(peak: float) -> str:
+    """Peak amplitude -> meter readout ("-38 dB"); "-" below the
+    meter floor (-60 dBFS) or at silence."""
+    if peak < 1e-3:
+        return "-"
+    db = 20.0 * math.log10(min(1.0, peak))
+    return f"{db:.0f} dB"
+
+
+def _gain_db_label(gain: float) -> str:
+    """Linear gain -> signed dB readout ("+6.0 dB" / "-12.0 dB")."""
+    db = 20.0 * math.log10(gain)
+    return f"{db:+.1f} dB" if abs(db) >= 0.05 else "0.0 dB"
 
 # Colour-override presets (reference swatches).
 COLOR_PRESETS = ("#FF2850", "#C95FD0", "#4ECBD4")
@@ -509,6 +530,18 @@ class AutoTab(BaseTab):
         self._auto_bpm = AutoBPMDetector()
         self._is_running = False
 
+        # Input level meter + gain (2026-07-21). Capture ownership is a
+        # strict two-state machine: idle-owned XOR engine-owned, never
+        # both. _idle_input monitors the mic while the engine is
+        # stopped; the engine's _live_input takes over on START.
+        self._idle_input = None
+        self._input_gain = min(GAIN_MAX, max(
+            GAIN_MIN, float(getattr(self._settings, "input_gain", 1.0))))
+        # 2 s of 20 Hz raw-peak polls: the AUTO gain measurement window.
+        self._recent_raw_peaks = deque(maxlen=40)
+        # Hold-and-decay display peak against 20 Hz flicker.
+        self._displayed_input_peak = 0.0
+
         # 20 Hz UI tick - paused when the tab isn't visible (see
         # on_tab_deactivated) so it doesn't burn cycles in the background.
         self._ui_timer = QTimer()
@@ -719,6 +752,10 @@ class AutoTab(BaseTab):
         meters.addStretch()
         self._meter_bars: Dict[str, _Bar] = {}
         self._meter_values: Dict[str, QLabel] = {}
+        # The INPUT stage rides its own centered row above the analysis
+        # meters (signal-chain order) - a fourth meter column would push
+        # the centre panel past the 720p width budget.
+        layout.addLayout(self._build_input_row())
         for key, caption, color in (
             ("rms", "RMS energy", tokens["accent"]),
             ("contrast", "Contrast", tokens["text_secondary"]),
@@ -821,6 +858,69 @@ class AutoTab(BaseTab):
         layout.addStretch(1)
         return panel
 
+    def _build_input_row(self) -> QHBoxLayout:
+        """The INPUT stage strip: level meter, GAIN slider (log-mapped,
+        centre = 0 dB), signed dB readout and the momentary AUTO button
+        (measures the last 2 s of raw peaks and sets the gain once -
+        TAP's interaction shape, not an AGC). Registered under the
+        "input" meter key so the shared stopped/clear paths cover it."""
+        row = QHBoxLayout()
+        row.setSpacing(16)
+        row.addStretch()
+
+        meter_column = QVBoxLayout()
+        meter_column.setSpacing(5)
+        caption = MicroLabel("Input level", point_size=7, tracking_em=0.1)
+        caption.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        meter_column.addWidget(caption)
+        bar = _Bar(*METER_BAR_SIZE, INPUT_LEVEL_COLOR)
+        meter_column.addWidget(bar, alignment=Qt.AlignmentFlag.AlignHCenter)
+        value = MicroLabel("-", point_size=8, tracking_em=0.0)
+        value.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        meter_column.addWidget(value)
+        row.addLayout(meter_column)
+        self._meter_bars["input"] = bar
+        self._meter_values["input"] = value
+
+        gain_column = QVBoxLayout()
+        gain_column.setSpacing(5)
+        gain_caption = MicroLabel("Gain", point_size=7, tracking_em=0.1)
+        gain_caption.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        gain_column.addWidget(gain_caption)
+        self._gain_control = self._make_gain_control()
+        self._gain_control.set_value(gain_to_slider(self._input_gain))
+        self._gain_control.value_changed.connect(self._on_gain_changed)
+        gain_column.addWidget(self._gain_control,
+                              alignment=Qt.AlignmentFlag.AlignHCenter)
+        self._gain_value = MicroLabel(_gain_db_label(self._input_gain),
+                                      point_size=8, tracking_em=0.0)
+        self._gain_value.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        gain_column.addWidget(self._gain_value)
+        row.addLayout(gain_column)
+
+        self._gain_auto_btn = QPushButton("AUTO")
+        self._gain_auto_btn.setProperty("role", "primary")
+        self._gain_auto_btn.setFont(mono_font(8, QFont.Weight.DemiBold))
+        self._gain_auto_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._gain_auto_btn.setToolTip(
+            "Set the gain from the level of the last two seconds")
+        self._gain_auto_btn.clicked.connect(self._on_auto_gain)
+        row.addWidget(self._gain_auto_btn,
+                      alignment=Qt.AlignmentFlag.AlignVCenter)
+
+        row.addStretch()
+        return row
+
+    def _make_gain_control(self):
+        """Factory for the gain control widget. Everything else talks
+        only to value()/set_value()/value_changed, so a rotary knob can
+        replace the bar slider by changing this one method."""
+        control = _BarSlider()
+        control.setFixedWidth(METER_BAR_SIZE[0])
+        control.setToolTip("Input gain · -20 dB to +20 dB · centre is "
+                           "0 dB · applied before analysis")
+        return control
+
     # -- Right panel: preview, log, readouts, setup -------------------------
 
     def _build_right_panel(self) -> QWidget:
@@ -898,6 +998,15 @@ class AutoTab(BaseTab):
         self._setup_toggle_btn.setCheckable(True)
         self._setup_toggle_btn.setProperty("role", "output-select")
         self._setup_toggle_btn.setFont(mono_font(8, QFont.Weight.Medium))
+        # Height floor: when the disclosure opens into a pane without
+        # room, the layout crushes height-flexible children - the
+        # button squeezed to a 14px unlabelled bar. Must be a WIDGET
+        # stylesheet rule: the theme's output-select role declares
+        # min-height: 0, and QSS geometry beats setMinimumHeight (same
+        # cascade trap as the app-wide font-family rule vs setFont).
+        # Content-box: 11px content + 2x6px padding + 2x1px border =
+        # the button's natural 25px resting height.
+        self._setup_toggle_btn.setStyleSheet("min-height: 11px;")
         self._setup_toggle_btn.setToolTip(
             "Show ArtNet, audio input and movement settings")
         self._setup_toggle_btn.toggled.connect(self._on_setup_toggled)
@@ -906,6 +1015,8 @@ class AutoTab(BaseTab):
         self._setup_area = self._build_setup_area()
         self._setup_area.hide()
         lower_layout.addWidget(self._setup_area)
+        self._lower_panel = lower
+        self._pre_setup_splitter_sizes = None
 
         self._right_splitter.addWidget(lower)
         self._right_splitter.setStretchFactor(0, 0)
@@ -1337,7 +1448,33 @@ class AutoTab(BaseTab):
         self._save_right_splitter_state()
 
     def _on_setup_toggled(self, checked: bool) -> None:
-        self._setup_area.setVisible(checked)
+        """Show/hide the SETUP disclosure AND make the splitter room.
+
+        The disclosure demands its scroll area's minimum height inside
+        whatever pane height the splitter happens to hold - with the 3D
+        preview pane large, opening it crushed the log to nothing and
+        the toggle button itself to a flat unlabelled bar. Opening now
+        grows the lower pane to the content's minimum (taking from the
+        collapsible preview pane); closing restores the split the user
+        had. Programmatic setSizes does not emit splitterMoved, so the
+        temporary growth never overwrites the saved splitter state.
+        """
+        splitter = self._right_splitter
+        if checked:
+            self._pre_setup_splitter_sizes = splitter.sizes()
+            self._setup_area.setVisible(True)
+            sizes = splitter.sizes()
+            total = sum(sizes)
+            if total > 0:
+                needed = self._lower_panel.minimumSizeHint().height()
+                lower = max(sizes[1], min(needed, total))
+                splitter.setSizes([total - lower, lower])
+        else:
+            self._setup_area.setVisible(False)
+            previous = self._pre_setup_splitter_sizes
+            self._pre_setup_splitter_sizes = None
+            if previous and sum(previous) > 0:
+                splitter.setSizes(previous)
 
     def _launch_visualizer(self):
         """Pop-out callback. Delegates to the Stage tab's standalone
@@ -1397,15 +1534,63 @@ class AutoTab(BaseTab):
         self._populate_devices()
         self._refresh_asio_hint()
         self._refresh_input_readout()
-        if self._is_running:
-            self._ui_timer.start()
+        # Unconditional (was: only while running): the input level
+        # meter monitors the mic while the engine is stopped, riding
+        # the same 20 Hz tick.
+        self._ui_timer.start()
+        if not self._is_running:
+            self._start_idle_capture()
 
     def on_tab_deactivated(self):
         self._ui_timer.stop()
+        # Release the input device to other applications while the tab
+        # is out of sight (the engine's own capture is untouched).
+        self._stop_idle_capture()
         try:
             self._save_settings()
         except Exception as e:
             user_warnings.warn(f"Auto Mode settings could not be saved: {e}", category="config-load", once_key="auto-settings-save")
+
+    # -- Idle input monitoring (meter while the engine is stopped) ---------
+
+    def _start_idle_capture(self) -> None:
+        """Open the selected input device for level monitoring only.
+
+        SILENT on failure (no device, open refused, device held by
+        another app): the meter shows "-" and a retry happens naturally
+        on re-activation, refresh or a device-combo change. Never a
+        modal - this runs on tab switches.
+        """
+        if self._is_running or self._idle_input is not None:
+            return
+        if self._input_device_combo.currentIndex() < 0:
+            return
+        idle = LiveAudioInput(sample_rate=44100, channels=1,
+                              buffer_size=512)
+        idle.set_gain(self._input_gain)
+        device_index = self._input_device_combo.currentData()
+        if not idle.initialize(device_index=device_index) \
+                or not idle.start():
+            idle.cleanup()
+            return
+        self._idle_input = idle
+        self._recent_raw_peaks.clear()
+
+    def _stop_idle_capture(self) -> None:
+        if self._idle_input is not None:
+            self._idle_input.cleanup()
+            self._idle_input = None
+
+    def _resume_idle_monitoring(self) -> None:
+        """Back to idle metering after the engine stopped or failed to
+        start (_cleanup stopped the UI timer and owns no capture)."""
+        self._start_idle_capture()
+        if self.isVisible():
+            self._ui_timer.start()
+
+    def _monitored_input(self):
+        """Whichever capture currently feeds the input level meter."""
+        return self._live_input if self._is_running else self._idle_input
 
     def update_from_config(self):
         # Refresh QXF fixture definitions for the current config on every
@@ -1581,15 +1766,30 @@ class AutoTab(BaseTab):
     def _on_input_api_changed(self, _text: str):
         self._populate_devices()
         self._refresh_input_readout()
+        self._rebind_idle_capture()
 
     def _on_input_device_changed(self, _index: int):
         self._refresh_input_readout()
+        self._rebind_idle_capture()
 
     def _on_refresh_devices(self):
         self._populate_input_apis()
         self._populate_devices()
         self._refresh_asio_hint()
         self._refresh_input_readout()
+        self._rebind_idle_capture()
+
+    def _rebind_idle_capture(self) -> None:
+        """Device selection changed while the engine is stopped: follow
+        it. Also the retry path - picking a device after a failed or
+        deviceless idle open starts monitoring. Visibility-gated so the
+        combo populations during tab activation (which fire these
+        signals before _start_idle_capture runs) and background config
+        refreshes never open a device on a hidden tab."""
+        if self._is_running or not self.isVisible():
+            return
+        self._stop_idle_capture()
+        self._start_idle_capture()
 
     def _populate_plane_combo(self):
         planes = compute_stage_planes(self.config)
@@ -1700,12 +1900,18 @@ class AutoTab(BaseTab):
             )
             return
 
+        # Hand the device from idle monitoring to the engine BEFORE the
+        # engine opens it (ASIO/WASAPI-exclusive drivers refuse a second
+        # open). Every failure path below resumes idle monitoring.
+        self._stop_idle_capture()
+
         try:
             device_index = self._input_device_combo.currentData()
 
             self._live_input = LiveAudioInput(
                 sample_rate=44100, channels=1, buffer_size=512
             )
+            self._live_input.set_gain(self._input_gain)
             if not self._live_input.initialize(device_index=device_index):
                 self.show_error(
                     "Audio input failed",
@@ -1714,9 +1920,14 @@ class AutoTab(BaseTab):
                     "is holding the input exclusively.",
                 )
                 self._cleanup()
+                self._resume_idle_monitoring()
                 return
 
-            self._analyzer = RealtimeSpectralAnalyzer(sample_rate=44100)
+            # The stream may have fallen back to the device's native
+            # rate (Invalid-sample-rate devices): analyze at the rate
+            # the stream ACTUALLY runs at.
+            self._analyzer = RealtimeSpectralAnalyzer(
+                sample_rate=self._live_input.sample_rate)
             self._bridge = LiveFeatureBridge(self._analyzer)
             self._bridge.feature_updated.connect(self._on_feature_frame)
 
@@ -1789,6 +2000,7 @@ class AutoTab(BaseTab):
                     "application and try again.",
                 )
                 self._cleanup()
+                self._resume_idle_monitoring()
                 return
             self._bridge.start(self._live_input.ring_buffer)
             if not self._dmx_controller.start():
@@ -1799,6 +2011,7 @@ class AutoTab(BaseTab):
                     "starting Auto mode.",
                 )
                 self._cleanup()
+                self._resume_idle_monitoring()
                 return
 
             self._is_running = True
@@ -1823,6 +2036,7 @@ class AutoTab(BaseTab):
             import traceback
             traceback.print_exc()
             self._cleanup()
+            self._resume_idle_monitoring()
             self.show_error(
                 "Auto mode failed to start",
                 f"An unexpected error occurred while starting:\n\n{e}\n\n"
@@ -1834,6 +2048,7 @@ class AutoTab(BaseTab):
             return
 
         self._cleanup()
+        self._resume_idle_monitoring()
 
         self._start_btn.setEnabled(True)
         self._start_btn.show()
@@ -1863,6 +2078,11 @@ class AutoTab(BaseTab):
         """Tear down audio + engine + DMX threads. Idempotent."""
         self._is_running = False
         self._ui_timer.stop()
+        self._stop_idle_capture()
+        # The timer keeps running after a STOP (idle metering), so a
+        # stale frame would repaint the last RMS/contrast/vocal values
+        # forever.
+        self._latest_frame = None
 
         if self._dmx_controller:
             self._dmx_controller.stop()
@@ -2018,6 +2238,7 @@ class AutoTab(BaseTab):
     # -- UI tick (20 Hz) -----------------------------------------------------
 
     def _update_ui(self):
+        self._update_input_meter()
         frame = self._latest_frame
         if frame:
             self._meter_bars['rms'].set_fraction(frame.rms)
@@ -2060,6 +2281,63 @@ class AutoTab(BaseTab):
                 if locked != self._last_logged_bpm:
                     self._last_logged_bpm = locked
                     self._log_event(f"BPM lock {auto_bpm:.1f}")
+
+    def _update_input_meter(self) -> None:
+        """Paint the INPUT LEVEL meter from whichever capture is live.
+
+        Reads the capture callback's pre-gain block peak (NOT the ring
+        buffer - the analyzer's destructive reads starve read_latest
+        while the engine runs, and NOT frame.rms - that is EMA-
+        normalized, i.e. already auto-gained). Shown post-gain, so
+        moving the GAIN control visibly moves the meter and the bar
+        answers "what does the analysis hear".
+        """
+        source = self._monitored_input()
+        if source is not None and source.is_active():
+            raw_peak = source.raw_peak()
+            self._recent_raw_peaks.append(raw_peak)
+            shown = raw_peak * self._input_gain
+            # Hold-and-decay against 20 Hz single-block flicker.
+            self._displayed_input_peak = max(
+                shown, self._displayed_input_peak * 0.85)
+            self._meter_bars["input"].set_fraction(
+                level_to_fraction(self._displayed_input_peak))
+            self._meter_values["input"].setText(
+                _level_db_label(self._displayed_input_peak))
+        else:
+            if source is not None and source is self._idle_input:
+                # Device died mid-idle: release it; retry happens on
+                # refresh, re-activation or a device change.
+                self._stop_idle_capture()
+            self._recent_raw_peaks.clear()
+            self._displayed_input_peak = 0.0
+            self._meter_bars["input"].set_fraction(None)
+            self._meter_values["input"].setText("-")
+
+    def _on_gain_changed(self, slider_value: float) -> None:
+        """Manual gain drag: push to whichever capture exists (silent,
+        like the energy slider - no log per pixel of drag)."""
+        self._input_gain = slider_to_gain(slider_value)
+        for source in (self._idle_input, self._live_input):
+            if source is not None:
+                source.set_gain(self._input_gain)
+        self._gain_value.setText(_gain_db_label(self._input_gain))
+
+    def _on_auto_gain(self) -> None:
+        """Momentary measure-and-set: aim the loudest raw peak of the
+        last 2 s at the -12 dBFS target. Refuses on silence."""
+        peak = max(self._recent_raw_peaks, default=0.0)
+        gain = compute_auto_gain(peak)
+        if gain is None:
+            self._log_event("Auto gain skipped · no signal")
+            return
+        self._input_gain = gain
+        self._gain_control.set_value(gain_to_slider(gain))
+        for source in (self._idle_input, self._live_input):
+            if source is not None:
+                source.set_gain(gain)
+        self._gain_value.setText(_gain_db_label(gain))
+        self._log_event(f"Auto gain {_gain_db_label(gain)}", accent=True)
 
     def _apply_active_riffs(self, active: Dict[str, str]) -> None:
         """Push engine-selected riffs into the rows and log the changes."""
@@ -2137,6 +2415,7 @@ class AutoTab(BaseTab):
             input_host_api=input_host_api,
             bpm=self._bpm_spinbox.value(),
             energy_sensitivity=int(round(self._energy_fader.value() * 100)),
+            input_gain=self._input_gain,
             target_plane_name=target_plane,
             max_movement_speed=self._speed_slider.value(),
             color_override_active=override_active,

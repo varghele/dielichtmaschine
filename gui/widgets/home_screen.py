@@ -68,10 +68,13 @@ def _has_structure(config):
 
 
 def _has_timeline_content(config):
+    # TimelineData calls its lane list "lanes" (config/models.py) - a
+    # "light_lanes" getattr here silently read [] forever, so "Build
+    # the show" could never check (fixed 2026-07-22).
     songs = (getattr(config, "songs", {}) or {}).values()
     for show in songs:
         timeline = getattr(show, "timeline_data", None)
-        for lane in getattr(timeline, "light_lanes", []) or []:
+        for lane in getattr(timeline, "lanes", []) or []:
             if getattr(lane, "light_blocks", None):
                 return True
     return False
