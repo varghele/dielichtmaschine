@@ -824,4 +824,11 @@ and the merge/tag decision. Envelope edges (same day, decided): drag
 TRIMS, Alt-drag STRETCHES to any beat (`utils/envelope_edit.py`, handles
 at the header strip's ends via `_envelope_edge_at`). One e2e run on
 this desk again reported 20 errors with no traceback, then four clean
-reruns: the known Windows e2e intermittent, still unexplained.
+reruns. EXPLAINED the same day by the v1.5.5 release run's Ubuntu abort
+(`Fatal Python error: Aborted`, autosave `_Writer` QThread inside
+`write_snapshot` while `tests/e2e/conftest.py` tore the window down): the
+e2e fixture `deleteLater()`s MainWindow WITHOUT closeEvent, so a 15 s
+autosave tick still writing was a running QThread destroyed. Fixed by
+`MainWindow.wait_for_background_workers()` (closeEvent's wait, now one
+method) called from the fixture. Anything that destroys a MainWindow
+without closing it must call it first.

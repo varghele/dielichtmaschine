@@ -2567,6 +2567,26 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         from gui.dialogs.about_dialog import AboutDialog
         AboutDialog(self).exec()
 
+    def wait_for_background_workers(self, timeout_ms: int = 10000):
+        """Block until the QThreads that cannot be interrupted are done:
+        a QThread destroyed while running aborts the process. Called by
+        closeEvent, and by anything else that destroys the window
+        without closing it (the e2e fixture: an autosave tick writing at
+        teardown aborted the whole run, 2026-10-13)."""
+        # A live autosave write (atomic either way, but let it finish).
+        worker = getattr(self, "_autosave_worker", None)
+        if worker is not None and worker.isRunning():
+            worker.wait(timeout_ms)
+        # An autogen run and superseded audio decodes / waveform analyses.
+        for tab_name in ("shows_tab", "structure_tab"):
+            tab = getattr(self, tab_name, None)
+            worker = getattr(tab, "_autogen_worker", None)
+            if worker is not None and worker.isRunning():
+                worker.wait(timeout_ms)
+        waveform_module = sys.modules.get("audio.audio_waveform_widget")
+        if waveform_module is not None:
+            waveform_module.wait_parked_threads(timeout_ms)
+
     def closeEvent(self, event):
         """Handle application close"""
         # A GDTF auto-pull is never waited on (its requests block for up
@@ -2575,22 +2595,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         cancel = getattr(self, "_gdtf_autopull_cancel", None)
         if cancel is not None:
             cancel.set()
-        # Never tear down under a live autosave write (a QThread
-        # destroyed while running aborts the process; the write is
-        # atomic either way, but let it finish).
-        worker = getattr(self, "_autosave_worker", None)
-        if worker is not None and worker.isRunning():
-            worker.wait(10000)
-        # Same for the workers that cannot be interrupted: an autogen
-        # run and superseded audio decodes / waveform analyses.
-        for tab_name in ("shows_tab", "structure_tab"):
-            tab = getattr(self, tab_name, None)
-            worker = getattr(tab, "_autogen_worker", None)
-            if worker is not None and worker.isRunning():
-                worker.wait(10000)
-        waveform_module = sys.modules.get("audio.audio_waveform_widget")
-        if waveform_module is not None:
-            waveform_module.wait_parked_threads(10000)
+        self.wait_for_background_workers()
 
         # Clean up shows tab audio resources
         if hasattr(self.shows_tab, 'cleanup'):

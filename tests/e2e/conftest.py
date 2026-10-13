@@ -411,6 +411,11 @@ def main_window(qapp, monkeypatch):
     try:
         yield window
     finally:
+        # The window is destroyed without closeEvent, so wait for its
+        # background QThreads here: an autosave tick still writing at
+        # teardown aborted the process ("QThread destroyed while
+        # running", the silent e2e deaths, 2026-10-13).
+        window.wait_for_background_workers()
         for tab in (window.shows_tab, window.stage_tab, window.auto_tab):
             try:
                 tab.cleanup()
