@@ -98,7 +98,7 @@ ArtNet playback, PyQt6 + ModernGL, developed primarily on Windows.
 
 ## Current state (update when it changes)
 
-As of 2026-10-12: **v1.5.5 hardening** on branch `v1.5.5-hardening`,
+As of 2026-10-13: **v1.5.5 hardening** on branch `v1.5.5-hardening`,
 cut from `v1.5-focus-morphing` at `32dbd1e` (2026-10-06), PUSHED to
 origin and CI green on both jobs. Fixes only: correctness,
 thread-safety and lifetime bugs plus test/env infra, eleven groups
@@ -798,3 +798,22 @@ cleanup items. New PC: `pip install -r requirements.txt` (pytest-timeout is in i
 and the suite's 120 s timeout needs it); the
 two untracked files in the repo root and `demos/rigs/` are scratch
 from this desk, not needed.
+
+**v1.5.5 code items closed (2026-10-13, same branch, NOT pushed):** every
+handover bug and cleanup that needed no desk is fixed: CSV rig sheet
+`groups` column (`Front;Side`, `group` stays primary; bug-reports.md is
+now EMPTY), export lime + no invented white without a colour block
+(native wins, demos byte-identical), GDTF auto-pull on a cancellable
+DAEMON thread that quit never joins (staged + `.part` downloads, never
+an unchecked file in the library dir), drag during playback via ONE
+`utils/timeline_edit_lock.TIMELINE_EDIT_LOCK` (render holds it around
+scheduling + update_dmx; UI interval writes hold it; never take the
+controller's `_render_lock` inside it), RenderEngine replays its last
+fixtures/grid/plane/DMX on every initializeGL (`_replay_state`), plus
+the shift-drag copy offset bug, typed rudiment lookups, CCW cylinder,
+autosave wrap removed, legacy shaders declared divergent. Gate on this
+desk: unit 3640, e2e 48, visual 88 + 1 skipped. OPEN: the desk checks
+(G9 real-GL, VISUALIZER OPEN port flow), release.yml on first release,
+the merge/tag decision, and a new product decision: envelope edge
+resize writes the deprecated `LightBlock.duration` (right edge is a
+no-op) - clip, scale or remove the handles.
