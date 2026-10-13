@@ -68,10 +68,14 @@ class RenderEngine(QOpenGLWidget):
         # grid / DMX updates pushed at config-load time. We buffer them
         # here and flush in initializeGL so the preview is correct the
         # moment the user first activates the tab.
-        self._pending_grid_size: Optional[float] = None
-        self._pending_fixtures: Optional[list] = None
-        self._pending_dmx: dict[int, bytes] = {}
-        self._pending_plane_highlight: Optional[tuple] = None  # (name, rig_height)
+        # The last state pushed into the engine, kept (not cleared) so
+        # every initializeGL replays it: before the first one, and after
+        # a context teardown + recreation, whose fresh renderers would
+        # otherwise start with no fixtures, grid, plane or DMX.
+        self._last_grid_size: Optional[float] = None
+        self._last_fixtures: Optional[list] = None
+        self._last_dmx: dict[int, bytes] = {}
+        self._last_plane_highlight: Optional[tuple] = None  # (name, rig_height)
 
         # Mouse tracking
         self.setMouseTracking(True)
@@ -150,8 +154,10 @@ class RenderEngine(QOpenGLWidget):
             # Set camera to fit stage
             self.camera.set_stage_size(self.stage_width, self.stage_height)
 
-            # Flush any state pushed before this widget was first shown.
-            self._flush_pending_state()
+            # Replay the last pushed state: updates that arrived before
+            # this widget was first shown, or everything the previous
+            # context held when Qt recreated it (reparenting).
+            self._replay_state()
 
             print(f"OpenGL initialized: {self.ctx.info['GL_RENDERER']}")
             print(f"  Stage size: {self.stage_width}m x {self.stage_height}m")
@@ -305,13 +311,12 @@ class RenderEngine(QOpenGLWidget):
                 tallest fixture's Z, min 3.0 — same rule as autogen's
                 compute_stage_planes)
         """
+        self._last_plane_highlight = (name, rig_height)
         if self.stage_planes:
             # Setters are GL-free; the VBO rebuild happens inside render.
             self.stage_planes.set_rig_height(rig_height)
             self.stage_planes.set_highlight(name)
             self.update()
-        else:
-            self._pending_plane_highlight = (name, rig_height)
 
     def set_grid_size(self, grid_size: float):
         """
@@ -320,14 +325,13 @@ class RenderEngine(QOpenGLWidget):
         Args:
             grid_size: Grid spacing in meters
         """
+        self._last_grid_size = grid_size
         if self.stage_renderer:
             # Make sure we're in the right OpenGL context
             self.makeCurrent()
             self.stage_renderer.set_grid_size(grid_size)
             self.doneCurrent()
             print(f"RenderEngine: Grid size updated to {grid_size}m")
-        else:
-            self._pending_grid_size = grid_size
 
     def update_fixtures(self, fixtures_data: list):
         """
@@ -336,12 +340,11 @@ class RenderEngine(QOpenGLWidget):
         Args:
             fixtures_data: List of fixture dictionaries from TCP message
         """
+        self._last_fixtures = fixtures_data
         if self.fixture_manager:
             self.makeCurrent()
             self.fixture_manager.update_fixtures(fixtures_data)
             self.doneCurrent()
-        else:
-            self._pending_fixtures = fixtures_data
 
     def update_dmx(self, universe: int, dmx_data: bytes):
         """
@@ -351,32 +354,30 @@ class RenderEngine(QOpenGLWidget):
             universe: Universe number
             dmx_data: 512 bytes of DMX data
         """
+        self._last_dmx[universe] = dmx_data
         if self.fixture_manager:
             self.fixture_manager.update_dmx(universe, dmx_data)
-        else:
-            self._pending_dmx[universe] = dmx_data
 
-    def _flush_pending_state(self):
-        """Apply state captured before initializeGL fired.
+    def _replay_state(self):
+        """Push the last state the engine was given into freshly built
+        renderers (called by initializeGL, so after a context recreation
+        too). The state is kept, never cleared: the next recreation
+        replays it again.
 
-        Split out so unit tests can exercise the flush against mock
+        Split out so unit tests can exercise the replay against mock
         renderers without needing a real OpenGL context.
         """
-        if self._pending_grid_size is not None and self.stage_renderer:
-            self.stage_renderer.set_grid_size(self._pending_grid_size)
-            self._pending_grid_size = None
-        if self._pending_fixtures is not None and self.fixture_manager:
-            self.fixture_manager.update_fixtures(self._pending_fixtures)
-            self._pending_fixtures = None
-        if self.fixture_manager and self._pending_dmx:
-            for uni, dmx in self._pending_dmx.items():
+        if self._last_grid_size is not None and self.stage_renderer:
+            self.stage_renderer.set_grid_size(self._last_grid_size)
+        if self._last_fixtures is not None and self.fixture_manager:
+            self.fixture_manager.update_fixtures(self._last_fixtures)
+        if self.fixture_manager:
+            for uni, dmx in self._last_dmx.items():
                 self.fixture_manager.update_dmx(uni, dmx)
-            self._pending_dmx.clear()
-        if self._pending_plane_highlight is not None and self.stage_planes:
-            name, rig_height = self._pending_plane_highlight
+        if self._last_plane_highlight is not None and self.stage_planes:
+            name, rig_height = self._last_plane_highlight
             self.stage_planes.set_rig_height(rig_height)
             self.stage_planes.set_highlight(name)
-            self._pending_plane_highlight = None
 
     def reset_camera(self):
         """Reset camera to default position."""
