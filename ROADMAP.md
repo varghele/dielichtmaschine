@@ -6,7 +6,7 @@ If you want to influence the order, open an issue or pick something up.
 
 > **Direction change (July 2026):** the QLC+ extension route was rejected upstream, so the app (now **Die Lichtmaschine**, formerly QLC+ Show Creator) continues as a standalone tool. Native playback (the built-in ArtNet output) is the primary path going forward; the QLC+ workspace export stays as an interop feature, not the product target. v1.2 below covers the groundwork this pivot implies (the switch to GDTF as the primary fixture format), including a branding switch and UI rework away from the "QLC+ Show Creator" name.
 
-> **Release plan (updated 2026-10-13):** v1.4.0 "the standalone switch" is tagged (2026-07-15). **v1.5.0** (focus geometry + morphing) was never finalised: its alpha shipped 2026-07-27 and the work now ships inside **v1.5.5** (decision 2026-10-13), together with the hardening pass (`docs/v1.5.5-hardening-plan.md`). The v1.5.5 release commit is prepped on `v1.5.5-hardening`; merge, tag and publish are pending. After that come stage refinement v1.6, timeline ergonomics v1.7, live ops + clock sync v1.8 (OSC folded in), control panel v1.9, autogen polish v1.10, Auto Mode hardening v1.11 and visualizer breadth v1.12. These numbers date from the 2026-07-14 restructure, when stage refinement moved behind the releases and every later milestone slid by one; plan docs and code comments written before that date may still use the old numbers.
+> **Release plan (updated 2026-10-13):** v1.4.0 "the standalone switch" is tagged (2026-07-15). **v1.5.0** (focus geometry + morphing) was never finalised: its alpha shipped 2026-07-27 and the work now ships inside **v1.5.5** (decision 2026-10-13), together with the hardening pass (`docs/v1.5.5-hardening-plan.md`). **v1.5.5 is RELEASED (2026-10-13).** After that come stage refinement v1.6, timeline ergonomics v1.7, live ops + clock sync v1.8 (OSC folded in), control panel v1.9, autogen polish v1.10, Auto Mode hardening v1.11 and visualizer breadth v1.12. These numbers date from the 2026-07-14 restructure, when stage refinement moved behind the releases and every later milestone slid by one; plan docs and code comments written before that date may still use the old numbers.
 
 ---
 
@@ -214,8 +214,8 @@ A fixes-only release on `v1.5.5-hardening`, cut from `v1.5-focus-morphing` at `3
 
 - [x] Fold `[Unreleased]` and the never-finalised `[1.5.0]` into `[1.5.5] - 2026-10-13` (one section, so the release notes cover everything since 1.4.0), repoint the link lines.
 - [x] Bump `_version.py` to `1.5.5`, re-render the brand assets (README banner only) and regenerate the About dialog golden on Windows.
-- [ ] Merge `v1.5.5-hardening` to `main` (`--no-ff`), tag `v1.5.5`, push; `release.yml` runs the Tests workflow, builds and drafts the release - check that first run and publish the draft.
-- [ ] Publish the **v1.4.0** GitHub release too: it is still a DRAFT (binaries attached, never published), which is why `v1.5.0-alpha` shows as Latest.
+- [x] Merge `v1.5.5-hardening` to `main` (`--no-ff`), tag `v1.5.5`, push; `release.yml` runs the Tests workflow, builds and drafts the release - check that first run and publish the draft. Done 2026-10-13: the first release run (38372014850) aborted on Ubuntu e2e (autosave QThread destroyed by the e2e fixture's teardown, fixed in `d1362d1`/`61ac402`); the tag was moved to the fixed merge `aa18bbe` (no release had been made from it) and run 38375192463 went green end to end; published as Latest.
+- [x] Publish the **v1.4.0** GitHub release too: it was still a DRAFT (binaries attached, never published). Done 2026-10-13, without the Latest flag.
 
 ---
 

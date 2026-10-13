@@ -114,10 +114,11 @@ alpha shipped 2026-07-27, the final never did, and **v1.5.5 carries
 the 1.5 work plus the hardening.** The release commit is prepped on
 this branch (`_version.py` 1.5.5, CHANGELOG `[1.5.0]` + `[Unreleased]`
 folded into `[1.5.5] - 2026-10-13`, banner + About golden regenerated);
-the user merges `--no-ff` to `main`, tags `v1.5.5` and publishes. The
-rig-blocked gate checks moved to the post-release hardware list in
-ROADMAP. The v1.4.0 GitHub release is still an unpublished DRAFT. The
-dated notes below are history, oldest first; where one disagrees with
+**v1.5.5 is RELEASED** (2026-10-13, merged to `main`, tag `v1.5.5` at
+`aa18bbe`, published as Latest; v1.4.0's forgotten draft published
+too). The rig-blocked gate checks moved to the post-release hardware
+list in ROADMAP. Next milestone: v1.6 stage refinement (new branch off
+`main`). The dated notes below are history, oldest first; where one disagrees with
 a later note or the code, the later one wins.
 
 **v1.1 reopened (2026-07-06):** all 8 items shipped a first pass on
