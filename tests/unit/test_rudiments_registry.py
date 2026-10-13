@@ -125,6 +125,10 @@ class TestDimmerConversion:
         with pytest.raises(ValueError):
             rudiment_to_dimmer_block("nope", {}, 0, 1)
 
+    def test_movement_only_name_is_not_an_intensity_rudiment(self):
+        with pytest.raises(ValueError, match="intensity"):
+            rudiment_to_dimmer_block("circle", {}, 0, 1)
+
 
 class TestMovementConversion:
     @pytest.mark.parametrize("name", sorted(MOVEMENT_RUDIMENTS))
@@ -154,3 +158,22 @@ class TestMovementConversion:
     def test_unknown_rudiment_raises(self):
         with pytest.raises(ValueError):
             rudiment_to_movement_block("nope", {}, 0, 1)
+
+    def test_static_reads_the_movement_definition(self, monkeypatch):
+        """"static" is in both tables and get_rudiment() returns the
+        intensity one; the movement converter must use its own (it used
+        to take the intensity definition, identical output only because
+        the movement defaults equal the converter's fallbacks)."""
+        import dataclasses
+        from rudiments.registry import RudimentParameter
+        moved = dataclasses.replace(
+            MOVEMENT_RUDIMENTS["static"],
+            parameters=[RudimentParameter("pan", "float", 42.0, 0.0, 255.0),
+                        RudimentParameter("tilt", "float", 99.0, 0.0, 255.0)])
+        monkeypatch.setitem(MOVEMENT_RUDIMENTS, "static", moved)
+        block = rudiment_to_movement_block("static", {}, 0, 1)
+        assert (block.pan, block.tilt) == (42.0, 99.0)
+
+    def test_intensity_only_name_is_not_a_movement_rudiment(self):
+        with pytest.raises(ValueError, match="movement"):
+            rudiment_to_movement_block("chase", {}, 0, 1)

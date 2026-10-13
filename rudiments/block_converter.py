@@ -3,7 +3,7 @@
 from typing import Dict, Any, Optional
 
 from config.models import DimmerBlock, MovementBlock
-from rudiments.registry import get_rudiment
+from rudiments.registry import INTENSITY_RUDIMENTS, MOVEMENT_RUDIMENTS
 
 
 def rudiment_to_dimmer_block(
@@ -23,9 +23,12 @@ def rudiment_to_dimmer_block(
     Returns:
         A DimmerBlock configured for this rudiment
     """
-    rudiment = get_rudiment(rudiment_name)
+    # Each converter reads its own table: "static" is both an intensity
+    # and a movement rudiment, and the shared get_rudiment() prefers the
+    # intensity one.
+    rudiment = INTENSITY_RUDIMENTS.get(rudiment_name)
     if rudiment is None:
-        raise ValueError(f"Unknown rudiment: {rudiment_name}")
+        raise ValueError(f"Unknown intensity rudiment: {rudiment_name}")
 
     # Build defaults from rudiment parameter definitions
     defaults = {p.name: p.default for p in rudiment.parameters}
@@ -68,9 +71,9 @@ def rudiment_to_movement_block(
     Returns:
         A MovementBlock configured for this rudiment
     """
-    rudiment = get_rudiment(rudiment_name)
+    rudiment = MOVEMENT_RUDIMENTS.get(rudiment_name)
     if rudiment is None:
-        raise ValueError(f"Unknown rudiment: {rudiment_name}")
+        raise ValueError(f"Unknown movement rudiment: {rudiment_name}")
 
     defaults = {p.name: p.default for p in rudiment.parameters}
     merged = {**defaults, **params}
