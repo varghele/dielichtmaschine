@@ -5,10 +5,10 @@ mesh in the visualizer and the orientation preview, but had no direct
 test. These pin array shapes, bounds, normals and winding, so a change
 that breaks a mesh fails here instead of as a subtly wrong picture.
 
-Winding note: the box is wound counter-clockwise seen from outside, the
-cylinder clockwise. The renderer never enables face culling
-(visualizer/renderer/camera.py), so both draw correctly; the test pins
-that each mesh is at least CONSISTENT, which is what culling would need.
+Winding note: the box and the cylinder are both wound counter-clockwise
+seen from outside (the cylinder was clockwise until 2026-10-13). The
+renderer never enables face culling (visualizer/renderer/camera.py), so
+the flip changes no pixel; it makes both meshes ready for culling.
 """
 
 from __future__ import annotations
@@ -63,11 +63,13 @@ class TestCylinder:
         assert np.linalg.norm(n.reshape(-1, 3), axis=1) == \
             pytest.approx(np.ones(len(pts)), abs=1e-6)
 
-    def test_winding_is_consistent(self):
-        v, n = G.create_cylinder(1.0, 1.0, segments=12)
-        dots = np.einsum("ij,ij->i", _face_normals(v),
-                         n.reshape(-1, 3, 3).mean(axis=1))
-        assert np.all(dots < 0) or np.all(dots > 0)
+    def test_normals_point_outward_and_winding_is_ccw(self):
+        v, n = G.create_cylinder(1.0, 1.0, segments=12, center=(2.0, 3.0, -1.0))
+        vertex_normals = n.reshape(-1, 3, 3).mean(axis=1)
+        outward = _tris(v).mean(axis=1) - np.array([2.0, 3.0, -1.0])
+        assert np.all(np.einsum("ij,ij->i", outward, vertex_normals) > 0)
+        assert np.all(np.einsum("ij,ij->i", _face_normals(v),
+                                vertex_normals) > 0)
 
 
 class TestBeams:
