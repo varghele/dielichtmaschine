@@ -246,7 +246,8 @@ def test_write_snapshot_round_trips_and_is_atomic(tmp_path):
     path = str(tmp_path / "snap.yaml.autosave")
     write_snapshot(pickle.dumps(cfg, 5), path)
     assert os.path.exists(path)
-    assert not os.path.exists(path + ".tmp")
+    # No temp file of any name survives a successful write.
+    assert os.listdir(str(tmp_path)) == ["snap.yaml.autosave"]
     back = Configuration.load(path)
     assert back.stage_width == 7.5
     assert 0 in back.universes

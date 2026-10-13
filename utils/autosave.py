@@ -81,14 +81,13 @@ def write_snapshot(snapshot_bytes: bytes, path: str) -> None:
     The performance half of the autosave (2026-07-16): the UI thread
     only pickles the config (~10 ms on a real project); THIS function -
     deserialize, YAML-dump, write - runs on a worker thread, so it must
-    stay Qt-free. The write is atomic (temp file + replace) so a crash
-    mid-write can never leave a torn recovery backup.
+    stay Qt-free. ``Configuration.save`` writes atomically (temp file +
+    replace, v1.5.5 G7), so a crash mid-write can never leave a torn
+    recovery backup.
     """
     import pickle
     config = pickle.loads(snapshot_bytes)
-    tmp = path + ".tmp"
-    config.save(tmp)
-    os.replace(tmp, path)
+    config.save(path)
 
 
 class AutosaveManager:
