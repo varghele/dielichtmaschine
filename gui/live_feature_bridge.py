@@ -5,8 +5,8 @@ as Qt signals, safe for connecting to GUI slots from the main thread.
 """
 
 from PyQt6.QtCore import QObject, pyqtSignal
-from .realtime_spectral import RealtimeSpectralAnalyzer, LiveFeatureFrame
-from .ring_buffer import AudioRingBuffer
+from audio.realtime_spectral import RealtimeSpectralAnalyzer, LiveFeatureFrame
+from audio.ring_buffer import AudioRingBuffer
 
 
 class LiveFeatureBridge(QObject):

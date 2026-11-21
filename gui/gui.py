@@ -424,7 +424,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         """The one LTCInputService, created lazily (most sessions never
         chase timecode). Its signals feed the Live tab's SYNC chip."""
         if getattr(self, "_ltc_service", None) is None:
-            from audio.ltc_input import LTCInputService
+            from gui.ltc_input_service import LTCInputService
             self._ltc_service = LTCInputService(parent=self)
             self._ltc_last_tc_label = ""
             self._ltc_service.state_changed.connect(self._on_ltc_state)
@@ -2553,7 +2553,8 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             worker = getattr(tab, "_autogen_worker", None)
             if worker is not None and worker.isRunning():
                 worker.wait(timeout_ms)
-        waveform_module = sys.modules.get("audio.audio_waveform_widget")
+        waveform_module = sys.modules.get(
+            "timeline_ui.audio_waveform_widget")
         if waveform_module is not None:
             waveform_module.wait_parked_threads(timeout_ms)
 

@@ -13,6 +13,20 @@ verbatim as the GitHub Release notes (see [docs/releasing.md](docs/releasing.md)
 
 ### Changed
 
+- **The core packages import without Qt.** The Auto Mode widgets moved from
+  `auto/widgets/` to `gui/widgets/auto/`, the waveform widget from `audio/` to
+  `timeline_ui/audio_waveform_widget.py` (next to the audio lane that uses
+  it), and the live spectral feature bridge to `gui/live_feature_bridge.py`.
+  The LTC input was split: the device, reader thread, decoder and chase stay
+  in `audio/ltc_input.py` (`LTCInputCore`, Qt-free), and
+  `gui/ltc_input_service.py` (`LTCInputService`) only turns its two display
+  hooks into the same Qt signals as before. `audio`, `auto`, `timeline`,
+  `autogen`, `config`, `effects`, `riffs`, `rudiments` and `scenes` now import
+  with PyQt6 unavailable, which the headless `export` and `morph` commands rely
+  on; `tests/unit/test_core_imports_without_qt.py` pins it (one known
+  exception, `auto/dmx_output.py`, reaches Qt through `utils/artnet`). The
+  `audio` package no longer exports `AudioWaveformWidget`,
+  `AudioLoaderThread` or `LiveFeatureBridge`. No behaviour change.
 - **CI compares the Windows screenshot goldens.** A new constraints file,
   `constraints/qt-gl.txt`, pins the exact Qt and GL versions the win32
   goldens were rendered with (PyQt6 6.11.0, PyQt6-Qt6 6.11.2, PyQt6-sip

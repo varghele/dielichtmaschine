@@ -551,7 +551,7 @@ class _HookLock:
 class TestLTCService:
 
     def test_active_rate_initialised_at_construction(self, qapp):
-        from audio.ltc_input import LTCInputService
+        from gui.ltc_input_service import LTCInputService
         service = LTCInputService(sample_rate=48000)
         assert service._active_rate == 48000
 

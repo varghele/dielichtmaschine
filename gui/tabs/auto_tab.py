@@ -68,7 +68,7 @@ from audio.live_input import (GAIN_MAX, GAIN_MIN, LiveAudioInput,
                               compute_auto_gain, gain_to_slider,
                               level_to_fraction, slider_to_gain)
 from audio.realtime_spectral import RealtimeSpectralAnalyzer, LiveFeatureFrame
-from audio.live_feature_bridge import LiveFeatureBridge
+from gui.live_feature_bridge import LiveFeatureBridge
 from gui.fonts import FONT_MONO
 from gui.icons import shell_icon
 from gui.typography import DisplayLabel, MicroLabel, display_font, mono_font
@@ -76,11 +76,11 @@ from gui.widgets.embedded_visualizer import EmbeddedVisualizer
 from auto.engine import AutoShowEngine
 from auto.dmx_output import AutoDMXController
 from auto.bpm_detector import TapBPM, AutoBPMDetector
-from auto.widgets.color_wheel import HSVColorWheel
-from auto.widgets.group_submasters import GroupSubmasterPanel
-from auto.widgets.energy_fader import EnergySensitivityFader
-from auto.widgets.riff_palette import GroupRiffConstraintPanel
-from auto.widgets.metrics_tracker import AutoMetricsTracker
+from gui.widgets.auto.color_wheel import HSVColorWheel
+from gui.widgets.auto.group_submasters import GroupSubmasterPanel
+from gui.widgets.auto.energy_fader import EnergySensitivityFader
+from gui.widgets.auto.riff_palette import GroupRiffConstraintPanel
+from gui.widgets.auto.metrics_tracker import AutoMetricsTracker
 from auto import settings as auto_settings
 from autogen.spatial import compute_stage_planes
 

@@ -2,9 +2,12 @@
 
 Owns the audio capture for the timecode chase: a LiveAudioInput fills
 its ring buffer from the device, a reader thread drains it through the
-LTC decoder into the chase, and a thin Qt boundary emits display
-signals. Pure logic stays in utils/timecode; this module is the only
-place where the chase meets a device, a thread and Qt.
+LTC decoder into the chase, and two display hooks report state and
+timecode. Pure logic stays in utils/timecode; this module is the only
+place where the chase meets a device and a thread. It is Qt-free: the
+Qt boundary is ``gui/ltc_input_service.py`` ``LTCInputService``, which
+turns the two hooks into signals (moved out of audio/ in v1.5.6, so
+the package imports without PyQt6).
 
 Ownership (phase 3): one instance lives on MainWindow, like the output
 arbiter - the SHELL owns arm/disarm policy, tabs only display.
@@ -30,8 +33,6 @@ import logging
 import threading
 import time
 from typing import Callable, List, Optional, Tuple
-
-from PyQt6.QtCore import QObject, pyqtSignal
 
 from utils.timecode import ChaseState, LTCDecoder, TimecodeChase
 from .live_input import LiveAudioInput
@@ -63,19 +64,22 @@ def resolve_input_device(hint: str) -> Optional[int]:
     return None
 
 
-class LTCInputService(QObject):
-    """Audio device -> ring buffer -> LTCDecoder -> TimecodeChase."""
+class LTCInputCore:
+    """Audio device -> ring buffer -> LTCDecoder -> TimecodeChase.
 
-    state_changed = pyqtSignal(str)   # ChaseState.value
-    timecode = pyqtSignal(str)        # last label, throttled for display
+    ``_signal_state`` / ``_signal_timecode`` are the display hooks, no-ops
+    here; the Qt subclass (gui/ltc_input_service.py) emits them as
+    signals. They are called at exactly the points (and under exactly
+    the locks) where the signals used to be emitted.
+
+    The initialiser never calls ``super().__init__()``: the Qt subclass
+    initialises its QObject base itself, before this one."""
 
     def __init__(self, sample_rate: int = 44100, device_hint: str = "",
                  clock: Callable[[], float] = time.monotonic,
                  audio_input_factory: Optional[Callable[..., LiveAudioInput]] = None,
                  poll_interval: float = 0.05,
-                 display_interval: float = 0.25,
-                 parent: Optional[QObject] = None):
-        super().__init__(parent)
+                 display_interval: float = 0.25):
         self.sample_rate = sample_rate
         self.device_hint = device_hint
         self.poll_interval = poll_interval
@@ -199,7 +203,7 @@ class LTCInputService(QObject):
 
     def drain_once(self, now: Optional[float] = None) -> None:
         """One reader iteration: consume the ring buffer, decode, feed
-        the chase, emit display signals. The thread calls this in a
+        the chase, report to the display hooks. The thread calls this in a
         loop; tests call it directly."""
         now = self._now(now)
         with self._lock:
@@ -236,7 +240,7 @@ class LTCInputService(QObject):
             if label and \
                     now - self._last_display_emit >= self.display_interval:
                 self._last_display_emit = now
-                self.timecode.emit(label)
+                self._signal_timecode(label)
 
     def _reader_loop(self) -> None:
         while self._running:
@@ -255,4 +259,12 @@ class LTCInputService(QObject):
         with self._emit_lock:
             if force or state != self._last_state_emitted:
                 self._last_state_emitted = state
-                self.state_changed.emit(state)
+                self._signal_state(state)
+
+    # -- display hooks (the Qt subclass emits these) -------------------------
+
+    def _signal_state(self, state: str) -> None:
+        """The chase state changed (ChaseState.value)."""
+
+    def _signal_timecode(self, label: str) -> None:
+        """The last timecode label, throttled for display."""

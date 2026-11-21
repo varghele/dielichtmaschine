@@ -14,9 +14,9 @@ logger = logging.getLogger(__name__)
 # Try to import audio components - may not be available in all installations
 try:
     from audio.audio_file import AudioFile
-    from audio.audio_waveform_widget import (AudioWaveformWidget,
-                                             AudioLoaderThread,
-                                             park_running_thread)
+    from .audio_waveform_widget import (AudioWaveformWidget,
+                                        AudioLoaderThread,
+                                        park_running_thread)
     AUDIO_AVAILABLE = True
 except ImportError:
     AUDIO_AVAILABLE = False

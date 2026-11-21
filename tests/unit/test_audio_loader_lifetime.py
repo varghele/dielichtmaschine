@@ -139,7 +139,7 @@ class TestAudioLoader:
         assert widget.file_path_edit.text() == ""
 
     def test_superseded_loader_stays_alive_until_it_ends(self, lane, qapp):
-        from audio.audio_waveform_widget import _PARKED_THREADS
+        from timeline_ui.audio_waveform_widget import _PARKED_THREADS
         widget, (a, b) = lane
         widget.load_audio_file(a)
         widget.load_audio_file(b)
@@ -151,7 +151,7 @@ class TestAudioLoader:
 
 @pytest.fixture
 def waveform(qapp, monkeypatch):
-    import audio.audio_waveform_widget as waveform_module
+    import timeline_ui.audio_waveform_widget as waveform_module
     GatedGenerator.instances = []
     monkeypatch.setattr(waveform_module, "WaveformGeneratorThread",
                         GatedGenerator)
@@ -191,19 +191,24 @@ def test_package_exports_still_resolve():
     import audio
     for name in audio.__all__:
         assert getattr(audio, name) is not None
-    from audio import AudioLoaderThread, AudioWaveformWidget
-    from audio.audio_waveform_widget import (
-        AudioLoaderThread as direct_loader)
-    assert AudioLoaderThread is direct_loader
-    assert AudioWaveformWidget.__name__ == "AudioWaveformWidget"
+    from audio import WaveformAnalyzer
+    from audio.waveform_analyzer import WaveformAnalyzer as direct
+    assert WaveformAnalyzer is direct
     with pytest.raises(AttributeError):
         audio.NoSuchThing
+    # The Qt classes moved out of the package (v1.5.6): the waveform
+    # widget to timeline_ui/, the feature bridge to gui/.
+    for moved in ("AudioWaveformWidget", "AudioLoaderThread",
+                  "LiveFeatureBridge"):
+        assert moved not in audio.__all__
+        with pytest.raises(AttributeError):
+            getattr(audio, moved)
 
 
 def test_wait_parked_threads_lets_them_end(qapp):
-    from audio.audio_waveform_widget import (_PARKED_THREADS,
-                                             park_running_thread,
-                                             wait_parked_threads)
+    from timeline_ui.audio_waveform_widget import (_PARKED_THREADS,
+                                                   park_running_thread,
+                                                   wait_parked_threads)
     thread = GatedLoader("x.wav")
     thread.start()
     park_running_thread(thread)
@@ -219,7 +224,7 @@ def test_main_window_close_waits_for_uninterruptible_workers(qapp):
     parked decode (a running QThread destroyed at exit aborts)."""
     from types import SimpleNamespace
     from PyQt6.QtGui import QCloseEvent
-    from audio.audio_waveform_widget import park_running_thread
+    from timeline_ui.audio_waveform_widget import park_running_thread
     from gui.gui import MainWindow
 
     autogen = GatedLoader("autogen")

@@ -8,8 +8,8 @@ from PyQt6.QtGui import QPainter, QColor, QPen, QPixmap, QPolygonF
 from PyQt6.QtCore import Qt, QPointF, QThread, pyqtSignal
 from typing import Optional
 
-from .audio_file import AudioFile
-from .waveform_analyzer import WaveformAnalyzer, WaveformData
+from audio.audio_file import AudioFile
+from audio.waveform_analyzer import WaveformAnalyzer, WaveformData
 
 
 #: Worker threads whose result is no longer wanted but whose run() has

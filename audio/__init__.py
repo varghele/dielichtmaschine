@@ -1,12 +1,15 @@
 # audio/__init__.py
 # Audio subsystem for Die Lichtmaschine
-# Provides song playback (pygame, simple_audio_player), live input, real-time analysis, and waveform visualization
+# Provides song playback (pygame, simple_audio_player), live input,
+# real-time analysis and waveform analysis.
+# The package is Qt-free: the waveform widget lives in timeline_ui/, the
+# Qt signal bridges (LiveFeatureBridge, LTCInputService) in gui/
+# (tests/unit/test_core_imports_without_qt.py).
 #
 # The package exports resolve LAZILY (PEP 562 module __getattr__): every
 # ``from audio import X`` keeps working, but importing a submodule such
 # as ``audio.spectral_analysis`` (autogen, the headless morph CLI) no
-# longer drags in QtWidgets, the device layer and the waveform widget
-# through this file.
+# longer drags in the device layer through this file.
 
 import importlib
 
@@ -19,24 +22,19 @@ _EXPORTS = {
     'WaveformAnalyzer': '.waveform_analyzer',
     'WaveformData': '.waveform_analyzer',
     'WaveformPeaks': '.waveform_analyzer',
-    'AudioWaveformWidget': '.audio_waveform_widget',
-    'AudioLoaderThread': '.audio_waveform_widget',
     'AudioRingBuffer': '.ring_buffer',
     'LiveAudioInput': '.live_input',
     'RealtimeSpectralAnalyzer': '.realtime_spectral',
     'LiveFeatureFrame': '.realtime_spectral',
-    'LiveFeatureBridge': '.live_feature_bridge',
 }
 
 __all__ = [
     'DeviceManager', 'AudioDevice',
     'AudioFile', 'AudioMetadata',
     'WaveformAnalyzer', 'WaveformData', 'WaveformPeaks',
-    'AudioWaveformWidget', 'AudioLoaderThread',
     'AudioRingBuffer',
     'LiveAudioInput',
     'RealtimeSpectralAnalyzer', 'LiveFeatureFrame',
-    'LiveFeatureBridge',
 ]
 
 

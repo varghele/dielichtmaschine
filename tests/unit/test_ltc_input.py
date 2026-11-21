@@ -1,4 +1,5 @@
-"""LTC input service (audio/ltc_input.py, docs/ltc-plan.md phase 2).
+"""LTC input service (audio/ltc_input.py core + gui/ltc_input_service.py
+Qt boundary, docs/ltc-plan.md phase 2).
 
 No real audio device anywhere: a fake input exposes a real ring
 buffer, generated LTC audio is pushed into it, and the service is
@@ -9,7 +10,8 @@ device -> decoder -> chase -> signals path runs deterministically.
 import numpy as np
 import pytest
 
-from audio.ltc_input import LTCInputService, resolve_input_device
+from audio.ltc_input import resolve_input_device
+from gui.ltc_input_service import LTCInputService
 from audio.ring_buffer import AudioRingBuffer
 from utils.timecode import FPS_25, Timecode, generate_ltc
 

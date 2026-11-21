@@ -295,7 +295,7 @@ class RealtimeSpectralAnalyzer:
         """Subscribe to feature updates.
 
         Callbacks are called on the analysis thread. For Qt thread safety,
-        use LiveFeatureBridge instead.
+        use LiveFeatureBridge (gui/live_feature_bridge.py) instead.
         """
         with self._callbacks_lock:
             if callback not in self._callbacks:

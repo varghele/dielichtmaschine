@@ -22,8 +22,12 @@ dielichtmaschine/
 │   │   ├── stage_tab.py       # Visual fixture placement
 │   │   ├── structure_tab.py   # Show structure editor
 │   │   └── shows_tab.py       # Timeline editor + playback
-│   └── dialogs/
-│       └── orientation_dialog.py  # 3D fixture orientation popup
+│   ├── dialogs/
+│   │   └── orientation_dialog.py  # 3D fixture orientation popup
+│   ├── widgets/
+│   │   └── auto/              # Auto Mode widgets (colour wheel, faders, metrics)
+│   ├── live_feature_bridge.py # Qt signal bridge for live spectral features
+│   └── ltc_input_service.py   # Qt signals on top of audio/ltc_input.py
 ├── timeline/
 │   ├── song_structure.py      # Song part management
 │   └── light_lane.py          # Light effect lanes
@@ -36,6 +40,8 @@ dielichtmaschine/
 │   ├── movement_block_dialog.py  # Pan/tilt/shape editor
 │   ├── special_block_dialog.py   # Gobo/focus/zoom editor
 │   ├── riff_browser_widget.py # Reusable effect library panel
+│   ├── audio_lane_widget.py   # Timeline audio row
+│   ├── audio_waveform_widget.py  # Visual waveform display
 │   ├── undo_commands.py       # Undo/redo support
 │   └── selection_manager.py   # Multi-selection handling
 ├── utils/
@@ -51,7 +57,9 @@ dielichtmaschine/
 ├── audio/
 │   ├── simple_audio_player.py # pygame-based playback
 │   ├── waveform_analyzer.py   # Waveform peak detection
-│   └── audio_waveform_widget.py  # Visual waveform display
+│   ├── realtime_spectral.py   # Live input feature analysis
+│   └── ltc_input.py           # LTC capture, decode and chase (Qt-free core)
+├── auto/                      # Auto Mode engine, BPM, DMX output (widgets in gui/widgets/auto/)
 ├── effects/                   # Effect computation module (extracted from dmx_manager)
 │   ├── types.py               # DimmerContext/Result, MovementContext/Result
 │   ├── timing.py              # parse_speed(), get_bpm()
@@ -74,6 +82,13 @@ dielichtmaschine/
 ├── visualizer/                # 3D preview app (see visualizer.md)
 └── tests/
 ```
+
+The core packages (`audio`, `auto`, `timeline`, `autogen`, `config`,
+`effects`, `riffs`, `rudiments`, `scenes`) import without PyQt6, which
+the headless export and morph CLIs rely on; Qt widgets and signal
+bridges live in `gui/` and `timeline_ui/`. Pinned by
+`tests/unit/test_core_imports_without_qt.py` (one known exception:
+`auto/dmx_output.py` reaches Qt through `utils/artnet/__init__.py`).
 
 ## Core Data Models
 
