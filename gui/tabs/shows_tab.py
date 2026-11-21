@@ -11,7 +11,7 @@ from PyQt6.QtWidgets import (QVBoxLayout, QHBoxLayout, QComboBox, QPushButton,
                              QApplication, QDialog, QButtonGroup, QMenu)
 from PyQt6.QtCore import Qt, QTimer, QEvent, QPoint, QRect
 from PyQt6.QtGui import QShortcut, QKeySequence, QActionGroup
-from config.models import Configuration, Song, TimelineData, LightBlock, ShowEffect
+from config.models import Configuration, Song, TimelineData
 from utils import user_warnings
 from timeline.song_structure import SongStructure
 from timeline.light_lane import LightLane
@@ -1767,42 +1767,16 @@ class ShowsTab(BaseTab):
                 )
 
     def _convert_effects_to_timeline(self, show: Song):
-        """Convert old ShowEffect data to LightBlock timeline format."""
-        if show.timeline_data is None:
-            show.timeline_data = TimelineData()
+        """Give a legacy effects-only song a timeline before it opens.
 
-        # Need song structure for timing
-        song_structure = SongStructure()
-        song_structure.load_from_show_parts(show.parts)
-
-        # Create lane per fixture group
-        groups_with_effects = set(e.fixture_group for e in show.effects if e.effect)
-        for group_name in groups_with_effects:
-            from config.models import LightLane as LightLaneModel
-            lane = LightLaneModel(name=group_name, fixture_group=group_name)
-
-            for effect in show.effects:
-                if effect.fixture_group != group_name or not effect.effect:
-                    continue
-
-                # Find show part to get timing
-                part = next((p for p in song_structure.parts if p.name == effect.show_part), None)
-                if part:
-                    block = LightBlock(
-                        start_time=part.start_time,
-                        duration=part.duration,
-                        effect_name=effect.effect,
-                        parameters={
-                            'speed': effect.speed,
-                            'color': effect.color,
-                            'intensity': effect.intensity,
-                            'spot': effect.spot
-                        }
-                    )
-                    lane.light_blocks.append(block)
-
-            if lane.light_blocks:
-                show.timeline_data.lanes.append(lane)
+        Goes through the shared best-effort converter
+        (utils/legacy_show_converter.py, also behind
+        demos/convert_legacy_show.py); the song's legacy ``effects`` stay
+        untouched. The tab's own conversion used to build blocks with
+        constructor arguments the models no longer take, so opening such
+        a song raised a TypeError."""
+        from utils.legacy_show_converter import convert_show_in_place
+        convert_show_in_place(show)
 
     def on_undo_stack_changed(self):
         """Called by MainWindow after every undo-stack index change

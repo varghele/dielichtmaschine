@@ -90,3 +90,25 @@ class TestConvertLegacyShow:
         for legacy, (sublane, etype, _dir) in LEGACY_EFFECT_MAP.items():
             reg = DIMMER_REGISTRY if sublane == "dimmer" else MOVEMENT_REGISTRY
             assert etype in reg, f"{legacy} -> {etype} missing from {sublane} registry"
+
+
+class TestShowsTabOpensLegacySongs:
+    """Opening an effects-only song in the Shows tab converts it through
+    this converter (v1.5.6). The tab's own conversion built LightLane /
+    LightBlock with arguments the models no longer take and raised a
+    TypeError, so such a song could not be opened at all."""
+
+    def test_tab_conversion_builds_a_timeline_and_keeps_effects(self):
+        from gui.tabs.shows_tab import ShowsTab
+        show = _show()
+        show.timeline_data = None
+        effects_before = list(show.effects)
+
+        ShowsTab._convert_effects_to_timeline(None, show)
+
+        assert show.timeline_data is not None
+        expected = convert_legacy_show(_show())
+        assert ([l.name for l in show.timeline_data.lanes]
+                == [l.name for l in expected.lanes])
+        assert all(lane.light_blocks for lane in show.timeline_data.lanes)
+        assert show.effects == effects_before

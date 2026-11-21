@@ -13,6 +13,10 @@ verbatim as the GitHub Release notes (see [docs/releasing.md](docs/releasing.md)
 
 ### Fixed
 
+- **Opening a song from a very old config** (lighting stored as legacy
+  effects, no timeline yet) no longer crashes the Shows tab. The tab's own
+  conversion used arguments the data model no longer takes; it now goes
+  through the same converter as `demos/convert_legacy_show.py`.
 - **Audio Settings now change where song audio plays.** The output device,
   sample rate and buffer size were ignored, because songs always played
   through pygame and only the unused fallback player read them. They now open
