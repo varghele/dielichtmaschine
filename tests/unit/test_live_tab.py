@@ -292,7 +292,7 @@ class TestColourFXPool:
 class TestNoSelectionFeedback:
     """A palette touch with nothing selected changes no output; the
     programmer bar must say so instead of staying silent (phase 0 of
-    docs/live-output-plan.md)."""
+    docs/archive/live-output-plan.md)."""
 
     def test_swatch_with_no_selection_flashes_a_warning(self, live_tab):
         live_tab._colour_swatches["red"].clicked.emit("red")

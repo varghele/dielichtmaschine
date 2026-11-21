@@ -1,5 +1,5 @@
 """Golden screenshot for the timeline lane visuals (timeline v3,
-stages T2 + T3 - docs/timeline-v3-plan.md).
+stages T2 + T3 - docs/archive/timeline-v3-plan.md).
 
 Renders a populated LightLaneWidget: the 260px header column
 (group-color left edge, Barlow Condensed name, N FIX count, the

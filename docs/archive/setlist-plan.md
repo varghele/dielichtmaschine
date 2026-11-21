@@ -18,7 +18,7 @@ Decisions locked 2026-07-09:
   chase) is v1.7 ("Live operations and clock sync") - LEARN and the
   MTC/SMPTE fields are honest placeholders until then.
 - Runs in parallel with the timeline v3 track
-  (`docs/timeline-v3-plan.md`).
+  (`docs/archive/timeline-v3-plan.md`).
 - No Bibliothek topbar section, no .lms extension this pass (noted in
   ROADMAP.md v1.3).
 

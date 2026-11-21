@@ -115,4 +115,4 @@ To resume:
 4. Related follow-ups already tracked elsewhere: v1.5a consumes the
    targets (focus geometry), the output arbiter makes them move
    (todo.md), Live plan stages for picker/REC remain open
-   (docs/live-tab-plan.md).
+   (docs/archive/live-tab-plan.md).

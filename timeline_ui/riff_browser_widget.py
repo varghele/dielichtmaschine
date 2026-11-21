@@ -1,7 +1,7 @@
 # timeline_ui/riff_browser_widget.py
 """RiffBrowserWidget - Dockable panel for browsing and selecting riffs.
 
-Styled to the Die Lichtmaschine North Star (docs/timeline-styling-review.md
+Styled to the Die Lichtmaschine North Star (docs/archive/timeline-styling-review.md
 item 3): brand surfaces and the Glutorange accent replace the old
 Windows-blue / Material-gray inline colors. Ordinary chrome (the panel
 container, search field, tree selection, icon buttons) goes through theme
@@ -26,7 +26,7 @@ from riffs.riff_library import RiffLibrary
 # Mime type for scene drags out of the library rail. Distinct from the
 # riff mime ("application/x-qlc-riff") on purpose: timelines only accept
 # riff drops, so a scene drag is inert until the cross-lane drop handler
-# lands with the capability-mapping pass (docs/timeline-v3-plan.md,
+# lands with the capability-mapping pass (docs/archive/timeline-v3-plan.md,
 # "Deferred": scenes dropping across multiple lanes).
 SCENE_MIME_TYPE = "application/x-lm-scene"
 
@@ -190,7 +190,7 @@ class SceneItemWidget(QFrame):
 
     Drag SOURCE only: the row starts a drag carrying SCENE_MIME_TYPE,
     but no timeline accepts it yet - cross-lane scene drops are deferred
-    to the capability-mapping pass (docs/timeline-v3-plan.md).
+    to the capability-mapping pass (docs/archive/timeline-v3-plan.md).
     """
 
     def __init__(self, scene, parent=None):
@@ -522,7 +522,7 @@ class RiffBrowserPanel(QWidget):
         """Append the SCENES category rendered from the shared
         SceneLibrary. Display + drag source only: rows drag with
         SCENE_MIME_TYPE but no timeline accepts them yet (cross-lane
-        scene drop is deferred, docs/timeline-v3-plan.md). An empty
+        scene drop is deferred, docs/archive/timeline-v3-plan.md). An empty
         library shows the Live tab's marker copy instead of vanishing.
         """
         library = self._resolve_scene_library()

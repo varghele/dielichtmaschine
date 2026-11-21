@@ -117,7 +117,8 @@ Windows), and every export hash change is named in the CHANGELOG.
 History: the dated session notes (July to November 2026) were
 condensed into the facts below on 2026-11-21; the full log is
 `git show 8ed6258:CLAUDE.md`. Per-feature decisions and status logs
-live in the plan docs (`docs/*-plan.md`). Docs older than 2026-07-14
+live in the plan docs (`docs/*-plan.md`; finished ones in
+`docs/archive/`, indexed by its README). Docs older than 2026-07-14
 use the OLD milestone numbers (old v1.6 timeline = v1.7, old v1.7 sync
 engine = v1.8). Pattern worth remembering from the v1.5 desk checks:
 the engine maths was right every time and every defect was the UI

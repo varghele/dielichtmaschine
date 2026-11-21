@@ -1,6 +1,6 @@
 """North Star styling for the riff browser panel.
 
-Covers docs/timeline-styling-review.md item 3: the pre-rebrand
+Covers docs/archive/timeline-styling-review.md item 3: the pre-rebrand
 Windows-blue (`#0078d4`) selection and Material-gray surfaces
 (`#4a4a4a` / `#3c3c3c` / `#2d2d2d`) inline styles are replaced by brand
 theme roles and token-derived widget-local styles.
@@ -117,7 +117,7 @@ def test_collapsed_bar_carries_brand_roles(qapp):
 # The library rail lists the shared SceneLibrary below the riff
 # categories. Display + drag SOURCE only: the rows carry a distinct
 # scene mime type, and no timeline accepts it - cross-lane scene drops
-# are deferred to the capability-mapping pass (docs/timeline-v3-plan.md
+# are deferred to the capability-mapping pass (docs/archive/timeline-v3-plan.md
 # "Deferred"), so the drag is inert by design.
 
 

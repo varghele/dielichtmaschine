@@ -67,7 +67,7 @@ def wheel_spot_def():
     """A wheel-only mover (the Hero Spot 60 shape): dimmer, shutter and
     a colour WHEEL - no RGB emitters. Unless the busk layer steers the
     wheel, such a fixture can never show a busked colour (the phase 0
-    root cause in docs/live-output-plan.md: swatches lit the bench rig
+    root cause in docs/archive/live-output-plan.md: swatches lit the bench rig
     white at best)."""
     return {
         "manufacturer": "TestMfr", "model": "WheelModel",
@@ -339,7 +339,7 @@ class TestWheelOnlyFixtures:
 
 
 class TestScenePool:
-    """Phase 1 of docs/live-output-plan.md: the active scene claims its
+    """Phase 1 of docs/archive/live-output-plan.md: the active scene claims its
     listed groups like an applied colour - selection-independent,
     below explicit swatches, released on second touch (state contract:
     set_scene(None))."""

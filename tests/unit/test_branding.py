@@ -1,6 +1,6 @@
 """Brand foundation: identity constants, brand assets, shipped fonts.
 
-The rebrand (docs/rebranding-plan.md) hinges on utils/app_identity.py
+The rebrand (docs/archive/rebranding-plan.md) hinges on utils/app_identity.py
 being the single source of truth and on the assets/fonts actually being
 present and loadable, so packaging can't silently ship without them.
 """

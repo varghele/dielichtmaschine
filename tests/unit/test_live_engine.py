@@ -1,6 +1,6 @@
 # tests/unit/test_live_engine.py
 """utils/artnet/live_engine.py - the Live tab's clock-driven playback
-engine (docs/live-output-plan.md phase 2).
+engine (docs/archive/live-output-plan.md phase 2).
 
 Pure infrastructure tests against a REAL private DMXManager (mock
 fixture definition, no sockets, no Qt): the looping beat clock replays
@@ -736,7 +736,7 @@ class TestEngineUnderBuskLayer:
 class TestMovementBinder:
     """LiveMovementBinder: MOVEMENT SHAPES trace the registry rudiment
     around the held-position anchor through the real solver path
-    (docs/live-output-plan.md phase 4). The oracle rebuilds the same
+    (docs/archive/live-output-plan.md phase 4). The oracle rebuilds the same
     MovementContext the playback resolve builds and compares DMX."""
 
     TILT, PAN_FINE = 6, 7

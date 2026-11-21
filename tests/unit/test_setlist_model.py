@@ -1,5 +1,5 @@
 # tests/unit/test_setlist_model.py
-"""Unit tests for the setlist model (docs/setlist-plan.md S1).
+"""Unit tests for the setlist model (docs/archive/setlist-plan.md S1).
 
 Covers the new dataclasses (SongTrigger, PauseLook, SetlistEntry,
 Setlist), the Configuration songs+setlist YAML round-trip, and the

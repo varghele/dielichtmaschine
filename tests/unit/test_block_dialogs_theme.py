@@ -3,7 +3,7 @@
 The six modal editors opened from the Show Timeline (colour / movement /
 dimmer / special block editors, the fixture-target picker and the
 save-as-riff dialog) were restyled off the pre-rebrand Windows-blue and
-gray inline stylesheets onto theme roles (docs/timeline-styling-review.md
+gray inline stylesheets onto theme roles (docs/archive/timeline-styling-review.md
 item 4).
 
 These tests pin the two things that matter without ever calling a real

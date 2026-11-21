@@ -144,7 +144,7 @@ DEFAULT_LIVE_BPM = 120.0
 # rudiments (minus "static" - the POSITION palettes above ARE the
 # static aim). Ids are registry keys; the live engine's movement
 # binder replays the touched shape anchored at each group's held
-# position (docs/live-output-plan.md phase 4).
+# position (docs/archive/live-output-plan.md phase 4).
 MOVEMENT_SHAPES: Tuple[Tuple[str, str], ...] = (
     ("circle", "Circle"),
     ("figure_8", "Fig-8"),
@@ -1244,7 +1244,7 @@ class LiveTab(BaseTab):
     utils/artnet/live_layer.py, which renders this state as the
     arbiter's LIVE layer whenever ArtNet output is enabled: colours,
     scenes, submasters, flash, strobe and position aims are real;
-    effects wait on the live engine (docs/live-output-plan.md).
+    effects wait on the live engine (docs/archive/live-output-plan.md).
     """
 
     #: ARM toggled by the operator on the busk surface (2026-07-22);

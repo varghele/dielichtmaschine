@@ -722,7 +722,7 @@ def _separator_indices(combo):
 
 
 class TestSongSelector:
-    """S3 (docs/setlist-plan.md): the toolbar SONG selector lists songs
+    """S3 (docs/archive/setlist-plan.md): the toolbar SONG selector lists songs
     in SETLIST order with "NN · Name" display text (same format as the
     Structure rail cards); songs missing from the setlist follow after
     a separator, unnumbered. The display text is no longer the song

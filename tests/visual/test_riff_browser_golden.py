@@ -1,5 +1,5 @@
 """Golden screenshot for the riff browser panel (North Star item 3,
-docs/timeline-styling-review.md).
+docs/archive/timeline-styling-review.md).
 
 Pins the rebranded panel: brand panel/raised surfaces, the accent
 Glutorange selection on a highlighted category, and the token-derived

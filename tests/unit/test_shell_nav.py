@@ -1,7 +1,7 @@
 """Shell chrome: topbar/subnav navigation, overflow menu, shortcuts.
 
 The shell replaces the menubar + visible tab bar (shell pass S2, see
-docs/shell-pass-plan.md). These tests pin the contract: nav drives the
+docs/archive/shell-pass-plan.md). These tests pin the contract: nav drives the
 existing QTabWidget indices, external index changes sync the chrome,
 every menu survives into the overflow popup, and every shortcut still
 fires without a menubar.

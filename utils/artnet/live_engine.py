@@ -1,6 +1,6 @@
 # utils/artnet/live_engine.py
 """The Live tab's clock-driven playback engine
-(docs/live-output-plan.md phase 2).
+(docs/archive/live-output-plan.md phase 2).
 
 The engine does NOT reimplement effects. Each SLOT ("effect",
 "intensity", "movement") owns a PRIVATE DMXManager (created through the
@@ -412,7 +412,7 @@ class LiveMovementBinder:
     group -> MOVEMENT_REGISTRY rudiment id, 2026-07-22) onto one
     engine slot per mover group ("movement:<group>") - each group
     traces its own shape at its own anchor, and a shape keeps running
-    after deselection (the effects pattern; docs/live-output-plan.md
+    after deselection (the effects pattern; docs/archive/live-output-plan.md
     phase 4 for the orbit mechanics).
 
     Per group, staging builds one synthetic lane PER FIXTURE: a single

@@ -6,7 +6,7 @@
  * and the result goes to app.setStyleSheet(). Never ship this file's
  * raw text to Qt - unrendered placeholders are invalid QSS.
  *
- * Brand rules baked in here (see docs/rebranding-plan.md):
+ * Brand rules baked in here (see docs/archive/rebranding-plan.md):
  * - border-radius 0 everywhere (hard edges, datasheet aesthetic)
  * - no shadows, no gradients
  * - accent Glutorange for selection/highlight, function colors

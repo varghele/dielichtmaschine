@@ -236,7 +236,7 @@ class DMXManager:
                 The Live engine's private managers pass False - they
                 must claim ONLY what their staged blocks drive, so the
                 busk rides on top of the show instead of grabbing every
-                mover's wheel and yoke (docs/live-output-plan.md).
+                mover's wheel and yoke (docs/archive/live-output-plan.md).
         """
         self.config = config
         self.fixture_definitions = fixture_definitions

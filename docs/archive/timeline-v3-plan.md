@@ -9,7 +9,7 @@ functional items hiding in the mock are explicitly deferred (see
 "Deferred" below).
 
 Decisions locked 2026-07-09: runs in parallel with the setlist track
-(`docs/setlist-plan.md`); no Bibliothek section this pass.
+(`docs/archive/setlist-plan.md`); no Bibliothek section this pass.
 
 ## Stage T1 - one compact toolbar row
 
@@ -97,7 +97,7 @@ snap, swing, zoom and save into a single 44px row.
   to a single lane only when the drop handler lands, and is inert until
   then (clearly marked).
 - **Song numbering in the selector**: arrives with the setlist model
-  (track S3 in `docs/setlist-plan.md`).
+  (track S3 in `docs/archive/setlist-plan.md`).
 
 Each stage is one commit with tests + regenerated goldens; per-glyph
 clipping check on every golden before commit (bounced once on the Live

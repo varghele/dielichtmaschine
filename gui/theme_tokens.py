@@ -1,6 +1,6 @@
 """Die Lichtmaschine design tokens and the QSS template renderer.
 
-The brand palette (docs/rebranding-plan.md, section "Design tokens" -
+The brand palette (docs/archive/rebranding-plan.md, section "Design tokens" -
 authoritative values in docs/design/README.md) is
 expressed as one token dict per theme. ``render_theme(name)`` reads
 ``resources/themes/theme.qss.template`` and substitutes every

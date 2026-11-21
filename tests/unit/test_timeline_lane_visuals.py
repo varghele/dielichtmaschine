@@ -1,7 +1,7 @@
 """North Star lane visuals: token-derived Mute/Solo chips, group-color
 sublane fills, the header fixture count (items 1 and 2 of
-docs/timeline-styling-review.md), and the timeline v3 stage T3 block
-label/format helpers (docs/timeline-v3-plan.md).
+docs/archive/timeline-styling-review.md), and the timeline v3 stage T3 block
+label/format helpers (docs/archive/timeline-v3-plan.md).
 
 These assert token-derived colors and QColors, never widget.styleSheet()
 font families, per the styling brief.

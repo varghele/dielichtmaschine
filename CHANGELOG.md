@@ -1531,7 +1531,7 @@ everything below is new.
   of a fixed palette (colour rows show the real gradient); the riff
   browser and the colour/movement/dimmer/special/target/save dialogs
   moved onto the theme's roles and accent. Custom-painted widgets read the
-  theme tokens directly (see docs/timeline-styling-review.md).
+  theme tokens directly (see docs/archive/timeline-styling-review.md).
 - **The Add button stays put between the Universes and Fixtures tabs.**
   The Universes tab now uses the same top action strip as Fixtures, so
   "+ ADD UNIVERSE" and "+ ADD FIXTURE" sit in the identical spot and the
