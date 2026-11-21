@@ -936,11 +936,11 @@ class StructureTab(BaseTab):
         self.is_playing = False
         self.playhead_position = 0.0
 
-        # Audio components (lazy init)
-        self.audio_engine = None
-        self.audio_mixer = None
-        self.playback_sync = None
-        self.device_manager = None
+        # Song audio: the app's shared pygame player once opened (lazy,
+        # on first play); the Shows tab plays through the same one, so
+        # it is only driven while this tab owns it (_owns_audio).
+        self.simple_audio_player = None
+        self._audio_controls_wired = False
 
         # Playback timer
         self.playback_timer = QTimer()
@@ -3569,20 +3569,20 @@ class StructureTab(BaseTab):
         self.is_playing = True
         self.play_btn.setText("Pause")
 
-        # Initialize audio if available
-        try:
-            from audio.audio_file import AudioFile
-            from audio.audio_engine import AudioEngine
-            from audio.audio_mixer import AudioMixer
-            from audio.playback_synchronizer import PlaybackSynchronizer
-            from audio.device_manager import DeviceManager
-
-            if self.audio_lane.get_audio_file():
-                self._init_audio_engine()
-                if self.playback_sync:
-                    self.playback_sync.on_play_requested(self.playhead_position)
-        except ImportError:
-            pass  # Audio not available
+        audio_path = self.audio_lane.get_audio_file_path()
+        if audio_path:
+            self._init_audio_engine()
+            player = self.simple_audio_player
+            if player:
+                try:
+                    if player.claim(self, audio_path):
+                        player.set_volume(
+                            self.audio_lane.volume_slider.value() / 100.0)
+                        player.set_muted(
+                            self.audio_lane.mute_button.isChecked())
+                        player.play(self.playhead_position)
+                except Exception as e:
+                    print(f"Audio playback failed: {e}")
 
         self.playback_timer.start()
 
@@ -3592,8 +3592,8 @@ class StructureTab(BaseTab):
         self.play_btn.setText("Play")
         self.playback_timer.stop()
 
-        if self.playback_sync:
-            self.playback_sync.on_pause_requested()
+        if self._owns_audio():
+            self.simple_audio_player.pause()
 
     def _stop_playback(self):
         """Stop playback and reset position."""
@@ -3601,8 +3601,8 @@ class StructureTab(BaseTab):
         self.play_btn.setText("Play")
         self.playback_timer.stop()
 
-        if self.playback_sync:
-            self.playback_sync.on_stop_requested()
+        if self._owns_audio():
+            self.simple_audio_player.stop()
 
         self.playhead_position = 0.0
         self.time_label.setText("00:00.00")
@@ -3614,8 +3614,8 @@ class StructureTab(BaseTab):
             return
 
         # Get position from audio if available, otherwise use timer
-        if self.playback_sync:
-            position = self.playback_sync.get_accurate_position()
+        if self._owns_audio() and self.simple_audio_player.is_playing():
+            position = self.simple_audio_player.get_current_position()
         else:
             # Fallback: increment by timer interval
             position = self.playhead_position + 0.016  # 16ms
@@ -3653,8 +3653,8 @@ class StructureTab(BaseTab):
             total = self.song_structure.get_total_duration()
             position = (self.position_slider.value() / 1000.0) * total
             self.playhead_position = position
-            if self.playback_sync:
-                self.playback_sync.on_seek_requested(position)
+            if self._owns_audio():
+                self.simple_audio_player.seek(position)
 
     def _on_position_slider_changed(self, value: int):
         """Handle position slider value change during drag."""
@@ -3670,56 +3670,34 @@ class StructureTab(BaseTab):
         secs = seconds % 60
         return f"{minutes:02d}:{secs:05.2f}"
 
+    def _owns_audio(self) -> bool:
+        """True while this tab is the shared player's driver."""
+        return bool(self.simple_audio_player
+                    and self.simple_audio_player.is_owned_by(self))
+
     def _init_audio_engine(self):
-        """Initialize audio engine on first use."""
-        try:
-            from audio.audio_file import AudioFile
-            from audio.audio_engine import AudioEngine
-            from audio.audio_mixer import AudioMixer
-            from audio.playback_synchronizer import PlaybackSynchronizer
-            from audio.device_manager import DeviceManager
+        """Open the shared song player on first use (stored Audio
+        Settings) and wire this tab's lane volume + mute to it once.
+        Without an audio output the playhead still runs on the timer."""
+        from audio import simple_audio_player as song_audio
+        if self.simple_audio_player is None:
+            self.simple_audio_player = song_audio.ensure_shared_player()
+            if self.simple_audio_player is None:
+                return
+        if not self._audio_controls_wired:
+            self.audio_lane.volume_slider.valueChanged.connect(
+                self._on_lane_volume_changed)
+            self.audio_lane.mute_button.toggled.connect(
+                self._on_lane_mute_toggled)
+            self._audio_controls_wired = True
 
-            if self.audio_engine is None:
-                self.device_manager = DeviceManager()
-                self.audio_engine = AudioEngine()
-                self.audio_mixer = AudioMixer()
+    def _on_lane_volume_changed(self, value: int) -> None:
+        if self._owns_audio():
+            self.simple_audio_player.set_volume(value / 100.0)
 
-                # Apply stored audio settings if available from parent
-                device_index = None
-                if hasattr(self.parent(), 'audio_settings') and self.parent().audio_settings:
-                    device_index = self.parent().audio_settings.get('device_index')
-                    sample_rate = self.parent().audio_settings.get('sample_rate', 44100)
-                    buffer_size = self.parent().audio_settings.get('buffer_size', 1024)
-                    self.audio_engine.sample_rate = sample_rate
-                    self.audio_engine.buffer_size = buffer_size
-
-                # Initialize audio engine with device
-                if not self.audio_engine.initialize(device_index=device_index):
-                    raise Exception("Audio device initialization failed")
-
-                self.playback_sync = PlaybackSynchronizer(
-                    self.audio_engine, self.audio_mixer
-                )
-
-                # Load audio file into mixer
-                audio_file = self.audio_lane.get_audio_file()
-                if audio_file:
-                    self.audio_mixer.add_lane("audio", audio_file, 1.0)
-
-                # Connect volume/mute if available
-                if hasattr(self.audio_lane, 'volume_slider'):
-                    self.audio_lane.volume_slider.valueChanged.connect(
-                        lambda v: self.audio_mixer.update_lane_volume("audio", v / 100.0) if self.audio_mixer else None
-                    )
-                if hasattr(self.audio_lane, 'mute_button'):
-                    self.audio_lane.mute_button.toggled.connect(
-                        lambda m: self.audio_mixer.set_mute_state("audio", m) if self.audio_mixer else None
-                    )
-
-        except Exception as e:
-            print(f"Failed to initialize audio engine: {e}")
-            self.audio_engine = None
-            self.playback_sync = None
+    def _on_lane_mute_toggled(self, muted: bool) -> None:
+        if self._owns_audio():
+            self.simple_audio_player.set_muted(muted)
 
     def save_to_config(self):
         """Flush UI state into the in-memory Configuration. No-op today.
@@ -3759,11 +3737,7 @@ class StructureTab(BaseTab):
         """Clean up audio resources."""
         self._stop_playback()
 
-        if self.audio_engine:
-            try:
-                self.audio_engine.shutdown()
-            except Exception:
-                pass
-            self.audio_engine = None
-            self.audio_mixer = None
-            self.playback_sync = None
+        # The player is shared with the Shows tab, which closes it on
+        # quit; this tab only lets go of it.
+        if self.simple_audio_player:
+            self.simple_audio_player.release(self)

@@ -11,6 +11,21 @@ verbatim as the GitHub Release notes (see [docs/releasing.md](docs/releasing.md)
 
 ## [Unreleased]
 
+### Fixed
+
+- **Audio Settings now change where song audio plays.** The output device,
+  sample rate and buffer size were ignored, because songs always played
+  through pygame and only the unused fallback player read them. They now open
+  the pygame mixer, are remembered between sessions, and apply immediately,
+  also during playback. A device that cannot be opened (unplugged, renamed)
+  falls back to the system default with an entry in Help > Warnings.
+- **The audio lane's M (mute) button works** in the Shows and Structure tabs.
+  It was wired only to the fallback player.
+- **The Structure tab plays through the same player as the Shows tab**, so
+  the two tabs no longer open two audio outputs at once and never pause, seek
+  or re-volume each other's song; it also picks up a song's new audio file
+  instead of replaying the first one it loaded.
+
 ### Removed
 
 - **Unreferenced `resources/lightbulb.png`** (1.4 MB).
@@ -33,6 +48,11 @@ verbatim as the GitHub Release notes (see [docs/releasing.md](docs/releasing.md)
   column (the primary group), and exports are byte-identical.
 - **`Fixture.group` compat property.** Code reads the primary group via
   `config.models.primary_group_name()` and writes `fixture.groups`.
+- **The second song player** (the sounddevice `AudioEngine`, `AudioMixer` and
+  `PlaybackSynchronizer`), which only ran when pygame failed to start. Live
+  audio input (Auto mode, LTC) still uses sounddevice.
+- **The Audio Input group in Audio Settings.** Nothing read its values; live
+  input is chosen on the Auto tab.
 
 ## [1.5.5] - 2026-10-13
 

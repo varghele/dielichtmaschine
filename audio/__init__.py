@@ -1,6 +1,6 @@
 # audio/__init__.py
 # Audio subsystem for Die Lichtmaschine
-# Provides audio playback, mixing, live input, real-time analysis, and waveform visualization
+# Provides song playback (pygame, simple_audio_player), live input, real-time analysis, and waveform visualization
 #
 # The package exports resolve LAZILY (PEP 562 module __getattr__): every
 # ``from audio import X`` keeps working, but importing a submodule such
@@ -16,10 +16,6 @@ _EXPORTS = {
     'AudioDevice': '.device_manager',
     'AudioFile': '.audio_file',
     'AudioMetadata': '.audio_file',
-    'AudioEngine': '.audio_engine',
-    'AudioMixer': '.audio_mixer',
-    'AudioLaneState': '.audio_mixer',
-    'PlaybackSynchronizer': '.playback_synchronizer',
     'WaveformAnalyzer': '.waveform_analyzer',
     'WaveformData': '.waveform_analyzer',
     'WaveformPeaks': '.waveform_analyzer',
@@ -35,9 +31,6 @@ _EXPORTS = {
 __all__ = [
     'DeviceManager', 'AudioDevice',
     'AudioFile', 'AudioMetadata',
-    'AudioEngine',
-    'AudioMixer', 'AudioLaneState',
-    'PlaybackSynchronizer',
     'WaveformAnalyzer', 'WaveformData', 'WaveformPeaks',
     'AudioWaveformWidget', 'AudioLoaderThread',
     'AudioRingBuffer',

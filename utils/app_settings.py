@@ -143,3 +143,50 @@ def migrate_legacy_settings() -> int:
     new.setValue(_MIGRATION_FLAG, True)
     new.sync()
     return copied
+
+
+# -- audio output ------------------------------------------------------------
+# Song playback (Shows and Structure tabs) goes through ONE pygame mixer
+# (audio/simple_audio_player.shared_player). These are its persisted
+# parameters, set in Settings > Audio Settings. output_device is an SDL
+# playback device name; "" means the system default device.
+
+_AUDIO_DEVICE_KEY = "audio/output_device"
+_AUDIO_RATE_KEY = "audio/sample_rate"
+_AUDIO_BUFFER_KEY = "audio/buffer_size"
+
+AUDIO_SAMPLE_RATES = (44100, 48000, 96000)
+AUDIO_DEFAULT_SAMPLE_RATE = 44100
+AUDIO_DEFAULT_BUFFER_SIZE = 2048
+
+
+def audio_output_settings() -> dict:
+    """The stored audio output parameters, with defaults filled in.
+
+    Returns a dict with ``output_device`` (str, "" = system default),
+    ``sample_rate`` and ``buffer_size`` (ints). A stored sample rate the
+    dialog does not offer falls back to the default."""
+    settings = app_settings()
+    device = settings.value(_AUDIO_DEVICE_KEY, "", type=str) or ""
+    rate = settings.value(_AUDIO_RATE_KEY, AUDIO_DEFAULT_SAMPLE_RATE, type=int)
+    if rate not in AUDIO_SAMPLE_RATES:
+        rate = AUDIO_DEFAULT_SAMPLE_RATE
+    buffer_size = settings.value(_AUDIO_BUFFER_KEY, AUDIO_DEFAULT_BUFFER_SIZE,
+                                 type=int)
+    if buffer_size <= 0:
+        buffer_size = AUDIO_DEFAULT_BUFFER_SIZE
+    return {"output_device": device, "sample_rate": rate,
+            "buffer_size": buffer_size}
+
+
+def set_audio_output_settings(output_device: str, sample_rate: int,
+                              buffer_size: int) -> None:
+    """Persist the audio output parameters ("" device = system default)."""
+    settings = app_settings()
+    if output_device:
+        settings.setValue(_AUDIO_DEVICE_KEY, output_device)
+    else:
+        settings.remove(_AUDIO_DEVICE_KEY)
+    settings.setValue(_AUDIO_RATE_KEY, int(sample_rate))
+    settings.setValue(_AUDIO_BUFFER_KEY, int(buffer_size))
+    settings.sync()

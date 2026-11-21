@@ -2514,32 +2514,10 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         GDTFShareAccountDialog(parent=self).exec()
 
     def open_audio_settings(self):
-        """Open audio settings dialog"""
+        """Settings > Audio Settings: the song player's output device,
+        sample rate and buffer. The dialog persists and applies on OK."""
         try:
-            # Get audio engine and device manager from shows tab if available
-            audio_engine = getattr(self.shows_tab, 'audio_engine', None)
-            device_manager = getattr(self.shows_tab, 'device_manager', None)
-
-            dialog = AudioSettingsDialog(
-                device_manager=device_manager,
-                audio_engine=audio_engine,
-                parent=self
-            )
-
-            if dialog.exec():
-                # Settings were applied
-                settings = dialog.get_settings()
-                if settings:
-                    # Store settings for shows tab to use
-                    self.audio_settings = settings
-
-                    # If shows tab has audio components, update them
-                    if hasattr(self.shows_tab, 'apply_audio_settings'):
-                        self.shows_tab.apply_audio_settings(settings)
-
-                    print(f"Audio settings applied: device={settings['device_index']}, "
-                          f"rate={settings['sample_rate']}, buffer={settings['buffer_size']}")
-
+            AudioSettingsDialog(parent=self).exec()
         except Exception as e:
             QMessageBox.critical(
                 self,

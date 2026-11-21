@@ -68,7 +68,7 @@ def slider_to_gain(value: float) -> float:
 class LiveAudioInput:
     """Captures live audio from an input device into a ring buffer.
 
-    Separate from AudioEngine (output-only) to avoid ASIO exclusivity issues
+    Separate from song playback (pygame, output-only) to avoid ASIO exclusivity issues
     where some drivers cannot open the same device for both input and output.
     """
 

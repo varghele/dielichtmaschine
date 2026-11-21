@@ -36,23 +36,9 @@ from gui.widgets.embedded_visualizer import EmbeddedVisualizer
 from timeline_ui.riff_browser_widget import RiffBrowserPanel
 from .base_tab import BaseTab
 
-# Try to import simple audio player (pygame-based) - preferred for performance
-try:
-    from audio.simple_audio_player import SimpleAudioPlayer, PYGAME_AVAILABLE
-    SIMPLE_AUDIO_AVAILABLE = PYGAME_AVAILABLE
-except ImportError:
-    SIMPLE_AUDIO_AVAILABLE = False
-
-# Try to import legacy audio components - fallback if pygame not available
-try:
-    from audio.audio_file import AudioFile
-    from audio.audio_engine import AudioEngine
-    from audio.audio_mixer import AudioMixer
-    from audio.playback_synchronizer import PlaybackSynchronizer
-    from audio.device_manager import DeviceManager
-    AUDIO_AVAILABLE = True
-except ImportError:
-    AUDIO_AVAILABLE = False
+# Song audio plays through the app's one pygame player (shared with the
+# Structure tab; see audio/simple_audio_player.py).
+from audio import simple_audio_player as song_audio
 
 # Try to import ArtNet components - may not be available
 try:
@@ -183,15 +169,11 @@ class ShowsTab(BaseTab):
         self._is_activating = False
         self._config_dirty = True
 
-        # Audio components (lazy init)
-        # Simple audio player (pygame-based) - preferred for performance
+        # Song audio: the shared pygame player once this tab has opened
+        # it (lazy, on first play). Only drive it while it is ours
+        # (_owns_audio); the Structure tab plays through the same one.
         self.simple_audio_player = None
-        self.use_simple_audio = SIMPLE_AUDIO_AVAILABLE  # Use pygame if available
-        # Legacy audio components (sounddevice-based) - fallback
-        self.audio_engine = None
-        self.audio_mixer = None
-        self.playback_sync = None
-        self.device_manager = None
+        self._audio_controls_wired = False
 
         # ArtNet controller (lazy init)
         self.artnet_controller = None
@@ -1235,22 +1217,14 @@ class ShowsTab(BaseTab):
                 show.timeline_data.audio_file_path = stored
                 print(f"Stored audio reference in show: {stored}")
 
-        # Update simple audio player if it exists
-        if self.simple_audio_player:
+        # Swap the file in the shared player if this tab is driving it
+        # (otherwise the next play claims it with the new file).
+        if self.simple_audio_player and \
+                self.simple_audio_player.is_owned_by(self):
             try:
                 self.simple_audio_player.load(local_path)
-                print(f"SimpleAudioPlayer loaded: {basename}")
             except Exception as e:
-                print(f"Failed to load audio in SimpleAudioPlayer: {e}")
-
-        # Update the legacy audio mixer if it exists (engine already initialized)
-        elif self.audio_mixer:
-            audio_file = self.audio_lane.get_audio_file()
-            if audio_file:
-                # Remove old audio and add new one
-                self.audio_mixer.remove_lane("audio")
-                self.audio_mixer.add_lane("audio", audio_file, 1.0)
-                print(f"Audio mixer updated with: {basename}")
+                print(f"Failed to load audio into the player: {e}")
 
     def _load_show(self, show_name: str):
         """Load show into timeline."""
@@ -1333,14 +1307,9 @@ class ShowsTab(BaseTab):
                 else:
                     user_warnings.warn(f"Audio file not found for '{audio_filename}' (looked in {bundle_dir}); the song plays without audio", category="audio")
                     self.audio_lane.clear_audio()
-                    if self.audio_mixer:
-                        self.audio_mixer.remove_lane("audio")
             else:
                 # No audio for this show, clear it
                 self.audio_lane.clear_audio()
-                # Also clear the mixer
-                if self.audio_mixer:
-                    self.audio_mixer.remove_lane("audio")
 
             # Create lane widgets. Don't pump events inside this loop -
             # any pending deleteLater from _clear_light_lanes above would
@@ -1357,8 +1326,6 @@ class ShowsTab(BaseTab):
         else:
             # No timeline data, clear audio
             self.audio_lane.clear_audio()
-            if self.audio_mixer:
-                self.audio_mixer.remove_lane("audio")
 
         # Footer + bar readout now that the structure and lanes are in place.
         self._update_status_line()
@@ -2076,30 +2043,20 @@ class ShowsTab(BaseTab):
         audio_path = self.audio_lane.get_audio_file_path()
         if audio_path:
             self._init_audio_engine()
-
-            # Try simple audio player first
-            if self.simple_audio_player:
+            player = self.simple_audio_player
+            if player:
                 try:
-                    # Load file if not already loaded or different file
-                    if not self.simple_audio_player.is_loaded():
-                        self.simple_audio_player.load(audio_path)
-                    self.simple_audio_player.play(self.playhead_position)
+                    # Take the shared player over (loads this song's
+                    # file if another tab or song left a different one)
+                    # and carry this lane's volume + mute across.
+                    if player.claim(self, audio_path):
+                        player.set_volume(
+                            self.audio_lane.volume_slider.value() / 100.0)
+                        player.set_muted(
+                            self.audio_lane.mute_button.isChecked())
+                        player.play(self.playhead_position)
                 except Exception as e:
-                    print(f"SimpleAudioPlayer playback failed: {e}")
-
-            # Fallback to sounddevice engine
-            elif self.playback_sync:
-                # Try to start audio playback - if it fails, fall back to timer-based
-                if not self.playback_sync.on_play_requested(self.playhead_position):
-                    print("Audio playback failed, falling back to timer-based playback")
-                    # Clean up failed audio engine so it can be reinitialized
-                    if self.audio_engine:
-                        try:
-                            self.audio_engine.cleanup()
-                        except Exception:
-                            pass
-                        self.audio_engine = None
-                    self.playback_sync = None
+                    print(f"Audio playback failed: {e}")
 
         # Initialize and start ArtNet if enabled
         if ARTNET_AVAILABLE and self.artnet_enabled:
@@ -2133,11 +2090,8 @@ class ShowsTab(BaseTab):
         self._apply_chrome_icons()  # pause glyph -> play glyph
         self.playback_timer.stop()
 
-        # Pause audio (simple player or sounddevice engine)
-        if self.simple_audio_player:
+        if self._owns_audio():
             self.simple_audio_player.pause()
-        elif self.playback_sync:
-            self.playback_sync.on_pause_requested()
 
         # Pause ArtNet output
         if self.artnet_controller:
@@ -2149,11 +2103,8 @@ class ShowsTab(BaseTab):
         self._apply_chrome_icons()  # pause glyph -> play glyph
         self.playback_timer.stop()
 
-        # Stop audio (simple player or sounddevice engine)
-        if self.simple_audio_player:
+        if self._owns_audio():
             self.simple_audio_player.stop()
-        elif self.playback_sync:
-            self.playback_sync.on_stop_requested()
 
         # Stop ArtNet output
         if self.artnet_controller:
@@ -2171,11 +2122,8 @@ class ShowsTab(BaseTab):
         self.playhead_position = position
         self._on_playhead_moved(position)
 
-        # Seek audio (simple player or sounddevice engine)
-        if self.simple_audio_player:
+        if self._owns_audio():
             self.simple_audio_player.seek(position)
-        elif self.playback_sync:
-            self.playback_sync.on_seek_requested(position)
 
     def _get_current_position(self) -> float:
         """Get current playback position (sample-accurate if audio available).
@@ -2185,10 +2133,8 @@ class ShowsTab(BaseTab):
         Returns:
             Current position in seconds
         """
-        if self.simple_audio_player and self.is_playing:
+        if self.is_playing and self._owns_audio():
             return self.simple_audio_player.get_current_position()
-        elif self.playback_sync and self.is_playing:
-            return self.playback_sync.get_accurate_position()
         return self.playhead_position
 
     def _update_playback(self):
@@ -2197,10 +2143,8 @@ class ShowsTab(BaseTab):
             return
 
         # Get position from audio if available, otherwise use timer
-        if self.simple_audio_player and self.simple_audio_player.is_playing():
+        if self._owns_audio() and self.simple_audio_player.is_playing():
             position = self.simple_audio_player.get_current_position()
-        elif self.playback_sync:
-            position = self.playback_sync.get_accurate_position()
         else:
             # Fallback: increment by timer interval
             position = self.playhead_position + 0.016  # 16ms
@@ -2234,127 +2178,36 @@ class ShowsTab(BaseTab):
             if self._inspector_window and self._inspector_window.isVisible():
                 self._inspector_window.update_position(position)
 
+    def _owns_audio(self) -> bool:
+        """True while this tab is the shared player's driver."""
+        return bool(self.simple_audio_player
+                    and self.simple_audio_player.is_owned_by(self))
+
     def _init_audio_engine(self):
-        """Initialize audio engine on first use.
+        """Open the shared song player on first use (stored Audio
+        Settings) and wire this tab's lane volume + mute to it once.
 
-        Prefers SimpleAudioPlayer (pygame) for better performance.
-        Falls back to sounddevice-based engine if pygame not available.
-        """
-        # Try simple audio player first (pygame-based, much faster)
-        if self.use_simple_audio and SIMPLE_AUDIO_AVAILABLE:
+        Without an audio output the playhead still runs on the timer."""
+        if self.simple_audio_player is None:
+            self.simple_audio_player = song_audio.ensure_shared_player()
             if self.simple_audio_player is None:
-                try:
-                    self.simple_audio_player = SimpleAudioPlayer()
+                return
+        if not self._audio_controls_wired:
+            # Connect alongside the lane's own slots (its % readout);
+            # never disconnect() the signal wholesale.
+            self.audio_lane.volume_slider.valueChanged.connect(
+                self._on_lane_volume_changed)
+            self.audio_lane.mute_button.toggled.connect(
+                self._on_lane_mute_toggled)
+            self._audio_controls_wired = True
 
-                    # Get buffer size from settings if available
-                    buffer_size = 2048
-                    if hasattr(self, 'audio_settings') and self.audio_settings:
-                        buffer_size = self.audio_settings.get('buffer_size', 2048)
+    def _on_lane_volume_changed(self, value: int) -> None:
+        if self._owns_audio():
+            self.simple_audio_player.set_volume(value / 100.0)
 
-                    if not self.simple_audio_player.initialize(buffer_size=buffer_size):
-                        raise Exception("pygame mixer initialization failed")
-
-                    # Load audio file if available
-                    audio_path = self.audio_lane.get_audio_file_path()
-                    if audio_path:
-                        self.simple_audio_player.load(audio_path)
-
-                    # Connect volume slider to simple audio player
-                    # Disconnect any previous connections first
-                    try:
-                        self.audio_lane.volume_slider.valueChanged.disconnect()
-                    except TypeError:
-                        pass  # No connections to disconnect
-                    self.audio_lane.volume_slider.valueChanged.connect(
-                        lambda v: self.simple_audio_player.set_volume(v / 100.0) if self.simple_audio_player else None
-                    )
-                    # Set initial volume
-                    initial_volume = self.audio_lane.volume_slider.value() / 100.0
-                    self.simple_audio_player.set_volume(initial_volume)
-
-                    print("Using SimpleAudioPlayer (pygame) for audio playback")
-                    return  # Success with simple player
-
-                except Exception as e:
-                    print(f"SimpleAudioPlayer failed: {e}, falling back to sounddevice engine")
-                    self.simple_audio_player = None
-                    self.use_simple_audio = False
-
-        # Fallback to sounddevice-based engine
-        if not AUDIO_AVAILABLE:
-            return
-
-        if self.audio_engine is None:
-            try:
-                self.device_manager = DeviceManager()
-                self.audio_engine = AudioEngine()
-                self.audio_mixer = AudioMixer()
-
-                # Apply stored audio settings if available
-                device_index = None
-                if hasattr(self, 'audio_settings') and self.audio_settings:
-                    device_index = self.audio_settings.get('device_index')
-                    sample_rate = self.audio_settings.get('sample_rate', 44100)
-                    buffer_size = self.audio_settings.get('buffer_size', 512)
-                    self.audio_engine.sample_rate = sample_rate
-                    self.audio_engine.buffer_size = buffer_size
-
-                # Initialize audio engine with device
-                if not self.audio_engine.initialize(device_index=device_index):
-                    raise Exception("Audio device initialization failed")
-
-                self.playback_sync = PlaybackSynchronizer(
-                    self.audio_engine, self.audio_mixer
-                )
-
-                # Load audio file into mixer
-                audio_file = self.audio_lane.get_audio_file()
-                if audio_file:
-                    self.audio_mixer.add_lane("audio", audio_file, 1.0)
-
-                # Connect volume/mute
-                self.audio_lane.volume_slider.valueChanged.connect(
-                    lambda v: self.audio_mixer.update_lane_volume("audio", v / 100.0) if self.audio_mixer else None
-                )
-                self.audio_lane.mute_button.toggled.connect(
-                    lambda m: self.audio_mixer.set_mute_state("audio", m) if self.audio_mixer else None
-                )
-
-                print("Using sounddevice for audio playback")
-
-            except Exception as e:
-                print(f"Failed to initialize audio engine: {e}")
-                self.audio_engine = None
-                self.playback_sync = None
-
-    def apply_audio_settings(self, settings: dict):
-        """Apply audio settings from settings dialog.
-
-        Args:
-            settings: Dict with device_index, sample_rate, buffer_size
-        """
-        self.audio_settings = settings
-
-        # If audio engine exists, reinitialize with new settings
-        if self.audio_engine:
-            was_playing = self.is_playing
-            if was_playing:
-                self._pause_playback()
-
-            # Cleanup and reinitialize
-            try:
-                self.audio_engine.cleanup()
-            except Exception:
-                pass
-
-            self.audio_engine = None
-            self.playback_sync = None
-
-            # Reinitialize with new settings
-            self._init_audio_engine()
-
-            if was_playing:
-                self._start_playback()
+    def _on_lane_mute_toggled(self, muted: bool) -> None:
+        if self._owns_audio():
+            self.simple_audio_player.set_muted(muted)
 
     def _init_artnet_controller(self):
         """Initialize ArtNet controller on first use."""
@@ -2610,23 +2463,13 @@ class ShowsTab(BaseTab):
         """Clean up audio and ArtNet resources."""
         self._stop_playback()
 
-        # Clean up simple audio player
+        # App shutdown: close the shared song player's mixer.
         if self.simple_audio_player:
             try:
                 self.simple_audio_player.cleanup()
             except Exception:
                 pass
             self.simple_audio_player = None
-
-        # Clean up legacy audio engine
-        if self.audio_engine:
-            try:
-                self.audio_engine.shutdown()
-            except Exception:
-                pass
-            self.audio_engine = None
-            self.audio_mixer = None
-            self.playback_sync = None
 
         # Clean up ArtNet
         if self.artnet_controller:

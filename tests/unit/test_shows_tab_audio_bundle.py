@@ -52,7 +52,6 @@ class _TabStub:
         self.current_song_name = song_name
         self.audio_lane = _AudioLaneStub()
         self.simple_audio_player = None
-        self.audio_mixer = None
 
 
 def _make_config(tmp_path, shows_directory):
