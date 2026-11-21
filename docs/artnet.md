@@ -27,7 +27,7 @@ Manages DMX state for all universes:
 Integrates with the Shows tab playback:
 - Tracks active blocks per fixture group per sublane type
 - Granular block ending (dimmer can fade while color holds)
-- No PlaybackEngine dependency - driven by ShowsTab's timer
+- Driven by the ShowsTab playback timer (no separate playback engine)
 
 ## Real-time Effects
 

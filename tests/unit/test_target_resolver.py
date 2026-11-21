@@ -4,7 +4,7 @@
 import pytest
 from config.models import Fixture, FixtureMode, FixtureGroup, Configuration, Universe
 from utils.target_resolver import (
-    parse_target, format_target, resolve_target, resolve_targets,
+    parse_target, resolve_target, resolve_targets,
     resolve_targets_unique, validate_targets, get_target_display_name,
     reset_warnings,
 )
@@ -72,18 +72,6 @@ class TestParseTarget:
         name, index = parse_target("Stage:Left:1")
         assert name == "Stage:Left"
         assert index == 1
-
-
-class TestFormatTarget:
-
-    def test_group_only(self):
-        assert format_target("Front Wash") == "Front Wash"
-
-    def test_with_index(self):
-        assert format_target("Front Wash", 2) == "Front Wash:2"
-
-    def test_with_zero_index(self):
-        assert format_target("Group", 0) == "Group:0"
 
 
 class TestResolveTarget:

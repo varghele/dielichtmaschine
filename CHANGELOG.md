@@ -52,6 +52,11 @@ verbatim as the GitHub Release notes (see [docs/releasing.md](docs/releasing.md)
   column (the primary group), and exports are byte-identical.
 - **`Fixture.group` compat property.** Code reads the primary group via
   `config.models.primary_group_name()` and writes `fixture.groups`.
+- **Code only tests still used**: the unused `PlaybackEngine`
+  (`timeline/playback_engine.py`), `get_direction_for_tilt_calculation`,
+  `format_target`, `StageView.remove_selected_items`, the single-still morph
+  preview `render_pair` (the screen renders strips) and `LiveEngine.kill_prefix`.
+  No behaviour change.
 - **`utils.orientation.beam_direction_stage`**, an unused helper for the
   pan/tilt home beam direction left over from the reverted 2026-07-12
   mounting-preset table. No behaviour change.

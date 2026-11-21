@@ -353,8 +353,6 @@ class TestScrubStrip:
         called = []
         monkeypatch.setattr(morph_preview, "render_strip",
                             lambda *a, **k: called.append(a))
-        monkeypatch.setattr(morph_preview, "render_pair",
-                            lambda *a, **k: called.append(a))
         screen.preview_slider.setRange(0, 200)
         for value in (10, 50, 120, 200):
             screen.preview_slider.setValue(value)

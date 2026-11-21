@@ -23,7 +23,7 @@ every time. Lowering the resolution barely helps - half size saved 1.5%
 from __future__ import annotations
 
 import os
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Tuple
 
 
 def _render_side(config, song, times: List[float], output_dir: str,
@@ -59,14 +59,6 @@ def _render_side(config, song, times: List[float], output_dir: str,
                 pass
 
 
-def _render_still(config, song, time_s: float, output_dir: str,
-                  prefix: str, camera: str, width: int,
-                  height: int) -> Optional[str]:
-    written = _render_side(config, song, [time_s], output_dir, prefix,
-                           camera, width, height)
-    return written[0] if written else None
-
-
 def render_strip(source_config, source_song, target_config, morphed_song,
                  times: List[float], output_dir: str,
                  camera: str = "Front", width: int = 960,
@@ -97,25 +89,3 @@ def render_strip(source_config, source_song, target_config, morphed_song,
 
     return (side(source_config, source_song, "src"),
             side(target_config, morphed_song, "dst"))
-
-
-def render_pair(source_config, source_song, target_config, morphed_song,
-                time_s: float, output_dir: str, camera: str = "Front",
-                width: int = 960, height: int = 540
-                ) -> Tuple[Optional[str], Optional[str]]:
-    """(source still path, morphed still path) at the same show time.
-
-    Either side comes back None when its render fails (no GL, empty
-    song) - the wizard shows a placeholder rather than dying."""
-    os.makedirs(output_dir, exist_ok=True)
-    try:
-        a = _render_still(source_config, source_song, time_s, output_dir,
-                          "src", camera, width, height)
-    except Exception:
-        a = None
-    try:
-        b = _render_still(target_config, morphed_song, time_s, output_dir,
-                          "dst", camera, width, height)
-    except Exception:
-        b = None
-    return a, b

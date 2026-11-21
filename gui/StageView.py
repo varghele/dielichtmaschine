@@ -788,33 +788,6 @@ class StageView(QtWidgets.QGraphicsView):
         self.spots_changed.emit()
         return True
 
-    def remove_selected_items(self):
-        """Remove selected items from the stage"""
-        removed_spot = False
-        for item in self.scene.selectedItems():
-            if isinstance(item, FixtureItem):
-                self.scene.removeItem(item)
-                if item.fixture_name in self.fixtures:
-                    del self.fixtures[item.fixture_name]
-            elif isinstance(item, SpotItem):
-                self.scene.removeItem(item)
-                if item.name in self.spots:
-                    del self.spots[item.name]
-                    if self.config:
-                        del self.config.spots[item.name]
-                    removed_spot = True
-
-                    # Update spot counter if necessary
-                    try:
-                        removed_number = int(item.name.replace('Spot', ''))
-                        if removed_number == self.spot_counter - 1:
-                            # If we removed the last spot, decrease the counter
-                            self.spot_counter = removed_number
-                    except ValueError:
-                        pass  # If the name doesn't follow the SpotX format, ignore
-        if removed_spot:
-            self.spots_changed.emit()
-
     def updateStage(self, width_m=None, depth_m=None):
         """Update stage dimensions"""
         if width_m is not None:

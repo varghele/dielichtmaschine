@@ -37,21 +37,6 @@ def parse_target(target: str) -> Tuple[str, Optional[int]]:
     return (target, None)
 
 
-def format_target(group_name: str, fixture_index: Optional[int] = None) -> str:
-    """Format a target string from components.
-
-    Args:
-        group_name: Name of the fixture group
-        fixture_index: Optional 0-indexed fixture position
-
-    Returns:
-        Target string like "Front Wash" or "Moving Heads:2"
-    """
-    if fixture_index is not None:
-        return f"{group_name}:{fixture_index}"
-    return group_name
-
-
 def resolve_target(target: str, config) -> List:
     """Resolve a single target string to a list of fixtures.
 

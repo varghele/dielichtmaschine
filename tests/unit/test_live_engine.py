@@ -225,7 +225,7 @@ class TestConcurrentSlots:
 class TestGroupSlots:
     """The dynamic slot namespace (per-group effects, 2026-07-22):
     "category:suffix" slots with independent loop lengths, clocks and
-    pause flags, deterministic merge order, kill_prefix, phase_from."""
+    pause flags, deterministic merge order, phase_from."""
 
     def _two_group_engine(self, mock_fixture_def):
         left = _fixture("MH1", 1)
@@ -291,17 +291,6 @@ class TestGroupSlots:
         values, _ = engine.render(1.0)[1]           # +2 beats
         assert values[DIMMER] == 255                # A frozen at beat 0
         assert values[10 + DIMMER] == 100           # B moved on
-
-    def test_kill_prefix_drops_the_family_only(self, qapp,
-                                               mock_fixture_def):
-        engine, left, right = self._two_group_engine(mock_fixture_def)
-        engine.stage("effect:A", [_ab_lane(left)], loop_beats=4, bpm=120)
-        engine.stage("effect:B", [_ab_lane(right)], loop_beats=4,
-                     bpm=120)
-        engine.stage("intensity", [self._flat_lane(left, 30.0, 2.0)],
-                     loop_beats=4, bpm=120)
-        engine.kill_prefix("effect")
-        assert engine.active_slots() == ["intensity"]
 
     def test_phase_from_adopts_the_donor_clock(self, qapp,
                                                mock_fixture_def):

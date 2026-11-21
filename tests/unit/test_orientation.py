@@ -22,7 +22,6 @@ from utils.orientation import (
     pan_tilt_to_dmx,
     pan_tilt_to_dmx16,
     preset_angles,
-    get_direction_for_tilt_calculation,
 )
 
 
@@ -274,21 +273,6 @@ class TestAimingEndToEnd:
         # Aim at the audience, the beam must not fly upstage.
         beam = _aimed_beam_stage((0.0, 0.0, 6.0), (0.0, -4.0, 0.0), 'hanging')
         assert beam[1] < 0, "a target toward the audience must aim -Y"
-
-
-class TestGetDirectionForTiltCalculation:
-
-    def test_standing_returns_up(self):
-        assert get_direction_for_tilt_calculation('standing') == 'UP'
-
-    def test_hanging_returns_down(self):
-        assert get_direction_for_tilt_calculation('hanging') == 'DOWN'
-
-    def test_wall_returns_down(self):
-        assert get_direction_for_tilt_calculation('wall_left') == 'DOWN'
-        assert get_direction_for_tilt_calculation('wall_right') == 'DOWN'
-        assert get_direction_for_tilt_calculation('wall_back') == 'DOWN'
-        assert get_direction_for_tilt_calculation('wall_front') == 'DOWN'
 
 def test_no_home_beam_direction_helper():
     """beam_direction_stage (the pan/tilt-HOME beam direction) was removed

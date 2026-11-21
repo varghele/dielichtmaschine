@@ -1045,9 +1045,9 @@ class TestMarks:
 
     def test_removing_a_plan_selected_spot_refreshes_the_list(self, tab):
         tab._add_mark()
-        item = tab.stage_view.spots["Spot1"]
-        item.setSelected(True)
-        tab.stage_view.remove_selected_items()  # emits spots_changed
+        # Delete on the plan removes the selected mark through
+        # remove_spot (StageView.keyPressEvent), which emits spots_changed.
+        tab.stage_view.remove_spot("Spot1")
         assert self._names(tab) == []
 
 

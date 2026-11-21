@@ -142,13 +142,6 @@ class LiveEngine:
         """Drop a slot: its claims vanish on the next render."""
         self._slots.pop(slot, None)
 
-    def kill_prefix(self, prefix: str) -> None:
-        """Drop the bare ``prefix`` slot and every ``prefix:...``
-        slot (the per-group effects family in one sweep)."""
-        for key in [k for k in self._slots
-                    if k == prefix or k.startswith(prefix + ":")]:
-            del self._slots[key]
-
     def pause(self, slot: str, paused: bool = True) -> None:
         """Freeze (or resume) a slot's clock. While paused the last
         frame keeps streaming - a paused chase holds its pose instead

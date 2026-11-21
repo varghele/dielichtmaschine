@@ -1,11 +1,11 @@
 # tests/unit/test_morph_preview_ui.py
 """The morph wizard's side-by-side preview scrub (v1.5b phase 3
-consumption of utils/morph/preview.render_pair): renders ON CLICK ONLY
+consumption of utils/morph/preview.render_strip): renders ON CLICK ONLY
 (construction and review never render, slider ticks never render), the
 worker runs off-thread (monkeypatched synchronous here, same pattern as
 test_gdtf_share), a None side shows the unavailable placeholder, and
 the slider bounds follow the selected song's duration. Offscreen;
-render_pair is stubbed to write real tiny PNGs - no GL."""
+render_strip is stubbed to write real tiny PNGs - no GL."""
 
 import pytest
 
@@ -96,7 +96,7 @@ def _write_png(path):
     return path
 
 
-def _stub_render_pair(monkeypatch, calls, sides=("src", "dst")):
+def _stub_render_strip(monkeypatch, calls, sides=("src", "dst")):
     """render_strip stand-in writing real tiny PNGs, one per requested
     time; a side can be omitted to exercise the unavailable path.
     Records every call's arguments of interest."""
@@ -129,7 +129,7 @@ class TestNoImplicitRenders:
             self, qapp, source_and_target, synchronous_workers,
             monkeypatch):
         calls = []
-        _stub_render_pair(monkeypatch, calls)
+        _stub_render_strip(monkeypatch, calls)
         source, target = source_and_target
         wizard = _wizard(source, target)
         wizard._enter_review()
@@ -143,7 +143,7 @@ class TestNoImplicitRenders:
     def test_slider_ticks_never_render(self, qapp, source_and_target,
                                        synchronous_workers, monkeypatch):
         calls = []
-        _stub_render_pair(monkeypatch, calls)
+        _stub_render_strip(monkeypatch, calls)
         source, target = source_and_target
         wizard = _wizard(source, target)
         wizard._enter_review()
@@ -156,7 +156,7 @@ class TestNoImplicitRenders:
     def test_slider_bounds_follow_song_duration(
             self, qapp, source_and_target, synchronous_workers,
             monkeypatch):
-        _stub_render_pair(monkeypatch, [])
+        _stub_render_strip(monkeypatch, [])
         source, target = source_and_target
         wizard = _wizard(source, target)
         wizard._enter_review()
@@ -171,7 +171,7 @@ class TestRenderOnClick:
     def test_click_renders_both_sides(self, qapp, source_and_target,
                                       synchronous_workers, monkeypatch):
         calls = []
-        _stub_render_pair(monkeypatch, calls)
+        _stub_render_strip(monkeypatch, calls)
         source, target = source_and_target
         wizard = _wizard(source, target)
         wizard._enter_review()
@@ -228,7 +228,7 @@ class TestRenderOnClick:
             monkeypatch):
         from gui.screens.morph_screen import PREVIEW_UNAVAILABLE
         calls = []
-        _stub_render_pair(monkeypatch, calls, sides=("src",))
+        _stub_render_strip(monkeypatch, calls, sides=("src",))
         source, target = source_and_target
         wizard = _wizard(source, target)
         wizard._enter_review()

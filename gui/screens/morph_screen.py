@@ -82,8 +82,9 @@ PREVIEW_STRIP_INTERVAL_S = 2.0
 
 
 class _PreviewWorker(QtCore.QThread):
-    """Run one render_pair call off the GUI thread (each render is a
-    full GL pass; the review page must never freeze on it)."""
+    """Run one preview render (utils/morph/preview.render_strip) off the
+    GUI thread (each render is a full GL pass; the review page must
+    never freeze on it)."""
     ok = QtCore.pyqtSignal(object)
     fail = QtCore.pyqtSignal(str)
 

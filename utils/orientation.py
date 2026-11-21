@@ -325,22 +325,3 @@ def pan_tilt_to_dmx16(
 # beam direction that pinned the wrong 2026-07-12 preset table; a
 # preset is a body orientation, judged only by the closed-loop aim
 # (test_orientation.py::TestAimingEndToEnd).
-
-
-def get_direction_for_tilt_calculation(mounting: str) -> str:
-    """
-    Get the legacy direction value ('UP' or 'DOWN') for tilt calculations.
-
-    This is used for backwards compatibility with existing effect code
-    that uses 'UP'/'DOWN' direction values.
-
-    Args:
-        mounting: Mounting preset name
-
-    Returns:
-        'UP' or 'DOWN' based on mounting preset
-    """
-    # Standing fixtures point up, everything else points down
-    if mounting == 'standing':
-        return 'UP'
-    return 'DOWN'

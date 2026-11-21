@@ -25,7 +25,6 @@ dielichtmaschine/
 │   └── dialogs/
 │       └── orientation_dialog.py  # 3D fixture orientation popup
 ├── timeline/
-│   ├── playback_engine.py     # BPM-aware playback timing
 │   ├── song_structure.py      # Song part management
 │   └── light_lane.py          # Light effect lanes
 ├── timeline_ui/
