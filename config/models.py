@@ -50,12 +50,13 @@ class Fixture:
     # intensity all come from it. Empty list = ungrouped.
     groups: List[str] = field(default_factory=list)
 
-    # Legacy single-group constructor keyword / YAML key. Consumed by
-    # __post_init__: Fixture(group="X") becomes groups=["X"] ("" -> [])
-    # unless `groups` was given too, in which case `groups` wins and
-    # this is ignored (dual-written files carry both). Reading/writing
-    # `fixture.group` goes through the compat property attached below
-    # the class (getter = primary group, setter REPLACES the list).
+    # Legacy single-group constructor keyword / YAML key, kept so files
+    # written before multi-group (only `group:`) load forever. Consumed
+    # by __post_init__: Fixture(group="X") becomes groups=["X"] ("" ->
+    # []) unless `groups` was given too, in which case `groups` wins.
+    # There is NO `fixture.group` attribute (the compat property was
+    # removed in multi-group stage 5, v1.5.6): read the primary with
+    # primary_group_name(fixture), write `fixture.groups`.
     group: InitVar[Optional[str]] = None
 
     type: str = "PAR"  # Default type if none specified
@@ -137,37 +138,18 @@ class Fixture:
         return self.z
 
 
-def _fixture_group_get(self) -> str:
-    """Compat: the primary group (groups[0]), or "" when ungrouped."""
-    return self.groups[0] if self.groups else ""
+# The InitVar's class-level default (None) is only needed while
+# @dataclass generates __init__ (the default is captured there). Drop it
+# so `fixture.group` raises AttributeError instead of silently reading
+# None (multi-group stage 5 removed the compat property). Side effect:
+# dataclasses.replace(fixture, ...) needs an explicit group=None.
+del Fixture.group
 
 
-def _fixture_group_set(self, value: str) -> None:
-    """Compat: REPLACES the whole membership list with [value] ("" clears).
-
-    Existing single-group callers keep their replace semantics; multi-group
-    membership editing goes through `groups` directly (plan stage 2)."""
-    self.groups = [value] if value else []
-
-
-# Attached after the class body: the InitVar's class-level default (None)
-# must still be None when @dataclass generates __init__; a property named
-# `group` inside the body would be picked up as that default. Instances
-# never store a `group` attribute (InitVar), so this data descriptor
-# handles every read/write of `fixture.group`.
-Fixture.group = property(_fixture_group_get, _fixture_group_set)
-
-
-def fixture_asdict(fixture: Fixture) -> dict:
-    """asdict plus the legacy `group` key (= groups[0] or "").
-
-    Dual-write: saved configs carry `groups` (the source of truth) AND
-    the old single `group` string for one release so older builds still
-    open the file. Dropping the legacy key is stage 5 of
-    docs/multi-group-fixtures-plan.md."""
-    d = asdict(fixture)
-    d['group'] = fixture.group
-    return d
+def primary_group_name(fixture) -> str:
+    """The fixture's PRIMARY group name (groups[0], "first group
+    wins"), or "" when ungrouped."""
+    return fixture.groups[0] if fixture.groups else ""
 
 
 def primary_group(config, fixture) -> Optional['FixtureGroup']:
@@ -176,7 +158,7 @@ def primary_group(config, fixture) -> Optional['FixtureGroup']:
     or None when the fixture is ungrouped or its primary group name is
     not in ``config.groups``. The one lookup every consumer shares;
     only reads ``config.groups``, so duck-typed configs work too."""
-    name = fixture.group
+    name = primary_group_name(fixture)
     return config.groups.get(name) if name else None
 
 
@@ -1897,10 +1879,9 @@ class Configuration:
     def save(self, filename: str):
         """Save configuration to YAML file"""
         data = {
-            # fixture_asdict dual-writes `groups` (source of truth) and
-            # the legacy `group` key for older builds (plan stage 5
-            # removes it).
-            'fixtures': [fixture_asdict(f) for f in self.fixtures],
+            # `groups` is the only membership key written; the legacy
+            # `group` key is load-only since multi-group stage 5.
+            'fixtures': [asdict(f) for f in self.fixtures],
             'groups': {
                 name: {
                     'name': group.name,
@@ -1916,7 +1897,7 @@ class Configuration:
                     # target and chase consumes, pinned by name.
                     'fixture_order': [f.name for f in group.fixtures],
                     'order_mode': group.order_mode,
-                    'fixtures': [fixture_asdict(f) for f in group.fixtures]
+                    'fixtures': [asdict(f) for f in group.fixtures]
                 }
                 for name, group in self.groups.items()
             },

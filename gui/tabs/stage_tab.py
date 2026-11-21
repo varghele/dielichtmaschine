@@ -44,7 +44,7 @@ from PyQt6 import QtWidgets
 from PyQt6.QtCore import Qt, QTimer, QEvent
 
 from utils.app_settings import app_settings
-from config.models import Configuration
+from config.models import Configuration, primary_group_name
 from .base_tab import BaseTab
 from gui.StageView import StageView
 from gui.stage_items import FixtureItem
@@ -2543,7 +2543,7 @@ class StageTab(BaseTab):
                     group.default_z_height = values['z_height']
 
                     for config_fixture in self.config.fixtures:
-                        if (config_fixture.group == group_name and
+                        if (primary_group_name(config_fixture) == group_name and
                                 config_fixture.name not in selected_fixture_names):
                             if config_fixture.orientation_uses_group_default:
                                 config_fixture.mounting = values['mounting']

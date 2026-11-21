@@ -26,6 +26,13 @@ verbatim as the GitHub Release notes (see [docs/releasing.md](docs/releasing.md)
   `utils/to_xml/unified_sequence.py`. No behaviour change.
 - **pandas dependency.** Nothing imports it any more; it is gone from
   `requirements.txt` and `environment.yml`.
+- **Legacy per-fixture `group` key on save** (multi-group stage 5). Saved
+  configs (YAML and .lms) carry only `groups`; files that only have `group:`
+  still load. Files saved by 1.5.6 need Die Lichtmaschine 1.4.0 or later (the
+  first release that reads `groups`). The CSV rig sheet and JSON fixture list keep their `group`
+  column (the primary group), and exports are byte-identical.
+- **`Fixture.group` compat property.** Code reads the primary group via
+  `config.models.primary_group_name()` and writes `fixture.groups`.
 
 ## [1.5.5] - 2026-10-13
 

@@ -11,7 +11,8 @@ Pins four things:
   ``Fixture(**f_data)`` and the other dataclass constructors.
 - One primary-group lookup (``config.models.primary_group``) replaces
   the copied ``config.groups.get(fixture.group)`` expressions, and no
-  production code writes the replacing ``fixture.group`` setter.
+  production code assigns ``fixture.group`` (the compat property is
+  gone since multi-group stage 5; such a write would be silently lost).
 - The Stage tab's "select group" honours secondary memberships.
 """
 
@@ -218,16 +219,22 @@ class TestUnknownKeys:
         user_warnings.get_log().clear()
 
     def test_legacy_group_key_is_not_reported_as_unknown(self, tmp_path):
-        # The dual-written legacy `group` key is an InitVar, not a
-        # field; it must keep loading silently.
+        # The legacy `group` key (files from before multi-group) is an
+        # InitVar, not a field; it must keep loading silently.
         from utils import user_warnings
-        user_warnings.get_log().clear()
         path = tmp_path / "show.yaml"
         small_config().save(str(path))
-        assert "group" in yaml.safe_load(path.read_text())["fixtures"][0]
-        Configuration.load(str(path))
+        data = yaml.safe_load(path.read_text())
+        for fixture in data["fixtures"]:
+            groups = fixture.pop("groups")
+            fixture["group"] = groups[0] if groups else ""
+        path.write_text(yaml.safe_dump(data))
+        user_warnings.get_log().clear()
+        loaded = Configuration.load(str(path))
         assert not [e for e in user_warnings.get_log().entries()
                     if "ignored" in e.message]
+        # A legacy file only knows the primary group.
+        assert [f.groups for f in loaded.fixtures] == [["Front"], ["Front"]]
 
 
 # ---------------------------------------------------------------------------
@@ -264,10 +271,11 @@ class TestPrimaryGroup:
             "use config.models.primary_group(config, fixture)")
 
     def test_no_production_code_writes_the_group_setter(self):
-        """The compat setter REPLACES the whole membership list, so a
-        UI path that writes it silently drops secondary groups. Only
-        the stage plan's FixtureItem (its own attribute, not a Fixture)
-        is allowed to assign ``.group``."""
+        """Fixture has no ``group`` attribute any more (multi-group
+        stage 5), so an assignment would land on a stray instance
+        attribute and be silently lost. Only the stage plan's
+        FixtureItem (its own attribute, not a Fixture) is allowed to
+        assign ``.group``."""
         allowed = {("gui/StageView.py", "fixture_item")}
         offenders = []
         for path in _production_files():
@@ -283,9 +291,7 @@ class TestPrimaryGroup:
                     if (isinstance(target, ast.Attribute)
                             and target.attr == "group"):
                         owner = ast.unparse(target.value)
-                        if (rel, owner) not in allowed \
-                                and not (rel == "config/models.py"
-                                         and owner == "Fixture"):
+                        if (rel, owner) not in allowed:
                             offenders.append(f"{rel}:{node.lineno}")
         assert offenders == []
 

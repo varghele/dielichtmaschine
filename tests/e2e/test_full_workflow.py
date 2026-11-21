@@ -438,14 +438,14 @@ class TestStep2Fixtures:
         assert len(pars) == 2
         assert all(f.manufacturer == PAR_MFR for f in pars)
         assert all(f.current_mode == PAR_MODE_6CH for f in pars)
-        assert all(f.group == WASH_GROUP for f in pars)
+        assert all(f.groups[0] == WASH_GROUP for f in pars)
         assert [f.address for f in pars] == [PAR1_ADDR, PAR2_ADDR]
         assert all(f.universe == 1 for f in pars)
 
         mh = _fixture(main_window, _mh_name(main_window))
         assert (mh.manufacturer, mh.model) == (MH_MFR, MH_MODEL)
         assert mh.current_mode == MH_MODE_8CH
-        assert mh.group == MOVER_GROUP
+        assert mh.groups[0] == MOVER_GROUP
         assert mh.address == MH_ADDR
         assert mh.type == "MH"
 
@@ -820,7 +820,7 @@ class TestFullWorkflow:
                       key=lambda f: f.address)
         assert [f.address for f in pars] == [PAR1_ADDR, PAR2_ADDR]
         assert all(f.current_mode == PAR_MODE_6CH for f in pars)
-        assert all(f.group == WASH_GROUP for f in pars)
+        assert all(f.groups[0] == WASH_GROUP for f in pars)
         assert pars[0].x == pytest.approx(-2.0, abs=0.01)
         assert pars[0].layer == WASH_LAYER
         assert pars[0].mounting == "standing"

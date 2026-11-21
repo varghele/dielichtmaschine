@@ -271,12 +271,14 @@ focus geometry + the output arbiter).
 
 **Multi-group fixtures shipped (2026-07-10, same branch, stages 1-4 of
 docs/multi-group-fixtures-plan.md):** `Fixture.groups: List[str]` is
-the membership source of truth; `fixture.group` is a compat PROPERTY
-whose setter REPLACES the whole list (UI add/remove paths must mutate
-`fixture.groups` directly - the number one trap). groups[0] = primary
+the membership source of truth; there is NO `fixture.group` (the
+compat property went in stage 5, v1.5.6): read the primary with
+`config.models.primary_group_name` / `primary_group`, write
+`fixture.groups`. groups[0] = primary
 (drives data colour, orientation, role, export intensity - locked
-first-group-wins). Legacy `group:` YAML loads forever; save dual-writes
-both keys until plan stage 5 (NOT done - waits a release). Group
+first-group-wins). Legacy `group:` YAML loads forever; save writes
+only `groups` since v1.5.6 (CSV/JSON fixture lists still carry the
+primary as `group`). Group
 derivation puts a fixture in every listed group; indexed targets
 (Group:N) index into that group's derived order. Export emits
 per-group ChannelsGroups (QLC+ tolerates shared channels), patch

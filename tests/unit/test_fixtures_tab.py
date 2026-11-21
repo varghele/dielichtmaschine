@@ -248,7 +248,7 @@ def test_inspector_group_change_writes_config(qapp, sample_configuration):
     tab = _make_tab(qapp, sample_configuration)
     try:
         tab.insp_group.setCurrentText("")
-        assert sample_configuration.fixtures[0].group == ""
+        assert sample_configuration.fixtures[0].groups == []
         # The empty group vanished from the rebuilt group table.
         assert "TestGroup" not in sample_configuration.groups
     finally:
@@ -514,7 +514,7 @@ def test_duplicate_creates_conflict_free_copy(qapp, sample_configuration):
         fixtures = sample_configuration.fixtures
         assert len(fixtures) == 2
         assert fixtures[1].name == "Test Fixture 1 (Copy)"
-        assert fixtures[1].group == "TestGroup"
+        assert fixtures[1].groups[0] == "TestGroup"
         assert lint_dmx_addresses(fixtures).is_clean
         assert tab.table.rowCount() == 2
     finally:
@@ -746,7 +746,7 @@ def test_assign_multiple_fixtures_to_a_group(qapp):
         _select_rows(tab, [0, 1])
         assert tab._selected_fixture_rows() == [0, 1]
         tab._assign_selected_to_group("Wash")
-        groups = {f.name: f.group for f in tab.config.fixtures}
+        groups = {f.name: f.groups[0] for f in tab.config.fixtures}
         assert groups == {"P1": "Wash", "P2": "Wash", "P3": "Wash"}
         # The GROUP column text must update for the assigned rows, not just
         # the model (regression: multi-assign left the old name in the cell).
@@ -765,8 +765,8 @@ def test_assign_selection_to_a_new_group(qapp):
                           return_value=("Spots", True)):
             tab._assign_selected_to_new_group()
         assert "Spots" in tab.config.groups
-        assert tab.config.fixtures[0].group == "Spots"
-        assert tab.config.fixtures[1].group == "Spots"
+        assert tab.config.fixtures[0].groups[0] == "Spots"
+        assert tab.config.fixtures[1].groups[0] == "Spots"
     finally:
         tab.deleteLater()
 
@@ -776,7 +776,7 @@ def test_ungroup_selection(qapp):
     try:
         _select_rows(tab, [2])  # P3 is in "Wash"
         tab._assign_selected_to_group("")
-        assert tab.config.fixtures[2].group == ""
+        assert tab.config.fixtures[2].groups == []
     finally:
         tab.deleteLater()
 
@@ -900,7 +900,7 @@ def test_assign_adds_membership_keeps_existing(qapp):
         tab._assign_selected_to_group("Spots")
         fixture = tab.config.fixtures[0]
         assert fixture.groups == ["Wash", "Spots"]
-        assert fixture.group == "Wash"  # primary unchanged
+        assert fixture.groups[0] == "Wash"  # primary unchanged
         assert tab.table.item(0, COL_GROUP).text() == "WASH · SPOTS"
     finally:
         tab.deleteLater()
@@ -954,7 +954,7 @@ def test_make_primary_reorders_membership(qapp):
         tab._make_selected_primary("Spots")
         fixture = tab.config.fixtures[2]
         assert fixture.groups == ["Spots", "Wash"]
-        assert fixture.group == "Spots"
+        assert fixture.groups[0] == "Spots"
         assert tab.table.item(2, COL_GROUP).text() == "SPOTS · WASH"
         # The row visuals follow the new primary group's color.
         fg = tab.table.item(2, COL_GROUP).foreground().color()
@@ -1181,7 +1181,7 @@ def test_delete_group_removes_membership_not_fixtures(qapp):
         assert names == ["P1", "P2", "P3"]
         assert tab.config.fixtures[0].groups == []
         assert tab.config.fixtures[2].groups == ["Spots"]
-        assert tab.config.fixtures[2].group == "Spots"
+        assert tab.config.fixtures[2].groups[0] == "Spots"
         assert tab.table.item(2, COL_GROUP).text() == "SPOTS"
     finally:
         tab.deleteLater()

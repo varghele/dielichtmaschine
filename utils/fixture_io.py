@@ -36,6 +36,7 @@ from typing import Dict, List, Optional, Tuple
 
 from config.models import (
     Fixture, FixtureGroup, FixtureMode, StageLayer, primary_group,
+    primary_group_name,
 )
 from utils.dmx_conflicts import fixture_channel_count
 
@@ -109,7 +110,7 @@ def write_fixture_list_csv(path: str, config) -> None:
                 'channels': fixture_channel_count(fixture),
                 'universe': fixture.universe,
                 'address': fixture.address,
-                'group': fixture.group,
+                'group': primary_group_name(fixture),
                 'groups': GROUPS_SEPARATOR.join(fixture.groups),
                 'layer': fixture.layer,
                 'x': fixture.x,
@@ -203,10 +204,10 @@ def write_fixture_list_json(path: str, config) -> None:
             'mode': fixture.current_mode,
             'universe': fixture.universe,
             'address': fixture.address,
-            # Dual-write: `groups` is the source of truth, the legacy
-            # single `group` (= primary) keeps older builds importing
-            # the file (removal is multi-group plan stage 5).
-            'group': fixture.group,
+            # `groups` is the source of truth; the single `group`
+            # (= primary) stays in the interchange file so older builds
+            # and external tools keep importing it unchanged.
+            'group': primary_group_name(fixture),
             'groups': list(fixture.groups),
             'layer': fixture.layer,
             'x': fixture.x,

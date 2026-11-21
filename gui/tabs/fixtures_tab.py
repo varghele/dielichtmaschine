@@ -46,6 +46,7 @@ from PyQt6.QtGui import QFont
 from PyQt6.QtCore import Qt
 from config.models import (
     Configuration, Fixture, FixtureMode, FixtureGroup, primary_group,
+    primary_group_name,
 )
 from utils.fixture_utils import get_cached_fixture_definitions
 from utils.dmx_conflicts import (
@@ -1383,7 +1384,7 @@ class FixturesTab(BaseTab):
             self.insp_group.addItem("")
             for group in sorted(self.config.groups.keys()):
                 self.insp_group.addItem(group)
-            self.insp_group.setCurrentText(fixture.group)
+            self.insp_group.setCurrentText(primary_group_name(fixture))
             self.insp_group.blockSignals(False)
 
         if not self.insp_role.hasFocus():
@@ -1393,7 +1394,7 @@ class FixturesTab(BaseTab):
             index = self.insp_role.findText(role or "")
             self.insp_role.setCurrentIndex(index if index >= 0 else 0)
             self.insp_role.blockSignals(False)
-            self.insp_role.setEnabled(bool(fixture.group))
+            self.insp_role.setEnabled(bool(fixture.groups))
 
         group = primary_group(self.config, fixture)
         z = fixture.get_effective_z(group)
@@ -1548,8 +1549,8 @@ class FixturesTab(BaseTab):
     def _on_inspector_group(self, text: str):
         """The inspector's "Primary group" combo: edits groups[0] ONLY.
 
-        Secondary memberships survive (never `fixture.group = text` -
-        the compat setter would REPLACE the whole list). Picking a group
+        Secondary memberships survive (only groups[0] is replaced).
+        Picking a group
         the fixture is already a secondary member of promotes it to
         primary (the old primary membership is what the edit replaces);
         picking "" drops the primary membership and promotes the next
@@ -1560,7 +1561,7 @@ class FixturesTab(BaseTab):
         if row < 0 or self._is_rebuilding:
             return
         fixture = self.config.fixtures[row]
-        if fixture.group == text:
+        if primary_group_name(fixture) == text:
             return
         rest = [g for g in fixture.groups[1:] if g != text]
         fixture.groups = ([text] + rest) if text else rest
@@ -1582,7 +1583,7 @@ class FixturesTab(BaseTab):
         index = self.insp_role.findText(role or "")
         self.insp_role.setCurrentIndex(index if index >= 0 else 0)
         self.insp_role.blockSignals(False)
-        self.insp_role.setEnabled(bool(fixture.group))
+        self.insp_role.setEnabled(bool(fixture.groups))
         self._sync_fingerprint()
         self._notify_main_window()
 
@@ -1752,8 +1753,7 @@ class FixturesTab(BaseTab):
         secondary). When every selected fixture already has the group,
         the click removes that membership instead (the menu entry shows
         checked in that state). "" is Ungroup: clears the whole
-        membership list. Always mutate `fixture.groups`; the compat
-        `fixture.group` setter would replace the list.
+        membership list. Always mutate `fixture.groups` in place.
         """
         rows = self._selected_fixture_rows()
         if not rows:

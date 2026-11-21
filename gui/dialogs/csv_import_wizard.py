@@ -355,7 +355,9 @@ class CsvImportWizard(QtWidgets.QDialog):
             resolved = self._report.is_resolved(fixture)
             values = [fixture.name, fixture.manufacturer, fixture.model,
                       fixture.current_mode, str(fixture.universe),
-                      str(fixture.address), fixture.group, fixture.layer,
+                      str(fixture.address),
+                      fixture.groups[0] if fixture.groups else "",
+                      fixture.layer,
                       "OK" if resolved else "NO DEFINITION"]
             for c, value in enumerate(values):
                 item = QtWidgets.QTableWidgetItem(value)

@@ -1,12 +1,13 @@
 # tests/unit/test_multi_group_fixtures.py
-"""Multi-group fixtures, stage 1 (docs/multi-group-fixtures-plan.md).
+"""Multi-group fixtures, stages 1 and 5 (docs/multi-group-fixtures-plan.md).
 
-Pins the model change: `Fixture.groups: List[str]` is the source of
-truth (groups[0] = primary, first group wins), `Fixture.group` is a
-compat property (getter = primary, setter REPLACES the list), legacy
-single-group YAML/JSON migrates on load, saves dual-write `groups` plus
-the legacy `group` key, and every group-membership derivation puts a
-fixture in EVERY group it lists.
+Pins the model: `Fixture.groups: List[str]` is the source of truth
+(groups[0] = primary, first group wins, read via
+`config.models.primary_group_name`). Stage 5 (v1.5.6) removed the
+`Fixture.group` compat property and the legacy `group` save key: saved
+configs carry only `groups`, while legacy single-group YAML/JSON (only
+`group:`) still migrates on load forever, and every group-membership
+derivation puts a fixture in EVERY group it lists.
 """
 
 from __future__ import annotations
@@ -18,7 +19,7 @@ import yaml
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from config.models import (
-    Configuration, Fixture, FixtureGroup, FixtureMode, fixture_asdict,
+    Configuration, Fixture, FixtureGroup, FixtureMode, primary_group_name,
 )
 
 
@@ -36,34 +37,42 @@ def make_fixture(name="F1", **kwargs):
 # Field + property semantics
 # ---------------------------------------------------------------------------
 
-class TestGroupsFieldAndProperty:
+class TestGroupsFieldAndPrimary:
 
     def test_default_is_ungrouped(self):
         f = make_fixture()
         assert f.groups == []
-        assert f.group == ""
+        assert primary_group_name(f) == ""
 
     def test_groups_list_and_primary(self):
         f = make_fixture(groups=["A", "B"])
         assert f.groups == ["A", "B"]
         # groups[0] is the primary group (first group wins).
-        assert f.group == "A"
-
-    def test_setter_replaces_whole_list(self):
-        f = make_fixture(groups=["A", "B"])
-        f.group = "C"
-        assert f.groups == ["C"]
-
-    def test_setter_empty_string_clears(self):
-        f = make_fixture(groups=["A", "B"])
-        f.group = ""
-        assert f.groups == []
+        assert primary_group_name(f) == "A"
 
     def test_groups_list_is_directly_mutable(self):
         f = make_fixture(groups=["A"])
         f.groups.append("B")
-        assert f.group == "A"
+        assert primary_group_name(f) == "A"
         assert f.groups == ["A", "B"]
+
+
+class TestCompatPropertyRemoved:
+    """Stage 5: there is no `fixture.group` any more, neither on the
+    class nor on instances (a stale read must fail loudly, not read a
+    silent None from the InitVar default)."""
+
+    def test_class_has_no_group_attribute(self):
+        assert not hasattr(Fixture, "group")
+
+    def test_instance_read_raises(self):
+        import pytest
+        f = make_fixture(group="X")
+        with pytest.raises(AttributeError):
+            f.group  # noqa: B018
+
+    def test_legacy_keyword_still_constructs(self):
+        assert make_fixture(group="X").groups == ["X"]
 
 
 class TestConstructorCompat:
@@ -71,7 +80,7 @@ class TestConstructorCompat:
     def test_legacy_group_keyword(self):
         f = make_fixture(group="X")
         assert f.groups == ["X"]
-        assert f.group == "X"
+        assert primary_group_name(f) == "X"
 
     def test_legacy_group_empty_string(self):
         f = make_fixture(group="")
@@ -82,7 +91,7 @@ class TestConstructorCompat:
         assert f.groups == ["X", "Y"]
 
     def test_groups_wins_over_legacy_group(self):
-        # Dual-written dicts carry both; `groups` is the source of truth.
+        # Files dual-written by 1.4-1.5.5 carry both; `groups` wins.
         f = make_fixture(group="Old", groups=["A", "B"])
         assert f.groups == ["A", "B"]
 
@@ -100,7 +109,7 @@ class TestConstructorCompat:
 
 
 # ---------------------------------------------------------------------------
-# asdict / fingerprint / dual-write dict
+# asdict / fingerprint
 # ---------------------------------------------------------------------------
 
 class TestSerializationDicts:
@@ -109,7 +118,7 @@ class TestSerializationDicts:
         from dataclasses import asdict
         d = asdict(make_fixture(groups=["A", "B"]))
         assert d["groups"] == ["A", "B"]
-        # `group` is an InitVar + property, not a field: asdict skips it.
+        # `group` is a load-only InitVar, not a field: asdict skips it.
         assert "group" not in d
 
     def test_autosave_fingerprint_path(self):
@@ -121,19 +130,9 @@ class TestSerializationDicts:
         fp2 = hash(repr(asdict(config)))
         assert fp1 != fp2
 
-    def test_fixture_asdict_dual_writes_legacy_group(self):
-        d = fixture_asdict(make_fixture(groups=["A", "B"]))
-        assert d["groups"] == ["A", "B"]
-        assert d["group"] == "A"
-
-    def test_fixture_asdict_ungrouped(self):
-        d = fixture_asdict(make_fixture())
-        assert d["groups"] == []
-        assert d["group"] == ""
-
 
 # ---------------------------------------------------------------------------
-# Config YAML load migration + save dual-write
+# Config YAML load migration + save (groups only, stage 5)
 # ---------------------------------------------------------------------------
 
 def _fixture_yaml_dict(name, **extra):
@@ -170,7 +169,6 @@ class TestLoadMigration:
         config = Configuration.load(path)
         by_name = {f.name: f for f in config.fixtures}
         assert by_name["Par 1"].groups == ["Front"]
-        assert by_name["Par 1"].group == "Front"
         assert by_name["Loose"].groups == []
         assert [f.name for f in config.groups["Front"].fixtures] == ["Par 1"]
 
@@ -209,9 +207,9 @@ class TestLoadMigration:
         assert warm == ["Par 1"]
 
 
-class TestSaveDualWrite:
+class TestSaveWritesGroupsOnly:
 
-    def test_save_writes_groups_and_legacy_group(self, temp_dir):
+    def test_save_writes_groups_without_legacy_group(self, temp_dir):
         config = Configuration(
             fixtures=[make_fixture("Par 1", groups=["Front", "Warm"])],
             groups={"Front": FixtureGroup("Front", [])},
@@ -223,9 +221,9 @@ class TestSaveDualWrite:
             raw = yaml.safe_load(f)
         fd = raw["fixtures"][0]
         assert fd["groups"] == ["Front", "Warm"]
-        assert fd["group"] == "Front"
+        assert "group" not in fd
 
-    def test_save_ungrouped_writes_empty_legacy_group(self, temp_dir):
+    def test_save_ungrouped_writes_empty_groups_only(self, temp_dir):
         config = Configuration(fixtures=[make_fixture("Solo")])
         path = os.path.join(temp_dir, "saved.yaml")
         config.save(path)
@@ -234,9 +232,9 @@ class TestSaveDualWrite:
             raw = yaml.safe_load(f)
         fd = raw["fixtures"][0]
         assert fd["groups"] == []
-        assert fd["group"] == ""
+        assert "group" not in fd
 
-    def test_groups_section_fixture_dicts_dual_write_too(self, temp_dir):
+    def test_groups_section_fixture_dicts_have_no_legacy_key(self, temp_dir):
         fixture = make_fixture("Par 1", groups=["Front"])
         config = Configuration(
             fixtures=[fixture],
@@ -249,7 +247,26 @@ class TestSaveDualWrite:
             raw = yaml.safe_load(f)
         gd = raw["groups"]["Front"]["fixtures"][0]
         assert gd["groups"] == ["Front"]
-        assert gd["group"] == "Front"
+        assert "group" not in gd
+
+    def test_lms_save_has_no_per_fixture_group_key(self, temp_dir):
+        """The .lms path goes through the same save (compact
+        serializer on top); no fixture dict anywhere carries `group`."""
+        fixture = make_fixture("Par 1", groups=["Front", "Warm"])
+        config = Configuration(
+            fixtures=[fixture],
+            groups={"Front": FixtureGroup("Front", [fixture]),
+                    "Warm": FixtureGroup("Warm", [fixture])},
+        )
+        path = os.path.join(temp_dir, "saved.lms")
+        config.save(path)
+        with open(path) as f:
+            raw = yaml.safe_load(f)
+        dicts = list(raw["fixtures"]) + [
+            fd for g in raw["groups"].values() for fd in g["fixtures"]]
+        assert dicts and all("group" not in fd for fd in dicts)
+        assert Configuration.load(path).fixtures[0].groups == [
+            "Front", "Warm"]
 
 
 class TestRoundTrip:
@@ -271,7 +288,7 @@ class TestRoundTrip:
             raw = yaml.safe_load(f)
         by_name = {fd["name"]: fd for fd in raw["fixtures"]}
         assert by_name["Par 1"]["groups"] == ["Front"]
-        assert by_name["Par 1"]["group"] == "Front"
+        assert "group" not in by_name["Par 1"]
         assert by_name["Loose"]["groups"] == []
 
         reloaded = Configuration.load(resaved)
@@ -290,7 +307,7 @@ class TestRoundTrip:
         config.save(path)
         reloaded = Configuration.load(path)
         assert reloaded.fixtures[0].groups == ["Front", "Warm"]
-        assert reloaded.fixtures[0].group == "Front"
+        assert primary_group_name(reloaded.fixtures[0]) == "Front"
         front = [f.name for f in reloaded.groups["Front"].fixtures]
         warm = [f.name for f in reloaded.groups["Warm"].fixtures]
         assert front == ["Par 1"]
@@ -334,7 +351,7 @@ class TestFixtureListJson:
             cfg.groups[name].fixtures.append(fixture)
         return cfg
 
-    def test_json_export_dual_writes_and_reimports(self, temp_dir):
+    def test_json_export_keeps_primary_group_and_reimports(self, temp_dir):
         import json
         from utils.fixture_io import (
             read_fixture_list_json, write_fixture_list_json,

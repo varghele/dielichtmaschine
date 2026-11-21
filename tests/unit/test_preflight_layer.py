@@ -19,6 +19,7 @@ import pytest
 
 from config.models import (
     Configuration, Fixture, FixtureGroup, FixtureMode, Spot, Universe,
+    primary_group,
 )
 from utils.artnet.arbiter import IDLE_BLACKOUT, OutputArbiter
 from utils.artnet.dmx_manager import FixtureChannelMap
@@ -60,7 +61,7 @@ def _expected_aim16(fixture, target, config,
                     pan_range=540.0, tilt_range=270.0):
     """Reference 16-bit aim - the same primary-group orientation
     resolve the layer (and the busk layer) uses."""
-    primary = config.groups.get(fixture.group) if fixture.group else None
+    primary = primary_group(config, fixture)
     mounting, yaw, pitch, roll = fixture.get_effective_orientation(primary)
     pan_deg, tilt_deg = calculate_pan_tilt(
         fixture_x=fixture.x, fixture_y=fixture.y,

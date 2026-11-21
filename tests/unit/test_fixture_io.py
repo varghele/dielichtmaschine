@@ -120,7 +120,7 @@ class TestCsvRoundTrip:
         assert f.name == "LED Par 64"
         assert f.available_modes == [FixtureMode(name="Default", channels=1)]
         assert f.type == "PAR"
-        assert f.group == ""
+        assert f.groups == []
 
     def test_bad_row_reports_file_and_line(self, tmp_path):
         path = tmp_path / "venue.csv"

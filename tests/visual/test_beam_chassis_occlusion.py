@@ -157,11 +157,12 @@ def _make_front_mh(name: str = "mh_front") -> Fixture:
 def _build_config(fixtures) -> Configuration:
     groups: dict[str, FixtureGroup] = {}
     for f in fixtures:
-        if f.group not in groups:
-            groups[f.group] = FixtureGroup(
-                name=f.group, fixtures=[], default_z_height=1.0,
+        name = f.groups[0] if f.groups else ""
+        if name not in groups:
+            groups[name] = FixtureGroup(
+                name=name, fixtures=[], default_z_height=1.0,
             )
-        groups[f.group].fixtures.append(f)
+        groups[name].fixtures.append(f)
     return Configuration(
         fixtures=list(fixtures),
         groups=groups,

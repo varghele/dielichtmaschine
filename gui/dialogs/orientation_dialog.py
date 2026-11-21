@@ -2273,8 +2273,8 @@ class OrientationPanel(QWidget):
                         (cf for cf in self.config.fixtures if cf.name == fx_name),
                         None,
                     )
-                    if cf is not None:
-                        group_name = cf.group
+                    if cf is not None and cf.groups:
+                        group_name = cf.groups[0]
             if group_name:
                 groups.add(group_name)
 

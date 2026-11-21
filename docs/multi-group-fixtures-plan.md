@@ -154,6 +154,30 @@ several consumers.
 - Left for stage 5: remove the `group` compat property + legacy save
   field (waits a release, unchanged).
 
+### Stage 5 (v1.5.6, 2026-11-21)
+
+- The `Fixture.group` compat property (getter and setter) is gone, and
+  so is the InitVar's class-level default: `fixture.group` raises
+  AttributeError instead of reading a silent None. Primary reads go
+  through `config.models.primary_group_name(fixture)` (name) or
+  `primary_group(config, fixture)` (object); writes mutate
+  `fixture.groups`. The references to the compat property in the
+  stage 3 notes above are history.
+- `Configuration.save` (YAML and .lms) writes only `groups`;
+  `fixture_asdict` is gone (plain `asdict`). The `group` constructor
+  keyword / YAML key stays as a load-only InitVar, so files that only
+  carry `group:` load forever. Files saved by 1.5.6 need 1.4.0 or
+  later, the first release that reads `groups`.
+- External formats unchanged: the CSV rig sheet and the JSON fixture
+  list still write the primary as `group` next to `groups`, the
+  visualizer payload and the .qxw export never carried it (export
+  hashes identical).
+- Tests: `tests/unit/test_multi_group_fixtures.py`
+  (`TestCompatPropertyRemoved`, `TestSaveWritesGroupsOnly`, legacy load
+  in `TestLoadMigration`) and
+  `tests/unit/test_config_persistence.py` (legacy-only file loads
+  without warnings; no production code assigns `.group`).
+
 ## Staging (each its own commit, tests + goldens)
 
 1. Model + `groups` list + `group` compat property + load/save migration
@@ -168,7 +192,8 @@ several consumers.
    derived, patch-ordered list), and the one proven bug fixed (N FIX
    count now dedupes by fixture identity). Tests in
    tests/unit/test_multi_group_fixtures.py, stage 4 section.
-5. Remove the `group` compat property and the legacy save field.
+5. Remove the `group` compat property and the legacy save field. Done
+   in v1.5.6 (see "Stage 5" above).
 
 Build started 2026-07-10 (stage 1 first); stage 5 (compat removal)
-deliberately waits a release.
+deliberately waited a release and shipped in v1.5.6.

@@ -4,7 +4,7 @@ from PyQt6 import QtWidgets, QtGui, QtCore
 from PyQt6.QtCore import pyqtProperty
 from PyQt6.QtGui import QColor
 from gui.stage_items import FixtureItem, SpotItem
-from config.models import Spot, primary_group
+from config.models import Spot, primary_group, primary_group_name
 
 
 # Fallback colours used only when QSS hasn't supplied a value yet (e.g.
@@ -333,7 +333,7 @@ class StageView(QtWidgets.QGraphicsView):
                 fixture_item.address = fixture.address
                 fixture_item.manufacturer = fixture.manufacturer
                 fixture_item.model = fixture.model
-                fixture_item.group = fixture.group  # primary, for display
+                fixture_item.group = primary_group_name(fixture)  # for display
                 # Full membership (primary first): group selection on
                 # the plan must reach secondary members too.
                 fixture_item.groups = list(fixture.groups)

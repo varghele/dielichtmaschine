@@ -1,5 +1,5 @@
 import xml.etree.ElementTree as ET
-from config.models import Configuration
+from config.models import Configuration, primary_group_name
 from utils import user_warnings
 
 
@@ -113,7 +113,7 @@ def create_tracks_from_timeline(show_function, engine, show, config, fixture_id_
         resolved_fixtures = resolve_targets_unique(targets, config)
         print(f"    Resolved fixtures count: {len(resolved_fixtures)}")
         for f in resolved_fixtures:
-            print(f"      - {f.name}: group='{f.group}', universe={f.universe}, address={f.address}")
+            print(f"      - {f.name}: group='{primary_group_name(f)}', universe={f.universe}, address={f.address}")
 
         if not resolved_fixtures:
             user_warnings.warn(
@@ -130,7 +130,7 @@ def create_tracks_from_timeline(show_function, engine, show, config, fixture_id_
         # This handles multi-target lanes by creating one track per fixture group
         fixtures_by_group = {}
         for fixture in resolved_fixtures:
-            group_name = fixture.group
+            group_name = primary_group_name(fixture)
             if group_name not in fixtures_by_group:
                 fixtures_by_group[group_name] = []
             fixtures_by_group[group_name].append(fixture)

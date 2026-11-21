@@ -225,14 +225,14 @@ class TestBuildFixtures:
             ("Default", 1)]
         assert f.type == "PAR"
         assert (f.universe, f.address) == (1, 1)
-        assert f.group == ""
+        assert f.groups == []
         # No orientation in a venue sheet: group defaults stay in charge.
         assert f.orientation_uses_group_default is True
 
     def test_group_and_position_land_on_the_model(self):
         fixtures, _ = build_fixtures(self._records(
             group="Front Wash", position="FOH Truss"))
-        assert fixtures[0].group == "Front Wash"
+        assert fixtures[0].groups[0] == "Front Wash"
         assert fixtures[0].layer == "FOH Truss"
 
     def test_semicolon_group_cell_joins_every_group(self):
@@ -315,7 +315,7 @@ class TestResolve:
         f = fixtures[0]
         assert report.is_resolved(f)
         assert f.address == 17
-        assert f.group == "Wäsche"
+        assert f.groups[0] == "Wäsche"
         assert f.layer == "Traverse Bühne"
         assert len(f.available_modes) == 3  # real .qxf modes, not synthesized
 
