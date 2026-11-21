@@ -115,7 +115,10 @@ glcontext, PyGLM), and every CI install plus the release build use it:
 pip install -r requirements.txt -c constraints/qt-gl.txt
 ```
 
-Install the same way on the desk before regenerating goldens. Bumping a
+The Windows CI runner has no GL 3.3 driver, so the real-GL tests (and
+the GDTF mesh golden among them) skip there and stay a desk check; the
+Qt-raster goldens all compare. Install the same way on the desk before
+regenerating goldens. Bumping a
 pin is a pixel change: regenerate the win32 goldens on Windows with the
 new versions and commit both together. `tests/unit/test_repo_infra.py`
 (`TestQtGlConstraints`) checks the file pins with `==`, covers exactly
