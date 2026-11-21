@@ -304,23 +304,3 @@ class VisualizerTCPClient(QObject):
 
         print(f"Update: {update_type}")
         self.update_received.emit(update_type, data)
-
-    def set_host(self, host: str):
-        """Set server hostname."""
-        self.host = host
-
-    def set_port(self, port: int):
-        """Set server port."""
-        self.port = port
-
-    def get_fixtures(self) -> List[Dict]:
-        """Get stored fixtures list."""
-        return self.fixtures
-
-    def get_groups(self) -> List[Dict]:
-        """Get stored groups list."""
-        return self.groups
-
-    def get_stage_dimensions(self) -> tuple:
-        """Get stored stage dimensions."""
-        return (self.stage_width, self.stage_height)

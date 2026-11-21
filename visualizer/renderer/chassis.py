@@ -592,17 +592,6 @@ class MovingYokeChassisGeometry(ChassisGeometry):
         self.program['emissive_strength'].value = float(state.emissive_strength)
         self._lens_vao.render(moderngl.TRIANGLES)
 
-    def head_offset_local(self) -> glm.vec3:
-        """Local-frame offset (Z-up) from the chassis origin to the head pivot.
-
-        Beam emissions originate at this point, transformed through the
-        same pan/tilt that the head goes through. Useful for the
-        FixtureRenderer when computing the beam's local transform —
-        currently the EmitterRunner builds its own head offset, but this
-        getter gives a consistent answer.
-        """
-        return glm.vec3(0.0, 0.0, self.base_thickness + self.yoke_height / 2)
-
     def lens_world_pos(
         self,
         fixture_model: glm.mat4,

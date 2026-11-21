@@ -195,9 +195,6 @@ class MorphPlan:
     def edges_for_song(self, song_name: str) -> List[MorphEdge]:
         return self.song_overrides.get(song_name, self.edges)
 
-    def effective_seed(self, edge: MorphEdge) -> int:
-        return edge.seed if edge.seed is not None else self.seed
-
     def is_protected(self, target_group: str) -> bool:
         return target_group in self.protected_target_lanes
 

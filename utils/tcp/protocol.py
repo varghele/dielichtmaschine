@@ -159,18 +159,6 @@ def _findall_elements(parent, tag: str, ns: Dict[str, str] = None):
     return elems if elems else []
 
 
-def _get_qxf_fixture_dirs() -> List[str]:
-    """Get list of directories containing QXF fixture files."""
-    from utils.fixture_library import fixture_search_dirs
-    return [path for path, _source in fixture_search_dirs()]
-
-
-def _find_qxf_file(manufacturer: str, model: str) -> Optional[str]:
-    """Find QXF file for a given manufacturer and model."""
-    from utils.fixture_library import find_fixture_file
-    return find_fixture_file(manufacturer, model)
-
-
 def _parse_qxf_for_visualizer(manufacturer: str, model: str, mode_name: str) -> Dict[str, Any]:
     """
     Parse QXF file to extract data needed for visualizer.
@@ -764,23 +752,6 @@ class VisualizerProtocol:
         message = {
             "type": MessageType.HEARTBEAT.value,
             "timestamp": None  # Will be filled by server
-        }
-        return json.dumps(message) + "\n"
-
-    @staticmethod
-    def create_ack_message(original_type: str) -> str:
-        """
-        Create acknowledgment message.
-
-        Args:
-            original_type: Type of message being acknowledged
-
-        Returns:
-            JSON string with newline delimiter
-        """
-        message = {
-            "type": MessageType.ACK.value,
-            "ack_type": original_type
         }
         return json.dumps(message) + "\n"
 

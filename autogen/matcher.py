@@ -332,51 +332,6 @@ def match_rudiments_to_section(
     return scores
 
 
-def select_groove_and_fill(
-    section: SectionAnalysis,
-    bpm: float,
-    config: Optional[AutogenConfig] = None,
-    previous_section_rudiments: Optional[Dict[str, str]] = None,
-    section_type: str = "generic",
-    previous_section_type: Optional[str] = None,
-) -> Tuple[str, str]:
-    """Select groove and fill rudiments for a section.
-
-    The groove is the highest-scoring rudiment. The fill is the
-    highest-scoring rudiment with higher flux than the groove.
-
-    Returns:
-        (groove_rudiment_name, fill_rudiment_name)
-    """
-    if config is None:
-        config = AutogenConfig()
-
-    scores = match_rudiments_to_section(
-        section, bpm,
-        previous_section_rudiments=previous_section_rudiments,
-        section_type=section_type,
-        previous_section_type=previous_section_type,
-        config=config,
-    )
-
-    intensity_rudiments = get_intensity_rudiments()
-
-    # Groove = highest scoring
-    groove_name = next(iter(scores))
-    groove_flux = intensity_rudiments[groove_name].average_flux
-
-    # Fill = highest scoring with higher flux than groove
-    fill_name = groove_name  # Fallback
-    for name, ms in scores.items():
-        if name == groove_name:
-            continue
-        if intensity_rudiments[name].average_flux > groove_flux:
-            fill_name = name
-            break
-
-    return groove_name, fill_name
-
-
 
 # Complementary envelope category pairs (these look good together)
 COMPLEMENTARY_PAIRS = {

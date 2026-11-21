@@ -242,19 +242,6 @@ def _compute_cell_offsets(
             )
 
 
-def compute_cell_offsets(
-    emitter: CellArray,
-    body_dims_m: Tuple[float, float, float],
-) -> List[glm.vec3]:
-    """Public helper: list version of :func:`_compute_cell_offsets`.
-
-    Used by chassis geometries that need to position visible per-cell
-    emitter geometry at the same offsets the :class:`CellArrayRunner`
-    uses for its emissions.
-    """
-    return list(_compute_cell_offsets(emitter, body_dims_m))
-
-
 # ---------------------------------------------------------------------------
 # MultiHeadRunner — N heads with independent pan/tilt + color (moving-head bar, spider)
 # ---------------------------------------------------------------------------

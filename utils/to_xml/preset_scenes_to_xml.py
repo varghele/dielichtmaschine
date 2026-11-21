@@ -1128,78 +1128,6 @@ def _cycle_palette(colors, num_groups):
 
 
 
-def create_master_rainbow_scene(
-    engine: ET.Element,
-    function_id: int,
-    config: Configuration,
-    fixture_id_map: Dict[int, int],
-    fixture_definitions: Dict[str, Any],
-    master_presets: Dict[str, int]
-) -> int:
-    """Create rainbow static scene with different colors per group."""
-    rainbow_colors_rgb = [
-        (255, 0, 0),      # Red
-        (255, 127, 0),    # Orange
-        (255, 255, 0),    # Yellow
-        (0, 255, 0),      # Green
-        (0, 255, 255),    # Cyan
-        (0, 0, 255),      # Blue
-        (255, 0, 255),    # Purple
-    ]
-
-    rainbow_colors_wheel = [37, 63, 88, 113, 138, 163, 188]
-
-    fixture_values = []
-    group_idx = 0
-
-    for group_name, group in config.groups.items():
-        color_idx = group_idx % len(rainbow_colors_rgb)
-        rgb_val = rainbow_colors_rgb[color_idx]
-        wheel_val = rainbow_colors_wheel[color_idx]
-
-        for fixture in group.fixtures:
-            fixture_id = fixture_id_map.get((fixture.universe, fixture.address))
-            if fixture_id is None:
-                continue
-
-            channels_dict, _ = get_fixture_channels_for_preset(
-                fixture, fixture_definitions,
-                list(DIMMER_PRESETS) + list(COLOUR_PRESETS)
-            )
-
-            channel_vals = {}
-
-            # Set dimmer
-            for ch in channels_dict.get("IntensityDimmer", []):
-                channel_vals[ch] = 255
-
-            # Set RGB
-            for ch in channels_dict.get("IntensityRed", []):
-                channel_vals[ch] = rgb_val[0]
-            for ch in channels_dict.get("IntensityGreen", []):
-                channel_vals[ch] = rgb_val[1]
-            for ch in channels_dict.get("IntensityBlue", []):
-                channel_vals[ch] = rgb_val[2]
-
-            # Color wheel
-            color_ch = get_color_wheel_channel(fixture, fixture_definitions)
-            if color_ch is not None and not (channels_dict.get("IntensityRed") or channels_dict.get("IntensityGreen") or channels_dict.get("IntensityBlue")):
-                channel_vals[color_ch] = wheel_val
-
-            if channel_vals:
-                channel_str = ",".join(f"{ch},{val}" for ch, val in sorted(channel_vals.items()))
-                fixture_values.append((fixture_id, channel_str))
-
-        group_idx += 1
-
-    if fixture_values:
-        create_scene_function(engine, function_id, "Scene - Rainbow", fixture_values)
-        master_presets["Scene_Rainbow"] = function_id
-        return function_id + 1
-
-    return function_id
-
-
 def create_party_chaser(
     engine: ET.Element,
     function_id: int,
@@ -1449,5 +1377,3 @@ def create_sparkle_chaser(
         return function_id + 1
 
     return function_id
-
-

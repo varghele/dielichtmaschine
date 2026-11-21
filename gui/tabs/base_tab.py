@@ -86,22 +86,3 @@ class BaseTab(QtWidgets.QWidget):
             message: Error message to display
         """
         QtWidgets.QMessageBox.critical(self, title, message)
-
-    def show_info(self, title: str, message: str):
-        """Show information dialog with consistent styling
-
-        Args:
-            title: Dialog title
-            message: Information message to display
-        """
-        QtWidgets.QMessageBox.information(self, title, message)
-
-    def validate_config(self) -> bool:
-        """Validate configuration before save
-
-        Override to add tab-specific validation logic.
-
-        Returns:
-            True if configuration is valid, False otherwise
-        """
-        return True

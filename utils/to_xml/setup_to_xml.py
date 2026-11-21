@@ -1,30 +1,6 @@
 # setup_to_xml.py
 import xml.etree.ElementTree as ET
-import csv
-import os
-import json
-import pandas as pd
 from config.models import Configuration
-
-
-def read_universes_from_csv():
-    universes = []
-    csv_path = os.path.join('../../setup', 'universes.json')
-    with open(csv_path, 'r') as file:
-        csv_reader = csv.DictReader(file)
-        for row in csv_reader:
-            universes.append(row)
-    return universes
-
-
-def read_fixtures_from_csv(setup_fixtures_dir):
-    fixtures = []
-    csv_path = os.path.join(setup_fixtures_dir, 'fixtures.csv')
-    with open(csv_path, 'r') as file:
-        csv_reader = csv.DictReader(file)
-        for row in csv_reader:
-            fixtures.append(row)
-    return fixtures
 
 
 def create_universe_elements(input_output_map, config: Configuration):

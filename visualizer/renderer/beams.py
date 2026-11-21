@@ -9,7 +9,6 @@ Variants mirror the natural factoring of the existing renderers:
 - :class:`GlowBeam` — short glow cone (PAR / wash fallback)
 - :class:`CylindricalBeam` — stubby column (PAR canister)
 - :class:`ConeBeam` — long narrow cone with gobo + focus modulation (MH)
-- :class:`SegmentedBeam` — N glow beams along a bar (pixel bar / sunstrip / matrix)
 - :class:`RectangularBeam` — wide rectangular volume (wash)
 
 Phase B keeps the existing GLSL intact (shared via ``shaders.py``); Phase D
@@ -379,65 +378,6 @@ class RectangularBeam(BeamComponent):
         self.length_m = length_m
 
         verts, alphas = GeometryBuilder.create_beam_box(width_m, height_m, length_m)
-
-        self.program = ctx.program(
-            vertex_shader=BEAM_VERTEX_SHADER,
-            fragment_shader=BEAM_FRAGMENT_SHADER,
-        )
-        self.vbo = ctx.buffer(verts.tobytes())
-        self.abo = ctx.buffer(alphas.tobytes())
-        self.vao = ctx.vertex_array(
-            self.program,
-            [
-                (self.vbo, '3f', 'in_position'),
-                (self.abo, '1f', 'in_alpha'),
-            ],
-        )
-
-    def render_emission(
-        self,
-        mvp: glm.mat4,
-        fixture_model: glm.mat4,
-        emission: Emission,
-        modifiers: BeamModifiers = _DEFAULT_MODIFIERS,
-    ) -> None:
-        if emission.dimmer < 0.01:
-            return
-        mvp_bytes = _to_mvp_bytes(mvp, fixture_model, emission.local_transform)
-        _setup_additive_blending(self.ctx)
-        try:
-            self.program['mvp'].write(mvp_bytes)
-            self.program['beam_color'].value = emission.color
-            self.program['beam_intensity'].value = emission.dimmer * modifiers.brightness_scale
-            self.vao.render(moderngl.TRIANGLES)
-        finally:
-            _restore_state(self.ctx)
-
-
-# ---------------------------------------------------------------------------
-# SegmentedBeam — one short glow cone per cell (pixel bar / sunstrip / matrix)
-# ---------------------------------------------------------------------------
-
-
-class SegmentedBeam(BeamComponent):
-    """One short glow cone per emission. Kept for back-compat; new code
-    should prefer :class:`SegmentedRectBeam` (pixel/LED bar) or
-    :class:`SegmentedCylinderBeam` (sunstrip) which match the legacy
-    fixture beam shapes more faithfully.
-    """
-
-    def __init__(
-        self,
-        ctx: moderngl.Context,
-        length_m: float = 0.5,
-        cone_angle_deg: float = 50.0,
-    ):
-        super().__init__(ctx)
-        self.length_m = length_m
-        self.cone_angle_deg = cone_angle_deg
-
-        radius = length_m * math.tan(math.radians(cone_angle_deg / 2.0))
-        verts, alphas = GeometryBuilder.create_beam_cone(radius, length_m, segments=12)
 
         self.program = ctx.program(
             vertex_shader=BEAM_VERTEX_SHADER,

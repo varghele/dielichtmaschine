@@ -2551,7 +2551,7 @@ class OrientationDialog(QDialog):
     """Modal wrapper around :class:`OrientationPanel`.
 
     Adds Cancel / Apply buttons and standard QDialog accept/reject flow so
-    existing call sites (``stage_tab._open_orientation_dialog``) keep working
+    existing call sites (the Stage tab, the pre-flight screen) keep working
     unchanged. Forwards ``get_selected_mounting`` / ``get_orientation_values``
     to the embedded panel.
     """

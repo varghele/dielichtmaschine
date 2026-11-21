@@ -2494,20 +2494,6 @@ class StageTab(BaseTab):
         values = self.orientation_panel.get_orientation_values()
         self._apply_orientation_to_fixtures(fixture_items, values)
 
-    def _open_orientation_dialog(self):
-        """Modal-dialog fallback. No longer wired to the right-click flow,
-        but kept for any future multi-edit-confirm path that wants Apply/
-        Cancel semantics."""
-        fixture_items = getattr(self, '_pending_orientation_fixtures', None)
-        if not fixture_items:
-            return
-
-        self._pending_orientation_fixtures = None
-
-        dialog = OrientationDialog(fixture_items, self.config, self)
-        if dialog.exec() == QtWidgets.QDialog.DialogCode.Accepted:
-            self._apply_orientation_to_fixtures(fixture_items, dialog.get_orientation_values())
-
     def _apply_orientation_to_fixtures(self, fixture_items: list, values: dict) -> None:
         """Write a values dict (mounting, yaw, pitch, roll, z_height,
         apply_to_group) back to the fixture items, the config, and group

@@ -149,9 +149,6 @@ class LiveEngine:
                     if k == prefix or k.startswith(prefix + ":")]:
             del self._slots[key]
 
-    def kill_all(self) -> None:
-        self._slots.clear()
-
     def pause(self, slot: str, paused: bool = True) -> None:
         """Freeze (or resume) a slot's clock. While paused the last
         frame keeps streaming - a paused chase holds its pose instead
@@ -263,12 +260,6 @@ class LiveEngine:
             if any(mask):
                 frame[universe] = (values, mask)
         return frame
-
-    @staticmethod
-    def merge_frames(frames: List[Frame]) -> Frame:
-        """Public alias of the slot merge - later frames override
-        earlier ones per claimed channel."""
-        return LiveEngine._merge(frames)
 
     @staticmethod
     def _merge(frames: List[Frame]) -> Frame:
@@ -421,21 +412,6 @@ SHAPE_ORBIT_RADIUS_M = 0.75
 # The world-space movement path reads its amplitude in meters as
 # block.pan_amplitude / 20 (dmx_manager._apply_movement_block).
 _AMPLITUDE_PER_METER = 20.0
-
-
-class SpotOverlayConfig:
-    """A read-only VIEW of a Configuration with extra transient spots
-    overlaid - the movement binder's anchor spots exist for the
-    private manager's spot-targeting resolve only and never touch the
-    real (saved) config. Everything else delegates to the base."""
-
-    def __init__(self, base, extra_spots) -> None:
-        self._base = base
-        self.spots = dict(getattr(base, "spots", None) or {})
-        self.spots.update(extra_spots)
-
-    def __getattr__(self, name):
-        return getattr(self._base, name)
 
 
 class LiveMovementBinder:

@@ -168,21 +168,6 @@ class AudioFile:
         except Exception as e:
             print(f"Error resampling audio: {e}")
 
-    def get_metadata(self) -> Optional[AudioMetadata]:
-        """Get audio file metadata"""
-        if not self._is_loaded:
-            return None
-
-        format_name = os.path.splitext(self.file_path)[1][1:].upper()
-
-        return AudioMetadata(
-            duration=self.duration,
-            sample_rate=self.sample_rate,
-            channels=self.channels,
-            frames=self.frames,
-            format_name=format_name
-        )
-
     def read_frames(self, frame_count: int, start_frame: Optional[int] = None) -> np.ndarray:
         """
         Read frames from audio file
@@ -252,9 +237,3 @@ class AudioFile:
     def is_loaded(self) -> bool:
         """Check if audio file is loaded"""
         return self._is_loaded
-
-    def unload(self):
-        """Unload audio data from memory"""
-        self.audio_data = None
-        self._is_loaded = False
-        self.current_frame = 0

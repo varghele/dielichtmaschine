@@ -662,7 +662,7 @@ These are reference shapes. Actual envelope curves are parameterized (speed, int
 | Spatial model | Fixture positions + orientation from `config/models.py` |
 | Color wheel | QXF parsing in `utils/tcp/protocol.py`, DMX handling in `dmx_manager.py` |
 | Gobo/prism | SpecialBlock with gobo_index, prism fields |
-| **Lighting roles** | `autogen/spatial.py` → `LightingRole` enum (wash, key, texture, accent) |
+| **Lighting roles** | `autogen/spatial.py` → `GroupClassification.lighting_role` (string from the config) |
 | **Role-based activation** | `autogen/spatial.py` → `compute_richness_weights()`, `_ROLE_ENERGY_CONFIG` |
 | **Role-based temporal behavior** | `autogen/spatial.py` → `assign_group_roles()` with `group_classifications` parameter |
 | **RMS energy** | `audio/spectral_analysis.py` → `SectionAnalysis.rms_energy`, `librosa.feature.rms()` |

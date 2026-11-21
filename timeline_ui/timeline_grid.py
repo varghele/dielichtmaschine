@@ -364,9 +364,3 @@ class TimelineGrid(QWidget):
             if hasattr(tw, "update_timeline_width"):
                 tw.update_timeline_width()
             tw.update()
-
-    def horizontal_scroll_value(self) -> int:
-        return self.stripes_scroll.horizontalScrollBar().value()
-
-    def set_horizontal_scroll_value(self, value: int) -> None:
-        self.stripes_scroll.horizontalScrollBar().setValue(value)

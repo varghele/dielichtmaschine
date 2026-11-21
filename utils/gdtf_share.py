@@ -335,13 +335,6 @@ def auto_pull_enabled() -> bool:
     return app_settings().value(AUTO_PULL_KEY, True, type=bool)
 
 
-def set_auto_pull_enabled(enabled: bool) -> None:
-    from utils.app_settings import app_settings
-    settings = app_settings()
-    settings.setValue(AUTO_PULL_KEY, bool(enabled))
-    settings.sync()
-
-
 def _norm_identity(text: str) -> str:
     return " ".join((text or "").lower().replace("_", " ").split())
 

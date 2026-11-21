@@ -27,7 +27,7 @@ from autogen.color_generator import (
     get_preset_palette,
 )
 from autogen.matcher import (
-    match_rudiments_to_section, select_groove_and_fill,
+    match_rudiments_to_section,
     select_rudiments_per_group, AutogenConfig,
 )
 from autogen.spatial import (

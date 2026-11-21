@@ -479,12 +479,3 @@ class PrismComponent(FixtureComponent):
     @property
     def facets(self) -> int:
         return self.prism.facets
-
-    @property
-    def rotation_speed_normalized(self) -> float:
-        """-1..+1: negative = CCW, positive = CW, 0 = stop."""
-        if self._rotation_value == 0:
-            return 0.0
-        if self._rotation_value < 128:
-            return self._rotation_value / 127.0
-        return -((self._rotation_value - 128) / 127.0)

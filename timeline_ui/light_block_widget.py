@@ -232,14 +232,6 @@ def block_header_label(name, kind="", modified=False, selected=False) -> str:
     return left
 
 
-def _signature_beats_per_bar(signature: str) -> float:
-    try:
-        numerator, denominator = map(int, str(signature).split("/"))
-        return (numerator * 4) / denominator
-    except (ValueError, ZeroDivisionError):
-        return 4.0
-
-
 def bar_index_at(song_structure, time: float):
     """1-based global bar number at ``time``, accumulating bars across
     parts (same counting as the toolbar BAR readout). None when there
@@ -453,16 +445,6 @@ class LightBlockWidget(QWidget):
         # No UI widgets needed - we'll draw everything in paintEvent
         pass
 
-    def _format_parameters(self) -> str:
-        """Format block parameters for display."""
-        params = self.block.parameters
-        parts = []
-        if params.get('speed') and params['speed'] != '1':
-            parts.append(f"×{params['speed']}")
-        if params.get('intensity'):
-            parts.append(f"I:{params['intensity']}")
-        return " ".join(parts) if parts else ""
-
     def update_display(self):
         """Update the display after block data changes."""
         self.update()  # Trigger repaint
@@ -485,11 +467,6 @@ class LightBlockWidget(QWidget):
         envelope moves/resizes call _flip_morph_provenance alone."""
         self.block.modified = True
         self._flip_morph_provenance()
-
-    @property
-    def is_multi_selected(self) -> bool:
-        """Check if this block is part of a multi-selection."""
-        return self._is_multi_selected
 
     def set_multi_selected(self, selected: bool) -> None:
         """Set multi-selection state.
@@ -1477,17 +1454,6 @@ class LightBlockWidget(QWidget):
 
         return None
 
-    def _get_block_color(self) -> QColor:
-        """Get color for block based on effect or parameters.
-
-        Falls back to the lane's group data color (or a brand neutral)
-        rather than a Material per-effect palette.
-        """
-        # Use color from parameters if set
-        if self.block.parameters.get('color'):
-            return QColor(self.block.parameters['color'])
-        return self._group_base_color()
-
     def mousePressEvent(self, event: QMouseEvent):
         """Handle mouse press for dragging/resizing envelope or sublane blocks."""
         if event.button() == Qt.MouseButton.RightButton:
@@ -1843,22 +1809,6 @@ class LightBlockWidget(QWidget):
 
             # Redraw to update handle position and label
             self.update()
-
-    def _get_sublane_blocks_by_type(self, sublane_type):
-        """Get list of sublane block objects by type.
-
-        Returns:
-            List of blocks for the given sublane type, or empty list if not found.
-        """
-        if sublane_type == "dimmer":
-            return self.block.dimmer_blocks
-        elif sublane_type == "colour":
-            return self.block.colour_blocks
-        elif sublane_type == "movement":
-            return self.block.movement_blocks
-        elif sublane_type == "special":
-            return self.block.special_blocks
-        return []
 
     def _check_overlap(self, sublane_type, start_time, end_time, exclude_block=None):
         """Check if a time range would overlap with existing blocks in a sublane.

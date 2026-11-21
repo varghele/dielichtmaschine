@@ -80,12 +80,6 @@ class AudioMixer:
                 self._lanes[lane_id].solo = solo
                 self._update_solo_state()
 
-    def set_enabled_state(self, lane_id: int, enabled: bool):
-        """Enable or disable a lane"""
-        with self._lock:
-            if lane_id in self._lanes:
-                self._lanes[lane_id].enabled = enabled
-
     def _update_solo_state(self):
         """Update internal solo state flag"""
         self._has_solo_lanes = any(lane.solo for lane in self._lanes.values())

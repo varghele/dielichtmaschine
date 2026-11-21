@@ -76,7 +76,6 @@ a = Analysis(
         'gui.tabs.configuration_tab',
         'gui.tabs.fixtures_tab',
         'gui.tabs.shows_tab',
-        'gui.tabs.shows_tab_timeline',
         'gui.tabs.stage_tab',
         'gui.tabs.structure_tab',
         # keyring finds its backend at runtime (GDTF Share password

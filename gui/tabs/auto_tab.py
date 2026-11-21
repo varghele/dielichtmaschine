@@ -213,10 +213,6 @@ class _Bar(QWidget):
         self._fill = QColor(fill)
         self._fraction: Optional[float] = None
 
-    def set_fill_color(self, color: str) -> None:
-        self._fill = QColor(color)
-        self.update()
-
     def fraction(self) -> Optional[float]:
         return self._fraction
 

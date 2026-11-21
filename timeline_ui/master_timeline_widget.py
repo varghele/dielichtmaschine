@@ -514,10 +514,6 @@ class MasterTimelineContainer(QWidget):
         """
         self.timeline_widget.set_grid_subdivision(subdivision)
 
-    def sync_scroll_position(self, position: int):
-        """Sync scroll position with other timelines."""
-        self.timeline_scroll.horizontalScrollBar().setValue(position)
-
     def set_zoom_factor(self, zoom_factor: float):
         """Set zoom factor for timeline."""
         self.timeline_widget.zoom_factor = zoom_factor

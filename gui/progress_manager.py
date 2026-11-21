@@ -108,16 +108,6 @@ class ProgressManager:
         if self.status_progress:
             self.status_progress.start(message, maximum)
 
-    def update_status(self, value: int = None, message: str = None):
-        """Update status bar progress.
-
-        Args:
-            value: Current value (None to auto-increment)
-            message: Optional new message
-        """
-        if self.status_progress:
-            self.status_progress.update(value, message)
-
     def finish_status(self):
         """Finish status bar progress."""
         if self.status_progress:
@@ -207,8 +197,8 @@ class ProgressManager:
                              parent=None) -> 'ProgressDialogWithLog':
         """Start a modal progress dialog with a scrolling log area.
 
-        Use log_modal() to append lines, or use start_log_capture()/stop_log_capture()
-        to redirect stdout into the log automatically.
+        Use start_log_capture()/stop_log_capture() to redirect stdout into
+        the log automatically.
 
         Returns:
             ProgressDialogWithLog instance
@@ -225,11 +215,6 @@ class ProgressManager:
 
         return self.modal_dialog
 
-    def log_modal(self, text: str):
-        """Append a line to the modal log area."""
-        if self.modal_dialog and hasattr(self.modal_dialog, 'append_log'):
-            self.modal_dialog.append_log(text)
-
     def start_log_capture(self):
         """Redirect stdout to the modal log area. Call stop_log_capture() to restore."""
         if self.modal_dialog and hasattr(self.modal_dialog, 'append_log'):
@@ -241,12 +226,6 @@ class ProgressManager:
         if hasattr(self, '_original_stdout') and self._original_stdout is not None:
             sys.stdout = self._original_stdout
             self._original_stdout = None
-
-    def is_modal_canceled(self) -> bool:
-        """Check if user canceled the modal dialog."""
-        if self.modal_dialog:
-            return self.modal_dialog.wasCanceled()
-        return False
 
 
 # Global progress manager instance (set by MainWindow)

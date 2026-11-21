@@ -74,14 +74,6 @@ class SelectionOverlay(QWidget):
         self._is_selecting = False
         self.update()
 
-    def is_selecting(self) -> bool:
-        """Check if currently in selection mode.
-
-        Returns:
-            True if selection is in progress
-        """
-        return self._is_selecting
-
     def get_selection_rect(self) -> QRect:
         """Get the current selection rectangle.
 

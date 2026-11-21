@@ -1690,12 +1690,6 @@ class Universe:
         if self.name is None:
             self.name = f"Universe {self.id}"
 
-@dataclass
-class UniverseOutput:
-    plugin: str
-    line: str
-    parameters: Dict[str, str]
-
 
 
 def _process_umask() -> int:
@@ -2293,28 +2287,6 @@ class Configuration:
                 }
             )
 
-    def add_universe(self, universe_id: int, output_type: str, ip: str, port: str, subnet: str, universe: str):
-        """Add or update a universe configuration"""
-        self.universes[universe_id] = Universe(
-            id=universe_id,
-            name=f"Universe {universe_id}",
-            output={
-                'plugin': output_type,
-                'line': '0',
-                'parameters': {
-                    'ip': ip,
-                    'port': port,
-                    'subnet': subnet,
-                    'universe': universe
-                }
-            }
-        )
-
-    def remove_universe(self, universe_id: int):
-        """Remove a universe configuration"""
-        if universe_id in self.universes:
-            del self.universes[universe_id]
-
     def ensure_universes_for_fixtures(self):
         """
         Ensure universes exist for all fixtures.
@@ -2362,4 +2334,3 @@ class Configuration:
         print(f"Auto-created {len(missing_ids)} universe(s) for visualizer: {sorted(missing_ids)}")
 
         return True
-

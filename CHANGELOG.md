@@ -11,6 +11,16 @@ verbatim as the GitHub Release notes (see [docs/releasing.md](docs/releasing.md)
 
 ## [Unreleased]
 
+### Removed
+
+- **Dead code.** The pre-v3 timeline tab module (`gui/tabs/shows_tab_timeline.py`),
+  `utils/make/make_channel_groups.py`, `utils/to_xml/chaser_functions.py` and
+  `utils/step_utils.py` are gone, together with about 80 functions, methods and
+  classes nothing called (among them the `setup_to_xml` CSV readers, the
+  device-manager preference IO, `compute_beat_features`,
+  `create_master_rainbow_scene` and the legacy glow-beam pair). No behaviour
+  change; rig and demo show exports are byte-identical.
+
 ## [1.5.5] - 2026-10-13
 
 Version 1.5.0 never shipped as a final release: its alpha went out on

@@ -458,12 +458,3 @@ class LiveBuskLayer:
                                             fixture_map)
 
         return {u: (bytes(values[u]), bytes(masks[u])) for u in values}
-
-    @staticmethod
-    def _target_for(config, presets_by_id, position_id, fixture):
-        """The stage-space (x, y, z) a position id aims this fixture at,
-        or None when the id is stale - the shared resolve in
-        utils/position_presets.py (the movement binder anchors shapes
-        through the same function)."""
-        return resolve_position_target(config, presets_by_id,
-                                       position_id, fixture)

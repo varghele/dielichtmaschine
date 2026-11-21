@@ -768,12 +768,6 @@ class RiffBrowserWidget(QDockWidget):
     def is_collapsed(self) -> bool:
         return self._is_collapsed
 
-    def set_collapsed(self, collapsed: bool):
-        if collapsed:
-            self.collapse()
-        else:
-            self.expand()
-
     # ── Pass-through to the panel for back-compat ─────────────────────
 
     def set_fixture_filter(self, fixture_group: FixtureGroup):

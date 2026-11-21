@@ -99,11 +99,6 @@ class _EMANormalizer:
 
         return float(np.clip((value - self._running_min) / span, 0.0, 1.0))
 
-    def set_range(self, min_val: float, max_val: float):
-        """Pre-set normalization range (e.g. from offline analysis)."""
-        self._running_min = min_val
-        self._running_max = max_val
-
 
 class _OutputSmoother:
     """Single-pole low-pass filter on the normalised metric output.
@@ -306,21 +301,6 @@ class RealtimeSpectralAnalyzer:
         with self._callbacks_lock:
             if callback in self._callbacks:
                 self._callbacks.remove(callback)
-
-    def set_calibration_range(self, metric: str, min_val: float, max_val: float) -> None:
-        """Pre-set normalization range for a metric.
-
-        Useful when offline analysis results are available to seed
-        the normalizer with known dynamic ranges.
-
-        Args:
-            metric: One of 'flux', 'transient', 'richness', 'vocal', 'centroid', 'rms', 'contrast'
-            min_val: Minimum expected raw value
-            max_val: Maximum expected raw value
-        """
-        normalizer = getattr(self, f'_norm_{metric}', None)
-        if normalizer:
-            normalizer.set_range(min_val, max_val)
 
     def _reset_state(self):
         """Reset internal state for a fresh start."""

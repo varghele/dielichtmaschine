@@ -12,14 +12,6 @@ from typing import Optional, Callable
 from .audio_mixer import AudioMixer
 
 
-class AudioCommand:
-    """Commands for audio engine"""
-    START = "start"
-    STOP = "stop"
-    PAUSE = "pause"
-    SEEK = "seek"
-
-
 class AudioEngine:
     """Core audio playback engine using sounddevice"""
 

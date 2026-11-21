@@ -3486,57 +3486,6 @@ class StructureTab(BaseTab):
         # Show menu at cursor position
         menu.exec(self.parts_host.mapToGlobal(position))
 
-    def _import_from_csv(self):
-        """Import show structure from CSV file."""
-        if self._locked():
-            self._flash_locked()
-            return
-        if not self.current_song_name:
-            QMessageBox.warning(self, "No Show Selected", "Please select a show first.")
-            return
-
-        # Use the existing import functionality
-        project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-        csv_path = os.path.join(project_root, "shows", f"{self.current_song_name}.csv")
-
-        if not os.path.exists(csv_path):
-            QMessageBox.warning(
-                self,
-                "CSV Not Found",
-                f"No CSV file found for show '{self.current_song_name}' at:\n{csv_path}"
-            )
-            return
-
-        try:
-            # Clear existing parts
-            self.current_show.parts.clear()
-
-            # Read CSV
-            with open(csv_path, 'r') as f:
-                reader = csv.DictReader(f)
-                for row in reader:
-                    part = ShowPart(
-                        name=row['showpart'],
-                        color=row['color'],
-                        signature=row['signature'],
-                        bpm=float(row['bpm']),
-                        num_bars=int(row['num_bars']),
-                        transition=row['transition']
-                    )
-                    self.current_show.parts.append(part)
-
-            # Reload display
-            self._selected_index = 0 if self.current_show.parts else -1
-            self._rebuild_parts_strip()
-
-            # Update timelines
-            self._update_timelines()
-
-            QMessageBox.information(self, "Success", f"Imported {len(self.current_show.parts)} parts from CSV.")
-
-        except Exception as e:
-            QMessageBox.critical(self, "Import Error", f"Failed to import CSV:\n{str(e)}")
-
     def _auto_save(self):
         """Hook called after in-memory edits. No-op today.
 

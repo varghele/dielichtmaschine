@@ -117,10 +117,6 @@ class LTCDecoder:
         return out
 
     @property
-    def cell_period_samples(self) -> Optional[float]:
-        return self._period
-
-    @property
     def fps_estimate(self) -> Optional[float]:
         """Raw frame rate implied by the measured cell period."""
         if not self._period:

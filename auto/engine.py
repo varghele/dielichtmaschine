@@ -198,11 +198,6 @@ class AutoShowEngine:
             return self._cycle.is_fill
 
     @property
-    def current_groove_name(self) -> str:
-        with self._lock:
-            return self._cycle.groove_rudiment
-
-    @property
     def cycle_bars(self) -> int:
         """Bars per riff-reselection cycle (fixed at 4)."""
         with self._lock:

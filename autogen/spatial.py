@@ -20,29 +20,6 @@ class ActivationRole(Enum):
     FILL_ONLY = "fill"       # Plays only fill blocks (punches in for fills)
 
 
-class LightingRole(Enum):
-    """Semantic role a fixture group plays in the show design.
-
-    Assigned by the user in config YAML, used by autogen for
-    activation priority and temporal behavior.
-
-    Rhythm and movement are attributes (applied per-section by the
-    algorithm), not roles. Any role can have rhythmic or movement
-    behavior depending on the section's audio character.
-    """
-    WASH = "wash"        # Base illumination, broad coverage, always on
-    KEY = "key"          # Front-of-stage visibility, vocal-aware, always on
-    TEXTURE = "texture"  # Gobos, prism, breakup patterns, medium+ energy
-    ACCENT = "accent"    # Sparse, high-impact peaks — strobes, blinders
-
-
-@dataclass
-class GroupActivation:
-    """Activation state for a fixture group in a section."""
-    weight: float            # 0.0 = inactive, 0.1-1.0 = intensity weight
-    role: ActivationRole = ActivationRole.FULL
-
-
 @dataclass
 class GroupClassification:
     """Stage position and role classification for a fixture group."""

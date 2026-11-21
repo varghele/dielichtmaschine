@@ -315,11 +315,6 @@ class AudioWaveformWidget(QWidget):
         painter.drawText(0, 0, width, height, Qt.AlignmentFlag.AlignCenter,
                          "No audio loaded")
 
-    def set_waveform_color(self, color: QColor):
-        """Set the color for waveform display"""
-        self.waveform_color = color
-        self.update()
-
     def cleanup(self):
         """Cleanup resources"""
         # quit() cannot stop run() (no event loop): just let it end

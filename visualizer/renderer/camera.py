@@ -211,14 +211,3 @@ class OrbitCamera:
             0.0,
             -math.sin(azimuth_rad)
         )
-
-    def _get_forward_vector(self) -> glm.vec3:
-        """Get camera forward vector."""
-        azimuth_rad = math.radians(self.azimuth)
-        elevation_rad = math.radians(self.elevation)
-
-        return glm.vec3(
-            -math.cos(elevation_rad) * math.sin(azimuth_rad),
-            -math.sin(elevation_rad),
-            -math.cos(elevation_rad) * math.cos(azimuth_rad)
-        )

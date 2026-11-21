@@ -37,7 +37,6 @@ from visualizer.renderer.beams import (
     CylindricalBeam,
     GlowBeam,
     RectangularBeam,
-    SegmentedBeam,
     SegmentedCylinderBeam,
     SegmentedRectBeam,
 )

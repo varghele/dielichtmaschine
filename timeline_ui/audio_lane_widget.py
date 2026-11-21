@@ -525,10 +525,6 @@ class AudioLaneWidget(QFrame):
         if self.timeline_widget.waveform_widget:
             self.timeline_widget.waveform_widget.set_zoom_factor(zoom_factor)
 
-    def sync_scroll_position(self, position: int):
-        """Sync scroll position with master timeline."""
-        self.timeline_scroll.horizontalScrollBar().setValue(position)
-
     def cleanup(self):
         """Clean up audio resources."""
         # Let a running audio loader thread end (it cannot be

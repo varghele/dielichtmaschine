@@ -32,9 +32,6 @@ def _sawtooth(n=32):
 def _ramp_up(n=32):
     return [i / (n - 1) for i in range(n)]
 
-def _ramp_down(n=32):
-    return [1.0 - i / (n - 1) for i in range(n)]
-
 def _rolling(n=32):
     """Chase/waterfall envelope — rolling sawtooth-like."""
     return [0.5 * (1 + math.sin(2 * math.pi * i / n - math.pi / 2)) for i in range(n)]

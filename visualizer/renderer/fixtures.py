@@ -536,7 +536,7 @@ class FixtureRenderer(ABC):
         self.vbo: Optional[moderngl.Buffer] = None
         self.nbo: Optional[moderngl.Buffer] = None
 
-        # Beam resources (optional, created by _create_glow_beam)
+        # Beam resources (optional, created by subclasses)
         self.beam_program: Optional[moderngl.Program] = None
         self.beam_vao: Optional[moderngl.VertexArray] = None
         self.beam_vbo: Optional[moderngl.Buffer] = None
@@ -625,86 +625,6 @@ class FixtureRenderer(ABC):
         """Get current dimmer value (0-1 range)."""
         # Default to 0 (off) when no DMX received, not 255
         return self.dmx_values.get('dimmer', 0) / 255.0
-
-    def _create_glow_beam(self, beam_length: float = 0.8, beam_angle: float = 40.0):
-        """
-        Create a short glow beam for non-moving-head fixtures.
-
-        Args:
-            beam_length: Length of the beam in meters (default 0.8m - short glow)
-            beam_angle: Beam spread angle in degrees (default 40 - wide spread)
-        """
-        # Create beam shader program
-        self.beam_program = self.ctx.program(
-            vertex_shader=BEAM_VERTEX_SHADER,
-            fragment_shader=BEAM_FRAGMENT_SHADER
-        )
-
-        # Calculate beam radius at end based on angle
-        beam_radius = beam_length * math.tan(math.radians(beam_angle / 2))
-
-        beam_verts, beam_alphas = GeometryBuilder.create_beam_cone(
-            beam_radius, beam_length, segments=16
-        )
-
-        self.beam_vbo = self.ctx.buffer(beam_verts.tobytes())
-        self.beam_abo = self.ctx.buffer(beam_alphas.tobytes())
-
-        self.beam_vao = self.ctx.vertex_array(
-            self.beam_program,
-            [
-                (self.beam_vbo, '3f', 'in_position'),
-                (self.beam_abo, '1f', 'in_alpha'),
-            ]
-        )
-        self.beam_vertex_count = len(beam_verts) // 3
-
-    def _render_glow_beam(self, mvp: glm.mat4, model: glm.mat4,
-                          color: Tuple[float, float, float], dimmer: float,
-                          beam_offset_z: float = 0.0):
-        """
-        Render a short glow beam.
-
-        Args:
-            mvp: View-projection matrix
-            model: Model matrix for the fixture
-            color: RGB color tuple (0-1 range)
-            dimmer: Dimmer value (0-1 range)
-            beam_offset_z: Offset along Z axis to position beam at lens
-        """
-        if not self.beam_vao or dimmer < 0.01:
-            return
-
-        try:
-            # Offset beam to start at lens position
-            beam_offset = glm.translate(glm.mat4(1.0), glm.vec3(0, 0, beam_offset_z))
-            beam_model = model * beam_offset
-
-            beam_mvp = mvp * beam_model
-            mvp_bytes = np.array([x for col in beam_mvp.to_list() for x in col], dtype='f4').tobytes()
-
-            # Enable additive blending
-            self.ctx.enable(moderngl.BLEND)
-            self.ctx.blend_func = (moderngl.SRC_ALPHA, moderngl.ONE)
-            self.ctx.depth_mask = False
-
-            self.beam_program['mvp'].write(mvp_bytes)
-            self.beam_program['beam_color'].value = color
-            self.beam_program['beam_intensity'].value = dimmer * self.brightness_scale
-
-            self.beam_vao.render(moderngl.TRIANGLES)
-
-            # Restore state
-            self.ctx.depth_mask = True
-            self.ctx.disable(moderngl.BLEND)
-
-        except Exception as e:
-            # Restore state on error
-            try:
-                self.ctx.depth_mask = True
-                self.ctx.disable(moderngl.BLEND)
-            except:
-                pass
 
     @abstractmethod
     def render(self, mvp: glm.mat4):
@@ -3795,10 +3715,6 @@ class FixtureManager:
         # Legacy fixtures keep their old chassis-then-beam single pass.
         for fixture in single_pass:
             fixture.render(mvp)
-
-    def get_fixture(self, name: str) -> Optional[FixtureRenderer]:
-        """Get fixture by name."""
-        return self.fixtures.get(name)
 
     def release(self):
         """Release all GPU resources."""

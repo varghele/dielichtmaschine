@@ -473,14 +473,6 @@ class LightLaneWidget(QFrame):
         for block_widget in self.light_block_widgets:
             block_widget.update_position()
 
-    def sync_scroll_position(self, position: int):
-        """Sync scroll position with master timeline."""
-        self.timeline_scroll.horizontalScrollBar().setValue(position)
-
-    def update_bpm(self, bpm: float):
-        """Update BPM for grid calculations."""
-        self.timeline_widget.set_bpm(bpm)
-
     def create_light_block_widget(self, block):
         """Create a widget for a light block."""
         block_widget = LightBlockWidget(block, self.timeline_widget, self)
@@ -872,14 +864,6 @@ class LightLaneWidget(QFrame):
 
         # Header micro-labels track the active sublanes (slice T1)
         self.refresh_sublane_labels()
-
-    def set_riff_library(self, riff_library):
-        """Set the riff library for this lane.
-
-        Args:
-            riff_library: RiffLibrary instance
-        """
-        self.riff_library = riff_library
 
     def on_riff_dropped(self, riff_path: str, drop_time: float):
         """Handle a riff being dropped onto the timeline.
