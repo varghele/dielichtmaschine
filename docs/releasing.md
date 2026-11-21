@@ -47,5 +47,9 @@ short and user-facing (what changed for someone using the app), not a commit log
   the draft, so the two never drift.
 - Changelog version headings are **without** the `v` (`## [1.0.0]`); tags have it
   (`v1.0.0`). The extractor strips the `v` when matching.
+- The build installs with `-c constraints/qt-gl.txt`, so the shipped Qt/GL stack
+  is the exact one the win32 goldens were compared against. To move to a newer
+  Qt, bump the pins and regenerate the win32 goldens in the same commit
+  (`tests/README.md`, "Pinned Qt/GL stack").
 - If a tag has no matching changelog section, the notes fall back to a link to
   `CHANGELOG.md` (the build still succeeds).

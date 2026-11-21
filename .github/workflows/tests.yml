@@ -40,7 +40,9 @@ jobs:
         with:
           python-version: '3.12'
           cache: pip
-          cache-dependency-path: requirements.txt
+          cache-dependency-path: |
+            requirements.txt
+            constraints/qt-gl.txt
 
       - name: Install system deps
         # Same set the release build needs (PortAudio for sounddevice,
@@ -63,7 +65,7 @@ jobs:
       - name: Install Python deps
         run: |
           python -m pip install --upgrade pip
-          pip install -r requirements.txt
+          pip install -r requirements.txt -c constraints/qt-gl.txt
 
       # xvfb-run: glcontext's Linux default is the X11 backend, so a
       # display-less runner cannot create standalone GL contexts at
@@ -100,12 +102,14 @@ jobs:
         with:
           python-version: '3.12'
           cache: pip
-          cache-dependency-path: requirements.txt
+          cache-dependency-path: |
+            requirements.txt
+            constraints/qt-gl.txt
 
       - name: Install Python deps
         run: |
           python -m pip install --upgrade pip
-          pip install -r requirements.txt
+          pip install -r requirements.txt -c constraints/qt-gl.txt
 
       - name: Unit suite (parallel)
         run: python -m pytest tests/unit -n auto -q
@@ -115,11 +119,13 @@ jobs:
         # 2026-10-12) shows which test it hit.
         run: python -m pytest tests/e2e -v
 
-      # tests/visual is deliberately NOT run here: the win32 goldens
-      # pin the dev machine's exact Qt raster output, and requirements
-      # float PyQt6 (>=), so a newer runner Qt legitimately shifts
-      # pixels. Goldens stay a dev-machine concern per tests/README.md;
-      # the linux job covers the machine-independent visual checks.
+      - name: Visual suite (serial - tests/README.md rule)
+        # The win32 goldens compare here: constraints/qt-gl.txt pins the
+        # Qt/GL stack that rendered them, so a newer runner Qt cannot
+        # shift pixels. GL tests skip when the runner has no GL 3.3.
+        # -rs lists every skip reason, so a golden that silently skipped
+        # instead of comparing shows in the log.
+        run: python -m pytest tests/visual -q -rs
 
   # tests/integration (sockets/devices) stays out of CI on purpose -
   # it is written for machines with the real test rig attached.

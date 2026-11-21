@@ -22,7 +22,7 @@ permissions:
 
 jobs:
   tests:
-    # The full Tests workflow (unit, e2e, visual on Linux; unit, e2e on
+    # The full Tests workflow (unit, e2e and visual on Linux and
     # Windows). Nothing is built, let alone released, on a red suite.
     name: Tests
     uses: ./.github/workflows/tests.yml
@@ -55,7 +55,9 @@ jobs:
         with:
           python-version: '3.12'
           cache: pip
-          cache-dependency-path: requirements.txt
+          cache-dependency-path: |
+            requirements.txt
+            constraints/qt-gl.txt
 
       - name: Install Linux system deps
         if: runner.os == 'Linux'
@@ -75,7 +77,7 @@ jobs:
       - name: Install Python deps
         run: |
           python -m pip install --upgrade pip
-          pip install -r requirements.txt
+          pip install -r requirements.txt -c constraints/qt-gl.txt
           pip install pyinstaller
 
       - name: Build with PyInstaller

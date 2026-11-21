@@ -1,0 +1,25 @@
+# Pinned Qt/GL stack: the exact versions that render the win32 goldens
+# (tests/visual/goldens/win32). requirements.txt floats these (>=), and a
+# newer Qt raster engine or GL binding legitimately shifts pixels, so CI
+# and the release build install with
+#
+#   pip install -r requirements.txt -c constraints/qt-gl.txt
+#
+# A constraints file only pins versions; it never adds a package that
+# requirements.txt does not already pull in. Bumping a pin here is a
+# pixel change: regenerate the win32 goldens on the Windows desk with the
+# new versions in the same commit (tests/README.md, visual workflow).
+#
+# numpy and pillow stay unpinned: the golden comparison reads PNGs and
+# paints through Qt, numpy only diffs the arrays and pillow only writes
+# the failure overlay, so neither moves a rendered pixel.
+
+# Qt binding, the Qt runtime it bundles, and the sip ABI module
+PyQt6==6.11.0
+PyQt6-Qt6==6.11.2
+PyQt6-sip==13.13.0
+
+# GL: moderngl, its context backend, and the matrix maths behind cameras
+moderngl==5.12.0
+glcontext==3.0.0
+PyGLM==2.8.3

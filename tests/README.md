@@ -9,8 +9,9 @@ python -m pytest tests/integration -q   # network/hardware-adjacent tests
 
 Runtimes as of 2026-10 on a 16-core Linux box: unit about 10 s under
 `-n auto`, e2e about 10 s, visual about 5 s. CI (`.github/workflows/
-tests.yml`) runs unit, e2e and visual on Linux, unit and e2e on
-Windows, on every push and before every release build.
+tests.yml`) runs unit, e2e and visual on Linux and Windows, on every
+push and before every release build; the Windows visual run is where
+the win32 goldens get compared (see "Pinned Qt/GL stack" below).
 
 Everything runs headless via `QT_QPA_PLATFORM=offscreen` (set at the top
 of each Qt-touching test module).
@@ -101,6 +102,24 @@ renders as fallback boxes. Goldens therefore pin layout, geometry, and
 colors, not glyph shapes, and are per-platform. For a true-font look at
 painted output (e.g. the stage plot), render on the native platform
 (no `QT_QPA_PLATFORM` override) and inspect by eye.
+
+### Pinned Qt/GL stack
+
+`requirements.txt` floats PyQt6 and the GL packages (`>=`), and a newer
+Qt raster engine legitimately moves pixels, so a golden is only
+comparable against the stack that rendered it. `constraints/qt-gl.txt`
+pins that stack exactly (PyQt6, PyQt6-Qt6, PyQt6-sip, moderngl,
+glcontext, PyGLM), and every CI install plus the release build use it:
+
+```bash
+pip install -r requirements.txt -c constraints/qt-gl.txt
+```
+
+Install the same way on the desk before regenerating goldens. Bumping a
+pin is a pixel change: regenerate the win32 goldens on Windows with the
+new versions and commit both together. `tests/unit/test_repo_infra.py`
+(`TestQtGlConstraints`) checks the file pins with `==`, covers exactly
+that stack, and is used by every workflow install.
 
 ## Conventions
 

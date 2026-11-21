@@ -207,3 +207,89 @@ class TestTestsReadme:
         assert tiers, "no test tiers found"
         missing = [t for t in tiers if f"`{t}/`" not in readme]
         assert missing == []
+
+
+QT_GL_CONSTRAINTS = ROOT / "constraints" / "qt-gl.txt"
+
+# The packages whose version moves a rendered pixel in the win32
+# goldens: the Qt binding, its bundled Qt runtime and sip ABI module,
+# and the GL stack behind the visualizer renders.
+QT_GL_STACK = {"pyqt6", "pyqt6-qt6", "pyqt6-sip", "moderngl", "glcontext", "pyglm"}
+
+_PIN = re.compile(r"^([A-Za-z0-9_.\-]+)==([0-9][0-9A-Za-z.]*)$")
+
+
+def _constraints():
+    """{normalized name: pinned version}; every non-comment line must be
+    an exact `name==version` pin."""
+    pins = {}
+    for line in QT_GL_CONSTRAINTS.read_text(encoding="utf-8").splitlines():
+        line = line.split("#", 1)[0].strip()
+        if not line:
+            continue
+        match = _PIN.match(line)
+        assert match, f"constraints/qt-gl.txt: not an exact == pin: {line!r}"
+        name = re.sub(r"[-_.]+", "-", match.group(1)).lower()
+        assert name not in pins, f"constraints/qt-gl.txt pins {name} twice"
+        pins[name] = match.group(2)
+    return pins
+
+
+def _install_commands(workflow):
+    """Every `pip install -r requirements.txt ...` line in a workflow."""
+    lines = []
+    for job in _workflow(workflow)["jobs"].values():
+        for step in job.get("steps", []):
+            for line in str(step.get("run", "")).splitlines():
+                if "pip install" in line and "requirements.txt" in line:
+                    lines.append(line.strip())
+    return lines
+
+
+class TestQtGlConstraints:
+    """The win32 goldens pin one exact Qt/GL stack. requirements.txt
+    floats it (>=), so before v1.5.6 the Windows CI job installed
+    whatever PyQt6 was newest and could not compare the goldens at all
+    (it ran no visual tier). constraints/qt-gl.txt pins that stack, and
+    every CI install and the release build go through it."""
+
+    def test_pins_exactly_the_qt_gl_stack(self):
+        assert set(_constraints()) == QT_GL_STACK
+
+    def test_pins_satisfy_the_requirement_floors(self):
+        reqs = _requirements()
+        for name, version in _constraints().items():
+            floor = _norm_version(reqs.get(name))
+            if floor is None:
+                continue  # transitive (PyQt6-Qt6, PyQt6-sip, glcontext)
+            assert _norm_version(version) >= floor, (
+                f"{name}=={version} is below the requirements.txt floor")
+
+    def test_transitive_pins_belong_to_a_required_package(self):
+        """A constraints file never installs anything by itself, so a pin
+        on a package nothing requires would be dead weight."""
+        reqs = _requirements()
+        assert {"pyqt6", "moderngl", "pyglm"} <= set(reqs)
+
+    @pytest.mark.parametrize("workflow", ["tests.yml", "release.yml"])
+    def test_every_ci_install_uses_the_constraints(self, workflow):
+        commands = _install_commands(workflow)
+        assert commands, f"{workflow} never installs requirements.txt"
+        for command in commands:
+            assert "-c constraints/qt-gl.txt" in command, command
+
+    @pytest.mark.parametrize("workflow", ["tests.yml", "release.yml"])
+    def test_pip_cache_keys_on_the_constraints(self, workflow):
+        """A pin bump must invalidate the pip cache, or setup-python
+        restores wheels of the old stack under the old key."""
+        for job in _workflow(workflow)["jobs"].values():
+            for step in job.get("steps", []):
+                if str(step.get("uses", "")).startswith("actions/setup-python"):
+                    paths = str(step.get("with", {}).get("cache-dependency-path", ""))
+                    assert "constraints/qt-gl.txt" in paths
+
+    def test_windows_job_compares_the_win32_goldens(self):
+        steps = _workflow("tests.yml")["jobs"]["test-windows"]["steps"]
+        runs = [str(s.get("run", "")) for s in steps]
+        assert any("pytest tests/visual" in r and "-n" not in r.split()
+                   for r in runs), "the Windows job runs no serial visual tier"

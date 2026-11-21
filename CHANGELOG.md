@@ -13,6 +13,14 @@ verbatim as the GitHub Release notes (see [docs/releasing.md](docs/releasing.md)
 
 ### Changed
 
+- **CI compares the Windows screenshot goldens.** A new constraints file,
+  `constraints/qt-gl.txt`, pins the exact Qt and GL versions the win32
+  goldens were rendered with (PyQt6 6.11.0, PyQt6-Qt6 6.11.2, PyQt6-sip
+  13.13.0, moderngl 5.12.0, glcontext 3.0.0, PyGLM 2.8.3). Both CI jobs and
+  the release build install with `pip install -r requirements.txt -c
+  constraints/qt-gl.txt`, so the shipped binaries use that stack too, and the
+  Windows CI job now runs the visual tier. Bumping a pin means regenerating
+  the win32 goldens in the same commit (`tests/README.md`).
 - **Console messages go to the log file.** About 270 `print()` calls in the
   app now write through per-module loggers into the daily log (Help >
   Diagnostics shows where it lives) at info, warning or error level, and
