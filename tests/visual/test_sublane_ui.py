@@ -7,7 +7,7 @@ from PyQt6.QtCore import Qt
 
 from config.models import (
     Configuration, Fixture, FixtureMode, FixtureGroup,
-    LightLane, TimelineData
+    LightLane
 )
 from timeline_ui.light_lane_widget import LightLaneWidget
 

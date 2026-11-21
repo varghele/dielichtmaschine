@@ -4,8 +4,6 @@ coverage table, gap detection against group capabilities, the unrouted
 mirror view, and the end-to-end morph-from-disk path with report file,
 validation exit and the --force destruction gate."""
 
-import pytest
-
 from config.models import (ColourBlock, Configuration, DimmerBlock, Fixture,
                            FixtureGroup, FixtureGroupCapabilities,
                            FixtureMode, LightBlock, LightLane, ShowPart,

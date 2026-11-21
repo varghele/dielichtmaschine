@@ -9,7 +9,7 @@ from typing import Dict, List, Optional
 from dataclasses import dataclass
 
 from config.models import (
-    Configuration, FixtureGroup, Spot, StagePlane, primary_group,
+    Configuration, Spot, StagePlane, primary_group,
 )
 
 

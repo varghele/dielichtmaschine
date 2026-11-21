@@ -7,8 +7,6 @@ touches solver/visualizer math. Plus a regression pin that the export
 aims at the definition's real Focus ranges (closed by the 2026-07-13/14
 yoke work; the roadmap note claiming 540/270 was stale)."""
 
-import pytest
-
 from config.models import Configuration, Fixture, FixtureGroup, FixtureMode, Universe
 from utils.yoke import (apply_yoke_to_universe, convert_solver_dmx,
                         export_aim_dmx, fixture_yoke)

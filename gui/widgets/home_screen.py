@@ -17,13 +17,13 @@ import os
 import time
 
 from PyQt6.QtCore import QCoreApplication, Qt, pyqtSignal
-from PyQt6.QtGui import QFont, QPixmap
+from PyQt6.QtGui import QFont
 from PyQt6.QtWidgets import (
     QHBoxLayout, QLabel, QPushButton, QVBoxLayout, QWidget,
 )
 
 from gui.typography import MicroLabel, display_font, mono_font
-from utils.app_identity import APP_WORDMARK, SLOGAN_EN, app_icon_path
+from utils.app_identity import APP_WORDMARK, SLOGAN_EN
 
 
 # NOTE: all user-visible strings below use LITERAL

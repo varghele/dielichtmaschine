@@ -4,15 +4,13 @@ generation order and contents from plan + setlist, the fix-and-re-test
 loop, persistence with completion state, and the export guard
 (incomplete and stale-after-calibration cases)."""
 
-import pytest
-
 from config.models import (Configuration, DimmerBlock, Fixture,
                            FixtureGroup, FixtureGroupCapabilities,
                            FixtureMode, LightBlock, LightLane,
                            MovementBlock, ShowPart, Song, Spot,
                            TimelineData, Universe)
 from utils.morph.plan import MorphEdge, MorphPlan
-from utils.morph.preflight import (PreflightChecklist, PreflightItem,
+from utils.morph.preflight import (PreflightChecklist,
                                    export_guard_message,
                                    generate_checklist)
 

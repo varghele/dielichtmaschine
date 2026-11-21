@@ -18,8 +18,6 @@ from __future__ import annotations
 import os
 import types
 
-import pytest
-
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 _KEY = "timeline/show_sublane_labels"

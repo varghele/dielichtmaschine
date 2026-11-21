@@ -8,8 +8,6 @@ routing (hardware converted, mirror not) is in test_output_arbiter.py,
 and the end-to-end aim is in test_gdtf_draw_plan.py::TestAimedBeamHitsTheSpot.
 """
 
-import math
-
 from utils.yoke import (
     apply_yoke_to_universe,
     fixture_yoke,

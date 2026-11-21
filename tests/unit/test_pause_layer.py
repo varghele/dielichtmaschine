@@ -8,8 +8,6 @@ Socket-free; fixture layout = the shared mock def (dimmer 0, RGBW
 1-4, pan 5, tilt 6, fines 7-8, gobo 9).
 """
 
-import pytest
-
 from config.models import (
     Configuration, Fixture, FixtureGroup, FixtureMode, PauseLook, Scene,
     Spot, Universe,

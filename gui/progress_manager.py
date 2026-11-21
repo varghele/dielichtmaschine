@@ -2,10 +2,9 @@
 # Progress indicator management for long-running operations
 
 import sys
-import io
-from PyQt6.QtWidgets import (QProgressDialog, QApplication, QStatusBar, QProgressBar,
+from PyQt6.QtWidgets import (QProgressDialog, QApplication, QProgressBar,
                               QLabel, QWidget, QHBoxLayout, QVBoxLayout, QDialog, QTextEdit)
-from PyQt6.QtCore import Qt, QTimer
+from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QFont
 
 

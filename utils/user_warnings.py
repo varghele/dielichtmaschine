@@ -26,7 +26,7 @@ import logging
 import threading
 import time
 from contextlib import contextmanager
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 logger = logging.getLogger("user.warnings")
 

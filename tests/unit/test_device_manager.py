@@ -17,14 +17,12 @@ drivers registered (Focusrite, ASIO4ALL, etc.). It exercises:
 from __future__ import annotations
 
 import json
-import os
 from pathlib import Path
 from unittest.mock import patch
 
 import pytest
 
 from audio.device_manager import (
-    AudioDevice,
     DeviceCategory,
     DeviceManager,
     _classify,

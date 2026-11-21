@@ -7,8 +7,6 @@ rule so the theme keeps owning the header background.
 
 import os
 
-import pytest
-
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from timeline.light_lane import LightLane

@@ -16,7 +16,7 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from config.models import Configuration
 from utils.csv_table_import import (
-    FIELDS, REQUIRED_FIELDS, apply_mapping, build_fixtures, detect_delimiter,
+    FIELDS, apply_mapping, build_fixtures, detect_delimiter,
     guess_mapping, resolve_fixtures, sniff_csv,
 )
 

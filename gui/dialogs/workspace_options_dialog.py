@@ -2,10 +2,9 @@
 # Dialog for configuring QLC+ workspace export options
 
 from PyQt6.QtWidgets import (
-    QDialog, QVBoxLayout, QHBoxLayout, QCheckBox, QGroupBox,
+    QDialog, QVBoxLayout, QCheckBox, QGroupBox,
     QDialogButtonBox, QLabel, QSpinBox, QGridLayout, QComboBox
 )
-from PyQt6.QtCore import Qt
 
 # QLC+ target versions for the cosmetic <Creator><Version> stamp.
 # The workspace XML schema is identical across these (verified: stock

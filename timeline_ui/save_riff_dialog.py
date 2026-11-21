@@ -2,11 +2,10 @@
 """Dialog for saving a LightBlock as a Riff."""
 
 from PyQt6.QtWidgets import (
-    QDialog, QVBoxLayout, QHBoxLayout, QFormLayout,
-    QLineEdit, QComboBox, QTextEdit, QPushButton,
+    QDialog, QVBoxLayout, QFormLayout,
+    QLineEdit, QComboBox, QTextEdit,
     QLabel, QMessageBox, QDialogButtonBox
 )
-from PyQt6.QtCore import Qt
 
 from config.models import (
     LightBlock, Riff, RiffDimmerBlock, RiffColourBlock,

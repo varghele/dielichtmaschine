@@ -7,8 +7,6 @@ world-plane path the native renderer already had, and the new field
 round-trips through YAML. Resolution priority: plane > spot > point >
 manual pan/tilt."""
 
-import pytest
-
 from config.models import (Configuration, Fixture, FixtureGroup,
                            FixtureMode, MovementBlock, Spot, Universe)
 

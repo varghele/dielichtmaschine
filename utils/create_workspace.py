@@ -2,7 +2,7 @@ import xml.etree.ElementTree as ET
 import xml.dom.minidom as minidom
 import os
 from typing import Dict, Optional
-from config.models import Configuration, FixtureGroupCapabilities
+from config.models import Configuration
 from utils import user_warnings
 from utils.to_xml.setup_to_xml import (create_universe_elements, create_fixture_elements,
                                        create_channels_groups)

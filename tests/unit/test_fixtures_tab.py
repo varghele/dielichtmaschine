@@ -22,15 +22,13 @@ from __future__ import annotations
 
 import os
 
-import pytest
-
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from PyQt6 import QtWidgets
 
 from gui.tabs.fixtures_tab import (
     COL_ADDRESS, COL_FIXTURE, COL_GROUP, COL_MODE, COL_NUM, COL_TYPE,
-    COL_UNI, CONFLICT_BG, GROUP_TINT_ALPHA,
+    COL_UNI, CONFLICT_BG,
 )
 
 

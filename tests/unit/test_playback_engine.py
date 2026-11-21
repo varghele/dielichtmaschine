@@ -3,7 +3,7 @@
 
 import pytest
 from unittest.mock import MagicMock
-from config.models import ShowPart, LightBlock
+from config.models import ShowPart
 from timeline.song_structure import SongStructure
 from timeline.playback_engine import PlaybackEngine
 from timeline.light_lane import LightLane

@@ -1,11 +1,10 @@
 """Tests for group activation roles in auto-generation."""
-import pytest
 
 from autogen.spatial import (
     ActivationRole, GroupClassification,
     compute_richness_weights, assign_group_roles,
 )
-from autogen.generator import _generate_section_blocks, MovementStrategy
+from autogen.generator import _generate_section_blocks
 from autogen.matcher import AutogenConfig
 from config.models import LightLane, ShowPart
 

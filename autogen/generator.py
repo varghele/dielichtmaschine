@@ -16,15 +16,14 @@ from dataclasses import dataclass
 from typing import Dict, List, Optional, Tuple
 
 from config.models import (
-    Configuration, LightLane, LightBlock, DimmerBlock, ColourBlock,
-    MovementBlock, SpecialBlock, ShowPart,
+    Configuration, LightLane, LightBlock, ColourBlock,
+    SpecialBlock, ShowPart,
 )
 from timeline.song_structure import SongStructure
 from audio.spectral_analysis import analyze_song, SongAnalysis, SectionAnalysis
 from autogen.color_generator import (
     SongPalette, SectionColorAssignment,
     generate_palette_from_audio, assign_section_colors,
-    get_preset_palette,
 )
 from autogen.matcher import (
     match_rudiments_to_section,
@@ -32,10 +31,10 @@ from autogen.matcher import (
 )
 from autogen.spatial import (
     classify_fixture_groups, apply_vocal_rule, compute_richness_weights,
-    get_gobo_prism_groups, GroupClassification, ensure_default_spots,
+    get_gobo_prism_groups, ensure_default_spots,
     ActivationRole, assign_group_roles,
 )
-from rudiments.registry import get_intensity_rudiments, get_movement_rudiments
+from rudiments.registry import get_intensity_rudiments
 from rudiments.block_converter import rudiment_to_dimmer_block, rudiment_to_movement_block
 from autogen.report import (
     GenerationReport, SectionReport, GroupSectionReport, MatchScoreEntry,

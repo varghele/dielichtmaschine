@@ -100,7 +100,6 @@ class TestHomeScreenWidget:
             home.deleteLater()
 
     def test_relative_age_buckets(self, tmp_path):
-        import time
         from gui.widgets.home_screen import relative_age
         p = tmp_path / "f.yaml"
         p.write_text("x")

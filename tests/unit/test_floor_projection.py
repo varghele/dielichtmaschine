@@ -14,7 +14,6 @@ import pytest
 
 from visualizer.renderer.floor_projection import (
     DEFAULT_BEAM_LENGTH_M,
-    FloorIntersection,
     compute_distance_falloff,
     compute_floor_intersection,
 )

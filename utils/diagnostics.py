@@ -10,7 +10,6 @@ it stays importable headlessly; the GL probe spins up (and releases) a
 standalone context only when asked.
 """
 
-import os
 import platform
 import sys
 

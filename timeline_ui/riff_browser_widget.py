@@ -15,7 +15,7 @@ import json
 from PyQt6.QtWidgets import (
     QDockWidget, QWidget, QVBoxLayout, QHBoxLayout,
     QLineEdit, QTreeWidget, QTreeWidgetItem, QPushButton,
-    QLabel, QFrame, QSizePolicy, QStackedWidget, QApplication
+    QLabel, QFrame, QStackedWidget, QApplication
 )
 from PyQt6.QtCore import Qt, pyqtSignal, QMimeData
 from PyQt6.QtGui import QDrag, QPixmap, QPainter, QColor, QFont

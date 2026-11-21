@@ -5,11 +5,11 @@ import os
 from PyQt6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QLabel,
                               QComboBox, QPushButton, QFileDialog, QLineEdit,
                               QCheckBox, QGroupBox, QScrollArea, QWidget,
-                              QProgressBar, QTextEdit, QApplication)
-from PyQt6.QtCore import Qt, QThread, pyqtSignal
+                              QProgressBar, QTextEdit)
+from PyQt6.QtCore import QThread, pyqtSignal
 from PyQt6.QtGui import QFont
 
-from config.models import Configuration, Song
+from config.models import Configuration
 from utils.render.camera_presets import CAMERA_PRESETS
 
 

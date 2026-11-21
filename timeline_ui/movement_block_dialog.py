@@ -5,9 +5,8 @@ import math
 from PyQt6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QFormLayout,
                              QGroupBox, QSlider, QDoubleSpinBox, QSpinBox,
                              QLabel, QDialogButtonBox, QCheckBox, QFrame,
-                             QPushButton, QComboBox, QWidget, QScrollArea,
-                             QSizePolicy)
-from PyQt6.QtCore import Qt, pyqtSignal, QPointF
+                             QPushButton, QComboBox, QWidget, QScrollArea)
+from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtGui import QPainter, QColor, QPen, QBrush, QPainterPath
 from config.models import MovementBlock
 

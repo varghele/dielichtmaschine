@@ -5,10 +5,10 @@ entire song. Different sections use different combinations of these colors.
 """
 
 import colorsys
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import List, Dict, Tuple, Optional
 
-from audio.spectral_analysis import SectionAnalysis, SongAnalysis
+from audio.spectral_analysis import SongAnalysis
 
 
 @dataclass

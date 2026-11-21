@@ -7,7 +7,6 @@ from PyQt6.QtWidgets import QWidget
 from PyQt6.QtGui import QPainter, QColor, QPen, QPixmap, QPolygonF
 from PyQt6.QtCore import Qt, QPointF, QThread, pyqtSignal
 from typing import Optional
-import numpy as np
 
 from .audio_file import AudioFile
 from .waveform_analyzer import WaveformAnalyzer, WaveformData

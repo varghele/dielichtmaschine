@@ -25,9 +25,7 @@ import glm
 
 from utils.fixture_capabilities import (
     CellArray,
-    CellSegment,
     Emitter,
-    HeadDescriptor,
     LaserVector,
     MultiHead,
     ParticlePlume,

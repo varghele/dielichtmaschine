@@ -16,7 +16,7 @@ import pytest
 
 from utils import fixture_library as fl
 from utils.effects_utils import get_channels_by_property
-from utils.fixture_library import clear_library_cache, get_definition, parse_fixture_file
+from utils.fixture_library import clear_library_cache, get_definition
 from utils.gdtf_loader import cie_xyy_to_hex
 
 # ---------------------------------------------------------------------------

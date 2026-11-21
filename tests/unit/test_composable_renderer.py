@@ -17,7 +17,6 @@ tests where an offscreen GL context is available.
 from __future__ import annotations
 
 import math
-from typing import List
 
 import glm
 import numpy as np
@@ -62,7 +61,6 @@ from visualizer.renderer.components import (
 )
 from visualizer.renderer.emitters import (
     CellArrayRunner,
-    Emission,
     MultiHeadRunner,
     PointEmitterRunner,
     create_emitter_runner,

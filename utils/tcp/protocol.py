@@ -7,7 +7,7 @@ from enum import Enum
 
 logger = logging.getLogger("visualizer.protocol")
 from typing import Dict, List, Any, Optional, Tuple
-from config.models import Configuration, Fixture, FixtureGroup, primary_group
+from config.models import Configuration, Fixture, primary_group
 from utils import user_warnings
 from utils.fixture_capabilities import get_capabilities_for_fixture
 

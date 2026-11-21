@@ -1,7 +1,6 @@
 # utils/dmx_device_detection.py
 # USB DMX device detection utility
 
-import sys
 from typing import List, Dict
 
 from utils import user_warnings

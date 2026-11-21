@@ -1,6 +1,6 @@
-from PyQt6.QtWidgets import QGraphicsItem, QGraphicsEllipseItem, QGraphicsView
+from PyQt6.QtWidgets import QGraphicsItem
 from PyQt6.QtCore import Qt, QRectF, QPointF
-from PyQt6.QtGui import QPen, QBrush, QColor, QPainter, QFontMetrics, QFont
+from PyQt6.QtGui import QPen, QBrush, QColor, QPainter, QFontMetrics
 from math import sin, cos, radians, atan2, sqrt
 
 from utils.fixture_capabilities import chassis_from_legacy_type

@@ -2,7 +2,6 @@
 """Unit tests for audio/waveform_analyzer.py - peak extraction."""
 
 import os
-import json
 import tempfile
 import shutil
 import pytest

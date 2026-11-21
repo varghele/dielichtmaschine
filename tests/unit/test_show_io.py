@@ -1,5 +1,4 @@
 """Tests for utils.show_io (File -> Import/Export Show Structure)."""
-import os
 from pathlib import Path
 
 import pytest

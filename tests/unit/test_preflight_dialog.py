@@ -10,8 +10,6 @@ CLI guard hooks. Offscreen; the GL orientation dialog is stubbed."""
 
 import os
 
-import pytest
-
 from config.models import (ColourBlock, Configuration, DimmerBlock,
                            Fixture, FixtureGroup, FixtureMode, LightBlock,
                            LightLane, MovementBlock, ShowPart, Song, Spot,

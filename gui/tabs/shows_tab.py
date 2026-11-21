@@ -6,16 +6,16 @@ import logging
 
 _audio_logger = logging.getLogger("shows.audio")
 from PyQt6.QtWidgets import (QVBoxLayout, QHBoxLayout, QComboBox, QPushButton,
-                             QLabel, QSlider, QScrollArea, QWidget, QFrame,
-                             QSplitter, QSizePolicy, QInputDialog, QMessageBox, QCheckBox,
+                             QLabel, QSlider, QWidget,
+                             QSplitter, QMessageBox,
                              QApplication, QDialog, QButtonGroup, QMenu)
-from PyQt6.QtCore import Qt, QTimer, QEvent, pyqtSignal, QPoint, QRect
+from PyQt6.QtCore import Qt, QTimer, QEvent, QPoint, QRect
 from PyQt6.QtGui import QShortcut, QKeySequence, QActionGroup
 from config.models import Configuration, Song, TimelineData, LightBlock, ShowEffect
 from utils import user_warnings
 from timeline.song_structure import SongStructure
 from timeline.light_lane import LightLane
-from utils.fixture_utils import load_fixture_definitions_from_qlc, get_cached_fixture_definitions
+from utils.fixture_utils import load_fixture_definitions_from_qlc
 from timeline_ui import (MasterTimelineContainer, LightLaneWidget, AudioLaneWidget,
                          TimelineGrid)
 from timeline_ui.master_timeline_widget import SUBDIVISION_CHOICES

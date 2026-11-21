@@ -7,8 +7,6 @@ role-tagged block via apply_palette - changing 'primary' re-skins the
 tagged blocks' literal RGB. Offscreen; QColorDialog never opens (tests
 drive the plain methods)."""
 
-import pytest
-
 from config.models import (ColourBlock, LightBlock, LightLane, Song,
                            TimelineData)
 

@@ -5,7 +5,7 @@ Handles volume, mute, and solo processing.
 
 import numpy as np
 import threading
-from typing import Dict, Optional
+from typing import Dict
 from .audio_file import AudioFile
 
 

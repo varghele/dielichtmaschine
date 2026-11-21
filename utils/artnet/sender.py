@@ -4,7 +4,7 @@
 import socket
 import struct
 import time
-from typing import Dict, Optional
+from typing import Dict
 
 from utils import user_warnings
 

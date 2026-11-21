@@ -69,7 +69,7 @@ def create_tracks_from_timeline(show_function, engine, show, config, fixture_id_
     if export_overrides is None:
         export_overrides = {}
     from timeline.song_structure import SongStructure
-    from utils.target_resolver import resolve_targets_unique, validate_targets, detect_targets_capabilities
+    from utils.target_resolver import resolve_targets_unique, validate_targets
 
     # Debug: Show export info
     print(f"\n=== Exporting show: {show.name} ===")

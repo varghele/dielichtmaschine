@@ -5,7 +5,7 @@ import socket
 import struct
 import threading
 import time
-from typing import Dict, Optional, Callable
+from typing import Dict, Optional
 
 from PyQt6.QtCore import QObject, pyqtSignal
 

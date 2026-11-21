@@ -26,7 +26,7 @@ pieces each lane hands over via ``detach_pieces()``. Callers keep references
 to the lane widgets so signals and methods on them keep working.
 """
 
-from typing import List, Optional
+from typing import List
 
 from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtWidgets import (

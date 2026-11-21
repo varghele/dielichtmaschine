@@ -2,9 +2,7 @@
 """Unit tests for offline rendering components."""
 
 import os
-import math
 import pytest
-from unittest.mock import patch, MagicMock
 
 from utils.render.camera_presets import CAMERA_PRESETS, _compute_distance
 

@@ -15,8 +15,6 @@ tests/visual/test_golden_screenshots.py::test_timeline_block_golden).
 
 import os
 
-import pytest
-
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from timeline.light_lane import LightLane

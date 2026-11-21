@@ -13,7 +13,7 @@ users don't lose state on the first run after the rename.
 import json
 import os
 from dataclasses import dataclass, field, asdict
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional
 
 
 _SETTINGS_DIR = os.path.join(os.path.expanduser("~"), ".qlcautoshow")

@@ -5,7 +5,6 @@ Supports ASIO (Windows) and JACK (Linux) for low-latency operation.
 """
 
 import sounddevice as sd
-import numpy as np
 import threading
 import queue
 from typing import Optional, Callable

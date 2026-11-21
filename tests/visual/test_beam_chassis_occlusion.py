@@ -31,7 +31,6 @@ from __future__ import annotations
 import importlib
 import os
 import pathlib
-from typing import Optional, Tuple
 
 import glm
 import moderngl

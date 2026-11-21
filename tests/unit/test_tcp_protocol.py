@@ -2,7 +2,6 @@
 """Unit tests for utils/tcp/protocol.py - Visualizer protocol message creation."""
 
 import json
-import pytest
 from utils.tcp.protocol import MessageType, _infer_gobo_pattern, GOBO_PATTERN_KEYWORDS
 
 

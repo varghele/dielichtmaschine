@@ -5,7 +5,6 @@ no-hardware end to end: generated LTC audio through the real decoder
 and chase drives a two-song setlist.
 """
 
-import numpy as np
 import pytest
 
 from config.models import PauseLook, Setlist, SetlistEntry, SongTrigger

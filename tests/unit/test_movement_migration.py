@@ -18,7 +18,7 @@ import pytest
 from config.models import (Configuration, Fixture, FixtureGroup,
                            FixtureMode, LightBlock, LightLane,
                            MovementBlock, Song, TimelineData)
-from utils.movement_migration import (BlockMigration, apply_migration,
+from utils.movement_migration import (apply_migration,
                                       beam_direction, plan_migration,
                                       solver_dmx_to_degrees, stage_bounds,
                                       trace_beam)

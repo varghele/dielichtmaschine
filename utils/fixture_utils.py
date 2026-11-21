@@ -118,8 +118,7 @@ def detect_fixture_group_capabilities(fixtures, fixture_definitions=None):
     """
     from config.models import FixtureGroupCapabilities
     from utils.sublane_presets import (
-        categorize_preset, SublaneType,
-        DIMMER_PRESETS, COLOUR_PRESETS, MOVEMENT_PRESETS, SPECIAL_PRESETS
+        categorize_preset, SublaneType
     )
 
     capabilities = FixtureGroupCapabilities()

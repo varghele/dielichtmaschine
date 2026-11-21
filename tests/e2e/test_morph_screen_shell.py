@@ -5,8 +5,6 @@ shell section, navigating away KEEPS the in-progress morph, re-opening
 resumes the SAME screen, closing tears it down, and a swapped project
 config (a load) discards the stale screen instead of resuming it."""
 
-import pytest
-
 from config.models import (Configuration, DimmerBlock, Fixture,
                            FixtureGroup, FixtureGroupCapabilities,
                            FixtureMode, LightBlock, LightLane, ShowPart,

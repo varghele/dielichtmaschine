@@ -5,11 +5,7 @@ Profiling script to identify performance bottlenecks in playback.
 Run this to see where time is being spent during show playback.
 """
 
-import sys
 import time
-import cProfile
-import pstats
-import io
 from functools import wraps
 from collections import defaultdict
 

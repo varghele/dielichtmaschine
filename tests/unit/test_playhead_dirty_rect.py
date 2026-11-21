@@ -8,11 +8,7 @@ saturation). Zoom and explicit update() keep full repaints."""
 
 import os
 
-import pytest
-
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
-
-from PyQt6.QtWidgets import QApplication
 
 
 def _flush(qapp, n=4):

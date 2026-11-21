@@ -2,12 +2,11 @@
 """Unit tests for config/models.py - data model classes."""
 
 import os
-import pytest
 from config.models import (
-    Fixture, FixtureMode, FixtureGroup, FixtureGroupCapabilities, Spot,
+    Fixture, FixtureMode, FixtureGroupCapabilities, Spot,
     DimmerBlock, ColourBlock, MovementBlock, SpecialBlock,
-    LightBlock, LightLane, Song, ShowPart, ShowEffect,
-    Configuration, Universe, TimelineData
+    LightBlock, LightLane, ShowPart,
+    Configuration, Universe
 )
 
 

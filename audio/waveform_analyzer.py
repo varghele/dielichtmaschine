@@ -5,10 +5,9 @@ Generates multi-resolution peak data for efficient waveform display at different
 
 import numpy as np
 import os
-import json
 import hashlib
 from typing import Optional, Tuple, List
-from dataclasses import dataclass, asdict
+from dataclasses import dataclass
 from .audio_file import AudioFile
 
 

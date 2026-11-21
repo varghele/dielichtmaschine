@@ -24,7 +24,6 @@ from utils.fixture_capabilities import (
     CellArray,
     Chassis,
     ColorMixingMode,
-    FixtureCapabilities,
     MovementType,
     MultiHead,
     PointEmitter,

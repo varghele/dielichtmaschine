@@ -22,7 +22,7 @@ from __future__ import annotations
 
 import datetime
 import os
-from typing import List, Optional
+from typing import List
 
 from PyQt6.QtCore import QMarginsF, QRectF, Qt
 from PyQt6.QtGui import (

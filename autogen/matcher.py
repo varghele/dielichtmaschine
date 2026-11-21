@@ -5,14 +5,14 @@ dual-criteria scoring (Section 5, Steps 4-7) from the theory.
 """
 
 import math
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Dict, List, Optional, Set, Tuple
 
 from audio.spectral_analysis import SectionAnalysis
 from rudiments.rudiment import (
-    Rudiment, RudimentType, EnvelopeCategory, CycleMode,
+    Rudiment, EnvelopeCategory, CycleMode,
 )
-from rudiments.registry import get_intensity_rudiments, get_movement_rudiments
+from rudiments.registry import get_intensity_rudiments
 
 
 @dataclass

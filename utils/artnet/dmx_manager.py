@@ -3,13 +3,13 @@
 
 import time
 import math
-from typing import Dict, List, Optional, Tuple, Any
-from config.models import Configuration, Fixture, LightBlock, DimmerBlock, ColourBlock, MovementBlock, SpecialBlock, primary_group
+from typing import Dict, List, Optional, Tuple
+from config.models import Configuration, Fixture, DimmerBlock, ColourBlock, MovementBlock, SpecialBlock, primary_group
 from utils import user_warnings
 from utils.effects_utils import get_channels_by_property
 from utils.orientation import calculate_pan_tilt, pan_tilt_to_dmx
 from effects import (
-    DimmerContext, DimmerResult, MovementContext, MovementResult,
+    DimmerContext, DimmerResult, MovementContext,
     DIMMER_REGISTRY, MOVEMENT_REGISTRY, parse_speed, get_bpm, movement_total_cycles,
     movement_seconds_per_bar,
 )

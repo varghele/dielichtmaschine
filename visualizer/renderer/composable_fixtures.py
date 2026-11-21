@@ -18,7 +18,7 @@ Layout (rendered per frame in ``render(mvp)``):
 
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional
 
 import glm
 import moderngl
@@ -28,7 +28,6 @@ from utils.fixture_capabilities import (
     Chassis,
     FixtureCapabilities,
     MultiHead,
-    PointEmitter,
 )
 from visualizer.renderer.beams import (
     BeamComponent,

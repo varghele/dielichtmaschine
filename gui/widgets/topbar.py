@@ -20,7 +20,7 @@ translations keep natural casing.
 from PyQt6.QtCore import QCoreApplication, Qt, pyqtSignal
 from PyQt6.QtGui import QFont, QPixmap
 from PyQt6.QtWidgets import (
-    QHBoxLayout, QLabel, QPushButton, QSizePolicy, QToolButton, QWidget,
+    QHBoxLayout, QLabel, QPushButton, QToolButton, QWidget,
 )
 
 from gui.typography import MicroLabel, display_font

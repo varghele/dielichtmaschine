@@ -12,7 +12,6 @@ import glm
 
 from config.models import Configuration, Song
 from utils import user_warnings
-from utils.fixture_utils import load_fixture_definitions_from_qlc
 from utils.target_resolver import resolve_targets_unique
 from utils.artnet.dmx_manager import DMXManager
 from utils.render.camera_presets import CAMERA_PRESETS

@@ -20,6 +20,9 @@ verbatim as the GitHub Release notes (see [docs/releasing.md](docs/releasing.md)
   device-manager preference IO, `compute_beat_features`,
   `create_master_rainbow_scene` and the legacy glow-beam pair). No behaviour
   change; rig and demo show exports are byte-identical.
+- **Unused imports.** 182 imports nothing used are gone (105 in production,
+  77 in tests), including the importer-less `export_aim_dmx` re-export in
+  `utils/to_xml/unified_sequence.py`. No behaviour change.
 
 ## [1.5.5] - 2026-10-13
 

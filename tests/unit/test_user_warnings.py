@@ -5,7 +5,6 @@ converted call sites (target resolver, fixture library), and the
 Warnings panel (gui/dialogs/warnings_dialog.py)."""
 
 import logging
-import os
 
 import pytest
 

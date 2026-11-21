@@ -1,8 +1,7 @@
 # tests/unit/test_light_lane.py
 """Unit tests for timeline/light_lane.py - runtime LightLane class."""
 
-import pytest
-from config.models import LightBlock, DimmerBlock, ColourBlock, MovementBlock
+from config.models import LightBlock, DimmerBlock, ColourBlock
 from config.models import LightLane as LightLaneModel
 from timeline.light_lane import LightLane
 

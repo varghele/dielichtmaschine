@@ -7,7 +7,7 @@ centroid, and contrast as color-coded polylines.
 
 from collections import deque
 from PyQt6.QtWidgets import QWidget
-from PyQt6.QtCore import Qt, QPointF
+from PyQt6.QtCore import QPointF
 from PyQt6.QtGui import QPainter, QPen, QColor, QFont
 
 from audio.realtime_spectral import LiveFeatureFrame

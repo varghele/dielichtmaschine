@@ -2,7 +2,7 @@
 # 3D Orientation Dialog for setting fixture orientation
 
 import math
-from typing import List, Optional, Dict, Any
+from typing import List, Optional
 
 import moderngl
 import glm

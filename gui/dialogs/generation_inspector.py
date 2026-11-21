@@ -4,12 +4,11 @@
 import html
 import math
 import colorsys
-from typing import Optional, List
 
 import numpy as np
 
 from PyQt6.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QLabel, QSplitter, QSizePolicy,
+    QWidget, QVBoxLayout, QLabel, QSplitter, QSizePolicy,
 )
 from PyQt6.QtCore import Qt, QRectF, QPointF
 from PyQt6.QtGui import (

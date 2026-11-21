@@ -16,8 +16,6 @@ import ast
 import os
 import pathlib
 
-import pytest
-
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 REPO = pathlib.Path(__file__).resolve().parents[2]

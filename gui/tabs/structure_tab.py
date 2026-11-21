@@ -65,11 +65,11 @@ import zlib
 from PyQt6.QtWidgets import (QVBoxLayout, QHBoxLayout, QWidget, QLabel,
                              QPushButton, QComboBox, QScrollArea, QFrame,
                              QLineEdit, QSpinBox, QDoubleSpinBox, QColorDialog,
-                             QMessageBox, QSplitter, QInputDialog, QSlider,
+                             QMessageBox, QInputDialog, QSlider,
                              QGridLayout, QButtonGroup,
-                             QSizePolicy, QMenu, QFileDialog, QProgressDialog)
-from PyQt6.QtCore import Qt, QTimer, pyqtSignal, QRectF, QPointF, QMimeData
-from PyQt6.QtGui import (QPainter, QColor, QPen, QBrush, QFont, QAction,
+                             QSizePolicy, QMenu, QFileDialog)
+from PyQt6.QtCore import Qt, QTimer, pyqtSignal, QMimeData
+from PyQt6.QtGui import (QPainter, QColor, QFont, QAction,
                          QFontMetrics, QDrag, QCursor)
 import shutil
 

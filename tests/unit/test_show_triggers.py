@@ -2,7 +2,6 @@
 """Unit tests for show trigger configuration and export."""
 
 import os
-import pytest
 import tempfile
 import xml.etree.ElementTree as ET
 from config.models import (

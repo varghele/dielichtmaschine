@@ -5,7 +5,6 @@
 from PyQt6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QLabel,
                              QComboBox, QPushButton, QGroupBox, QSpinBox,
                              QCheckBox, QMessageBox)
-from PyQt6.QtCore import Qt
 
 # Try to import audio components
 try:

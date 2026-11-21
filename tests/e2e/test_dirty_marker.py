@@ -7,8 +7,6 @@ timeline blocks), an autosave backup never clears it, a real save
 does.
 """
 
-import pytest
-
 
 def _force_tick(window):
     window._dirty_ticks = 0        # bypass the 5-tick throttle

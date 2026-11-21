@@ -5,7 +5,7 @@ HSV Color Wheel widget for Auto mode color override.
 import math
 from PyQt6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QLabel
 from PyQt6.QtCore import Qt, pyqtSignal, QPointF
-from PyQt6.QtGui import QPainter, QConicalGradient, QRadialGradient, QColor, QImage, QPen
+from PyQt6.QtGui import QPainter, QColor, QImage, QPen
 
 
 class HSVColorWheel(QWidget):

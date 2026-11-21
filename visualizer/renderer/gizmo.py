@@ -4,7 +4,6 @@
 import numpy as np
 import moderngl
 import glm
-from typing import Optional
 
 
 class CoordinateGizmo:

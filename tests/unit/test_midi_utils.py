@@ -3,8 +3,6 @@
 
 import os
 import pytest
-import tempfile
-import xml.etree.ElementTree as ET
 from utils.midi_utils import discover_midi_profiles, get_midi_profile_directories
 
 

@@ -6,11 +6,10 @@ import os
 import json
 import tempfile
 import shutil
-from dataclasses import asdict
 
 from config.models import (
     Riff, RiffDimmerBlock, RiffColourBlock, RiffMovementBlock, RiffSpecialBlock,
-    LightBlock, DimmerBlock, ColourBlock, MovementBlock, SpecialBlock,
+    LightBlock,
     Fixture, FixtureMode, FixtureGroup
 )
 from riffs.riff_library import RiffLibrary

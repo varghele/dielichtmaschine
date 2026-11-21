@@ -12,12 +12,12 @@ import copy
 import pytest
 
 from config.models import (ColourBlock, Configuration, DimmerBlock, Fixture,
-                           FixtureGroup, FixtureGroupCapabilities,
+                           FixtureGroup,
                            FixtureMode, LightBlock, LightLane, MovementBlock,
                            ShowPart, Song, SpecialBlock, TimelineData,
                            Universe)
-from utils.morph.compile import (MorphReport, apply_morph, compile_setlist,
-                                 compile_song, pending_destruction)
+from utils.morph.compile import (apply_morph, compile_setlist,
+                                 pending_destruction)
 from utils.morph.plan import MorphEdge, MorphPlan, PlanError
 
 

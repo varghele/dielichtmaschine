@@ -1,7 +1,6 @@
 from PyQt6 import QtCore, QtWidgets, QtGui
 from PyQt6.QtWidgets import QToolButton
 from PyQt6.QtGui import QAction, QFont
-from gui.StageView import StageView
 from utils.app_identity import APP_NAME, SETTINGS_APP
 
 

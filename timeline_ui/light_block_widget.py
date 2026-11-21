@@ -2,7 +2,7 @@
 # Visual widget for light effect blocks on timeline
 # Adapted from midimaker_and_show_structure/ui/midi_block_widget.py
 
-from PyQt6.QtWidgets import QWidget, QVBoxLayout, QLabel
+from PyQt6.QtWidgets import QWidget
 from PyQt6.QtCore import Qt, pyqtSignal, QPoint, QRect
 from PyQt6.QtGui import (
     QPainter, QColor, QPen, QBrush, QMouseEvent, QFont, QLinearGradient,
@@ -1939,7 +1939,7 @@ class LightBlockWidget(QWidget):
 
                 # Create copy at new position via lane widget
                 if hasattr(self.lane_widget, 'paste_effect_at_time'):
-                    from .effect_clipboard import copy_effect, paste_effect
+                    from .effect_clipboard import copy_effect
                     copy_effect(self.block)
                     self.lane_widget.paste_effect_at_time(new_start_time)
 

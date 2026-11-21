@@ -13,7 +13,7 @@ import argparse
 import sys
 import os
 import statistics
-from typing import List, Optional
+from typing import List
 
 # Add project root to path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))

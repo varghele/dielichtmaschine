@@ -11,8 +11,8 @@ import threading
 import colorsys
 import numpy as np
 from collections import deque
-from dataclasses import dataclass, field
-from typing import Optional, Tuple, Dict, List, Set, Callable
+from dataclasses import dataclass
+from typing import Optional, Tuple, Dict, Set, Callable
 
 from audio.realtime_spectral import LiveFeatureFrame
 from audio.spectral_analysis import SectionAnalysis
@@ -22,7 +22,7 @@ from autogen.spatial import (
     assign_group_roles, get_gobo_prism_groups, ActivationRole,
 )
 from rudiments.block_converter import rudiment_to_dimmer_block, rudiment_to_movement_block
-from config.models import DimmerBlock, ColourBlock, MovementBlock, SpecialBlock, Configuration
+from config.models import ColourBlock, SpecialBlock, Configuration
 
 
 # How many feature frames to keep (~86 frames/sec at 44100/512)

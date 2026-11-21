@@ -24,8 +24,6 @@ centred coordinates so each Y zone really covers a third of the stage.
 
 from __future__ import annotations
 
-import pytest
-
 from autogen.spatial import classify_fixture_groups
 from config.models import Configuration, Fixture, FixtureGroup, FixtureMode
 

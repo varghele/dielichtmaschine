@@ -3,8 +3,6 @@
 guarded probes and the copyable dialog. Driver-touching probes (GL,
 audio) are injected - nothing here opens a context or an audio API."""
 
-import pytest
-
 from utils import diagnostics
 
 
