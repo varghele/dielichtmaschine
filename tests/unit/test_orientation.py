@@ -289,3 +289,11 @@ class TestGetDirectionForTiltCalculation:
         assert get_direction_for_tilt_calculation('wall_right') == 'DOWN'
         assert get_direction_for_tilt_calculation('wall_back') == 'DOWN'
         assert get_direction_for_tilt_calculation('wall_front') == 'DOWN'
+
+def test_no_home_beam_direction_helper():
+    """beam_direction_stage (the pan/tilt-HOME beam direction) was removed
+    in v1.5.6: it only ever served the 2026-07-12 beam-direction preset
+    tests that broke every mover rig. Presets are body orientations,
+    pinned by TestAimingEndToEnd; do not bring a home-beam helper back."""
+    import utils.orientation as orientation
+    assert not hasattr(orientation, "beam_direction_stage")

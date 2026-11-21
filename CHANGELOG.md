@@ -52,6 +52,9 @@ verbatim as the GitHub Release notes (see [docs/releasing.md](docs/releasing.md)
   column (the primary group), and exports are byte-identical.
 - **`Fixture.group` compat property.** Code reads the primary group via
   `config.models.primary_group_name()` and writes `fixture.groups`.
+- **`utils.orientation.beam_direction_stage`**, an unused helper for the
+  pan/tilt home beam direction left over from the reverted 2026-07-12
+  mounting-preset table. No behaviour change.
 - **Deprecated `LightBlock.duration` and `parameters` fields.** Nothing read
   them and saved files never contained them (only copy and paste carried
   them). Old data that gives a block a `duration` instead of an end time still

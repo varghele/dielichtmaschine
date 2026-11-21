@@ -145,21 +145,6 @@ def fixture_rotation_matrix(yaw: float, pitch: float,
     return Ry @ Rx @ Rz
 
 
-def beam_direction_stage(yaw: float, pitch: float,
-                         roll: float) -> np.ndarray:
-    """Where a fixture with this orientation points at pan=0, tilt=0,
-    as a unit vector in STAGE coordinates (+X stage right, +Y upstage,
-    +Z up). This is only the pan/tilt-HOME rest direction - it is NOT
-    what a mounting preset "means" (presets are body orientations; a
-    mover's real aim comes from the pan/tilt solve). Kept for tests and
-    diagnostics."""
-    scene = fixture_rotation_matrix(yaw, pitch, roll) @ np.array([1.0, 0.0,
-                                                                  0.0])
-    # scene (a, b, c) -> stage (a, c, b): the renderer maps stage Y to
-    # scene Z and stage Z (height) to scene Y.
-    return np.array([scene[0], scene[2], scene[1]])
-
-
 def calculate_pan_tilt(
     fixture_x: float, fixture_y: float, fixture_z: float,
     target_x: float, target_y: float, target_z: float,
@@ -335,7 +320,11 @@ def pan_tilt_to_dmx16(
 # the one the visualizer and calculate_pan_tilt actually use, and no
 # production code called them - only their own tests did. They are the
 # reason the mounting presets were never noticed to be wrong. Use
-# fixture_rotation_matrix / beam_direction_stage instead.
+# fixture_rotation_matrix and the pan/tilt solve (calculate_pan_tilt)
+# instead. REMOVED 2026-11-21: beam_direction_stage, the pan/tilt-HOME
+# beam direction that pinned the wrong 2026-07-12 preset table; a
+# preset is a body orientation, judged only by the closed-loop aim
+# (test_orientation.py::TestAimingEndToEnd).
 
 
 def get_direction_for_tilt_calculation(mounting: str) -> str:
