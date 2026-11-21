@@ -1,12 +1,15 @@
 # timeline_ui/audio_lane_widget.py
 # Audio lane widget for displaying waveform and audio controls on the timeline
 
+import logging
 import os
 from PyQt6.QtWidgets import (QWidget, QHBoxLayout, QVBoxLayout, QLabel,
                              QPushButton, QSlider, QFrame, QScrollArea,
                              QFileDialog, QLineEdit)
 from PyQt6.QtCore import Qt, pyqtSignal
 from .timeline_widget import TimelineWidget, HEADER_COLUMN_WIDTH
+
+logger = logging.getLogger(__name__)
 
 # Try to import audio components - may not be available in all installations
 try:
@@ -456,7 +459,7 @@ class AudioLaneWidget(QFrame):
         self.file_path_edit.setText(f"Error loading file")
         self.file_path_edit.setToolTip(error_message)
         self.load_button.setEnabled(True)
-        print(f"Audio load error: {error_message}")
+        logger.warning(f"Audio load error: {error_message}")
 
     def clear_audio(self):
         """Clear the current audio file and reset the display."""

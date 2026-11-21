@@ -1,12 +1,15 @@
 # utils/artnet/sender.py
 # ArtNet DMX packet sender with 44Hz rate limiting
 
+import logging
 import socket
 import struct
 import time
 from typing import Dict
 
 from utils import user_warnings
+
+logger = logging.getLogger(__name__)
 
 
 class ArtNetSender:
@@ -57,7 +60,7 @@ class ArtNetSender:
         # Rate limiting - track last send time per universe
         self.last_send_time: Dict[int, float] = {}
 
-        print(f"ArtNet sender initialized: {target_ip}:{target_port}")
+        logger.info(f"ArtNet sender initialized: {target_ip}:{target_port}")
 
     def create_dmx_packet(self, universe: int, dmx_data: bytes) -> bytes:
         """
@@ -156,7 +159,7 @@ class ArtNetSender:
         """Close the UDP socket."""
         if self.socket:
             self.socket.close()
-            print("ArtNet sender closed")
+            logger.info("ArtNet sender closed")
 
     def __del__(self):
         """Cleanup on deletion."""

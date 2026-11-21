@@ -25,6 +25,10 @@ import traceback
 from utils import app_identity
 
 LOG_FILE_NAME = "lichtmaschine.log"
+# The standalone visualizer is a second process: it logs into its own
+# file next to the app's, so the two never rotate one file at midnight
+# (Windows cannot rename a file another process holds open).
+VISUALIZER_LOG_FILE_NAME = "lichtmaschine-visualizer.log"
 LOG_DIR_ENV = "QLC_LOG_DIR"
 LOG_BACKUP_DAYS = 14
 
@@ -54,7 +58,7 @@ def _fallback_dir() -> str:
     return os.path.join(tempfile.gettempdir(), "lichtmaschine-logs")
 
 
-def _make_file_handler():
+def _make_file_handler(file_name: str = LOG_FILE_NAME):
     """Create the rotating file handler, falling back to the tmp dir.
 
     Returns (handler, path). Raises only if even the tmp fallback fails.
@@ -62,7 +66,7 @@ def _make_file_handler():
     for directory in (log_dir(), _fallback_dir()):
         try:
             os.makedirs(directory, exist_ok=True)
-            path = os.path.join(directory, LOG_FILE_NAME)
+            path = os.path.join(directory, file_name)
             handler = logging.handlers.TimedRotatingFileHandler(
                 path, when="midnight", backupCount=LOG_BACKUP_DAYS,
                 encoding="utf-8")
@@ -72,13 +76,15 @@ def _make_file_handler():
     raise OSError("no writable log directory found")
 
 
-def setup_logging() -> str:
+def setup_logging(file_name: str = LOG_FILE_NAME) -> str:
     """Configure root logging. Idempotent. Returns the log file path.
+
+    ``file_name`` picks the log file inside log_dir(); the standalone
+    visualizer passes VISUALIZER_LOG_FILE_NAME.
 
     - TimedRotatingFileHandler at INFO, rotating daily, keeping
       LOG_BACKUP_DAYS days, UTF-8.
-    - StreamHandler at WARNING so the console stays quiet-ish while
-      existing print() output is untouched.
+    - StreamHandler at WARNING so the console stays quiet-ish.
     - warnings-module output routed into logging.
     - A startup banner with version, Python/Qt versions and platform.
     """
@@ -88,7 +94,7 @@ def setup_logging() -> str:
     if existing is not None and existing in root.handlers:
         return existing.baseFilename
 
-    file_handler, path = _make_file_handler()
+    file_handler, path = _make_file_handler(file_name)
     file_handler.setLevel(logging.INFO)
     file_handler.setFormatter(logging.Formatter(
         "%(asctime)s %(levelname)-8s %(name)s: %(message)s"))

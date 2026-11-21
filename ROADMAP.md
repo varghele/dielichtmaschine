@@ -207,7 +207,7 @@ A fixes-only release on `v1.5.5-hardening`, cut from `v1.5-focus-morphing` at `3
 - [ ] **i18n beyond the shell** (600+ literal strings).
 - [ ] **`schema_version` and ordered migration steps** for config files.
 - [ ] **Move Qt-dependent modules out of core packages** (`auto/widgets`, `AudioWaveformWidget`, the Qt timers in `timeline/` and `audio/`).
-- [ ] **`print` to logging**, and an audit of the ~130 broad `except` blocks.
+- [ ] **`print` to logging**, and an audit of the ~130 broad `except` blocks. Done so far (v1.5.6, 2026-11-22): the print half. 272 production `print()` calls became module-logger calls (104 debug, 73 info, 80 warning, 15 exception; 58 carry `exc_info`) and the 5 lone `traceback.print_exc()` calls became `logger.exception`; prints stay only in `main.py` (`--version`, `--profile`), `utils/export_cli.py`, `utils/morph_cli.py` and `__main__` blocks; the standalone visualizer calls `setup_logging` with its own file (`lichtmaschine-visualizer.log`). Guard: `tests/unit/test_no_print.py`, file name: `test_app_logging.py::test_setup_logging_custom_file_name`. Left: the broad `except` audit.
 - [ ] **Pinned constraints file for the Qt/GL stack** so CI can run the win32 goldens on the Windows job.
 
 **Release ritual** (decided 2026-10-13: v1.5.0 is skipped, this release carries the 1.5 work, and the rig-blocked checks moved to post-release verification):

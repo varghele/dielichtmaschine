@@ -21,6 +21,7 @@ etc. without touching components, emitters, or beams.
 
 from __future__ import annotations
 
+import logging
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import Callable, Dict, List, Optional, Tuple
@@ -36,6 +37,8 @@ from visualizer.renderer.shaders import (
     FIXTURE_FRAGMENT_SHADER,
     FIXTURE_VERTEX_SHADER,
 )
+
+logger = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------------------
@@ -1074,7 +1077,7 @@ def make_chassis_geometry(
             gdtf_path, gdtf_data, mode_name = gdtf_source
             return GdtfMeshChassisGeometry(ctx, gdtf_path, gdtf_data, mode_name)
         except Exception as e:
-            print(f"GDTF mesh chassis unavailable, procedural fallback: {e}")
+            logger.warning(f"GDTF mesh chassis unavailable, procedural fallback: {e}", exc_info=True)
     if chassis is Chassis.MOVING_YOKE:
         return MovingYokeChassisGeometry(ctx, body_dims_m)
     if isinstance(emitter, CellArray) and chassis in (Chassis.BAR, Chassis.PANEL):

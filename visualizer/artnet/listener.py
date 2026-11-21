@@ -1,6 +1,7 @@
 # visualizer/artnet/listener.py
 # ArtNet UDP listener for receiving DMX data
 
+import logging
 import socket
 import struct
 import threading
@@ -8,6 +9,8 @@ import time
 from typing import Dict, Optional
 
 from PyQt6.QtCore import QObject, pyqtSignal
+
+logger = logging.getLogger(__name__)
 
 
 class ArtNetListener(QObject):
@@ -117,12 +120,12 @@ class ArtNetListener(QObject):
             self.listen_thread = threading.Thread(target=self._listen_loop, daemon=True)
             self.listen_thread.start()
 
-            print(f"ArtNet listener started on port {self.port}")
+            logger.info(f"ArtNet listener started on port {self.port}")
             return True
 
         except OSError as e:
             error_msg = f"Failed to start ArtNet listener: {e}"
-            print(error_msg)
+            logger.warning(error_msg, exc_info=True)
             self.error_occurred.emit(error_msg)
             return False
 
@@ -145,7 +148,7 @@ class ArtNetListener(QObject):
             self.is_receiving = False
             self.receiving_stopped.emit()
 
-        print("ArtNet listener stopped")
+        logger.info("ArtNet listener stopped")
 
     def _listen_loop(self):
         """Background thread: receive and parse ArtNet packets."""

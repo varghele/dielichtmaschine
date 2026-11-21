@@ -181,4 +181,7 @@ def main(argv=None):
 
 
 if __name__ == "__main__":
+    # The renderer reports through logging; show its INFO lines here.
+    import logging
+    logging.basicConfig(level=logging.INFO, format="%(message)s")
     main()

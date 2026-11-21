@@ -3,11 +3,14 @@ Audio file loading and management for Die Lichtmaschine.
 Supports WAV, MP3, FLAC, and OGG formats.
 """
 
+import logging
 import numpy as np
 import soundfile as sf
 from dataclasses import dataclass
 from typing import Optional
 import os
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -41,7 +44,7 @@ class AudioFile:
     def load(self, file_path: str) -> bool:
         """Load audio file from disk"""
         if not os.path.exists(file_path):
-            print(f"Audio file not found: {file_path}")
+            logger.warning(f"Audio file not found: {file_path}")
             return False
 
         try:
@@ -81,7 +84,7 @@ class AudioFile:
             try:
                 return self._load_with_librosa(file_path)
             except Exception as e2:
-                print(f"Error loading audio file {file_path}: {e}, {e2}")
+                logger.warning(f"Error loading audio file {file_path}: {e}, {e2}", exc_info=True)
                 return False
 
     def _load_with_librosa(self, file_path: str) -> bool:
@@ -114,10 +117,10 @@ class AudioFile:
 
             return True
         except ImportError:
-            print("librosa not installed, cannot load MP3 files")
+            logger.warning("librosa not installed, cannot load MP3 files")
             return False
         except Exception as e:
-            print(f"Error loading audio with librosa: {e}")
+            logger.warning(f"Error loading audio with librosa: {e}", exc_info=True)
             return False
 
     def _downmix_to_stereo(self, audio_data: np.ndarray) -> np.ndarray:
@@ -164,9 +167,9 @@ class AudioFile:
             self.duration = self.frames / self.sample_rate
 
         except ImportError:
-            print("librosa not installed, cannot resample audio")
+            logger.warning("librosa not installed, cannot resample audio")
         except Exception as e:
-            print(f"Error resampling audio: {e}")
+            logger.warning(f"Error resampling audio: {e}", exc_info=True)
 
     def read_frames(self, frame_count: int, start_frame: Optional[int] = None) -> np.ndarray:
         """

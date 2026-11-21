@@ -13,12 +13,15 @@ factory again and re-set the icons (Ui_MainWindow.apply_shell_icons
 does that for the topbar).
 """
 
+import logging
 import os
 
 from PyQt6.QtCore import QByteArray, Qt
 from PyQt6.QtGui import QIcon, QImage, QPainter, QPixmap
 
 from utils.paths import get_project_root
+
+logger = logging.getLogger(__name__)
 
 
 def icons_dir() -> str:
@@ -36,13 +39,13 @@ def line_icon(name: str, color: str, size: int = 16) -> QIcon:
         with open(path, "r", encoding="utf-8") as f:
             svg = f.read()
     except OSError:
-        print(f"icons: missing {path}")
+        logger.warning(f"icons: missing {path}")
         return QIcon()
 
     svg = svg.replace("currentColor", color)
     renderer = QSvgRenderer(QByteArray(svg.encode("utf-8")))
     if not renderer.isValid():
-        print(f"icons: invalid SVG {path}")
+        logger.warning(f"icons: invalid SVG {path}")
         return QIcon()
 
     icon = QIcon()

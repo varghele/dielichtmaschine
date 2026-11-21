@@ -3,12 +3,15 @@ Waveform analysis and peak extraction for visualization.
 Generates multi-resolution peak data for efficient waveform display at different zoom levels.
 """
 
+import logging
 import numpy as np
 import os
 import hashlib
 from typing import Optional, Tuple, List
 from dataclasses import dataclass
 from .audio_file import AudioFile
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -97,7 +100,7 @@ class WaveformAnalyzer:
             WaveformData object or None on failure
         """
         if not audio_file.is_loaded():
-            print("Audio file not loaded")
+            logger.warning("Audio file not loaded")
             return None
 
         # Check cache first
@@ -173,7 +176,7 @@ class WaveformAnalyzer:
             )
 
         except Exception as e:
-            print(f"Error generating peaks at resolution {resolution}: {e}")
+            logger.warning(f"Error generating peaks at resolution {resolution}: {e}", exc_info=True)
             return None
 
     def _get_cache_path(self, file_path: str) -> str:
@@ -219,7 +222,7 @@ class WaveformAnalyzer:
             os.replace(tmp, cache_path)
             return
         except Exception as e:
-            print(f"Error saving waveform cache: {e}")
+            logger.warning(f"Error saving waveform cache: {e}", exc_info=True)
 
     def _load_from_cache(self, file_path: str) -> Optional[WaveformData]:
         """Load waveform data from the npz cache. Anything unreadable
@@ -261,7 +264,7 @@ class WaveformAnalyzer:
                 if filename.endswith('.waveform'):
                     os.remove(os.path.join(self.cache_dir, filename))
         except Exception as e:
-            print(f"Error clearing waveform cache: {e}")
+            logger.warning(f"Error clearing waveform cache: {e}", exc_info=True)
 
 
 def generate_simple_overview(audio_data: np.ndarray, target_width: int = 1000) -> Tuple[List[float], List[float]]:
@@ -306,5 +309,5 @@ def generate_simple_overview(audio_data: np.ndarray, target_width: int = 1000) -
         return min_peaks, max_peaks
 
     except Exception as e:
-        print(f"Error generating simple overview: {e}")
+        logger.warning(f"Error generating simple overview: {e}", exc_info=True)
         return [], []

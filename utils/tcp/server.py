@@ -1,6 +1,7 @@
 # utils/tcp/server.py
 # TCP server for sending configuration to Visualizer
 
+import logging
 import socket
 import threading
 import time
@@ -9,6 +10,8 @@ from PyQt6.QtCore import QObject, pyqtSignal
 from config.models import Configuration
 from utils import user_warnings
 from .protocol import VisualizerProtocol
+
+logger = logging.getLogger(__name__)
 
 
 class VisualizerTCPServer(QObject):
@@ -52,12 +55,12 @@ class VisualizerTCPServer(QObject):
         self._send_locks: Dict[socket.socket, threading.Lock] = {}
         self.clients_lock = threading.Lock()
 
-        print(f"TCP Server initialized on port {port}")
+        logger.debug(f"TCP Server initialized on port {port}")
 
     def start(self):
         """Start the TCP server in a background thread."""
         if self.running:
-            print("TCP Server already running")
+            logger.debug("TCP Server already running")
             return
 
         # Bind HERE, on the caller's thread: a port that cannot be
@@ -78,27 +81,27 @@ class VisualizerTCPServer(QObject):
                 server_socket.close()
             except Exception:
                 pass
-            print(f"Server error: {e}")
+            logger.warning(f"Server error: {e}", exc_info=True)
             user_warnings.warn(
                 f"Visualizer feed could not listen on port {self.port}: {e}",
                 category="output")
             self.error_occurred.emit(str(e))
             return
 
-        print(f"TCP Server listening on {self.host}:{self.port}")
+        logger.info(f"TCP Server listening on {self.host}:{self.port}")
         self.server_socket = server_socket
         self.running = True
         self.server_thread = threading.Thread(
             target=self._run_server, args=(server_socket,), daemon=True)
         self.server_thread.start()
-        print(f"TCP Server started on {self.host}:{self.port}")
+        logger.debug(f"TCP Server started on {self.host}:{self.port}")
 
     def stop(self):
         """Stop the TCP server and disconnect all clients."""
         if not self.running:
             return
 
-        print("Stopping TCP Server...")
+        logger.debug("Stopping TCP Server...")
         self.running = False
 
         # Close all client connections
@@ -123,7 +126,7 @@ class VisualizerTCPServer(QObject):
         if self.server_thread and self.server_thread.is_alive():
             self.server_thread.join(timeout=2.0)
 
-        print("TCP Server stopped")
+        logger.info("TCP Server stopped")
 
     def _run_server(self, server_socket: socket.socket):
         """Main server loop (runs in background thread)."""
@@ -139,7 +142,7 @@ class VisualizerTCPServer(QObject):
                     client_socket, client_address = server_socket.accept()
                     client_addr_str = f"{client_address[0]}:{client_address[1]}"
 
-                    print(f"Client connected: {client_addr_str}")
+                    logger.info(f"Client connected: {client_addr_str}")
 
                     # The client joins self.clients in _handle_client,
                     # under its send lock, so no update can reach it
@@ -161,11 +164,11 @@ class VisualizerTCPServer(QObject):
                     continue
                 except Exception as e:
                     if self.running and self.server_thread is me:
-                        print(f"Error accepting connection: {e}")
+                        logger.warning(f"Error accepting connection: {e}", exc_info=True)
                         self.error_occurred.emit(str(e))
 
         except Exception as e:
-            print(f"Server error: {e}")
+            logger.warning(f"Server error: {e}", exc_info=True)
             self.error_occurred.emit(str(e))
         finally:
             try:
@@ -214,7 +217,7 @@ class VisualizerTCPServer(QObject):
                         # Handle incoming messages if needed
                         # (Currently clients just receive, not send)
                     except Exception as e:
-                        print(f"Error parsing message from {client_addr}: {e}")
+                        logger.warning(f"Error parsing message from {client_addr}: {e}")
 
                 except socket.timeout:
                     # Send heartbeat to keep connection alive
@@ -225,11 +228,11 @@ class VisualizerTCPServer(QObject):
                     except Exception:
                         break
                 except Exception as e:
-                    print(f"Error receiving from {client_addr}: {e}")
+                    logger.warning(f"Error receiving from {client_addr}: {e}", exc_info=True)
                     break
 
         except Exception as e:
-            print(f"Error handling client {client_addr}: {e}")
+            logger.warning(f"Error handling client {client_addr}: {e}", exc_info=True)
         finally:
             # Remove from clients set
             with self.clients_lock:
@@ -242,7 +245,7 @@ class VisualizerTCPServer(QObject):
             except Exception:
                 pass
 
-            print(f"Client disconnected: {client_addr}")
+            logger.info(f"Client disconnected: {client_addr}")
             self.client_disconnected.emit(client_addr)
 
     def _client_snapshot(self) -> List[Tuple[socket.socket, threading.Lock]]:
@@ -269,10 +272,10 @@ class VisualizerTCPServer(QObject):
                 client_socket.sendall(message.encode('utf-8'))
                 time.sleep(0.01)  # Small delay between messages
 
-            print(f"Sent configuration to client ({len(messages)} messages)")
+            logger.debug(f"Sent configuration to client ({len(messages)} messages)")
 
         except Exception as e:
-            print(f"Error sending config to client: {e}")
+            logger.warning(f"Error sending config to client: {e}", exc_info=True)
             raise
 
     def send_update(self, update_type: str, data: dict):
@@ -294,7 +297,7 @@ class VisualizerTCPServer(QObject):
                 with send_lock:
                     client_socket.sendall(payload)
             except Exception as e:
-                print(f"Error sending update to client: {e}")
+                logger.debug(f"Error sending update to client: {e}", exc_info=True)
 
     def update_config(self, config: Configuration):
         """
@@ -311,7 +314,7 @@ class VisualizerTCPServer(QObject):
                 with send_lock:
                     self._write_config(client_socket)
             except Exception as e:
-                print(f"Error updating client config: {e}")
+                logger.warning(f"Error updating client config: {e}", exc_info=True)
 
     def get_client_count(self) -> int:
         """

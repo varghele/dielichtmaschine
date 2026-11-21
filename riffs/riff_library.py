@@ -1,10 +1,13 @@
 # riffs/riff_library.py
 """RiffLibrary - manages the collection of available riffs."""
 
+import logging
 import os
 import json
 from typing import Dict, List, Optional
 from config.models import Riff, FixtureGroup
+
+logger = logging.getLogger(__name__)
 
 
 def parse_tags(text: str) -> List[str]:
@@ -46,7 +49,7 @@ class RiffLibrary:
         self.by_category.clear()
 
         if not os.path.exists(self.riffs_dir):
-            print(f"Riffs directory not found: {self.riffs_dir}")
+            logger.warning(f"Riffs directory not found: {self.riffs_dir}")
             return
 
         # Scan each category directory
@@ -95,10 +98,10 @@ class RiffLibrary:
                 data = json.load(f)
             return Riff.from_dict(data)
         except json.JSONDecodeError as e:
-            print(f"Error parsing riff file {filepath}: {e}")
+            logger.warning(f"Error parsing riff file {filepath}: {e}", exc_info=True)
             return None
         except Exception as e:
-            print(f"Error loading riff file {filepath}: {e}")
+            logger.warning(f"Error loading riff file {filepath}: {e}", exc_info=True)
             return None
 
     def save_riff(self, riff: Riff, category: str = None) -> str:

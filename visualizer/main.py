@@ -9,6 +9,7 @@
 # Mono, rotor glyph + wordmark header, token-driven status colors);
 # the GL scene itself is renderer territory.
 
+import logging
 import sys
 import os
 
@@ -32,6 +33,8 @@ from visualizer.tcp import VisualizerTCPClient
 from visualizer.artnet import ArtNetListener
 from visualizer.renderer import RenderEngine
 from visualizer.build_mode import build_mode_buffers
+
+logger = logging.getLogger("visualizer.main")
 
 
 class VisualizerWindow(QMainWindow):
@@ -122,27 +125,27 @@ class VisualizerWindow(QMainWindow):
     def _on_artnet_started(self):
         """Handle ArtNet receiving started."""
         self._update_artnet_indicator(True)
-        print("ArtNet: Receiving DMX data")
+        logger.info("ArtNet: Receiving DMX data")
 
     def _on_artnet_stopped(self):
         """Handle ArtNet receiving stopped."""
         self._update_artnet_indicator(False)
-        print("ArtNet: No longer receiving DMX data")
+        logger.info("ArtNet: No longer receiving DMX data")
 
     def _on_artnet_error(self, error_msg: str):
         """Handle ArtNet error."""
-        print(f"ArtNet error: {error_msg}")
+        logger.warning(f"ArtNet error: {error_msg}")
         self.statusbar.showMessage(f"ArtNet error: {error_msg}", 5000)
 
     def _on_tcp_connected(self):
         """Handle TCP connected event."""
         self._update_tcp_indicator(True)
-        print("TCP connected to Show Creator")
+        logger.info("TCP connected to Show Creator")
 
     def _on_tcp_disconnected(self):
         """Handle TCP disconnected event."""
         self._update_tcp_indicator(False)
-        print("TCP disconnected from Show Creator")
+        logger.info("TCP disconnected from Show Creator")
 
     def _on_tcp_error(self, error_msg: str):
         """Handle TCP connection error."""
@@ -151,7 +154,7 @@ class VisualizerWindow(QMainWindow):
 
     def _on_config_update(self, update_type: str, data: dict):
         """Handle configuration update from Show Creator."""
-        print(f"Config update received: {update_type}")
+        logger.debug(f"Config update received: {update_type}")
         # Re-request full config on update
         # (The server will send new stage/fixtures/groups messages)
 
@@ -336,10 +339,10 @@ class VisualizerWindow(QMainWindow):
     def _on_connect_clicked(self):
         """Handle connect/disconnect button click."""
         if self.tcp_connected:
-            print(f"Disconnecting from {APP_NAME}...")
+            logger.info(f"Disconnecting from {APP_NAME}...")
             self.tcp_client.disconnect()
         else:
-            print(f"Connecting to {APP_NAME} at "
+            logger.info(f"Connecting to {APP_NAME} at "
                   f"{self.tcp_client.host}:{self.tcp_client.port}...")
             self.tcp_client.connect()
 
@@ -347,7 +350,7 @@ class VisualizerWindow(QMainWindow):
         """Reset camera to default position."""
         if hasattr(self, 'render_engine') and self.render_engine:
             self.render_engine.reset_camera()
-            print("Camera reset to default position")
+            logger.debug("Camera reset to default position")
 
     def _on_build_toggled(self, checked: bool):
         """BUILD chip: synthesise a full-on rig look, or return to live.
@@ -358,13 +361,13 @@ class VisualizerWindow(QMainWindow):
         self.build_mode = checked
         if checked:
             self._push_build_look()
-            print("BUILD look on (live DMX ignored)")
+            logger.info("BUILD look on (live DMX ignored)")
         else:
             engine = getattr(self, 'render_engine', None)
             if engine:
                 for universe in build_mode_buffers(self.fixtures):
                     engine.update_dmx(universe, bytes(512))
-            print("BUILD look off (live DMX)")
+            logger.info("BUILD look off (live DMX)")
 
     def _push_build_look(self):
         """Push the synthetic build-look buffers for the current rig."""
@@ -413,7 +416,7 @@ class VisualizerWindow(QMainWindow):
             self.render_engine.set_stage_size(width, height)
             self.render_engine.set_grid_size(grid_size)
 
-        print(f"Stage dimensions updated: {width}m x {height}m (grid: {grid_size}m)")
+        logger.info(f"Stage dimensions updated: {width}m x {height}m (grid: {grid_size}m)")
 
     def set_fixtures(self, fixtures_data: list):
         """
@@ -434,7 +437,7 @@ class VisualizerWindow(QMainWindow):
         if self.build_mode:
             self._push_build_look()
 
-        print(f"Loaded {len(fixtures_data)} fixtures")
+        logger.info(f"Loaded {len(fixtures_data)} fixtures")
 
     def set_groups(self, groups_data: list):
         """
@@ -444,7 +447,7 @@ class VisualizerWindow(QMainWindow):
             groups_data: List of group dictionaries from protocol
         """
         self.groups = {g['name']: g for g in groups_data}
-        print(f"Loaded {len(groups_data)} groups")
+        logger.info(f"Loaded {len(groups_data)} groups")
 
     # --- DMX Handling ---
 
@@ -465,7 +468,7 @@ class VisualizerWindow(QMainWindow):
 
     def closeEvent(self, event):
         """Clean up on window close."""
-        print("Closing Visualizer...")
+        logger.info("Closing Visualizer...")
         self.status_timer.stop()
 
         # Disconnect TCP client
@@ -486,7 +489,13 @@ class VisualizerWindow(QMainWindow):
 def main():
     """Entry point for the Visualizer application."""
     try:
-        print(f"{APP_NAME} Visualizer starting...")
+        # This is its own process: main.py's setup_logging never ran
+        # here, so without this every message below would go nowhere.
+        from utils.app_logging import (
+            setup_logging, VISUALIZER_LOG_FILE_NAME)
+        setup_logging(VISUALIZER_LOG_FILE_NAME)
+
+        logger.info(f"{APP_NAME} Visualizer starting...")
 
         # Create application
         app = QApplication(sys.argv)
@@ -510,18 +519,16 @@ def main():
         window = VisualizerWindow()
         window.show()
 
-        print("Visualizer window opened")
-        print(f"  - TCP client ready (CONNECT links with {APP_NAME})")
-        print("  - ArtNet listener active on port 6454")
-        print("  - 3D renderer active (use mouse to orbit/pan/zoom)")
-        print("  - Camera controls: Left=Orbit, Right=Pan, Scroll=Zoom, Home=Reset")
+        logger.info("Visualizer window opened")
+        logger.info(f"  - TCP client ready (CONNECT links with {APP_NAME})")
+        logger.info("  - ArtNet listener active on port 6454")
+        logger.info("  - 3D renderer active (use mouse to orbit/pan/zoom)")
+        logger.info("  - Camera controls: Left=Orbit, Right=Pan, Scroll=Zoom, Home=Reset")
 
         sys.exit(app.exec())
 
     except Exception as e:
-        print(f"Error starting Visualizer: {e}")
-        import traceback
-        traceback.print_exc()
+        logger.exception(f"Error starting Visualizer: {e}")
         sys.exit(1)
 
 

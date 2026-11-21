@@ -116,7 +116,7 @@ class RenderEngine(QOpenGLWidget):
             # Get Qt's framebuffer object ID for rendering
             # QOpenGLWidget uses an FBO, not the default framebuffer
             self.qt_fbo_id = self.defaultFramebufferObject()
-            print(f"Qt FBO ID: {self.qt_fbo_id}")
+            logger.debug(f"Qt FBO ID: {self.qt_fbo_id}")
 
             # Enable depth testing
             self.ctx.enable(moderngl.DEPTH_TEST)
@@ -159,15 +159,13 @@ class RenderEngine(QOpenGLWidget):
             # context held when Qt recreated it (reparenting).
             self._replay_state()
 
-            print(f"OpenGL initialized: {self.ctx.info['GL_RENDERER']}")
-            print(f"  Stage size: {self.stage_width}m x {self.stage_height}m")
-            print(f"  Camera distance: {self.camera.distance}")
-            print(f"  Camera position: {self.camera.get_position()}")
+            logger.info(f"OpenGL initialized: {self.ctx.info['GL_RENDERER']}")
+            logger.debug(f"  Stage size: {self.stage_width}m x {self.stage_height}m")
+            logger.debug(f"  Camera distance: {self.camera.distance}")
+            logger.debug(f"  Camera position: {self.camera.get_position()}")
 
         except Exception as e:
-            print(f"Failed to initialize OpenGL: {e}")
-            import traceback
-            traceback.print_exc()
+            logger.exception(f"Failed to initialize OpenGL: {e}")
 
     def resizeGL(self, width: int, height: int):
         """Handle window resize."""
@@ -184,14 +182,14 @@ class RenderEngine(QOpenGLWidget):
 
         # Debug: first frame info
         if self._first_frame:
-            print(f"First frame rendering...")
-            print(f"  Viewport: {self.ctx.viewport}")
-            print(f"  Stage renderer: {self.stage_renderer is not None}")
+            logger.debug(f"First frame rendering...")
+            logger.debug(f"  Viewport: {self.ctx.viewport}")
+            logger.debug(f"  Stage renderer: {self.stage_renderer is not None}")
             # Check for OpenGL errors
             try:
                 error = self.ctx.error
                 if error:
-                    print(f"  OpenGL error: {error}")
+                    logger.warning(f"  OpenGL error: {error}")
             except:
                 pass
             self._first_frame = False
@@ -331,7 +329,7 @@ class RenderEngine(QOpenGLWidget):
             self.makeCurrent()
             self.stage_renderer.set_grid_size(grid_size)
             self.doneCurrent()
-            print(f"RenderEngine: Grid size updated to {grid_size}m")
+            logger.debug(f"RenderEngine: Grid size updated to {grid_size}m")
 
     def update_fixtures(self, fixtures_data: list):
         """

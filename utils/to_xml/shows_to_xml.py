@@ -1,6 +1,9 @@
+import logging
 import xml.etree.ElementTree as ET
 from config.models import Configuration, primary_group_name
 from utils import user_warnings
+
+logger = logging.getLogger(__name__)
 
 
 def add_steps_to_sequence(sequence, steps):
@@ -72,10 +75,10 @@ def create_tracks_from_timeline(show_function, engine, show, config, fixture_id_
     from utils.target_resolver import resolve_targets_unique, validate_targets
 
     # Debug: Show export info
-    print(f"\n=== Exporting show: {show.name} ===")
-    print(f"  Number of lanes: {len(show.timeline_data.lanes)}")
-    print(f"  Available groups: {list(config.groups.keys())}")
-    print(f"  fixture_id_map keys: {list(fixture_id_map.keys())[:10]}...")  # First 10
+    logger.debug(f"=== Exporting show: {show.name} ===")
+    logger.debug(f"  Number of lanes: {len(show.timeline_data.lanes)}")
+    logger.debug(f"  Available groups: {list(config.groups.keys())}")
+    logger.debug(f"  fixture_id_map keys: {list(fixture_id_map.keys())[:10]}...")  # First 10
 
     # Build song structure for timing calculations
     song_structure = SongStructure()
@@ -86,16 +89,16 @@ def create_tracks_from_timeline(show_function, engine, show, config, fixture_id_
 
     for lane_idx, lane in enumerate(show.timeline_data.lanes):
         # Debug: Lane info
-        print(f"\n  Lane {lane_idx}: '{lane.name}'")
-        print(f"    fixture_targets attr: {getattr(lane, 'fixture_targets', 'NOT_FOUND')}")
-        print(f"    light_blocks count: {len(lane.light_blocks)}")
+        logger.debug(f"  Lane {lane_idx}: '{lane.name}'")
+        logger.debug(f"    fixture_targets attr: {getattr(lane, 'fixture_targets', 'NOT_FOUND')}")
+        logger.debug(f"    light_blocks count: {len(lane.light_blocks)}")
 
         # Get fixture targets (with backward compatibility for old fixture_group field)
         targets = getattr(lane, 'fixture_targets', [])
         if not targets and hasattr(lane, 'fixture_group') and lane.fixture_group:
             targets = [lane.fixture_group]
 
-        print(f"    Resolved targets: {targets}")
+        logger.debug(f"    Resolved targets: {targets}")
 
         if not targets:
             user_warnings.warn(
@@ -111,9 +114,9 @@ def create_tracks_from_timeline(show_function, engine, show, config, fixture_id_
 
         # Resolve targets to unique fixtures
         resolved_fixtures = resolve_targets_unique(targets, config)
-        print(f"    Resolved fixtures count: {len(resolved_fixtures)}")
+        logger.debug(f"    Resolved fixtures count: {len(resolved_fixtures)}")
         for f in resolved_fixtures:
-            print(f"      - {f.name}: group='{primary_group_name(f)}', universe={f.universe}, address={f.address}")
+            logger.debug(f"      - {f.name}: group='{primary_group_name(f)}', universe={f.universe}, address={f.address}")
 
         if not resolved_fixtures:
             user_warnings.warn(
@@ -135,11 +138,11 @@ def create_tracks_from_timeline(show_function, engine, show, config, fixture_id_
                 fixtures_by_group[group_name] = []
             fixtures_by_group[group_name].append(fixture)
 
-        print(f"    fixtures_by_group: {list(fixtures_by_group.keys())}")
+        logger.debug(f"    fixtures_by_group: {list(fixtures_by_group.keys())}")
 
         # Process each fixture group as a separate track
         for group_name, group_fixtures in fixtures_by_group.items():
-            print(f"\n    Creating track for group: '{group_name}' with {len(group_fixtures)} fixtures")
+            logger.debug(f"    Creating track for group: '{group_name}' with {len(group_fixtures)} fixtures")
             # Calculate number of fixtures in this group
             fixture_num = len(group_fixtures)
 
@@ -202,7 +205,7 @@ def create_tracks_from_timeline(show_function, engine, show, config, fixture_id_
             # This creates ONE sequence per LightBlock with ALL effects combined
             from utils.to_xml.unified_sequence import generate_unified_sequence_steps
 
-            print(f"    Processing {len(lane.light_blocks)} light blocks for group '{group_name}' (export intensity: {group_intensity})")
+            logger.debug(f"    Processing {len(lane.light_blocks)} light blocks for group '{group_name}' (export intensity: {group_intensity})")
 
             for block_idx, block in enumerate(lane.light_blocks):
                 # Check if this block has any sublane blocks
@@ -213,10 +216,10 @@ def create_tracks_from_timeline(show_function, engine, show, config, fixture_id_
                     block.special_blocks
                 )
 
-                print(f"      Block {block_idx}: dimmer={len(block.dimmer_blocks)}, colour={len(block.colour_blocks)}, movement={len(block.movement_blocks)}, special={len(block.special_blocks)}, has_any={has_any_blocks}")
+                logger.debug(f"      Block {block_idx}: dimmer={len(block.dimmer_blocks)}, colour={len(block.colour_blocks)}, movement={len(block.movement_blocks)}, special={len(block.special_blocks)}, has_any={has_any_blocks}")
 
                 if not has_any_blocks:
-                    print(f"      Skipping block {block_idx} - no sublane blocks")
+                    logger.debug(f"      Skipping block {block_idx} - no sublane blocks")
                     continue
 
                 # Find the time range of all blocks in this LightBlock
@@ -238,9 +241,9 @@ def create_tracks_from_timeline(show_function, engine, show, config, fixture_id_
 
                 # Generate unified sequence steps
                 # Pass all_lane_fixtures (sorted by position) for cross-group effects like ping-pong
-                print(f"      Generating unified steps: bpm={block_bpm}, signature={block_signature}")
-                print(f"        fixtures count: {len(group_fixtures)}, fixture_id_map has {len(fixture_id_map)} entries")
-                print(f"        fixture_definitions has {len(fixture_definitions)} entries")
+                logger.debug(f"      Generating unified steps: bpm={block_bpm}, signature={block_signature}")
+                logger.debug(f"        fixtures count: {len(group_fixtures)}, fixture_id_map has {len(fixture_id_map)} entries")
+                logger.debug(f"        fixture_definitions has {len(fixture_definitions)} entries")
                 try:
                     steps = generate_unified_sequence_steps(
                         fixtures=group_fixtures,
@@ -254,7 +257,7 @@ def create_tracks_from_timeline(show_function, engine, show, config, fixture_id_
                         export_overrides=track_overrides
                     )
 
-                    print(f"      Generated {len(steps) if steps else 0} steps")
+                    logger.debug(f"      Generated {len(steps) if steps else 0} steps")
 
                     if not steps:
                         user_warnings.warn(
@@ -270,8 +273,7 @@ def create_tracks_from_timeline(show_function, engine, show, config, fixture_id_
                         f"'{lane_display_name}' failed to export and was "
                         f"skipped: {e}",
                         category="export")
-                    import traceback
-                    traceback.print_exc()
+                    logger.exception("Block export failed")
                     continue
 
                 # Create sequence for this unified block
@@ -326,10 +328,10 @@ def create_shows(engine, config: Configuration, fixture_id_map: dict, fixture_de
         # Debug info
         has_timeline = show.timeline_data is not None
         has_lanes = has_timeline and len(show.timeline_data.lanes) > 0 if has_timeline else False
-        print(f"\n>>> Processing show: {show_name}")
-        print(f"    timeline_data exists: {has_timeline}")
-        print(f"    lanes count: {len(show.timeline_data.lanes) if has_timeline else 0}")
-        print(f"    has_lanes (non-empty): {has_lanes}")
+        logger.debug(f">>> Processing show: {show_name}")
+        logger.debug(f"    timeline_data exists: {has_timeline}")
+        logger.debug(f"    lanes count: {len(show.timeline_data.lanes) if has_timeline else 0}")
+        logger.debug(f"    has_lanes (non-empty): {has_lanes}")
 
         # Create Function element for the show
         show_function = ET.SubElement(engine, "Function")
@@ -345,7 +347,7 @@ def create_shows(engine, config: Configuration, fixture_id_map: dict, fixture_de
         time_division.set("BPM", str(show.parts[0].bpm if show.parts else 120))
 
         if show.timeline_data and show.timeline_data.lanes:
-            print(f"    Using TIMELINE export path")
+            logger.debug(f"    Using TIMELINE export path")
             function_id_counter = create_tracks_from_timeline(
                 show_function,
                 engine,
@@ -356,7 +358,7 @@ def create_shows(engine, config: Configuration, fixture_id_map: dict, fixture_de
                 fixture_definitions,
                 export_overrides=export_overrides
             )
-            print(f"Successfully created show from timeline: {show_name}")
+            logger.debug(f"Successfully created show from timeline: {show_name}")
         else:
             # The Show function above is already in the workspace (VC
             # show buttons point at it), so say what really happens.

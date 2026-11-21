@@ -14,11 +14,14 @@ application fonts by content, and the family constants below do not
 depend on registration order.
 """
 
+import logging
 import os
 
 from PyQt6.QtGui import QFontDatabase
 
 from utils.paths import get_project_root
+
+logger = logging.getLogger(__name__)
 
 # Family names as they appear inside the shipped TTFs. Use these in QSS
 # and QFont constructors; never hardcode the strings elsewhere.
@@ -41,7 +44,7 @@ def register_brand_fonts() -> list:
     families = []
     directory = fonts_dir()
     if not os.path.isdir(directory):
-        print(f"fonts: directory not found: {directory}")
+        logger.warning(f"fonts: directory not found: {directory}")
         return families
     for name in sorted(os.listdir(directory)):
         if not name.lower().endswith(".ttf"):
@@ -49,7 +52,7 @@ def register_brand_fonts() -> list:
         path = os.path.join(directory, name)
         font_id = QFontDatabase.addApplicationFont(path)
         if font_id == -1:
-            print(f"fonts: failed to load {path}")
+            logger.warning(f"fonts: failed to load {path}")
             continue
         families.extend(QFontDatabase.applicationFontFamilies(font_id))
     return families

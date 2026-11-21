@@ -13,6 +13,7 @@ Data contract unchanged: Universe.output = {'plugin', 'line',
 update_from_config()/save_to_config().
 """
 
+import logging
 from PyQt6 import QtWidgets, QtCore
 from PyQt6.QtGui import QBrush, QColor, QFont, QPainter
 from PyQt6.QtCore import Qt, pyqtSignal
@@ -22,6 +23,8 @@ from utils.dmx_device_detection import (
     get_device_display_names, get_device_port_by_display_name,
 )
 from .base_tab import BaseTab
+
+logger = logging.getLogger(__name__)
 
 # Kept for import compatibility (FixturesTab and tests import these).
 _DISABLED_FG = QBrush(QColor(127, 127, 127))
@@ -736,7 +739,7 @@ class ConfigurationTab(BaseTab):
         """Inspector edits write through immediately; this is kept for
         the gui.py save flow and just refreshes derived displays."""
         self._refresh_cards()
-        print("Universe configuration updated")
+        logger.info("Universe configuration updated")
 
     def _add_universe(self):
         existing = list(self.config.universes.keys()) or [0]
@@ -829,4 +832,4 @@ class ConfigurationTab(BaseTab):
         if index >= 0:
             self.device_combo.setCurrentIndex(index)
         self.device_combo.blockSignals(False)
-        print("USB DMX device list refreshed")
+        logger.info("USB DMX device list refreshed")

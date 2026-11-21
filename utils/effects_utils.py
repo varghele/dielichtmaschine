@@ -1,3 +1,7 @@
+import logging
+
+logger = logging.getLogger(__name__)
+
 def get_channels_by_property(fixture_def, mode_name, properties):
     """
     Extracts channels with specific properties from a fixture definition
@@ -141,6 +145,6 @@ def find_closest_color_dmx(channels_dict, hex_color, fixture_def=None):
             # Get the middle of the DMX range for this color
             dmx_value = (int(capability['min']) + int(capability['max'])) // 2
             best_match = dmx_value
-            print(f"Found color match: {capability.get('name')} (distance: {distance:.2f}) - DMX: {dmx_value}")
+            logger.debug(f"Found color match: {capability.get('name')} (distance: {distance:.2f}) - DMX: {dmx_value}")
 
     return best_match

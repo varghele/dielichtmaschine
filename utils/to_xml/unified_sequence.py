@@ -1,6 +1,7 @@
 # unified_sequence.py
 # Functions for creating unified QLC+ sequences that combine all effect types
 
+import logging
 import math
 import xml.etree.ElementTree as ET
 from typing import List, Dict, Any, Optional, Tuple
@@ -12,6 +13,8 @@ from effects import (
     MovementContext, parse_speed,
 )
 from effects.timing import movement_seconds_per_bar, movement_total_cycles
+
+logger = logging.getLogger(__name__)
 
 
 def _map_rgb_to_color_wheel(r: int, g: int, b: int) -> int:
@@ -996,17 +999,17 @@ def generate_unified_sequence_steps(
     special_blocks = light_block.special_blocks if hasattr(light_block, 'special_blocks') else []
 
     # Debug: Log block counts
-    print(f"        [unified_sequence] dimmer={len(dimmer_blocks)}, colour={len(colour_blocks)}, movement={len(movement_blocks)}, special={len(special_blocks)}")
+    logger.debug(f"        [unified_sequence] dimmer={len(dimmer_blocks)}, colour={len(colour_blocks)}, movement={len(movement_blocks)}, special={len(special_blocks)}")
 
     # Calculate the unified step grid
     step_times_ms, step_duration_ms = calculate_unified_step_grid(
         dimmer_blocks, colour_blocks, movement_blocks, special_blocks, bpm, signature
     )
 
-    print(f"        [unified_sequence] step_times_ms count={len(step_times_ms)}, step_duration_ms={step_duration_ms}")
+    logger.debug(f"        [unified_sequence] step_times_ms count={len(step_times_ms)}, step_duration_ms={step_duration_ms}")
 
     if not step_times_ms:
-        print(f"        [unified_sequence] Returning empty - no step times calculated")
+        logger.debug(f"        [unified_sequence] Returning empty - no step times calculated")
         return []
 
     total_steps = len(step_times_ms)

@@ -2,6 +2,7 @@
 # Light lane widget for displaying and editing light effect lanes
 # Adapted from midimaker_and_show_structure/ui/lane_widget.py
 
+import logging
 from PyQt6.QtWidgets import (QWidget, QHBoxLayout, QVBoxLayout,
                              QPushButton, QCheckBox, QLineEdit, QFrame,
                              QScrollArea, QMessageBox)
@@ -13,6 +14,8 @@ from .light_block_widget import LightBlockWidget
 from .locking import flash_locked
 from .undo_commands import InsertRiffCommand, DeleteBlockCommand, AddBlockCommand
 from timeline.light_lane import LightLane
+
+logger = logging.getLogger(__name__)
 
 
 class LightLaneWidget(QFrame):
@@ -884,13 +887,13 @@ class LightLaneWidget(QFrame):
                 riff_library = main_window.riff_library
 
         if not riff_library:
-            print(f"Error: No riff library available")
+            logger.warning("No riff library available")
             return
 
         # Get the riff
         riff = riff_library.get_riff(riff_path)
         if not riff:
-            print(f"Error: Riff not found: {riff_path}")
+            logger.warning(f"Riff not found: {riff_path}")
             return
 
         # Check compatibility with fixture group

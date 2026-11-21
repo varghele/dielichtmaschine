@@ -11,6 +11,7 @@
 Reuses the synthetic GDTF fixtures from test_gdtf_loader (self-authored;
 GDTF Share files cannot be committed).
 """
+import logging
 import os
 
 import pytest
@@ -166,7 +167,7 @@ def test_companion_qxf_written_for_unknown_gdtf_fixture(gdtf_dir, tmp_path):
     assert reparsed.layout == original.layout
 
 
-def test_no_companion_when_qxf_twin_exists(tmp_path, monkeypatch, capsys):
+def test_no_companion_when_qxf_twin_exists(tmp_path, monkeypatch, caplog):
     gdtf_d = tmp_path / "gdtf"
     qxf_d = tmp_path / "qxf"
     gdtf_d.mkdir()
@@ -179,9 +180,10 @@ def test_no_companion_when_qxf_twin_exists(tmp_path, monkeypatch, capsys):
     fixture_utils.clear_fixture_definitions_cache()
 
     config = _config_with(_spot_fixture())
-    companions, _contents = _export(config, tmp_path / "export")
+    with caplog.at_level(logging.INFO, logger="utils.create_workspace"):
+        companions, _contents = _export(config, tmp_path / "export")
     assert companions == []
-    assert "no companion needed" in capsys.readouterr().out
+    assert "no companion needed" in caplog.text
 
 
 # ---------------------------------------------------------------------------

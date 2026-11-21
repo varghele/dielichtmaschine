@@ -40,6 +40,8 @@ from .base_tab import BaseTab
 # Structure tab; see audio/simple_audio_player.py).
 from audio import simple_audio_player as song_audio
 
+logger = logging.getLogger(__name__)
+
 # Try to import ArtNet components - may not be available
 try:
     from utils.artnet import ShowsArtNetController
@@ -1191,7 +1193,7 @@ class ShowsTab(BaseTab):
                 try:
                     if os.path.exists(file_path):
                         shutil.copy2(file_path, bundled)
-                        print(f"Copied audio file to: {bundled}")
+                        _audio_logger.info(f"Copied audio file to: {bundled}")
                         local_path = bundled
 
                         # Update the audio lane to use the local copy
@@ -1215,7 +1217,7 @@ class ShowsTab(BaseTab):
             show = self.config.songs[self.current_song_name]
             if show.timeline_data:
                 show.timeline_data.audio_file_path = stored
-                print(f"Stored audio reference in show: {stored}")
+                _audio_logger.info(f"Stored audio reference in show: {stored}")
 
         # Swap the file in the shared player if this tab is driving it
         # (otherwise the next play claims it with the new file).
@@ -1224,7 +1226,7 @@ class ShowsTab(BaseTab):
             try:
                 self.simple_audio_player.load(local_path)
             except Exception as e:
-                print(f"Failed to load audio into the player: {e}")
+                _audio_logger.warning(f"Failed to load audio into the player: {e}", exc_info=True)
 
     def _load_show(self, show_name: str):
         """Load show into timeline."""
@@ -2030,7 +2032,7 @@ class ShowsTab(BaseTab):
                             self.audio_lane.mute_button.isChecked())
                         player.play(self.playhead_position)
                 except Exception as e:
-                    print(f"Audio playback failed: {e}")
+                    _audio_logger.warning(f"Audio playback failed: {e}", exc_info=True)
 
         # Initialize and start ArtNet if enabled
         if ARTNET_AVAILABLE and self.artnet_enabled:
@@ -2239,12 +2241,10 @@ class ShowsTab(BaseTab):
                 if self.artnet_enabled:
                     self.artnet_controller.enable_output()
 
-                print("ArtNet controller initialized")
+                logger.info("ArtNet controller initialized")
 
             except Exception as e:
-                print(f"Failed to initialize ArtNet controller: {e}")
-                import traceback
-                traceback.print_exc()
+                logger.exception(f"Failed to initialize ArtNet controller: {e}")
                 self.artnet_controller = None
 
     def toggle_artnet(self):
@@ -2309,12 +2309,10 @@ class ShowsTab(BaseTab):
                 if self.tcp_enabled:
                     self.tcp_server.start()
 
-                print("TCP server initialized")
+                logger.info("TCP server initialized")
 
             except Exception as e:
-                print(f"Failed to initialize TCP server: {e}")
-                import traceback
-                traceback.print_exc()
+                logger.exception(f"Failed to initialize TCP server: {e}")
                 self.tcp_server = None
 
     def _on_tcp_toggle(self, checked: bool):
@@ -2334,15 +2332,15 @@ class ShowsTab(BaseTab):
 
     def _on_tcp_client_connected(self, client_addr: str):
         """Handle TCP client connection."""
-        print(f"Visualizer connected: {client_addr}")
+        logger.info(f"Visualizer connected: {client_addr}")
 
     def _on_tcp_client_disconnected(self, client_addr: str):
         """Handle TCP client disconnection."""
-        print(f"Visualizer disconnected: {client_addr}")
+        logger.info(f"Visualizer disconnected: {client_addr}")
 
     def _on_tcp_error(self, error_msg: str):
         """Handle TCP server error."""
-        print(f"TCP server error: {error_msg}")
+        logger.warning(f"TCP server error: {error_msg}")
 
     # ── Embedded visualizer plumbing ──────────────────────────────────
 
@@ -2842,7 +2840,7 @@ class ShowsTab(BaseTab):
         selected = self.selection_manager.get_selected_blocks()
         if selected:
             copy_multiple_effects(selected)
-            print(f"Copied {len(selected)} block(s) to clipboard")
+            logger.debug(f"Copied {len(selected)} block(s) to clipboard")
 
     def _paste_at_playhead(self):
         """Paste clipboard blocks at playhead position."""
@@ -2859,7 +2857,7 @@ class ShowsTab(BaseTab):
                 lane_widget.create_light_block_widget(new_block)
 
             if results:
-                print(f"Pasted {len(results)} block(s)")
+                logger.debug(f"Pasted {len(results)} block(s)")
                 self.save_to_config()
                 self._update_status_line()
 
@@ -2871,7 +2869,7 @@ class ShowsTab(BaseTab):
                 if new_block:
                     target_lane.lane.light_blocks.append(new_block)
                     target_lane.create_light_block_widget(new_block)
-                    print("Pasted 1 block")
+                    logger.debug("Pasted 1 block")
                     self.save_to_config()
 
     def _show_marquee_context_menu(self, global_pos: QPoint):
@@ -2925,7 +2923,7 @@ class ShowsTab(BaseTab):
         if undo_stack is not None:
             undo_stack.endMacro()
 
-        print(f"Deleted {count} block(s)")
+        logger.debug(f"Deleted {count} block(s)")
         self.save_to_config()
         self._update_status_line()
         self._refresh_block_inspector()
@@ -2963,4 +2961,4 @@ class ShowsTab(BaseTab):
 
         if all_blocks:
             self.selection_manager.select_multiple(all_blocks, extend=False)
-            print(f"Selected {len(all_blocks)} block(s)")
+            logger.debug(f"Selected {len(all_blocks)} block(s)")

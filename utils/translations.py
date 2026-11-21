@@ -11,11 +11,14 @@ There is deliberately no language-switcher UI yet; set the value by
 hand or leave it unset for English.
 """
 
+import logging
 import os
 
 from PyQt6.QtCore import QTranslator
 
 from utils.paths import get_project_root
+
+logger = logging.getLogger(__name__)
 
 CATALOG_PREFIX = "lichtmaschine_"
 
@@ -44,7 +47,7 @@ def install_translator(app) -> bool:
     path = catalog_path(language)
     translator = QTranslator(app)
     if not translator.load(path):
-        print(f"i18n: no compiled catalog for '{language}' at {path}; "
+        logger.warning(f"i18n: no compiled catalog for '{language}' at {path}; "
               f"falling back to English")
         return False
     app.installTranslator(translator)

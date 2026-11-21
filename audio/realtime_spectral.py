@@ -6,12 +6,15 @@ but operates on streaming audio chunks from a ring buffer.
 Uses pure numpy in the hot path — no librosa dependency at runtime.
 """
 
+import logging
 import numpy as np
 import threading
 import time
 from dataclasses import dataclass
 from typing import Callable, List, Optional
 from .ring_buffer import AudioRingBuffer
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -416,7 +419,7 @@ class RealtimeSpectralAnalyzer:
                         try:
                             cb(frame)
                         except Exception as e:
-                            print(f"Error in spectral callback: {e}")
+                            logger.debug(f"Error in spectral callback: {e}", exc_info=True)
 
     def _compute_frame(self) -> Optional[LiveFeatureFrame]:
         """Compute all 7 features for the current sliding window."""

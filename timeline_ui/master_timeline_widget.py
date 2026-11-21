@@ -2,11 +2,14 @@
 # Master timeline widget showing song structure, playhead, and grid
 # Adapted from midimaker_and_show_structure/ui/master_timeline_widget.py
 
+import logging
 from PyQt6.QtWidgets import (QWidget, QHBoxLayout, QVBoxLayout, QLabel,
                              QScrollArea, QStyle, QStyleOption)
 from PyQt6.QtCore import Qt, pyqtSignal, QPoint, QRectF
 from PyQt6.QtGui import QPainter, QPen, QColor, QPolygon, QBrush
 from .timeline_widget import TimelineWidget, iter_grid_steps, HEADER_COLUMN_WIDTH
+
+logger = logging.getLogger(__name__)
 
 
 # Grid interval choices. First tuple element is the LABEL (grid interval in
@@ -134,7 +137,7 @@ class MasterTimelineWidget(TimelineWidget):
             try:
                 self.draw_song_structure(painter, width, height)
             except Exception as e:
-                print(f"Error drawing song structure: {e}")
+                logger.debug(f"Error drawing song structure: {e}", exc_info=True)
 
         # Draw grid
         self.draw_grid(painter, width, height, clip)
@@ -196,7 +199,7 @@ class MasterTimelineWidget(TimelineWidget):
                     bpm_rect = QRectF(start_x + 6, 25, end_x - start_x - 12, 14)
                     painter.drawText(bpm_rect, Qt.AlignmentFlag.AlignLeft, bpm_text)
         except Exception as e:
-            print(f"Error in draw_song_structure: {e}")
+            logger.debug(f"Error in draw_song_structure: {e}", exc_info=True)
 
     def _bpm_tag_text(self, part) -> str:
         """"192 BPM" mono tag; "120->140 BPM" across a gradual ramp."""
@@ -278,7 +281,7 @@ class MasterTimelineWidget(TimelineWidget):
                     Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter,
                     bpm_text)
         except Exception as e:
-            print(f"Error in _draw_parts_band: {e}")
+            logger.debug(f"Error in _draw_parts_band: {e}", exc_info=True)
 
     def draw_grid(self, painter, width, height, clip=None):
         """Draw time-based grid with beat lines and optional sub-beat
@@ -333,9 +336,7 @@ class MasterTimelineWidget(TimelineWidget):
                         painter.drawLine(step_x_rounded, 0, step_x_rounded, height)
 
             except Exception as e:
-                import traceback
-                print(f"Error in draw_grid: {e}")
-                traceback.print_exc()
+                logger.debug(f"Error in draw_grid: {e}", exc_info=True)
                 self.draw_basic_grid(painter, width, height)
         else:
             self.draw_basic_grid(painter, width, height)

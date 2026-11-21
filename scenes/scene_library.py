@@ -8,11 +8,14 @@ JSON files. Predefined scenes are authored later, so a missing directory
 yields an empty library rather than a crash.
 """
 
+import logging
 import os
 import json
 from typing import Dict, List, Optional
 
 from config.models import Scene
+
+logger = logging.getLogger(__name__)
 
 
 class SceneLibrary:
@@ -73,10 +76,10 @@ class SceneLibrary:
                 data = json.load(f)
             return Scene.from_dict(data)
         except json.JSONDecodeError as e:
-            print(f"Error parsing scene file {filepath}: {e}")
+            logger.warning(f"Error parsing scene file {filepath}: {e}", exc_info=True)
             return None
         except Exception as e:
-            print(f"Error loading scene file {filepath}: {e}")
+            logger.warning(f"Error loading scene file {filepath}: {e}", exc_info=True)
             return None
 
     def add_scene(self, scene: Scene, category: str = "general") -> None:

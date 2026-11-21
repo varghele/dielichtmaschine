@@ -1,6 +1,7 @@
 # gui/dialogs/orientation_dialog.py
 # 3D Orientation Dialog for setting fixture orientation
 
+import logging
 import math
 from typing import List, Optional
 
@@ -20,6 +21,8 @@ from PyQt6.QtCore import Qt, QTimer, pyqtSignal
 from utils.fixture_capabilities import Chassis, chassis_from_legacy_type
 from utils.geometry import GeometryBuilder
 from utils.orientation import MOUNTING_PRESET_ANGLES
+
+logger = logging.getLogger(__name__)
 
 
 class OrientationPreviewWidget(QOpenGLWidget):
@@ -144,9 +147,7 @@ class OrientationPreviewWidget(QOpenGLWidget):
             self._create_handle_geometry()
 
         except Exception as e:
-            print(f"Failed to initialize OrientationPreviewWidget: {e}")
-            import traceback
-            traceback.print_exc()
+            logger.exception(f"Failed to initialize OrientationPreviewWidget: {e}")
 
     def _create_fixture_geometry(self):
         """Create fixture body geometry based on fixture type."""

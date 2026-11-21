@@ -20,12 +20,15 @@ Reality checks baked in (from Share files, docs/gdtf-coverage-note.md):
 
 from __future__ import annotations
 
+import logging
 import io
 import zipfile
 from dataclasses import dataclass
 from typing import Dict, Optional, Tuple
 
 import numpy as np
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -70,7 +73,7 @@ def load_glb_mesh(gdtf_path: str, archive_path: str,
     try:
         baked = _bake(gdtf_path, archive_path, target_dims_m, max_vertices)
     except Exception as e:
-        print(f"GDTF mesh bake failed ({archive_path} in {gdtf_path}): {e}")
+        logger.warning(f"GDTF mesh bake failed ({archive_path} in {gdtf_path}): {e}", exc_info=True)
     _bake_cache[key] = baked
     return baked
 
@@ -99,7 +102,7 @@ def _bake(gdtf_path, archive_path, target_dims_m, max_vertices):
 
     total_vertices = sum(len(m.vertices) for m, _src in meshes)
     if total_vertices == 0 or total_vertices > max_vertices:
-        print(f"GDTF mesh rejected ({archive_path}): {total_vertices} vertices "
+        logger.warning(f"GDTF mesh rejected ({archive_path}): {total_vertices} vertices "
               f"(cap {max_vertices})")
         return None
 

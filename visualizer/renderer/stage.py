@@ -1,9 +1,12 @@
 # visualizer/renderer/stage.py
 # Stage floor and grid rendering
 
+import logging
 import numpy as np
 import moderngl
 import glm
+
+logger = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------------------
@@ -181,9 +184,9 @@ class StageRenderer:
                 vertex_shader=self.FLOOR_VERTEX_SHADER,
                 fragment_shader=self.FLOOR_FRAGMENT_SHADER
             )
-            print(f"Floor shader compiled OK")
+            logger.debug(f"Floor shader compiled OK")
         except Exception as e:
-            print(f"Floor shader error: {e}")
+            logger.exception(f"Floor shader error: {e}")
             raise
 
         try:
@@ -191,15 +194,15 @@ class StageRenderer:
                 vertex_shader=self.GRID_VERTEX_SHADER,
                 fragment_shader=self.GRID_FRAGMENT_SHADER
             )
-            print(f"Grid shader compiled OK")
+            logger.debug(f"Grid shader compiled OK")
         except Exception as e:
-            print(f"Grid shader error: {e}")
+            logger.exception(f"Grid shader error: {e}")
             raise
 
         # Create geometry
         self._create_floor()
         self._create_grid()
-        print(f"Stage geometry created: floor={self.width}x{self.depth}m, grid vertices={self.grid_vertex_count}")
+        logger.debug(f"Stage geometry created: floor={self.width}x{self.depth}m, grid vertices={self.grid_vertex_count}")
 
     def _create_floor(self):
         """Create floor quad geometry."""
@@ -323,7 +326,7 @@ class StageRenderer:
             # Recreate geometry
             self._create_floor()
             self._create_grid()
-            print(f"Stage resized to {width}x{depth}m")
+            logger.debug(f"Stage resized to {width}x{depth}m")
 
     def set_grid_size(self, grid_size: float):
         """
@@ -343,7 +346,7 @@ class StageRenderer:
 
             # Recreate grid geometry
             self._create_grid()
-            print(f"Grid spacing changed to {grid_size}m")
+            logger.debug(f"Grid spacing changed to {grid_size}m")
 
     def render(self, mvp: glm.mat4):
         """

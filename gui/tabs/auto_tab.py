@@ -43,6 +43,7 @@ Two behavioural deltas worth knowing:
 Cleanup runs from ``MainWindow.closeEvent`` via :meth:`cleanup`.
 """
 
+import logging
 import math
 from collections import deque
 from datetime import datetime
@@ -84,6 +85,8 @@ from auto import settings as auto_settings
 from autogen.spatial import compute_stage_planes
 
 from .base_tab import BaseTab
+
+logger = logging.getLogger(__name__)
 
 # Reference geometry.
 LEFT_PANEL_WIDTH = 420
@@ -1612,7 +1615,7 @@ class AutoTab(BaseTab):
             try:
                 self._engine.refresh_from_config(self.config)
             except Exception as e:
-                print(f"AutoTab: engine refresh_from_config failed: {e}")
+                logger.warning(f"AutoTab: engine refresh_from_config failed: {e}", exc_info=True)
 
     # -- Lazy fixture definitions -------------------------------------------
 
@@ -2026,11 +2029,10 @@ class AutoTab(BaseTab):
             if self.embedded_visualizer is not None:
                 self.embedded_visualizer.set_preview_mode("live")
 
-            print("Auto Mode started")
+            logger.info("Auto Mode started")
 
         except Exception as e:
-            import traceback
-            traceback.print_exc()
+            logger.exception("Auto Mode failed to start")
             self._cleanup()
             self._resume_idle_monitoring()
             self.show_error(
@@ -2063,7 +2065,7 @@ class AutoTab(BaseTab):
         if self.embedded_visualizer is not None:
             self.embedded_visualizer.set_preview_mode("build")
 
-        print("Auto Mode stopped")
+        logger.info("Auto Mode stopped")
 
     def _clear_meters(self) -> None:
         for key, bar in self._meter_bars.items():

@@ -10,12 +10,15 @@ physically picks up. The LTC input service constructs its own LiveAudioInput
 whose gain stays at the 1.0 default, so timecode decoding is never touched.
 """
 
+import logging
 import math
 
 import sounddevice as sd
 import numpy as np
 from typing import Optional
 from .ring_buffer import AudioRingBuffer
+
+logger = logging.getLogger(__name__)
 
 # Input gain bounds: exactly +/-20 dB. Wide enough to rescue a quiet
 # lavalier or tame a hot desk feed, narrow enough that AUTO can never
@@ -183,7 +186,7 @@ class LiveAudioInput:
             self._is_initialized = True
             return True
 
-        print(f"Failed to initialize live audio input "
+        logger.warning(f"Failed to initialize live audio input "
               f"(tried {rates} Hz): {last_error}")
         self.cleanup()
         return False
@@ -203,7 +206,7 @@ class LiveAudioInput:
                 self._stream.start()
             return True
         except Exception as e:
-            print(f"Failed to start live audio input: {e}")
+            logger.warning(f"Failed to start live audio input: {e}", exc_info=True)
             return False
 
     def stop(self) -> None:
@@ -212,7 +215,7 @@ class LiveAudioInput:
             try:
                 self._stream.abort()
             except Exception as e:
-                print(f"Error stopping live audio input: {e}")
+                logger.warning(f"Error stopping live audio input: {e}", exc_info=True)
 
     def cleanup(self) -> None:
         """Release all resources."""
@@ -240,7 +243,7 @@ class LiveAudioInput:
             if status.input_overflow:
                 pass  # Dropped frames, acceptable for live monitoring
             else:
-                print(f"Live input status: {status}")
+                logger.debug(f"Live input status: {status}")
 
         # Pre-gain block peak for the UI level meter (single float
         # store: GIL-atomic, no lock).

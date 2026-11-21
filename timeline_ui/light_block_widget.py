@@ -2,6 +2,7 @@
 # Visual widget for light effect blocks on timeline
 # Adapted from midimaker_and_show_structure/ui/midi_block_widget.py
 
+import logging
 from PyQt6.QtWidgets import QWidget
 from PyQt6.QtCore import Qt, pyqtSignal, QPoint, QRect
 from PyQt6.QtGui import (
@@ -13,6 +14,8 @@ from utils.envelope_edit import EnvelopeState
 from utils.timeline_edit_lock import TIMELINE_EDIT_LOCK
 from .locking import flash_locked
 from .timeline_widget import STRIP_ZONE_HEIGHT, sublane_band_geometry
+
+logger = logging.getLogger(__name__)
 
 # Glutorange, the brand accent (gui/theme_tokens.py); selection marks in
 # this custom-painted widget follow the theme's selection color. Same
@@ -1864,7 +1867,7 @@ class LightBlockWidget(QWidget):
         # Check for overlaps in Movement/Special sublanes (prevent conflicts)
         if sublane_type in ["movement", "special"]:
             if self._check_overlap(sublane_type, start_time, end_time):
-                print(f"Warning: Cannot create {sublane_type} block - overlaps with existing block")
+                logger.warning(f"Cannot create {sublane_type} block - overlaps with existing block")
                 return  # Abort creation
 
         # Create the appropriate sublane block and append to its list.

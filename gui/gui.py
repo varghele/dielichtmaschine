@@ -1,6 +1,7 @@
 # gui/gui.py
 # Refactored MainWindow using tab components
 
+import logging
 import os
 import sys
 from PyQt6 import QtWidgets
@@ -19,6 +20,8 @@ from gui.progress_manager import ProgressManager, set_progress_manager
 from timeline_ui.riff_browser_widget import RiffBrowserWidget
 from riffs.riff_library import RiffLibrary
 from scenes.scene_library import SceneLibrary
+
+logger = logging.getLogger(__name__)
 
 
 class MainWindow(QMainWindow, Ui_MainWindow):
@@ -256,7 +259,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
                         [sys.executable, visualizer_path],
                         cwd=project_root
                     )
-                    print("Visualizer launched")
+                    logger.info("Visualizer launched")
                 except Exception as e:
                     QMessageBox.critical(
                         self,
@@ -1149,9 +1152,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             self._sync_idle_policy(index)
 
         except Exception as e:
-            print(f"ERROR in _on_tab_changed: {e}")
-            import traceback
-            traceback.print_exc()
+            logger.exception(f"_on_tab_changed failed: {e}")
 
     def _update_riff_browser_visibility(self, tab_index: int):
         """Show or hide the global riff-browser dock based on the current
@@ -1216,7 +1217,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             except Exception as e:
                 # Don't let one tab's visualizer failure block the
                 # others — log and keep going.
-                print(f"{tab_attr} embedded visualizer refresh failed: {e}")
+                logger.warning(f"{tab_attr} embedded visualizer refresh failed: {e}", exc_info=True)
 
     def on_show_selected(self, show_name: str, source_tab: str):
         """Coordinate show selection across tabs.
@@ -1278,7 +1279,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
                 "Success",
                 f"Configuration saved to {self.config_path}"
             )
-            print(f"Configuration saved to {self.config_path}")
+            logger.info(f"Configuration saved to {self.config_path}")
 
         except Exception as e:
             QMessageBox.critical(
@@ -1286,9 +1287,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
                 "Error",
                 f"Failed to save configuration: {str(e)}"
             )
-            print(f"Error saving configuration: {e}")
-            import traceback
-            traceback.print_exc()
+            logger.exception(f"Error saving configuration: {e}")
 
     def _record_recent_config(self, path: str) -> None:
         """Track a config for the Home screen recents and refresh it
@@ -1300,7 +1299,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
                 self.home_screen.refresh(recent_configs())
                 self.home_screen.refresh_checklist(self.config)
         except Exception as e:
-            print(f"recent configs: {e}")
+            logger.warning(f"recent configs: {e}", exc_info=True)
 
     def open_recent_config(self, path: str):
         """Open a config picked from the Home screen recent list."""
@@ -1362,7 +1361,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
                 "Success",
                 f"Configuration saved to {self.config_path}"
             )
-            print(f"Configuration saved to {self.config_path}")
+            logger.info(f"Configuration saved to {self.config_path}")
 
         except Exception as e:
             QMessageBox.critical(
@@ -1370,9 +1369,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
                 "Error",
                 f"Failed to save configuration: {str(e)}"
             )
-            print(f"Error saving configuration: {e}")
-            import traceback
-            traceback.print_exc()
+            logger.exception(f"Error saving configuration: {e}")
 
     def new_from_template(self):
         """File -> New from Template: start a project from a starter rig.
@@ -1549,7 +1546,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             self.progress_manager.update_modal(8, "Done")
             self.progress_manager.finish_modal()
 
-            print(f"Configuration loaded from {file_path}")
+            logger.info(f"Configuration loaded from {file_path}")
 
             # Home screen bookkeeping: remember the file and leave the
             # landing page for the tab pages.
@@ -1572,9 +1569,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
 
         except Exception as e:
             self.progress_manager.finish_modal()
-            print(f"Error loading configuration: {e}")
-            import traceback
-            traceback.print_exc()
+            logger.exception(f"Error loading configuration: {e}")
             # A failed load used to be console-only - the UI just sat
             # there with the old (or no) project. Say it out loud.
             QMessageBox.critical(
@@ -1834,7 +1829,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             # Load into cache
             if models_in_config:
                 get_cached_fixture_definitions(models_in_config)
-                print(f"Pre-loaded {len(models_in_config)} fixture definition(s) into cache")
+                logger.info(f"Pre-loaded {len(models_in_config)} fixture definition(s) into cache")
         except Exception as e:
             from utils import user_warnings
             user_warnings.warn(
@@ -1911,7 +1906,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
                 "Success",
                 f"Workspace imported from {file_path}"
             )
-            print(f"Workspace imported from {file_path}")
+            logger.info(f"Workspace imported from {file_path}")
 
         except Exception as e:
             self.progress_manager.finish_modal()
@@ -1920,9 +1915,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
                 "Error",
                 f"Failed to import workspace: {str(e)}"
             )
-            print(f"Error importing workspace: {e}")
-            import traceback
-            traceback.print_exc()
+            logger.exception(f"Error importing workspace: {e}")
 
     def import_show_structure_file(self):
         """File -> Import Show Structure: read a .csv or .yaml into the config.
@@ -2417,7 +2410,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
                     "Success",
                     f"Workspace created at {workspace_path}"
                 )
-            print(f"Workspace created at {workspace_path}")
+            logger.info(f"Workspace created at {workspace_path}")
 
         except Exception as e:
             self.progress_manager.stop_log_capture()
@@ -2427,9 +2420,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
                 "Error",
                 f"Failed to create workspace: {str(e)}"
             )
-            print(f"Error creating workspace: {e}")
-            import traceback
-            traceback.print_exc()
+            logger.exception(f"Error creating workspace: {e}")
 
     def render_to_video(self):
         """Open the render-to-video dialog."""
@@ -2451,8 +2442,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
 
         except Exception as e:
             QMessageBox.critical(self, "Error", f"Failed to open render dialog: {str(e)}")
-            import traceback
-            traceback.print_exc()
+            logger.exception("Failed to open render dialog")
 
     def _on_toggle_sublane_labels(self, checked):
         """Persist the sub-lane-label deep setting and repaint the timeline."""
@@ -2524,9 +2514,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
                 "Error",
                 f"Failed to open audio settings: {str(e)}"
             )
-            print(f"Error opening audio settings: {e}")
-            import traceback
-            traceback.print_exc()
+            logger.exception(f"Error opening audio settings: {e}")
 
     def open_log_folder(self):
         """Open the application log directory in the system file browser."""

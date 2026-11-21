@@ -34,6 +34,7 @@ layer chips, active-layer editing, element palette, truss docking, 3D
 preview + pop-out, TCP notify + visualizer broadcast) is unchanged.
 """
 
+import logging
 import datetime
 import math
 import subprocess
@@ -50,6 +51,8 @@ from gui.StageView import StageView
 from gui.stage_items import FixtureItem
 from gui.dialogs.orientation_dialog import OrientationDialog, OrientationPanel
 from gui.widgets.embedded_visualizer import EmbeddedVisualizer
+
+logger = logging.getLogger(__name__)
 
 # Reference column widths.
 LIBRARY_WIDTH = 260
@@ -1596,7 +1599,7 @@ class StageTab(BaseTab):
                 [sys.executable, visualizer_path],
                 cwd=project_root
             )
-            print(f"Visualizer launched (PID: {self.visualizer_process.pid})")
+            logger.info(f"Visualizer launched (PID: {self.visualizer_process.pid})")
         except Exception as e:
             QtWidgets.QMessageBox.critical(
                 self,
@@ -1662,7 +1665,7 @@ class StageTab(BaseTab):
                     # Verify it started
                     tcp_server = getattr(shows_tab, 'tcp_server', None)
                     if tcp_server and tcp_server.is_running():
-                        print("TCP server started successfully")
+                        logger.info("TCP server started successfully")
                         self._update_tcp_status()
                         return True
                     else:
@@ -1686,7 +1689,7 @@ class StageTab(BaseTab):
                 return False
 
         except Exception as e:
-            print(f"Error checking TCP server: {e}")
+            logger.warning(f"Error checking TCP server: {e}", exc_info=True)
             return True  # Proceed anyway on error
 
     def _update_tcp_status(self):
@@ -1790,7 +1793,7 @@ class StageTab(BaseTab):
                     # Update the server's config and push to clients
                     tcp_server.update_config(self.config)
         except Exception as e:
-            print(f"Error notifying TCP server: {e}")
+            logger.warning(f"Error notifying TCP server: {e}", exc_info=True)
 
     # ── Stage plot export ─────────────────────────────────────────────
 

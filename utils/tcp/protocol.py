@@ -368,7 +368,7 @@ def _parse_qxf_for_visualizer(manufacturer: str, model: str, mode_name: str) -> 
 
         if gobo_wheel_entries:
             result['gobo_wheel'] = gobo_wheel_entries
-            print(f"  Parsed {len(gobo_wheel_entries)} gobo wheel entries")
+            logger.debug(f"  Parsed {len(gobo_wheel_entries)} gobo wheel entries")
 
         # Parse each mode's channel mapping and Head tags (for pixel segments)
         modes = _findall_elements(root, './/Mode', ns)

@@ -1,6 +1,7 @@
 # utils/render/offline_renderer.py
 # Headless offline rendering of shows to MP4 video files
 
+import logging
 import os
 import subprocess
 import numpy as np
@@ -16,6 +17,8 @@ from utils.target_resolver import resolve_targets_unique
 from utils.artnet.dmx_manager import DMXManager
 from utils.render.camera_presets import CAMERA_PRESETS
 from timeline.song_structure import SongStructure
+
+logger = logging.getLogger(__name__)
 
 
 class OfflineRenderer:
@@ -76,7 +79,7 @@ class OfflineRenderer:
                 return False
 
             total_frames = int(duration * self.fps)
-            print(f"Rendering {self.show.name}: {duration:.1f}s, {total_frames} frames at {self.fps}fps")
+            logger.info(f"Rendering {self.show.name}: {duration:.1f}s, {total_frames} frames at {self.fps}fps")
 
             # Initialize OpenGL context and renderers
             self._init_gl_context()
@@ -101,7 +104,7 @@ class OfflineRenderer:
             try:
                 for frame_idx in range(total_frames):
                     if self._cancelled:
-                        print("Render cancelled")
+                        logger.info("Render cancelled")
                         ffmpeg_proc.stdin.close()
                         ffmpeg_proc.terminate()
                         return False
@@ -144,7 +147,7 @@ class OfflineRenderer:
                     return False
 
                 self._report_progress(total_frames, total_frames, "Done!")
-                print(f"Render complete: {self.output_path}")
+                logger.info(f"Render complete: {self.output_path}")
                 return True
 
             except BrokenPipeError:
@@ -153,8 +156,7 @@ class OfflineRenderer:
 
         except Exception as e:
             user_warnings.warn(f"Render failed: {e}", category="render")
-            import traceback
-            traceback.print_exc()
+            logger.exception("Render failed")
             return False
 
         finally:
@@ -301,7 +303,7 @@ class OfflineRenderer:
             )
             size_mb = os.path.getsize(output_path) / 1e6
             self._report_progress(total_frames, total_frames, "Done!")
-            print(f"GIF complete: {output_path}  ({len(p_frames)} frames, {out_w}x{out_h}, "
+            logger.info(f"GIF complete: {output_path}  ({len(p_frames)} frames, {out_w}x{out_h}, "
                   f"{colors} colors, {size_mb:.1f} MB)")
             return True
         finally:
@@ -537,7 +539,7 @@ class OfflineRenderer:
 
         cmd.append(self.output_path)
 
-        print(f"Starting FFmpeg: {' '.join(cmd[:10])}...")
+        logger.info(f"Starting FFmpeg: {' '.join(cmd[:10])}...")
         # stderr goes to DEVNULL to prevent pipe buffer filling up and blocking FFmpeg
         return subprocess.Popen(
             cmd,

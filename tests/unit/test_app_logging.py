@@ -60,6 +60,20 @@ def test_setup_logging_creates_dir_and_file(log_env):
     assert app_identity.version_string() in content
 
 
+def test_setup_logging_custom_file_name(log_env):
+    # The standalone visualizer logs into its own file in the same dir.
+    path = app_logging.setup_logging(app_logging.VISUALIZER_LOG_FILE_NAME)
+    assert os.path.dirname(path) == str(log_env)
+    assert os.path.basename(path) == app_logging.VISUALIZER_LOG_FILE_NAME
+    logging.getLogger("visualizer.main").info("viewer-log-probe")
+    for handler in logging.getLogger().handlers:
+        handler.flush()
+    with open(path, encoding="utf-8") as handle:
+        assert "viewer-log-probe" in handle.read()
+    assert not os.path.exists(
+        os.path.join(str(log_env), app_logging.LOG_FILE_NAME))
+
+
 def test_setup_logging_is_idempotent(log_env):
     first_path = app_logging.setup_logging()
     handlers_after_first = list(logging.getLogger().handlers)

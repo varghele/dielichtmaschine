@@ -2,11 +2,14 @@
 # Base timeline widget with grid drawing and snap functionality
 # Adapted from midimaker_and_show_structure/ui/lane_widget.py
 
+import logging
 import json
 import math
 from PyQt6.QtWidgets import QWidget, QMenu
 from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtGui import QPainter, QPen, QColor, QWheelEvent, QBrush
+
+logger = logging.getLogger(__name__)
 
 
 # Shared width of the header column to the left of every timeline row
@@ -476,7 +479,7 @@ class TimelineWidget(QWidget):
             try:
                 self.draw_song_structure_grid(painter, width, height, clip)
             except Exception as e:
-                print(f"Error drawing song structure grid: {e}")
+                logger.debug(f"Error drawing song structure grid: {e}", exc_info=True)
                 self.draw_basic_grid(painter, width, height, clip)
         else:
             self.draw_basic_grid(painter, width, height, clip)
@@ -610,7 +613,7 @@ class TimelineWidget(QWidget):
                 painter.fillRect(int(start_x), 0, int(end_x - start_x), height, color)
 
         except Exception as e:
-            print(f"Error drawing song structure background: {e}")
+            logger.debug(f"Error drawing song structure background: {e}", exc_info=True)
 
     def band_geometry(self):
         """``(strip, bands)`` for this canvas via sublane_band_geometry.
@@ -751,7 +754,7 @@ class TimelineWidget(QWidget):
 
                 event.acceptProposedAction()
             except (json.JSONDecodeError, UnicodeDecodeError, KeyError) as e:
-                print(f"Error processing dropped riff: {e}")
+                logger.warning(f"Error processing dropped riff: {e}", exc_info=True)
                 event.ignore()
         else:
             event.ignore()

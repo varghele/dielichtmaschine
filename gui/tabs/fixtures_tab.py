@@ -36,6 +36,7 @@ editors write straight into the config, then refresh the affected table
 row(s), the DMX lint, the groups panel and the status strip.
 """
 
+import logging
 import math
 
 from PyQt6 import QtWidgets, QtCore, QtGui
@@ -57,6 +58,8 @@ from utils.dmx_conflicts import (
 )
 from .base_tab import BaseTab
 from utils import user_warnings
+
+logger = logging.getLogger(__name__)
 
 # Table columns, reference order.
 COL_NUM, COL_FIXTURE, COL_TYPE, COL_MODE, COL_UNI, COL_ADDRESS, COL_GROUP = \
@@ -1942,8 +1945,7 @@ class FixturesTab(BaseTab):
 
         except Exception as e:
             user_warnings.warn(f"Adding the fixture failed: {e}", category="fixture-library")
-            import traceback
-            traceback.print_exc()
+            logger.exception("Adding the fixture failed")
 
     def _find_next_available_address(self, channel_count: int) -> tuple:
         """Find the next available DMX address that can fit the given channel count.
@@ -2109,7 +2111,7 @@ class FixturesTab(BaseTab):
         # Notify main window of changes
         self._notify_main_window()
 
-        print(f"Added {quantity}x fixture: {manufacturer} {model}")
+        logger.info(f"Added {quantity}x fixture: {manufacturer} {model}")
 
     def _remove_fixture(self):
         """Remove the selected fixture from the configuration."""
@@ -2258,4 +2260,4 @@ class FixturesTab(BaseTab):
         # Notify main window of changes
         self._notify_main_window()
 
-        print(f"Duplicated fixture: {original_fixture.manufacturer} {original_fixture.model}")
+        logger.info(f"Duplicated fixture: {original_fixture.manufacturer} {original_fixture.model}")

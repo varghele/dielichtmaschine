@@ -1,6 +1,7 @@
 # visualizer/renderer/fixtures.py
 # Fixture rendering for the 3D visualizer
 
+import logging
 import math
 import os
 import numpy as np
@@ -10,6 +11,8 @@ from typing import Dict, List, Any, Optional, Tuple
 from abc import ABC, abstractmethod
 
 from utils.geometry import GeometryBuilder
+
+logger = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------------------
@@ -1861,7 +1864,7 @@ class MovingHeadRenderer(FixtureRenderer):
                 self._color_log_count = 0
             if self._color_log_count < 3 and color_wheel_value > 0:
                 self._color_log_count += 1
-                print(f"MH {self.name}: color_wheel DMX={color_wheel_value} -> RGB={wheel_color}")
+                logger.debug(f"MH {self.name}: color_wheel DMX={color_wheel_value} -> RGB={wheel_color}")
             return wheel_color
 
         # If still no color from wheel (no wheel data), use white as fallback
@@ -2625,9 +2628,7 @@ class MovingHeadRenderer(FixtureRenderer):
             self.ctx.disable(moderngl.BLEND)
 
         except Exception as e:
-            print(f"Error rendering beam: {e}")
-            import traceback
-            traceback.print_exc()
+            logger.debug(f"Error rendering beam: {e}", exc_info=True)
             # Try to restore state on error
             try:
                 self.ctx.depth_mask = True
@@ -2823,9 +2824,7 @@ class MovingHeadRenderer(FixtureRenderer):
             self.ctx.disable(moderngl.BLEND)
 
         except Exception as e:
-            print(f"Error rendering floor projection: {e}")
-            import traceback
-            traceback.print_exc()
+            logger.debug(f"Error rendering floor projection: {e}", exc_info=True)
             # Try to restore state on error
             try:
                 self.ctx.enable(moderngl.DEPTH_TEST)
@@ -3522,7 +3521,7 @@ def _detect_capabilities_from_payload(fixture_data: Dict[str, Any]):
     try:
         return get_capabilities_for_fixture(_CapsLookupProxy(mfr, model, mode))
     except Exception as e:  # pragma: no cover — environment / QXF issue
-        print(f"Capability re-detection failed for {mfr}/{model}: {e}")
+        logger.warning(f"Capability re-detection failed for {mfr}/{model}: {e}", exc_info=True)
         return None
 
 
@@ -3595,9 +3594,9 @@ class FixtureManager:
                     lumens = fixture_data.get('lumens', 10000.0)
                     # Use sqrt compression to prevent extreme dimming of low-wattage fixtures
                     self.fixtures[name].brightness_scale = math.sqrt(lumens / max_lumens)
-                    print(f"  Brightness: {name} = {lumens:.0f} lm -> scale {self.fixtures[name].brightness_scale:.2f}")
+                    logger.debug(f"  Brightness: {name} = {lumens:.0f} lm -> scale {self.fixtures[name].brightness_scale:.2f}")
 
-        print(f"FixtureManager: {len(self.fixtures)} fixtures loaded")
+        logger.info(f"FixtureManager: {len(self.fixtures)} fixtures loaded")
         for name, fix in self.fixtures.items():
             extra_info = ""
             if isinstance(fix, MovingHeadRenderer):
@@ -3609,7 +3608,7 @@ class FixtureManager:
                 color_ch = [k for k, v in ch_map.items() if v == 'color_wheel']
                 cw_count = len(fix.color_wheel) if hasattr(fix, 'color_wheel') else 0
                 extra_info = f", pan={pan_ch}, tilt={tilt_ch}, dim={dimmer_ch}, color={color_ch}, wheel_colors={cw_count}"
-            print(f"  - {name}: type={fix.__class__.__name__}, U{fix.universe}@{fix.address}{extra_info}")
+            logger.debug(f"  - {name}: type={fix.__class__.__name__}, U{fix.universe}@{fix.address}{extra_info}")
 
     def _create_fixture(self, fixture_data: Dict[str, Any]):
         """
@@ -3678,7 +3677,7 @@ class FixtureManager:
             self._dmx_log_count += 1
             # Show first 20 channels
             ch_preview = [dmx_data[i] for i in range(min(20, len(dmx_data)))]
-            print(f"DMX U{universe}: {updated_count} fixtures, ch1-20: {ch_preview}")
+            logger.debug(f"DMX U{universe}: {updated_count} fixtures, ch1-20: {ch_preview}")
 
     def render(self, mvp: glm.mat4):
         """

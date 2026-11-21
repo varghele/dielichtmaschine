@@ -11,17 +11,20 @@ Live audio INPUT (Auto mode, LTC) is separate and stays on sounddevice
 (``audio/live_input.py``, ``audio/ltc_input.py``).
 """
 
+import logging
 import os
 import threading
 import time
 from typing import Callable, List, Optional
+
+logger = logging.getLogger(__name__)
 
 try:
     import pygame
     PYGAME_AVAILABLE = True
 except ImportError:
     PYGAME_AVAILABLE = False
-    print("pygame not available - install with: pip install pygame")
+    logger.warning("pygame not available - install with: pip install pygame")
 
 DEFAULT_FREQUENCY = 44100
 DEFAULT_BUFFER_SIZE = 2048
@@ -46,7 +49,7 @@ def list_output_devices() -> List[str]:
             opened_here = True
         return list(sdl_audio.get_audio_device_names(False))
     except Exception as e:
-        print(f"Could not list audio output devices: {e}")
+        logger.warning(f"Could not list audio output devices: {e}", exc_info=True)
         return []
     finally:
         if opened_here:
@@ -100,7 +103,7 @@ class SimpleAudioPlayer:
         a missing interface never leaves the show silent without a
         word."""
         if not PYGAME_AVAILABLE:
-            print("pygame not available")
+            logger.warning("pygame not available")
             return False
 
         self._frequency = int(frequency)
@@ -126,7 +129,7 @@ class SimpleAudioPlayer:
             self._is_initialized = True
             return True
         except Exception as e:
-            print(f"Failed to initialize pygame mixer: {e}")
+            logger.warning(f"Failed to initialize pygame mixer: {e}", exc_info=True)
             return False
 
     def _open_mixer(self, devicename: Optional[str]) -> None:
@@ -212,7 +215,7 @@ class SimpleAudioPlayer:
                 return False
 
         if not os.path.exists(file_path):
-            print(f"Audio file not found: {file_path}")
+            logger.warning(f"Audio file not found: {file_path}")
             return False
 
         try:
@@ -237,7 +240,7 @@ class SimpleAudioPlayer:
             return True
 
         except Exception as e:
-            print(f"Failed to load audio file: {e}")
+            logger.warning(f"Failed to load audio file: {e}", exc_info=True)
             return False
 
     def set_position_callback(self, callback: Callable[[float], None]):
@@ -274,7 +277,7 @@ class SimpleAudioPlayer:
 
             return True
         except Exception as e:
-            print(f"Failed to start playback: {e}")
+            logger.warning(f"Failed to start playback: {e}", exc_info=True)
             return False
 
     def pause(self):
@@ -325,7 +328,7 @@ class SimpleAudioPlayer:
             else:
                 self._paused_position = position
         except Exception as e:
-            print(f"Seek failed: {e}")
+            logger.warning(f"Seek failed: {e}", exc_info=True)
 
     def get_current_position(self) -> float:
         """Get current playback position in seconds."""
@@ -383,7 +386,7 @@ class SimpleAudioPlayer:
             try:
                 pygame.mixer.music.set_volume(self.effective_volume())
             except Exception as e:
-                print(f"Failed to set volume: {e}")
+                logger.warning(f"Failed to set volume: {e}", exc_info=True)
 
 
 _shared_player: Optional[SimpleAudioPlayer] = None

@@ -140,12 +140,9 @@ def main():
 
         sys.exit(app.exec())
 
-    except Exception as e:
+    except Exception:
         import logging
         logging.getLogger("crash").exception("Error starting application")
-        print(f"Error starting application: {e}")
-        import traceback
-        traceback.print_exc()
 
 if __name__ == "__main__":
     main()

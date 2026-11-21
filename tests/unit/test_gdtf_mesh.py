@@ -6,6 +6,7 @@ against a real Share download when gdtf_fixtures/ is populated locally
 (never in CI - Share files are not committed).
 """
 import glob
+import logging
 import os
 import zipfile
 
@@ -63,10 +64,11 @@ def test_bake_layout_and_types(tmp_path):
     assert len(baked.base_color) == 4
 
 
-def test_vertex_cap_rejects(tmp_path, capsys):
+def test_vertex_cap_rejects(tmp_path, caplog):
     path = _gdtf_with_glb(tmp_path)
-    assert load_glb_mesh(path, "models/gltf/body.glb", max_vertices=4) is None
-    assert "rejected" in capsys.readouterr().out
+    with caplog.at_level(logging.WARNING, logger="utils.gdtf_mesh"):
+        assert load_glb_mesh(path, "models/gltf/body.glb", max_vertices=4) is None
+    assert "rejected" in caplog.text
 
 
 def test_broken_glb_returns_none_and_caches(tmp_path):

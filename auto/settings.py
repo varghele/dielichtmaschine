@@ -10,10 +10,13 @@ to reconfigure on every launch. The previous filename
 users don't lose state on the first run after the rename.
 """
 
+import logging
 import json
 import os
 from dataclasses import dataclass, field, asdict
 from typing import Dict, List, Optional
+
+logger = logging.getLogger(__name__)
 
 
 _SETTINGS_DIR = os.path.join(os.path.expanduser("~"), ".qlcautoshow")
@@ -111,4 +114,4 @@ def save(settings: AutoModeSettings) -> None:
         with open(_SETTINGS_PATH, "w", encoding="utf-8") as f:
             json.dump(data, f, indent=2)
     except OSError as e:
-        print(f"Failed to save Auto Mode settings: {e}")
+        logger.warning(f"Failed to save Auto Mode settings: {e}", exc_info=True)

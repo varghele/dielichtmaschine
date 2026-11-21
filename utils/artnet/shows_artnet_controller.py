@@ -3,6 +3,7 @@
 # phase 1). Public API kept from the pre-arbiter controller so the
 # Shows tab wiring is unchanged.
 
+import logging
 import threading
 from PyQt6.QtCore import QObject
 from typing import Optional, Dict, Tuple, List, Callable
@@ -13,6 +14,8 @@ from .arbiter import Frame, IDLE_VISIBLE, OutputArbiter
 from .dmx_manager import DMXManager
 from utils.timeline_edit_lock import TIMELINE_EDIT_LOCK
 from .sender import ArtNetSender
+
+logger = logging.getLogger(__name__)
 
 # Debug flag - set to False to disable verbose prints
 DEBUG_PRINTS = False
@@ -118,7 +121,7 @@ class ShowsArtNetController(QObject):
         # Track fixture fingerprint to avoid redundant rebuilds
         self._last_fixture_fingerprint = self._get_fixture_fingerprint()
 
-        print("ShowsArtNet Controller initialized (arbiter layer)")
+        logger.info("ShowsArtNet Controller initialized (arbiter layer)")
 
     # -- wiring ------------------------------------------------------------
 
@@ -150,7 +153,7 @@ class ShowsArtNetController(QObject):
     def set_target_ip(self, ip: str):
         """Set target IP address for ArtNet packets."""
         self.arbiter.set_target_ip(ip)
-        print(f"ArtNet target IP set to: {ip}")
+        logger.info(f"ArtNet target IP set to: {ip}")
 
     def _get_fixture_fingerprint(self) -> str:
         """Fingerprint of current fixtures for change detection."""
@@ -173,7 +176,7 @@ class ShowsArtNetController(QObject):
             self._resolved_fixtures_cache.clear()
             self._refresh_stage_planes()
         self.arbiter.set_fixture_maps(self.dmx_manager.fixture_maps)
-        print(f"ShowsArtNet: Fixture mappings updated ({len(self.config.fixtures)} fixtures)")
+        logger.debug(f"ShowsArtNet: Fixture mappings updated ({len(self.config.fixtures)} fixtures)")
 
     def _refresh_stage_planes(self):
         """Give the renderer the stage's target planes, in the same
@@ -200,7 +203,7 @@ class ShowsArtNetController(QObject):
             self.arbiter.set_idle_policy(IDLE_VISIBLE)
         self.output_enabled = True
         self.arbiter.start()
-        print("ArtNet output enabled")
+        logger.info("ArtNet output enabled")
         return True
 
     def disable_output(self):
@@ -216,7 +219,7 @@ class ShowsArtNetController(QObject):
         if self._owns_arbiter \
                 or self.arbiter.playback_slot_owner() is None:
             self.arbiter.stop(blackout=True)
-        print("ArtNet output disabled")
+        logger.info("ArtNet output disabled")
 
     def start_playback(self) -> bool:
         """Playback started: claim the exclusive playback slot and
@@ -227,11 +230,11 @@ class ShowsArtNetController(QObject):
         if not self.output_enabled:
             return True   # nothing streams; nothing to claim
         if not self.arbiter.acquire_playback_slot(self, SLOT_OWNER):
-            print("ArtNet playback refused: Auto mode holds the playback slot")
+            logger.warning("ArtNet playback refused: Auto mode holds the playback slot")
             return False
         with self._render_lock:
             self._state = _PLAYING
-        print("ArtNet output started")
+        logger.info("ArtNet output started")
         return True
 
     def pause_playback(self):
@@ -241,7 +244,7 @@ class ShowsArtNetController(QObject):
         with self._render_lock:
             if self._state == _PLAYING:
                 self._state = _PAUSED
-        print("ArtNet output paused")
+        logger.info("ArtNet output paused")
 
     def stop_playback(self):
         """Playback stopped: clear block tracking, stop rendering and
@@ -253,7 +256,7 @@ class ShowsArtNetController(QObject):
             self.active_block_ids.clear()
             self.dmx_manager.clear_active_blocks()
         self.arbiter.release_playback_slot(SLOT_OWNER)
-        print("ArtNet output stopped - idle floor takes over")
+        logger.info("ArtNet output stopped - idle floor takes over")
 
     def update_position(self, position: float):
         """Update current playback position (from ShowsTab). With a
@@ -280,7 +283,7 @@ class ShowsArtNetController(QObject):
             self.arbiter.shutdown()
         elif was_enabled and self.arbiter.playback_slot_owner() is None:
             self.arbiter.stop(blackout=True)
-        print("ShowsArtNet Controller cleaned up")
+        logger.info("ShowsArtNet Controller cleaned up")
 
     # -- the arbiter layer contract -----------------------------------------
 
@@ -395,7 +398,7 @@ class ShowsArtNetController(QObject):
                             currently_active[sublane_type].add(block_id)
                             if block_id not in self.active_block_ids[lane_key][sublane_type]:
                                 if DEBUG_PRINTS:
-                                    print(f"[{current_time:.2f}s] Starting {sublane_type} block on lane {lane.name}")
+                                    logger.debug(f"[{current_time:.2f}s] Starting {sublane_type} block on lane {lane.name}")
                                 self.dmx_manager.block_started(
                                     lane_key, resolved_fixtures, sub_block,
                                     sublane_type, current_time)
@@ -407,6 +410,6 @@ class ShowsArtNetController(QObject):
                 if ended_blocks:
                     if not currently_active[sublane_type]:
                         if DEBUG_PRINTS:
-                            print(f"[{current_time:.2f}s] Ending {sublane_type} blocks on lane {lane.name}")
+                            logger.debug(f"[{current_time:.2f}s] Ending {sublane_type} blocks on lane {lane.name}")
                         self.dmx_manager.block_ended(lane_key, sublane_type)
                     self.active_block_ids[lane_key][sublane_type] = currently_active[sublane_type]

@@ -1,12 +1,15 @@
 # visualizer/tcp/client.py
 # TCP client for receiving configuration from Show Creator
 
+import logging
 import socket
 import threading
 import json
 from typing import Optional, Dict, Any, List
 
 from PyQt6.QtCore import QObject, pyqtSignal
+
+logger = logging.getLogger(__name__)
 
 
 class VisualizerTCPClient(QObject):
@@ -139,7 +142,7 @@ class VisualizerTCPClient(QObject):
                 self.socket = sock
             sock.settimeout(5.0)  # Connection timeout
 
-            print(f"Connecting to {self.host}:{self.port}...")
+            logger.info(f"Connecting to {self.host}:{self.port}...")
             sock.connect((self.host, self.port))
 
             with self._state_lock:
@@ -148,7 +151,7 @@ class VisualizerTCPClient(QObject):
                 self.is_connected = True
             sock.settimeout(None)  # No timeout for receiving
             self.connected.emit()
-            print(f"Connected to Show Creator at {self.host}:{self.port}")
+            logger.info(f"Connected to Show Creator at {self.host}:{self.port}")
 
             # Receive loop
             while self._is_current(generation):
@@ -156,7 +159,7 @@ class VisualizerTCPClient(QObject):
                     data = sock.recv(self.BUFFER_SIZE)
                     if not data:
                         # Server closed connection
-                        print("Server closed connection")
+                        logger.info("Server closed connection")
                         break
                     if not self._is_current(generation):
                         break   # retired mid-recv: the buffer is not ours
@@ -170,28 +173,28 @@ class VisualizerTCPClient(QObject):
                 except socket.timeout:
                     continue
                 except ConnectionResetError:
-                    print("Connection reset by server")
+                    logger.warning("Connection reset by server")
                     break
                 except OSError as e:
                     if self._is_current(generation):
-                        print(f"Socket error: {e}")
+                        logger.warning(f"Socket error: {e}")
                     break
 
         except socket.timeout:
             error_msg = f"Connection timeout: {self.host}:{self.port}"
-            print(error_msg)
+            logger.warning(error_msg)
             if self._is_current(generation):
                 self.connection_error.emit(error_msg)
 
         except ConnectionRefusedError:
             error_msg = f"Connection refused: {self.host}:{self.port}"
-            print(error_msg)
+            logger.warning(error_msg)
             if self._is_current(generation):
                 self.connection_error.emit(error_msg)
 
         except OSError as e:
             error_msg = f"Connection error: {e}"
-            print(error_msg)
+            logger.warning(error_msg)
             if self._is_current(generation):
                 self.connection_error.emit(error_msg)
 
@@ -229,7 +232,7 @@ class VisualizerTCPClient(QObject):
                 message = json.loads(line)
                 self._handle_message(message)
             except json.JSONDecodeError as e:
-                print(f"Invalid JSON: {e}")
+                logger.warning(f"Invalid JSON: {e}")
 
     def _handle_message(self, message: Dict[str, Any]):
         """
@@ -257,7 +260,7 @@ class VisualizerTCPClient(QObject):
             pass
 
         else:
-            print(f"Unknown message type: {msg_type}")
+            logger.warning(f"Unknown message type: {msg_type}")
 
     def _handle_stage(self, message: Dict[str, Any]):
         """Handle stage dimensions message."""
@@ -265,20 +268,20 @@ class VisualizerTCPClient(QObject):
         self.stage_height = message.get('height', 8.0)
         self.grid_size = message.get('grid_size', 0.5)
 
-        print(f"Stage: {self.stage_width}m x {self.stage_height}m (grid: {self.grid_size}m)")
+        logger.info(f"Stage: {self.stage_width}m x {self.stage_height}m (grid: {self.grid_size}m)")
         self.stage_received.emit(self.stage_width, self.stage_height, self.grid_size)
 
     def _handle_fixtures(self, message: Dict[str, Any]):
         """Handle fixtures list message."""
         self.fixtures = message.get('fixtures', [])
 
-        print(f"Fixtures: {len(self.fixtures)} received")
+        logger.info(f"Fixtures: {len(self.fixtures)} received")
         for i, fixture in enumerate(self.fixtures[:3]):  # Show first 3
             name = fixture.get('name', 'Unknown')
             pos = fixture.get('position', {})
-            print(f"  [{i+1}] {name} at ({pos.get('x', 0)}, {pos.get('y', 0)}, {pos.get('z', 0)})")
+            logger.debug(f"  [{i+1}] {name} at ({pos.get('x', 0)}, {pos.get('y', 0)}, {pos.get('z', 0)})")
         if len(self.fixtures) > 3:
-            print(f"  ... and {len(self.fixtures) - 3} more")
+            logger.debug(f"  ... and {len(self.fixtures) - 3} more")
 
         self.fixtures_received.emit(self.fixtures)
 
@@ -286,14 +289,14 @@ class VisualizerTCPClient(QObject):
         """Handle groups list message."""
         self.groups = message.get('groups', [])
 
-        print(f"Groups: {len(self.groups)} received")
+        logger.info(f"Groups: {len(self.groups)} received")
         for group in self.groups[:3]:
             name = group.get('name', 'Unknown')
             color = group.get('color', '#808080')
             fixtures = group.get('fixtures', [])
-            print(f"  - {name} ({color}): {len(fixtures)} fixtures")
+            logger.debug(f"  - {name} ({color}): {len(fixtures)} fixtures")
         if len(self.groups) > 3:
-            print(f"  ... and {len(self.groups) - 3} more")
+            logger.debug(f"  ... and {len(self.groups) - 3} more")
 
         self.groups_received.emit(self.groups)
 
@@ -302,5 +305,5 @@ class VisualizerTCPClient(QObject):
         update_type = message.get('update_type', '')
         data = message.get('data', {})
 
-        print(f"Update: {update_type}")
+        logger.debug(f"Update: {update_type}")
         self.update_received.emit(update_type, data)

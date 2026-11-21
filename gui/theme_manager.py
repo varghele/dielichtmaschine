@@ -8,12 +8,15 @@ chosen name is stored via ``QSettings`` under ``ui/theme`` so it
 survives restarts.
 """
 
+import logging
 from typing import Optional
 
 from PyQt6.QtWidgets import QApplication
 
 from gui.theme_tokens import THEMES, render_theme
 from utils.app_settings import app_settings
+
+logger = logging.getLogger(__name__)
 
 
 _SETTINGS_KEY = "ui/theme"
@@ -50,13 +53,13 @@ class ThemeManager:
         template cannot be read or rendered.
         """
         if name not in self.available_themes():
-            print(f"ThemeManager: unknown theme '{name}', falling back to '{_DEFAULT_THEME}'")
+            logger.warning(f"ThemeManager: unknown theme '{name}', falling back to '{_DEFAULT_THEME}'")
             name = _DEFAULT_THEME
 
         try:
             qss = render_theme(name)
         except (OSError, KeyError, ValueError) as e:
-            print(f"ThemeManager: failed to render theme '{name}': {e}")
+            logger.exception(f"ThemeManager: failed to render theme '{name}': {e}")
             return False
 
         app.setStyleSheet(qss)

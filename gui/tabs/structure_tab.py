@@ -58,6 +58,7 @@ title row, the stat tiles, the grid caption, the timelines and the
 status strip.
 """
 
+import logging
 import os
 import re
 import csv
@@ -87,6 +88,8 @@ from timeline.song_structure import SongStructure
 from utils import user_warnings
 from timeline_ui import AudioLaneWidget, MasterTimelineContainer, TimelineGrid
 from .base_tab import BaseTab
+
+logger = logging.getLogger(__name__)
 
 
 def _active_tokens() -> dict:
@@ -3285,7 +3288,7 @@ class StructureTab(BaseTab):
                 if os.path.exists(old_csv):
                     os.rename(old_csv, new_csv)
             except Exception as e:
-                print(f"Failed to rename CSV file: {e}")
+                logger.warning(f"Failed to rename CSV file: {e}", exc_info=True)
 
             # Update current show name
             self.current_song_name = new_name
@@ -3344,7 +3347,7 @@ class StructureTab(BaseTab):
                     try:
                         os.remove(audio_path)
                     except Exception as e:
-                        print(f"Failed to delete audio file: {e}")
+                        logger.warning(f"Failed to delete audio file: {e}", exc_info=True)
 
         # Delete from config, including the song's setlist entries
         # (a stale entry would render a ghost card in the rail).
@@ -3531,7 +3534,7 @@ class StructureTab(BaseTab):
             # Copy file if it's not already in audiofiles directory
             if os.path.abspath(file_path) != os.path.abspath(dest_path):
                 shutil.copy2(file_path, dest_path)
-                print(f"Copied audio file to: {dest_path}")
+                logger.info(f"Copied audio file to: {dest_path}")
 
             # Store just the filename in timeline_data
             if self.current_show.timeline_data is None:
@@ -3582,7 +3585,7 @@ class StructureTab(BaseTab):
                             self.audio_lane.mute_button.isChecked())
                         player.play(self.playhead_position)
                 except Exception as e:
-                    print(f"Audio playback failed: {e}")
+                    logger.warning(f"Audio playback failed: {e}", exc_info=True)
 
         self.playback_timer.start()
 

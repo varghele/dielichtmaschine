@@ -19,6 +19,7 @@ can present a curated list by default while keeping a "show all" escape
 hatch for power users.
 """
 
+import logging
 import re
 import sys
 from dataclasses import dataclass
@@ -26,6 +27,8 @@ from enum import Enum
 from typing import Dict, List, Optional, Tuple
 
 import sounddevice as sd
+
+logger = logging.getLogger(__name__)
 
 
 # ── Classification constants ──────────────────────────────────────────
@@ -519,7 +522,7 @@ class DeviceManager:
             raw_devices = list(sd.query_devices())
             host_apis = list(sd.query_hostapis())
         except Exception as e:
-            print(f"Error enumerating devices: {e}")
+            logger.warning(f"Error enumerating devices: {e}", exc_info=True)
             return out
 
         for i, info in enumerate(raw_devices):
@@ -599,7 +602,7 @@ class DeviceManager:
                 return None
             return self.get_device_by_index(default_output_index)
         except Exception as e:
-            print(f"Error getting default device: {e}")
+            logger.warning(f"Error getting default device: {e}", exc_info=True)
             return None
 
     def get_default_input_device(self) -> Optional[AudioDevice]:
@@ -610,7 +613,7 @@ class DeviceManager:
                 return None
             return self.get_device_by_index(default_input_index)
         except Exception as e:
-            print(f"Error getting default input device: {e}")
+            logger.warning(f"Error getting default input device: {e}", exc_info=True)
             return None
 
     def get_device_by_index(self, index: int) -> Optional[AudioDevice]:
@@ -625,7 +628,7 @@ class DeviceManager:
                 api_name = "Unknown"
             return _build_audio_device(index, info, api_name, api_index)
         except Exception as e:
-            print(f"Error getting device {index}: {e}")
+            logger.warning(f"Error getting device {index}: {e}", exc_info=True)
             return None
 
     def get_available_host_apis(self) -> List[Tuple[int, str]]:
@@ -641,7 +644,7 @@ class DeviceManager:
             indexed.sort(key=lambda t: _QUALITY_RANK.get(t[1], _UNKNOWN_QUALITY))
             return indexed
         except Exception as e:
-            print(f"Error querying host APIs: {e}")
+            logger.warning(f"Error querying host APIs: {e}", exc_info=True)
             return []
 
     def validate_device(self, device_index: int) -> bool:

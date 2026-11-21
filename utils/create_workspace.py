@@ -1,3 +1,4 @@
+import logging
 import xml.etree.ElementTree as ET
 import xml.dom.minidom as minidom
 import os
@@ -10,6 +11,8 @@ from utils.to_xml.shows_to_xml import create_shows
 from utils.to_xml.preset_scenes_to_xml import generate_all_preset_functions, create_master_presets
 from utils.to_xml.virtual_console_to_xml import build_virtual_console
 from utils.fixture_utils import load_fixture_definitions_from_qlc, detect_fixture_group_capabilities
+
+logger = logging.getLogger(__name__)
 
 
 def create_qlc_workspace(config: Configuration, vc_options: Optional[Dict[str, bool]] = None,
@@ -215,7 +218,7 @@ def _write_gdtf_companion_qxfs(models_in_config, out_dir: str):
         generated.append(out_path)
 
     if matched:
-        print("GDTF fixtures with a same-identity .qxf in the QLC+ library "
+        logger.info("GDTF fixtures with a same-identity .qxf in the QLC+ library "
               "(no companion needed): " + ", ".join(matched))
     if generated:
         user_warnings.warn(

@@ -11,6 +11,18 @@ verbatim as the GitHub Release notes (see [docs/releasing.md](docs/releasing.md)
 
 ## [Unreleased]
 
+### Changed
+
+- **Console messages go to the log file.** About 270 `print()` calls in the
+  app now write through per-module loggers into the daily log (Help >
+  Diagnostics shows where it lives), at debug, info, warning or error level,
+  and failures carry their traceback. The windowed build has no console, so
+  these messages used to vanish. The standalone visualizer now sets up
+  logging too and writes `lichtmaschine-visualizer.log` next to the app's
+  log. The headless `export` and `morph` commands, `--version` and the
+  `--profile` report still print to the terminal. A unit test
+  (`tests/unit/test_no_print.py`) keeps new `print()` calls out.
+
 ### Fixed
 
 - **Opening a song from a very old config** (lighting stored as legacy

@@ -1,5 +1,6 @@
 # config/models.py
 
+import logging
 from dataclasses import dataclass, field, asdict, InitVar
 from typing import Dict, List, Optional, Tuple
 import yaml
@@ -12,6 +13,8 @@ import sys
 import tempfile
 import time
 import uuid
+
+logger = logging.getLogger(__name__)
 
 # Prefer libyaml's C emitter/parser when the extension is present: the
 # output text is IDENTICAL to the pure-python Dumper's (verified on real
@@ -2304,6 +2307,6 @@ class Configuration:
                 }
             )
 
-        print(f"Auto-created {len(missing_ids)} universe(s) for visualizer: {sorted(missing_ids)}")
+        logger.info(f"Auto-created {len(missing_ids)} universe(s) for visualizer: {sorted(missing_ids)}")
 
         return True

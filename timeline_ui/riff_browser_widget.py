@@ -11,6 +11,7 @@ raised riff-item card with its accent hover) and the QPainter drag
 preview, which reads brand colors from the active theme tokens.
 """
 
+import logging
 import json
 from PyQt6.QtWidgets import (
     QDockWidget, QWidget, QVBoxLayout, QHBoxLayout,
@@ -22,6 +23,8 @@ from PyQt6.QtGui import QDrag, QPixmap, QPainter, QColor, QFont
 
 from config.models import Riff, FixtureGroup
 from riffs.riff_library import RiffLibrary
+
+logger = logging.getLogger(__name__)
 
 # Mime type for scene drags out of the library rail. Distinct from the
 # riff mime ("application/x-qlc-riff") on purpose: timelines only accept
@@ -658,7 +661,7 @@ class RiffBrowserPanel(QWidget):
         try:
             self.riff_library.save_riff(riff)
         except Exception as e:
-            print(f"riff tags: save failed: {e}")
+            logger.warning(f"riff tags: save failed: {e}", exc_info=True)
         # Rebuild so the card shows the new tags; keep an active search
         # consistent with them.
         query = self.search_input.text().strip()

@@ -1,6 +1,7 @@
 # utils/artnet/dmx_manager.py
 # DMX state manager for real-time DMX output
 
+import logging
 import time
 import math
 from typing import Dict, List, Optional, Tuple
@@ -13,6 +14,8 @@ from effects import (
     DIMMER_REGISTRY, MOVEMENT_REGISTRY, parse_speed, get_bpm, movement_total_cycles,
     movement_seconds_per_bar,
 )
+
+logger = logging.getLogger(__name__)
 
 # Debug flag - set to False to disable verbose prints (improves performance significantly)
 DEBUG_PRINTS = False
@@ -277,7 +280,7 @@ class DMXManager:
         # Stage planes for world-space movement (set by live mode)
         self._stage_planes: Dict[str, 'StagePlane'] = {}
 
-        print(f"DMX Manager initialized with {len(self.dmx_state)} universes")
+        logger.info(f"DMX Manager initialized with {len(self.dmx_state)} universes")
 
     def set_max_pan_tilt_speed(self, degrees_per_sec: float):
         """Set maximum pan/tilt speed in degrees/second. 0 = unlimited."""
@@ -334,7 +337,7 @@ class DMXManager:
                 new_universes.append(fixture.universe)
 
         if new_universes:
-            print(f"DMXManager: Added universe(s) {new_universes}")
+            logger.info(f"DMXManager: Added universe(s) {new_universes}")
 
     def clear_all_dmx(self):
         """Clear all DMX values to 0 and drop all channel claims.
@@ -579,14 +582,14 @@ class DMXManager:
                 if DEBUG_PRINTS and 12.4 < current_time < 12.6 and not hasattr(self, '_debug_dmx_12_5'):
                     self._debug_dmx_12_5 = True
                     fixture_names = [f.name for f in sorted_fixtures]
-                    print(f"\n=== DMX DEBUG at {current_time:.3f}s ===")
-                    print(f"  Lane: {lane_key}")
-                    print(f"  Dimmer block: {dimmer_block.effect_type}, {dimmer_block.start_time:.2f}-{dimmer_block.end_time:.2f}")
-                    print(f"  Fixtures: {fixture_names}, total={total_fixtures}")
+                    logger.debug(f"=== DMX DEBUG at {current_time:.3f}s ===")
+                    logger.debug(f"  Lane: {lane_key}")
+                    logger.debug(f"  Dimmer block: {dimmer_block.effect_type}, {dimmer_block.start_time:.2f}-{dimmer_block.end_time:.2f}")
+                    logger.debug(f"  Fixtures: {fixture_names}, total={total_fixtures}")
                     for f in sorted_fixtures:
                         in_maps = f.name in self.fixture_maps
-                        print(f"    {f.name}: in fixture_maps={in_maps}")
-                    print("=== END DMX DEBUG ===\n")
+                        logger.debug(f"    {f.name}: in fixture_maps={in_maps}")
+                    logger.debug("=== END DMX DEBUG ===")
 
                 # Debug: Print WASH fixtures around 137s
                 if DEBUG_PRINTS:
@@ -594,19 +597,19 @@ class DMXManager:
                     if 137.0 < current_time < 137.5 and any('W1' in n or 'W2' in n for n in fixture_names_check):
                         if not hasattr(self, '_debug_dmx_wash'):
                             self._debug_dmx_wash = True
-                            print(f"\n=== DMX WASH DEBUG at {current_time:.3f}s ===")
-                            print(f"  Lane: {lane_key}")
-                            print(f"  Dimmer block: {dimmer_block.effect_type}, intensity={dimmer_block.intensity}")
-                            print(f"  Block time range: {dimmer_block.start_time:.2f}-{dimmer_block.end_time:.2f}")
-                            print(f"  Fixtures: {fixture_names_check}")
+                            logger.debug(f"=== DMX WASH DEBUG at {current_time:.3f}s ===")
+                            logger.debug(f"  Lane: {lane_key}")
+                            logger.debug(f"  Dimmer block: {dimmer_block.effect_type}, intensity={dimmer_block.intensity}")
+                            logger.debug(f"  Block time range: {dimmer_block.start_time:.2f}-{dimmer_block.end_time:.2f}")
+                            logger.debug(f"  Fixtures: {fixture_names_check}")
                             for f in sorted_fixtures:
                                 in_maps = f.name in self.fixture_maps
-                                print(f"    {f.name}: universe={f.universe}, address={f.address}, in_maps={in_maps}")
+                                logger.debug(f"    {f.name}: universe={f.universe}, address={f.address}, in_maps={in_maps}")
                                 if in_maps:
                                     fm = self.fixture_maps[f.name]
-                                    print(f"      dimmer_channels={fm.dimmer_channels}, red={fm.red_channels}, green={fm.green_channels}, blue={fm.blue_channels}")
-                            print(f"  DMX state universes: {list(self.dmx_state.keys())}")
-                            print("=== END DMX WASH DEBUG ===\n")
+                                    logger.debug(f"      dimmer_channels={fm.dimmer_channels}, red={fm.red_channels}, green={fm.green_channels}, blue={fm.blue_channels}")
+                            logger.debug(f"  DMX state universes: {list(self.dmx_state.keys())}")
+                            logger.debug("=== END DMX WASH DEBUG ===")
 
                 for fixture_index, fixture in enumerate(sorted_fixtures):
                     if fixture.name not in self.fixture_maps:
@@ -624,12 +627,12 @@ class DMXManager:
                     if 137.0 < current_time < 137.5 and any('W1' in n or 'W2' in n for n in colour_fixture_names):
                         if not hasattr(self, '_debug_colour_wash'):
                             self._debug_colour_wash = True
-                            print(f"\n=== COLOUR WASH DEBUG at {current_time:.3f}s ===")
-                            print(f"  Lane: {lane_key}")
-                            print(f"  Colour block: R={colour_block.red}, G={colour_block.green}, B={colour_block.blue}")
-                            print(f"  Block time range: {colour_block.start_time:.2f}-{colour_block.end_time:.2f}")
-                            print(f"  Fixtures: {colour_fixture_names}")
-                            print("=== END COLOUR WASH DEBUG ===\n")
+                            logger.debug(f"=== COLOUR WASH DEBUG at {current_time:.3f}s ===")
+                            logger.debug(f"  Lane: {lane_key}")
+                            logger.debug(f"  Colour block: R={colour_block.red}, G={colour_block.green}, B={colour_block.blue}")
+                            logger.debug(f"  Block time range: {colour_block.start_time:.2f}-{colour_block.end_time:.2f}")
+                            logger.debug(f"  Fixtures: {colour_fixture_names}")
+                            logger.debug("=== END COLOUR WASH DEBUG ===")
 
                 for fixture in colour_fixtures:
                     if fixture.name not in self.fixture_maps:
@@ -647,7 +650,7 @@ class DMXManager:
                 if DEBUG_PRINTS and not hasattr(self, '_debug_movement_logged'):
                     self._debug_movement_logged = True
                     fixture_names = [f.name for f in sorted_movement_fixtures]
-                    print(f"[DMX DEBUG] Movement block: {movement_block.effect_type} on {fixture_names}, "
+                    logger.debug(f"[DMX DEBUG] Movement block: {movement_block.effect_type} on {fixture_names}, "
                           f"pan={movement_block.pan}, tilt={movement_block.tilt}, "
                           f"phase_offset={movement_block.phase_offset_enabled}, "
                           f"phase_degrees={movement_block.phase_offset_degrees}")
@@ -1001,11 +1004,11 @@ class DMXManager:
                         debug_key = f"_spot_debug_{fixture.name}"
                         if not hasattr(self, debug_key):
                             setattr(self, debug_key, True)
-                            print(f"[SPOT TARGET] {fixture.name} at ({fixture.x}, {fixture.y}, {fixture_z}) "
+                            logger.debug(f"[SPOT TARGET] {fixture.name} at ({fixture.x}, {fixture.y}, {fixture_z}) "
                                   f"-> Spot '{block.target_spot_name}' at ({spot.x}, {spot.y}, {spot.z})")
-                            print(f"  orientation: mounting={mounting}, yaw={yaw}, pitch={pitch}, roll={roll}")
-                            print(f"  calculated: pan={pan_degrees:.1f}°, tilt={tilt_degrees:.1f}°")
-                            print(f"  DMX: pan={pan_dmx}, tilt={tilt_dmx}")
+                            logger.debug(f"  orientation: mounting={mounting}, yaw={yaw}, pitch={pitch}, roll={roll}")
+                            logger.debug(f"  calculated: pan={pan_degrees:.1f}°, tilt={tilt_degrees:.1f}°")
+                            logger.debug(f"  DMX: pan={pan_dmx}, tilt={tilt_dmx}")
 
                     center_pan = float(pan_dmx)
                     center_tilt = float(tilt_dmx)
