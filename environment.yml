@@ -15,7 +15,6 @@ dependencies:
   # Core (PyQt6 comes from pip, see the bottom of the file)
   - pyyaml>=6.0
   - numpy>=1.24
-  - pandas>=2.0
   - pillow>=10.0
   - requests>=2.28
 

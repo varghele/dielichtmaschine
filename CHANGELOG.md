@@ -23,6 +23,8 @@ verbatim as the GitHub Release notes (see [docs/releasing.md](docs/releasing.md)
 - **Unused imports.** 182 imports nothing used are gone (105 in production,
   77 in tests), including the importer-less `export_aim_dmx` re-export in
   `utils/to_xml/unified_sequence.py`. No behaviour change.
+- **pandas dependency.** Nothing imports it any more; it is gone from
+  `requirements.txt` and `environment.yml`.
 
 ## [1.5.5] - 2026-10-13
 

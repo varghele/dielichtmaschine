@@ -1,7 +1,7 @@
 # QLC+ Visualizer - Additional Requirements
 # These are visualizer-specific dependencies beyond the main project requirements.
 #
-# The main project requirements (PyQt6, pandas, numpy, PyYAML) are inherited.
+# The main project requirements (PyQt6, numpy, PyYAML) are inherited.
 # Install these for 3D rendering capabilities.
 
 # ModernGL - Modern OpenGL bindings for Python (Phase V4+)
