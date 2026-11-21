@@ -27,7 +27,7 @@ Don't put a `QTableView::item` block in your stylesheet. Apply the equivalent vi
 - Grid → `table.setShowGrid(False)`.
 - Alternating rows → `table.setAlternatingRowColors(True)` and the table-level `alternate-background-color` property in QSS (which is fine — it's on `QTableView`, not `QTableView::item`).
 
-Both `resources/themes/dark.qss` and `light.qss` carry a comment explaining why the `::item` block is intentionally absent. **Don't re-add it.**
+`resources/themes/theme.qss.template` (the single stylesheet every theme renders through; themes are token dicts in `gui/theme_tokens.py`) carries a comment after the `QTableView` rule explaining why the `::item` block is intentionally absent. **Don't re-add it.**
 
 ### Why not just live with the override?
 
@@ -242,10 +242,10 @@ class StageView(QtWidgets.QGraphicsView):
 ```
 
 ```qss
-/* resources/themes/dark.qss */
+/* resources/themes/theme.qss.template ($...$ = tokens from gui/theme_tokens.py) */
 StageView {
-    qproperty-stageFillColor: #2d2d2e;
-    qproperty-fixtureTextColor: #e0e0e0;
+    qproperty-stageFillColor: $stage_fill$;
+    qproperty-fixtureTextColor: $text$;
     /* ... */
 }
 ```
@@ -546,7 +546,7 @@ almost certainly leaking widget trees.
 - `gui/widgets/group_row_delegate.py` — strips `State_Selected` so the row tint survives selection
 - `gui/widgets/row_outline_table.py` — overlay-based row-selection outline that spans widget cells
 - `gui/widgets/modern_table.py` — `apply_modern_table_style` (the right way to set table visuals without `QTableView::item`); also centralises `setDefaultAlignment(AlignLeft|AlignVCenter)` so every table reads the same
-- `resources/themes/{dark,light}.qss` — comments mark where the `::item` rule used to live; `StageView { qproperty-* }` block lives near the bottom and shows the canonical theme-driven custom-paint pattern
+- `resources/themes/theme.qss.template` — a comment after the `QTableView` rule marks where the `::item` rule used to live; the `StageView { qproperty-* }` block lives near the bottom (colours come from the `stage_*` tokens in `gui/theme_tokens.py`) and shows the canonical theme-driven custom-paint pattern
 - `gui/tabs/fixtures_tab.py::_update_row_colors` — concrete example of per-row tinting that works around all three table gotchas at once
 - `gui/StageView.py` — five `pyqtProperty(QColor)` declarations + the `_on_theme_color_changed` helper that invalidates viewport + items in lockstep
 - `gui/tabs/stage_tab.py::_on_show_axes_changed` — canonical "every item changed, repaint each one" handler (gotcha #4)

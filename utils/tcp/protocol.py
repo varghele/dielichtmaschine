@@ -1,4 +1,4 @@
-﻿# utils/tcp/protocol.py
+# utils/tcp/protocol.py
 # Protocol definition for Lichtmaschine <-> Visualizer communication
 
 import json

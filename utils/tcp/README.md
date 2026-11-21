@@ -1,4 +1,4 @@
-﻿# TCP Server for Visualizer Integration
+# TCP Server for Visualizer Integration
 
 TCP server implementation for sending stage/fixture configuration to the Visualizer application.
 

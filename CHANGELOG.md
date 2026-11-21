@@ -13,6 +13,7 @@ verbatim as the GitHub Release notes (see [docs/releasing.md](docs/releasing.md)
 
 ### Removed
 
+- **Unreferenced `resources/lightbulb.png`** (1.4 MB).
 - **Dead code.** The pre-v3 timeline tab module (`gui/tabs/shows_tab_timeline.py`),
   `utils/make/make_channel_groups.py`, `utils/to_xml/chaser_functions.py` and
   `utils/step_utils.py` are gone, together with about 80 functions, methods and
