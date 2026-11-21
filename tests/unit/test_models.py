@@ -1,6 +1,7 @@
 # tests/unit/test_models.py
 """Unit tests for config/models.py - data model classes."""
 
+import pytest
 import os
 from config.models import (
     Fixture, FixtureMode, FixtureGroupCapabilities, Spot,
@@ -184,6 +185,30 @@ class TestLightBlock:
         b = LightBlock.from_dict(d)
         assert b.start_time == 2.0
         assert b.end_time == 5.0
+
+    def test_deprecated_duration_and_parameters_fields_are_gone(self):
+        """v1.5.6: the deprecated ``duration`` / ``parameters`` fields left
+        LightBlock. Nothing read them and saves never wrote them (the
+        compact serializer whitelists keys); only to_dict (clipboard) did."""
+        b = LightBlock(start_time=1.0, end_time=5.0, effect_name="x")
+        assert not hasattr(b, "parameters")
+        assert not hasattr(b, "duration")
+        d = b.to_dict()
+        assert "parameters" not in d and "duration" not in d
+        with pytest.raises(TypeError):
+            LightBlock(start_time=0.0, end_time=1.0, effect_name="x",
+                       parameters={})
+
+    def test_old_dicts_with_the_removed_keys_still_load(self):
+        """Clipboard data or v1.0-era inline dicts may still carry the
+        keys; they are ignored, and a lone duration still sets end_time."""
+        b = LightBlock.from_dict({"start_time": 1.0, "duration": 3.0,
+                                  "effect_name": "old",
+                                  "parameters": {"color": "red"}})
+        assert (b.start_time, b.end_time) == (1.0, 4.0)
+        b2 = LightBlock.from_dict({"start_time": 1.0, "end_time": 2.0,
+                                   "duration": 99.0, "effect_name": "x"})
+        assert b2.end_time == 2.0   # end_time wins over a stale duration
 
     def test_legacy_singular_sublane_migration(self):
         """from_dict migrates dimmer_block (singular) to dimmer_blocks list."""

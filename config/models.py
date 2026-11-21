@@ -1198,10 +1198,6 @@ class LightBlock:
     # Re-morph uses this to list exactly what a replace will destroy.
     provenance: str = ""
 
-    # Legacy support (deprecated, kept for migration)
-    duration: Optional[float] = None  # Deprecated: use end_time - start_time
-    parameters: Dict[str, any] = field(default_factory=dict)  # Deprecated
-
     def get_duration(self) -> float:
         """Calculate duration from start and end times."""
         return self.end_time - self.start_time
@@ -1237,9 +1233,6 @@ class LightBlock:
             "name": self.name,
             # Morph provenance (only when set - keeps old files stable)
             **({"provenance": self.provenance} if self.provenance else {}),
-            # Legacy fields
-            "duration": self.get_duration(),
-            "parameters": self.parameters
         }
 
     @classmethod
@@ -1248,7 +1241,8 @@ class LightBlock:
         start_time = data.get("start_time", 0.0)
         end_time = data.get("end_time")
 
-        # Legacy: if no end_time, calculate from duration
+        # Legacy: blocks written before end_time existed carry a duration
+        # instead (the field itself is gone since v1.5.6).
         if end_time is None:
             duration = data.get("duration", 4.0)
             end_time = start_time + duration
@@ -1262,8 +1256,6 @@ class LightBlock:
             riff_version=data.get("riff_version"),
             name=data.get("name"),
             provenance=data.get("provenance", ""),
-            duration=data.get("duration"),
-            parameters=data.get("parameters", {})
         )
 
         # Load sublane blocks - handle both new list format and old single-block format

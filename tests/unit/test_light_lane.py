@@ -38,7 +38,7 @@ class TestAddLightBlock:
 
     def test_add_light_block_legacy(self):
         lane = LightLane(name="Test", fixture_targets=["G1"])
-        block = lane.add_light_block(2.0, 4.0, "bars.static", {"color": "red"})
+        block = lane.add_light_block(2.0, 4.0, "bars.static")
         assert block.start_time == 2.0
         assert block.end_time == 6.0
         assert block.effect_name == "bars.static"

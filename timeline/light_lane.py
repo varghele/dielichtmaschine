@@ -36,14 +36,13 @@ class LightLane:
         self.fixture_targets = [value] if value else []
 
     def add_light_block(self, start_time: float, duration: float,
-                        effect_name: str = "", parameters: dict = None) -> LightBlock:
+                        effect_name: str = "") -> LightBlock:
         """Add a new light block to this lane (legacy method).
 
         Args:
             start_time: Start time in seconds
             duration: Duration in seconds
             effect_name: Effect name (e.g., "bars.static")
-            parameters: Effect parameters dict
 
         Returns:
             The created LightBlock
@@ -52,7 +51,6 @@ class LightLane:
             start_time=start_time,
             end_time=start_time + duration,
             effect_name=effect_name,
-            parameters=parameters or {}
         )
         self.light_blocks.append(block)
         return block

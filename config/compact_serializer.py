@@ -300,8 +300,6 @@ def expand_compact(data: dict) -> dict:
                         'riff_source': lb_template.get('riff_source'),
                         'riff_version': lb_template.get('riff_version'),
                         'provenance': entry.get('provenance', ''),
-                        'duration': round(abs_end - abs_start, 6),
-                        'parameters': {},
                     }
 
                     # Expand sublane refs to full inline dicts

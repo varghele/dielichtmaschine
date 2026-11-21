@@ -52,6 +52,10 @@ verbatim as the GitHub Release notes (see [docs/releasing.md](docs/releasing.md)
   column (the primary group), and exports are byte-identical.
 - **`Fixture.group` compat property.** Code reads the primary group via
   `config.models.primary_group_name()` and writes `fixture.groups`.
+- **Deprecated `LightBlock.duration` and `parameters` fields.** Nothing read
+  them and saved files never contained them (only copy and paste carried
+  them). Old data that gives a block a `duration` instead of an end time still
+  loads. Saves and exports are byte-identical.
 - **The second song player** (the sounddevice `AudioEngine`, `AudioMixer` and
   `PlaybackSynchronizer`), which only ran when pygame failed to start. Live
   audio input (Auto mode, LTC) still uses sounddevice.
