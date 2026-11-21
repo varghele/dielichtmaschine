@@ -1,10 +1,13 @@
 # utils/midi_utils.py
 # MIDI input profile discovery for QLC+ trigger assignment
 
+import logging
 import os
 import sys
 import xml.etree.ElementTree as ET
 from typing import List, Dict, Optional
+
+logger = logging.getLogger(__name__)
 
 
 def get_midi_profile_directories() -> List[str]:
@@ -103,6 +106,7 @@ def ensure_midi_device_in_config(config, profile_name, midi_profiles=None):
         try:
             midi_profiles = discover_midi_profiles()
         except Exception:
+            logger.debug("MIDI profile discovery failed", exc_info=True)
             midi_profiles = []
     for p in midi_profiles:
         if p['name'] == profile_name:

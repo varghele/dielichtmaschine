@@ -30,6 +30,7 @@ generation time (utils/to_xml, 2026-07-13) so QLC+ playback aims like
 native output.
 """
 
+import logging
 from typing import Dict, Tuple
 
 from utils.orientation import (
@@ -37,6 +38,8 @@ from utils.orientation import (
     pan_tilt_to_dmx,
     pan_tilt_to_dmx16,
 )
+
+logger = logging.getLogger(__name__)
 
 
 def solver_to_gdtf_axes(pan_deg: float, tilt_deg: float,
@@ -97,6 +100,7 @@ def fixture_yoke(manufacturer: str, model: str,
         from utils.fixture_library import get_definition
         defn = get_definition(manufacturer, model)
     except Exception:
+        logger.debug("Fixture definition lookup failed for the yoke", exc_info=True)
         return (False, False)
     if defn is None:
         return (False, False)
@@ -111,6 +115,7 @@ def fixture_yoke(manufacturer: str, model: str,
         # A resolved definition whose chain cannot be built: cached like
         # a success, so the 44 Hz output loop does not rebuild it every
         # frame; the next invalidation retries it.
+        logger.debug("GDTF yoke chain could not be built", exc_info=True)
         result = (False, False)
     _YOKE_CACHE[key] = result
     return result
@@ -139,6 +144,7 @@ def _physical_ranges(manufacturer: str, model: str) -> Tuple[float, float]:
         pan = float(getattr(defn, "pan_max", 0.0) or 0.0)
         tilt = float(getattr(defn, "tilt_max", 0.0) or 0.0)
     except Exception:
+        logger.debug("Fixture definition lookup failed; default pan/tilt ranges", exc_info=True)
         return (540.0, 270.0)
     result = (pan or 540.0, tilt or 270.0)
     if defn is not None:

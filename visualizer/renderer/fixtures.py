@@ -2633,7 +2633,7 @@ class MovingHeadRenderer(FixtureRenderer):
             try:
                 self.ctx.depth_mask = True
                 self.ctx.disable(moderngl.BLEND)
-            except:
+            except Exception:
                 pass
 
     def _calculate_prism_floor_intersection(self, prism_offset_angle: float, prism_tilt: float
@@ -2830,7 +2830,7 @@ class MovingHeadRenderer(FixtureRenderer):
                 self.ctx.enable(moderngl.DEPTH_TEST)
                 self.ctx.depth_mask = True
                 self.ctx.disable(moderngl.BLEND)
-            except:
+            except Exception:
                 pass
 
     def release(self):

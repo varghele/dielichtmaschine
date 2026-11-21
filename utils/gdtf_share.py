@@ -16,10 +16,13 @@ locally, never bundled or committed (docs/gdtf-integration-plan.md #2).
 API doc: https://github.com/mvrdevelopment/tools (GDTF Share API).
 """
 
+import logging
 import json
 import os
 import re
 import time
+
+logger = logging.getLogger(__name__)
 
 BASE_URL = "https://gdtf-share.com/apis/public"
 CATALOG_CACHE_MAX_AGE_H = 24.0
@@ -292,6 +295,7 @@ def stored_password(user: str) -> str:
         import keyring
         return keyring.get_password(KEYRING_SERVICE, user) or ""
     except Exception:
+        logger.debug("Keyring password lookup failed", exc_info=True)
         return ""
 
 
@@ -305,6 +309,7 @@ def save_password(user: str, password: str) -> bool:
         keyring.set_password(KEYRING_SERVICE, user, password)
         return True
     except Exception:
+        logger.debug("Keyring password save failed", exc_info=True)
         return False
 
 
@@ -450,6 +455,7 @@ def pull_missing_gdtf(config, dest_dir: str, client=None,
             return []
         candidates = autopull_candidates(client.catalog(), identities)
     except Exception:
+        logger.debug("GDTF auto-pull: login or catalog failed", exc_info=True)
         return []
 
     from utils.gdtf_loader import parse_gdtf_file
@@ -462,6 +468,7 @@ def pull_missing_gdtf(config, dest_dir: str, client=None,
                 staged = client.download(entry, staging)
                 defn = parse_gdtf_file(staged)
             except Exception:
+                logger.debug("GDTF auto-pull: candidate download or parse failed", exc_info=True)
                 continue
             internal = (_norm_identity(defn.manufacturer),
                         _norm_identity(defn.model))

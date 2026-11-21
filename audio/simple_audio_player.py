@@ -234,6 +234,7 @@ class SimpleAudioPlayer:
                 del sound  # Free memory
             except Exception:
                 # Fallback: estimate from file size (rough)
+                logger.debug("Could not read the song length; estimating", exc_info=True)
                 self._duration = 300.0  # Default 5 minutes
 
             self._paused_position = 0.0
@@ -255,7 +256,7 @@ class SimpleAudioPlayer:
                     pos = self.get_current_position()
                     self._position_callback(pos)
                 except Exception:
-                    pass
+                    logger.debug("Position callback failed", exc_info=True)
             time.sleep(0.1)  # Update 10 times per second
 
     def play(self, start_position: float = 0.0) -> bool:

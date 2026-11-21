@@ -6,6 +6,7 @@ SectionAnalysis-compatible profile, and runs a groove+fill riff cycle
 that auto-generates lighting blocks matching the incoming sound.
 """
 
+import logging
 import time
 import threading
 import colorsys
@@ -23,6 +24,8 @@ from autogen.spatial import (
 )
 from rudiments.block_converter import rudiment_to_dimmer_block, rudiment_to_movement_block
 from config.models import ColourBlock, SpecialBlock, Configuration
+
+logger = logging.getLogger(__name__)
 
 
 # How many feature frames to keep (~86 frames/sec at 44100/512)
@@ -451,7 +454,7 @@ class AutoShowEngine:
         try:
             callback(pending)
         except Exception:
-            pass
+            logger.debug("riffs-updated callback failed", exc_info=True)
 
     def _update_auto_color(self, profile: SectionAnalysis):
         """Generate color from spectral centroid."""
@@ -610,7 +613,8 @@ class AutoShowEngine:
                         lane_key, group.fixtures, movement_block, 'movement', bar_start,
                     )
                 except Exception:
-                    pass  # Not all movement rudiments may be registered
+                    logger.debug("Auto movement block could not start", exc_info=True)
+                    # Not all movement rudiments may be registered
 
     def _end_all_blocks(self):
         """Unregister all active blocks from DMXManager."""
@@ -622,6 +626,6 @@ class AutoShowEngine:
                 try:
                     self._dmx_manager.block_ended(lane_key, block_type)
                 except Exception:
-                    pass
+                    logger.debug("Auto block end failed", exc_info=True)
 
         self._active_lanes.clear()

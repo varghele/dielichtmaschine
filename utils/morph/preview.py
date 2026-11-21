@@ -22,8 +22,11 @@ every time. Lowering the resolution barely helps - half size saved 1.5%
 
 from __future__ import annotations
 
+import logging
 import os
 from typing import Dict, List, Tuple
+
+logger = logging.getLogger(__name__)
 
 
 def _render_side(config, song, times: List[float], output_dir: str,
@@ -84,6 +87,7 @@ def render_strip(source_config, source_song, target_config, morphed_song,
             written = _render_side(config, song, targets, output_dir,
                                    prefix, camera, width, height)
         except Exception:
+            logger.warning("Morph preview render failed", exc_info=True)
             return {}
         return dict(zip(targets, written))
 

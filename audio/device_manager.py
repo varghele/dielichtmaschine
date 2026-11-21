@@ -326,6 +326,7 @@ def asio_status() -> Dict[str, object]:
     try:
         apis = [a["name"] for a in sd.query_hostapis()]
     except Exception:
+        logger.debug("Host API query failed", exc_info=True)
         apis = []
     in_portaudio = "ASIO" in apis
     registered = get_registered_asio_drivers()

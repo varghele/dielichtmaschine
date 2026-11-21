@@ -1,5 +1,6 @@
 # tests/unit/test_no_print.py
-"""Production code logs through ``logging``, never ``print``.
+"""Production code logs through ``logging``, never ``print``, and never
+uses a bare ``except:`` (it would swallow KeyboardInterrupt/SystemExit).
 
 The app is windowed (the packaged exe has no console), so a print()
 goes nowhere; module loggers reach the log file set up by
@@ -106,3 +107,27 @@ def test_no_print_in_production_code():
 ])
 def test_print_detector(source, expected):
     assert _print_calls(ast.parse(source)) == expected
+
+
+def _bare_excepts(tree):
+    return [node.lineno for node in ast.walk(tree)
+            if isinstance(node, ast.ExceptHandler) and node.type is None]
+
+
+def test_no_bare_except_in_production_code():
+    offenders = []
+    for rel_path in _production_files():
+        for line in _bare_excepts(_parse(rel_path)):
+            offenders.append(f"{rel_path}:{line}")
+    assert not offenders, (
+        "bare `except:` in production code; catch `Exception` (or "
+        "narrower) so KeyboardInterrupt and SystemExit keep flowing:\n"
+        + "\n".join(offenders))
+
+
+@pytest.mark.parametrize("source, expected", [
+    ("try:\n    pass\nexcept:\n    pass\n", [3]),
+    ("try:\n    pass\nexcept Exception:\n    pass\n", []),
+])
+def test_bare_except_detector(source, expected):
+    assert _bare_excepts(ast.parse(source)) == expected

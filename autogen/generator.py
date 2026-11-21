@@ -12,6 +12,7 @@ Implements the algorithm from theory Section 5 (Steps 1-11):
 10-11. Generate blocks on timeline
 """
 
+import logging
 from dataclasses import dataclass
 from typing import Dict, List, Optional, Tuple
 
@@ -39,6 +40,8 @@ from rudiments.block_converter import rudiment_to_dimmer_block, rudiment_to_move
 from autogen.report import (
     GenerationReport, SectionReport, GroupSectionReport, MatchScoreEntry,
 )
+
+logger = logging.getLogger(__name__)
 
 
 def generate_show(
@@ -106,6 +109,7 @@ def generate_show(
         from audio.spectral_analysis import compute_frame_features
         frame_features = compute_frame_features(audio_path)
     except Exception:
+        logger.debug("Frame features unavailable; generating without them", exc_info=True)
         frame_features = None
 
     report = GenerationReport(

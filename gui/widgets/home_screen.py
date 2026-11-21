@@ -13,6 +13,7 @@ left border and its screen tag; clicking a step jumps to that screen.
 Self-contained: emits signals, MainWindow wires them.
 """
 
+import logging
 import os
 import time
 
@@ -24,6 +25,8 @@ from PyQt6.QtWidgets import (
 
 from gui.typography import MicroLabel, display_font, mono_font
 from utils.app_identity import APP_WORDMARK, SLOGAN_EN
+
+logger = logging.getLogger(__name__)
 
 
 # NOTE: all user-visible strings below use LITERAL
@@ -381,6 +384,7 @@ class HomeScreen(QWidget):
                 done_flags.append(bool(config is not None
                                        and predicate(config)))
             except Exception:
+                logger.debug("Checklist predicate failed", exc_info=True)
                 done_flags.append(False)
         current = next((i for i, done in enumerate(done_flags) if not done),
                        None)

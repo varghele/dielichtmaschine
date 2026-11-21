@@ -190,7 +190,7 @@ class RenderEngine(QOpenGLWidget):
                 error = self.ctx.error
                 if error:
                     logger.warning(f"  OpenGL error: {error}")
-            except:
+            except Exception:
                 pass
             self._first_frame = False
 

@@ -24,6 +24,7 @@ content hash, which the export guard (7.5) reads.
 
 from __future__ import annotations
 
+import logging
 import datetime
 import os
 
@@ -35,6 +36,8 @@ from utils.morph.preflight import (PreflightChecklist, derive_plan_from_config,
                                    generate_checklist, plan_fingerprint)
 from utils.artnet.preflight_layer import (PreflightRigLayer, RGB_STEP_LABELS,
                                           SPECIAL_STEP_COUNT)
+
+logger = logging.getLogger(__name__)
 
 #: item kinds whose INCORRECT branch opens the orientation dialog for
 #: the group's fixtures (aim/orientation problems); everything else
@@ -122,6 +125,7 @@ class PreflightDialog(QtWidgets.QDialog):
             from utils.artnet.dmx_manager import DMXManager
             maps = DMXManager.build_fixture_maps(config)
         except Exception:
+            logger.debug("Fixture maps could not be built for pre-flight", exc_info=True)
             maps = {}
         self.layer = PreflightRigLayer(
             config_provider=lambda: self.config, fixture_maps=maps)
@@ -149,6 +153,7 @@ class PreflightDialog(QtWidgets.QDialog):
         try:
             existing = PreflightChecklist.load(self.checklist_path)
         except Exception:
+            logger.debug("Pre-flight checklist unreadable; generating a new one", exc_info=True)
             return self._generate()
         if not existing.items:
             return self._generate()
@@ -374,6 +379,7 @@ class PreflightDialog(QtWidgets.QDialog):
             try:
                 arbiter = self._arbiter_provider()
             except Exception:
+                logger.debug("Output arbiter provider failed", exc_info=True)
                 arbiter = None
             if arbiter is not None and not self.layer.attach(arbiter):
                 self.status_label.setText(

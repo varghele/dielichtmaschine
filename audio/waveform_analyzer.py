@@ -185,7 +185,7 @@ class WaveformAnalyzer:
         try:
             mtime = os.path.getmtime(file_path)
             cache_key = f"{file_path}_{mtime}"
-        except:
+        except Exception:
             cache_key = file_path
 
         file_hash = hashlib.md5(cache_key.encode()).hexdigest()
@@ -255,6 +255,7 @@ class WaveformAnalyzer:
             return waveform_data
 
         except Exception:
+            logger.debug("Waveform cache unreadable; re-analysing", exc_info=True)
             return None      # miss: regenerate (and re-save as npz)
 
     def clear_cache(self):

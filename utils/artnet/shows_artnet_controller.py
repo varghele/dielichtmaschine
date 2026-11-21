@@ -311,7 +311,8 @@ class ShowsArtNetController(QObject):
                 try:
                     self.current_time = self._position_callback()
                 except Exception:
-                    pass  # keep last known position
+                    logger.debug("Playback position callback failed", exc_info=True)
+                    # keep last known position
 
             now_t = self.current_time
             # Block intervals are read here and again in update_dmx; the

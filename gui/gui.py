@@ -847,6 +847,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         try:
             return hash(self._config_snapshot_bytes())
         except Exception:
+            logger.debug("Config snapshot failed; fingerprinting via repr", exc_info=True)
             from dataclasses import asdict
             try:
                 return hash(repr(asdict(self.config)))
@@ -931,6 +932,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         try:
             snapshot = self._config_snapshot_bytes()
         except Exception:
+            logger.debug("Config snapshot failed; autosaving synchronously", exc_info=True)
             self.config.save(path)
             return
         from PyQt6.QtCore import QThread
@@ -1627,6 +1629,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
                 kept = pull_missing_gdtf(
                     snapshot, project_gdtf_fixtures_dir(), cancel=cancel)
             except Exception:
+                logger.debug("GDTF auto-pull failed", exc_info=True)
                 kept = []
             if cancel.is_set():
                 return
@@ -2316,6 +2319,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
                 PreflightChecklist.default_path(config_path),
                 config_hash(self.config))
         except Exception:
+            logger.warning("Pre-flight export guard check failed", exc_info=True)
             return None
 
     def _confirm_preflight_export(self, message) -> bool:

@@ -16,6 +16,7 @@ generating items, never in judging correctness (7.2).
 
 from __future__ import annotations
 
+import logging
 import hashlib
 import os
 from dataclasses import dataclass, field
@@ -25,6 +26,8 @@ import yaml
 
 from utils.morph.compile import SUBLANE_ATTRS
 from utils.morph.plan import MorphEdge, MorphPlan
+
+logger = logging.getLogger(__name__)
 
 #: generated order (design doc 7.3): cheapest and grossest-error first
 ITEM_ORDER = ("flash", "spot_verify", "focus_capture", "colour_sanity",
@@ -319,6 +322,7 @@ def export_guard_message(checklist_path: str,
     try:
         checklist = PreflightChecklist.load(checklist_path)
     except Exception:
+        logger.debug("Pre-flight checklist unreadable; no export guard", exc_info=True)
         return None
     if not checklist.complete:
         remaining = len(checklist.pending())

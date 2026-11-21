@@ -57,6 +57,7 @@ PALETTE link and "+ REC" capture are staged for later passes and
 marked "arrives next".
 """
 
+import logging
 from typing import Dict, List, Optional, Tuple
 
 from PyQt6.QtCore import Qt, QObject, QTimer, pyqtSignal
@@ -78,6 +79,8 @@ from utils.position_presets import (
 )
 
 from .base_tab import BaseTab
+
+logger = logging.getLogger(__name__)
 
 # Reference geometry.
 RIGHT_PANEL_WIDTH = 330
@@ -1838,7 +1841,8 @@ class LiveTab(BaseTab):
                 combo.addItem(dev.display_name or dev.name, dev.name)
             self._sync_devices_loaded = True
         except Exception:
-            pass    # enumeration failed: default input only
+            logger.debug("Sync input device enumeration failed", exc_info=True)
+            # enumeration failed: default input only
         combo.blockSignals(False)
         self._select_persisted_sync_device()
 

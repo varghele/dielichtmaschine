@@ -157,7 +157,7 @@ class LiveAudioInput:
             if native and native not in rates:
                 rates.append(native)
         except Exception:
-            pass
+            logger.debug("Native sample rate query failed", exc_info=True)
         if 48000 not in rates:
             rates.append(48000)
 

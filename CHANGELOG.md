@@ -22,6 +22,13 @@ verbatim as the GitHub Release notes (see [docs/releasing.md](docs/releasing.md)
   log. The headless `export` and `morph` commands, `--version` and the
   `--profile` report still print to the terminal. A unit test
   (`tests/unit/test_no_print.py`) keeps new `print()` calls out.
+- **Silent error handlers now leave a trace.** An audit of the 233 broad
+  `except` blocks added a log entry with the traceback to 32 that swallowed
+  errors without a word (among them the GDTF auto-pull, the pre-flight export
+  guard, the waveform cache, keyring access and the morph preview render). The
+  four bare `except:` blocks catch `Exception` now, so Ctrl+C and exit
+  requests are no longer swallowed there. Behaviour is otherwise unchanged:
+  every fallback stays as it was.
 
 ### Fixed
 

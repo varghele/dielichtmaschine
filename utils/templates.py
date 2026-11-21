@@ -15,12 +15,15 @@ at the same relative location.
 
 from __future__ import annotations
 
+import logging
 import os
 import shutil
 from dataclasses import dataclass
 from typing import List, Optional
 
 import yaml
+
+logger = logging.getLogger(__name__)
 
 # Display metadata per rig file stem. Anything on disk that isn't listed
 # here still shows up, with a generic description.
@@ -75,6 +78,7 @@ def _count_fixtures(config_path: str) -> int:
             data = yaml.safe_load(f) or {}
         return len(data.get('fixtures', []))
     except Exception:
+        logger.debug("Template fixture count failed", exc_info=True)
         return 0
 
 

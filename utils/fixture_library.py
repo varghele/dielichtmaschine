@@ -38,6 +38,7 @@ consumers of this module are format-agnostic.
 
 from __future__ import annotations
 
+import logging
 import os
 import re
 import sys
@@ -47,6 +48,8 @@ from typing import Dict, Iterator, List, Optional, Set, Tuple
 
 from utils.gdtf_data import GdtfData  # noqa: F401  (typing for FixtureDefinition.gdtf)
 from utils import user_warnings
+
+logger = logging.getLogger(__name__)
 
 QLC_FIXTURE_NS = 'http://www.qlcplus.org/FixtureDefinition'
 _NS = {'': QLC_FIXTURE_NS}
@@ -348,6 +351,7 @@ def _user_library_dirs() -> Tuple[Optional[str], Optional[str]]:
         from utils.app_settings import user_gdtf_dir, user_qxf_dir
         return user_gdtf_dir(), user_qxf_dir()
     except Exception:
+        logger.debug("User library dirs unavailable", exc_info=True)
         return None, None
 
 

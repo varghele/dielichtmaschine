@@ -34,12 +34,15 @@ docs/focus-morphing-plan.md):
 
 from __future__ import annotations
 
+import logging
 import copy
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Tuple
 
 from config.models import (LightBlock, LightLane, MovementBlock, Song)
 from utils.morph.plan import MorphEdge, MorphPlan, config_hash
+
+logger = logging.getLogger(__name__)
 
 SUBLANE_ATTRS = {
     "dimmer": "dimmer_blocks",
@@ -358,7 +361,7 @@ def _default_target(target_config) -> dict:
         if "Floor" in planes:
             return {"target_plane_name": "Floor"}
     except Exception:
-        pass
+        logger.debug("Stage planes unavailable for the default target", exc_info=True)
     return {"target_point": [0.0, 0.0, 0.0]}
 
 
