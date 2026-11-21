@@ -236,7 +236,7 @@ A cleanup release on `v1.5.6-housekeeping`, cut from `main` at `418c140` on 2026
 - [ ] **Deprecated `LightBlock.duration` / `parameters`.** Still written to every saved file (`config/models.py`); after the dead readers go, `parameters` is never read. Dropping them is a file-format change, so it belongs with the deferred `schema_version` item in v1.5.5.
 - [ ] **`utils/orientation.beam_direction_stage`** is unused, in the mounting-preset area `docs/coordinate-frames-and-orientation.md` guards; remove only on purpose.
 - [ ] **Production code reached only by tests** (~80 symbols). Most are legitimate test hooks (screensaver setters, patchbay `can_undo` / `can_redo`); a few look like leftover API: `PlaybackSynchronizer.update_lanes` / `update_lane_mute` / `update_lane_solo`, `target_resolver.resolve_targets` / `format_target`, `orientation.get_direction_for_tilt_calculation`. Needs a symbol-by-symbol pass.
-- [ ] **Repo leftovers.** Delete the merged remote branches `origin/v1.5-focus-morphing` and `origin/v1.5.5-hardening`; condense the CLAUDE.md dated history and move finished plan docs to `docs/archive/`.
+- [ ] **Repo leftovers.** Delete the merged remote branches `origin/v1.5-focus-morphing` and `origin/v1.5.5-hardening`; condense the CLAUDE.md dated history and move finished plan docs to `docs/archive/`. Done so far (2026-11-21): both remote branches deleted (0 commits not on `main`); CLAUDE.md condensed from 837 to 287 lines (current state + subsystem facts and traps, the full log is `git show 8ed6258:CLAUDE.md`). Open: the plan-doc archive.
 
 ---
 
