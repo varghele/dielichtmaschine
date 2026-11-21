@@ -219,6 +219,27 @@ A fixes-only release on `v1.5.5-hardening`, cut from `v1.5-focus-morphing` at `3
 
 ---
 
+## v1.5.6 - Housekeeping
+
+A cleanup release on `v1.5.6-housekeeping`, cut from `main` at `418c140` on 2026-11-21, after a dead-code review pass (vulture plus an import-graph and per-file unused-import scan, every candidate checked by whole-word reference counts including tests, string-keyed lookups and the PyInstaller spec). Ground rules: no behaviour change, no rendered-pixel change, rig and demo show export hashes identical to `main` (`scripts/export_hash_check.py` plus a `main.py export` of every `demos/shows/*.lms`).
+
+- [ ] **Dead modules and functions.** `gui/tabs/shows_tab_timeline.py` (pre-v3 timeline tab, plus its spec hidden import), `utils/make/make_channel_groups.py`, `utils/to_xml/chaser_functions.py`, `utils/step_utils.py` (+ its test), and about 60 uncalled functions, methods and classes (largest: `compute_beat_features`, `create_master_rainbow_scene`, `StructureTab._import_from_csv`, the legacy glow-beam pair, the device-manager preference IO, the `setup_to_xml` CSV readers). Qt virtual overrides and the string-keyed cache clearers in `invalidate_fixture_caches` stay.
+- [ ] **Unused imports** (~110 in production, ~80 in tests) and the two dead locals.
+- [ ] **Drop pandas.** Its only importers are the dead code above.
+- [ ] **Docs and repo hygiene.** `docs/qt-gotchas.md` still points at the deleted `dark.qss` / `light.qss`; UTF-8 BOMs in `utils/tcp/protocol.py` and `utils/tcp/README.md`; unreferenced `resources/lightbulb.png` (1.4 MB).
+- [ ] **Multi-group stage 5** (`docs/multi-group-fixtures-plan.md`): remove the `fixture.group` compat property and the legacy `group:` dual-write on save. Legacy `group:` YAML keeps loading.
+
+**Needs a decision or a desk before removal** (found in the same pass, deliberately not done here):
+
+- [ ] **Legacy visualizer renderer.** About 3,100 lines of `visualizer/renderer/fixtures.py` (`LEDBarRenderer`, `PixelBarRenderer`, `SunstripRenderer`, `MovingHeadRenderer`, `WashRenderer`, `PARRenderer`) still run under `FIXTURE_RENDERER=legacy` and as the fallback when capability detection fails (`fixtures.py:3723`). Removal needs the composable path to cover the fallback cases, a desk check and the win32 goldens; fits v1.12.
+- [ ] **Two audio playback paths.** pygame's `SimpleAudioPlayer` is still preferred in `gui/tabs/shows_tab.py` alongside the sounddevice `AudioEngine`. Picking one drops a dependency but changes playback behaviour.
+- [ ] **Deprecated `LightBlock.duration` / `parameters`.** Still written to every saved file (`config/models.py`); after the dead readers go, `parameters` is never read. Dropping them is a file-format change, so it belongs with the deferred `schema_version` item in v1.5.5.
+- [ ] **`utils/orientation.beam_direction_stage`** is unused, in the mounting-preset area `docs/coordinate-frames-and-orientation.md` guards; remove only on purpose.
+- [ ] **Production code reached only by tests** (~80 symbols). Most are legitimate test hooks (screensaver setters, patchbay `can_undo` / `can_redo`); a few look like leftover API: `PlaybackSynchronizer.update_lanes` / `update_lane_mute` / `update_lane_solo`, `target_resolver.resolve_targets` / `format_target`, `orientation.get_direction_for_tilt_calculation`. Needs a symbol-by-symbol pass.
+- [ ] **Repo leftovers.** Delete the merged remote branches `origin/v1.5-focus-morphing` and `origin/v1.5.5-hardening`; condense the CLAUDE.md dated history and move finished plan docs to `docs/archive/`.
+
+---
+
 ## v1.6 - Stage refinement
 
 The stage tools all shipped a working first pass (v1.1) but were built ahead of sustained real-world use; this is the deliberate refinement pass after the v1.4/v1.5 releases prove what a show actually needs. Stage work is polish, not what makes or breaks a show (decided 2026-07-14), which is why it sits behind the two releases.
