@@ -15,17 +15,25 @@ verbatim as the GitHub Release notes (see [docs/releasing.md](docs/releasing.md)
 
 - **Console messages go to the log file.** About 270 `print()` calls in the
   app now write through per-module loggers into the daily log (Help >
-  Diagnostics shows where it lives), at debug, info, warning or error level,
-  and failures carry their traceback. The windowed build has no console, so
-  these messages used to vanish. The standalone visualizer now sets up
+  Diagnostics shows where it lives) at info, warning or error level, and
+  failures carry their traceback. Debug-level messages are not written by
+  default; start the app with the environment variable `QLC_LOG_LEVEL=DEBUG`
+  to include them. Failures on paint, render and per-update paths (timeline
+  grid and song structure, mover beam and floor projection in the
+  visualizer, the Auto spectral callback, the visualizer feed's updates) log
+  their first occurrence as a warning with the traceback and repeats at
+  debug, so a per-frame error cannot flood the log. The windowed build has
+  no console, so these messages used to vanish. The standalone visualizer now sets up
   logging too and writes `lichtmaschine-visualizer.log` next to the app's
   log. The headless `export` and `morph` commands, `--version` and the
   `--profile` report still print to the terminal. A unit test
   (`tests/unit/test_no_print.py`) keeps new `print()` calls out.
 - **Silent error handlers now leave a trace.** An audit of the 233 broad
   `except` blocks added a log entry with the traceback to 32 that swallowed
-  errors without a word (among them the GDTF auto-pull, the pre-flight export
-  guard, the waveform cache, keyring access and the morph preview render). The
+  errors without a word. Two log as warnings (the pre-flight export guard and
+  the morph preview render); the other 30 (among them the GDTF auto-pull, the
+  waveform cache and keyring access) log at debug, so they appear only with
+  `QLC_LOG_LEVEL=DEBUG`. The
   four bare `except:` blocks catch `Exception` now, so Ctrl+C and exit
   requests are no longer swallowed there. Behaviour is otherwise unchanged:
   every fallback stays as it was.

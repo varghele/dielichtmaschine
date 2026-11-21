@@ -11,6 +11,8 @@ from config.models import Configuration
 from utils import user_warnings
 from .protocol import VisualizerProtocol
 
+from utils.app_logging import warn_once
+
 logger = logging.getLogger(__name__)
 
 
@@ -297,7 +299,7 @@ class VisualizerTCPServer(QObject):
                 with send_lock:
                     client_socket.sendall(payload)
             except Exception as e:
-                logger.debug(f"Error sending update to client: {e}", exc_info=True)
+                warn_once(logger, "visualizer_feed.send_update", "Error sending update to client: %s", e)
 
     def update_config(self, config: Configuration):
         """

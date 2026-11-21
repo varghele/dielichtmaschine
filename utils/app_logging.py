@@ -30,12 +30,40 @@ LOG_FILE_NAME = "lichtmaschine.log"
 # (Windows cannot rename a file another process holds open).
 VISUALIZER_LOG_FILE_NAME = "lichtmaschine-visualizer.log"
 LOG_DIR_ENV = "QLC_LOG_DIR"
+# Level for the log file (and the root logger). INFO by default;
+# QLC_LOG_LEVEL=DEBUG writes the debug-level traces too.
+LOG_LEVEL_ENV = "QLC_LOG_LEVEL"
 LOG_BACKUP_DAYS = 14
 
 # Handlers installed by setup_logging(), kept so repeated calls are
 # no-ops and so shutdown_logging() can cleanly close them (Windows
 # cannot delete an open log file, which matters for tests).
 _state = {"file_handler": None, "console_handler": None}
+
+# Keys warn_once() has already reported at WARNING.
+_once_keys = set()
+_once_lock = threading.Lock()
+
+
+def file_log_level() -> int:
+    """The file handler's level: QLC_LOG_LEVEL if it names a level, else INFO."""
+    name = os.environ.get(LOG_LEVEL_ENV, "").strip().upper()
+    level = logging.getLevelName(name) if name else None
+    return level if isinstance(level, int) else logging.INFO
+
+
+def warn_once(logger: logging.Logger, key: str, msg: str, *args,
+              exc_info=True) -> None:
+    """Log ``msg`` at WARNING the first time ``key`` is seen, DEBUG after.
+
+    For failures on per-frame or per-callback paths: the first one
+    reaches the console and the log file, the repeats do not flood them.
+    """
+    with _once_lock:
+        first = key not in _once_keys
+        _once_keys.add(key)
+    logger.log(logging.WARNING if first else logging.DEBUG, msg, *args,
+               exc_info=exc_info)
 
 
 def log_dir() -> str:
@@ -82,7 +110,8 @@ def setup_logging(file_name: str = LOG_FILE_NAME) -> str:
     ``file_name`` picks the log file inside log_dir(); the standalone
     visualizer passes VISUALIZER_LOG_FILE_NAME.
 
-    - TimedRotatingFileHandler at INFO, rotating daily, keeping
+    - TimedRotatingFileHandler at INFO (QLC_LOG_LEVEL overrides, e.g.
+      DEBUG to also write the debug traces), rotating daily, keeping
       LOG_BACKUP_DAYS days, UTF-8.
     - StreamHandler at WARNING so the console stays quiet-ish.
     - warnings-module output routed into logging.
@@ -95,7 +124,8 @@ def setup_logging(file_name: str = LOG_FILE_NAME) -> str:
         return existing.baseFilename
 
     file_handler, path = _make_file_handler(file_name)
-    file_handler.setLevel(logging.INFO)
+    level = file_log_level()
+    file_handler.setLevel(level)
     file_handler.setFormatter(logging.Formatter(
         "%(asctime)s %(levelname)-8s %(name)s: %(message)s"))
     root.addHandler(file_handler)
@@ -107,9 +137,9 @@ def setup_logging(file_name: str = LOG_FILE_NAME) -> str:
     root.addHandler(console)
     _state["console_handler"] = console
 
-    # Root must pass INFO records for the file handler to see them.
-    if root.level == logging.NOTSET or root.level > logging.INFO:
-        root.setLevel(logging.INFO)
+    # Root must pass the file handler's records for it to see them.
+    if root.level == logging.NOTSET or root.level > level:
+        root.setLevel(level)
 
     logging.captureWarnings(True)
 

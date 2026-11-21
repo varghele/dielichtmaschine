@@ -12,6 +12,8 @@ from abc import ABC, abstractmethod
 
 from utils.geometry import GeometryBuilder
 
+from utils.app_logging import warn_once
+
 logger = logging.getLogger(__name__)
 
 
@@ -2628,7 +2630,7 @@ class MovingHeadRenderer(FixtureRenderer):
             self.ctx.disable(moderngl.BLEND)
 
         except Exception as e:
-            logger.debug(f"Error rendering beam: {e}", exc_info=True)
+            warn_once(logger, f"moving_head.beam.{self.name}", "Error rendering beam for %s: %s", self.name, e)
             # Try to restore state on error
             try:
                 self.ctx.depth_mask = True
@@ -2824,7 +2826,7 @@ class MovingHeadRenderer(FixtureRenderer):
             self.ctx.disable(moderngl.BLEND)
 
         except Exception as e:
-            logger.debug(f"Error rendering floor projection: {e}", exc_info=True)
+            warn_once(logger, f"moving_head.floor_projection.{self.name}", "Error rendering floor projection for %s: %s", self.name, e)
             # Try to restore state on error
             try:
                 self.ctx.enable(moderngl.DEPTH_TEST)

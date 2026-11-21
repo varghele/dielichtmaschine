@@ -9,6 +9,8 @@ from PyQt6.QtWidgets import QWidget, QMenu
 from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtGui import QPainter, QPen, QColor, QWheelEvent, QBrush
 
+from utils.app_logging import warn_once
+
 logger = logging.getLogger(__name__)
 
 
@@ -479,7 +481,7 @@ class TimelineWidget(QWidget):
             try:
                 self.draw_song_structure_grid(painter, width, height, clip)
             except Exception as e:
-                logger.debug(f"Error drawing song structure grid: {e}", exc_info=True)
+                warn_once(logger, "timeline.song_structure_grid", "Error drawing song structure grid: %s", e)
                 self.draw_basic_grid(painter, width, height, clip)
         else:
             self.draw_basic_grid(painter, width, height, clip)
@@ -613,7 +615,7 @@ class TimelineWidget(QWidget):
                 painter.fillRect(int(start_x), 0, int(end_x - start_x), height, color)
 
         except Exception as e:
-            logger.debug(f"Error drawing song structure background: {e}", exc_info=True)
+            warn_once(logger, "timeline.song_structure_background", "Error drawing song structure background: %s", e)
 
     def band_geometry(self):
         """``(strip, bands)`` for this canvas via sublane_band_geometry.

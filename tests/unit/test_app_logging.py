@@ -158,3 +158,52 @@ def test_fallback_dir_when_log_dir_unwritable(log_env, tmp_path, monkeypatch):
     path = app_logging.setup_logging()
     assert os.path.dirname(path) == str(fallback)
     assert os.path.isfile(path)
+
+
+@pytest.fixture
+def restore_root_level():
+    root = logging.getLogger()
+    previous = root.level
+    yield
+    root.setLevel(previous)
+
+
+def test_debug_records_are_dropped_by_default(log_env, monkeypatch,
+                                              restore_root_level):
+    monkeypatch.delenv(app_logging.LOG_LEVEL_ENV, raising=False)
+    app_logging.setup_logging()
+    logging.getLogger("test.level").debug("default-level debug marker")
+    logging.getLogger("test.level").info("default-level info marker")
+    content = _read_log(log_env)
+    assert "default-level info marker" in content
+    assert "default-level debug marker" not in content
+
+
+def test_log_level_env_writes_debug_records(log_env, monkeypatch,
+                                            restore_root_level):
+    monkeypatch.setenv(app_logging.LOG_LEVEL_ENV, "debug")
+    app_logging.setup_logging()
+    logging.getLogger("test.level").debug("env-level debug marker")
+    assert "env-level debug marker" in _read_log(log_env)
+
+
+def test_log_level_env_ignores_unknown_names(monkeypatch):
+    monkeypatch.setenv(app_logging.LOG_LEVEL_ENV, "chatty")
+    assert app_logging.file_log_level() == logging.INFO
+    monkeypatch.setenv(app_logging.LOG_LEVEL_ENV, "WARNING")
+    assert app_logging.file_log_level() == logging.WARNING
+
+
+def test_warn_once_warns_first_then_debugs(caplog):
+    log = logging.getLogger("test.warn_once")
+    key = "test.warn_once.%d" % id(caplog)
+    with caplog.at_level(logging.DEBUG, logger="test.warn_once"):
+        for attempt in range(3):
+            try:
+                raise RuntimeError("warn-once boom %d" % attempt)
+            except RuntimeError as exc:
+                app_logging.warn_once(log, key, "paint failed: %s", exc)
+    levels = [record.levelno for record in caplog.records]
+    assert levels == [logging.WARNING, logging.DEBUG, logging.DEBUG]
+    assert all(record.exc_info for record in caplog.records)
+    assert "warn-once boom 0" in caplog.records[0].getMessage()

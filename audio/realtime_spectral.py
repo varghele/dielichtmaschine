@@ -14,6 +14,8 @@ from dataclasses import dataclass
 from typing import Callable, List, Optional
 from .ring_buffer import AudioRingBuffer
 
+from utils.app_logging import warn_once
+
 logger = logging.getLogger(__name__)
 
 
@@ -419,7 +421,7 @@ class RealtimeSpectralAnalyzer:
                         try:
                             cb(frame)
                         except Exception as e:
-                            logger.debug(f"Error in spectral callback: {e}", exc_info=True)
+                            warn_once(logger, "realtime_spectral.callback", "Error in spectral callback: %s", e)
 
     def _compute_frame(self) -> Optional[LiveFeatureFrame]:
         """Compute all 7 features for the current sliding window."""

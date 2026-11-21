@@ -9,6 +9,8 @@ from PyQt6.QtCore import Qt, pyqtSignal, QPoint, QRectF
 from PyQt6.QtGui import QPainter, QPen, QColor, QPolygon, QBrush
 from .timeline_widget import TimelineWidget, iter_grid_steps, HEADER_COLUMN_WIDTH
 
+from utils.app_logging import warn_once
+
 logger = logging.getLogger(__name__)
 
 
@@ -137,7 +139,7 @@ class MasterTimelineWidget(TimelineWidget):
             try:
                 self.draw_song_structure(painter, width, height)
             except Exception as e:
-                logger.debug(f"Error drawing song structure: {e}", exc_info=True)
+                warn_once(logger, "master_timeline.song_structure_part", "Error drawing song structure: %s", e)
 
         # Draw grid
         self.draw_grid(painter, width, height, clip)
@@ -199,7 +201,7 @@ class MasterTimelineWidget(TimelineWidget):
                     bpm_rect = QRectF(start_x + 6, 25, end_x - start_x - 12, 14)
                     painter.drawText(bpm_rect, Qt.AlignmentFlag.AlignLeft, bpm_text)
         except Exception as e:
-            logger.debug(f"Error in draw_song_structure: {e}", exc_info=True)
+            warn_once(logger, "master_timeline.draw_song_structure", "Error in draw_song_structure: %s", e)
 
     def _bpm_tag_text(self, part) -> str:
         """"192 BPM" mono tag; "120->140 BPM" across a gradual ramp."""
@@ -281,7 +283,7 @@ class MasterTimelineWidget(TimelineWidget):
                     Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter,
                     bpm_text)
         except Exception as e:
-            logger.debug(f"Error in _draw_parts_band: {e}", exc_info=True)
+            warn_once(logger, "master_timeline.parts_band", "Error in _draw_parts_band: %s", e)
 
     def draw_grid(self, painter, width, height, clip=None):
         """Draw time-based grid with beat lines and optional sub-beat
@@ -336,7 +338,7 @@ class MasterTimelineWidget(TimelineWidget):
                         painter.drawLine(step_x_rounded, 0, step_x_rounded, height)
 
             except Exception as e:
-                logger.debug(f"Error in draw_grid: {e}", exc_info=True)
+                warn_once(logger, "master_timeline.draw_grid", "Error in draw_grid: %s", e)
                 self.draw_basic_grid(painter, width, height)
         else:
             self.draw_basic_grid(painter, width, height)
