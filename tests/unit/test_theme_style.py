@@ -248,3 +248,14 @@ class TestProgressAndRenderDialogsUseTheRegularTokens:
             dialog.deleteLater()
         finally:
             ThemeManager().apply(qapp, "dark")
+
+    def test_square_corners(self):
+        """Brand radius is 0: the render and progress dialogs used to
+        round their frames, fields, bars and buttons by 2-4 px."""
+        import re
+        from pathlib import Path
+        root = Path(__file__).resolve().parents[2]
+        for rel in ("gui/dialogs/render_dialog.py", "gui/progress_manager.py"):
+            src = (root / rel).read_text(encoding="utf-8")
+            assert not re.search(r"border-radius:\s*[1-9]", src), rel
+

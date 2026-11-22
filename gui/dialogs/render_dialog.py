@@ -164,7 +164,7 @@ class RenderDialog(QDialog):
         self._render_btn.setStyleSheet(f"""
             QPushButton {{
                 background-color: {tokens['success']}; color: {tokens['on_function']}; font-weight: bold;
-                border: none; border-radius: 4px; padding: 8px 20px; font-size: 14px;
+                border: none; border-radius: 0; padding: 8px 20px; font-size: 14px;
             }}
             QPushButton:hover {{ background-color: {tokens['success_light']}; }}
             QPushButton:disabled {{ background-color: {tokens['border']}; }}
@@ -176,7 +176,7 @@ class RenderDialog(QDialog):
         self._cancel_btn.setStyleSheet(f"""
             QPushButton {{
                 background-color: {tokens['destructive']}; color: {tokens['on_function']}; font-weight: bold;
-                border: none; border-radius: 4px; padding: 8px 20px; font-size: 14px;
+                border: none; border-radius: 0; padding: 8px 20px; font-size: 14px;
             }}
             QPushButton:hover {{ background-color: {tokens['destructive_light']}; }}
         """)
@@ -214,15 +214,15 @@ class RenderDialog(QDialog):
         self.setStyleSheet(f"""
             QDialog {{ background-color: {bg}; }}
             QLabel {{ color: {text}; }}
-            QGroupBox {{ color: {text}; font-weight: bold; border: 1px solid {border}; border-radius: 4px; margin-top: 10px; padding-top: 15px; }}
+            QGroupBox {{ color: {text}; font-weight: bold; border: 1px solid {border}; border-radius: 0; margin-top: 10px; padding-top: 15px; }}
             QGroupBox::title {{ subcontrol-origin: margin; left: 10px; padding: 0 3px; }}
             QCheckBox {{ color: {text}; }}
-            QComboBox, QLineEdit {{ background-color: {field}; color: {text}; border: 1px solid {border}; border-radius: 3px; padding: 4px; }}
+            QComboBox, QLineEdit {{ background-color: {field}; color: {text}; border: 1px solid {border}; border-radius: 0; padding: 4px; }}
             QScrollArea {{ border: none; background-color: {field}; }}
             QScrollArea > QWidget > QWidget {{ background-color: {field}; }}
-            QProgressBar {{ border: 1px solid {border}; border-radius: 3px; background-color: {field}; text-align: center; color: {text}; }}
-            QProgressBar::chunk {{ background-color: {tokens['success']}; border-radius: 2px; }}
-            QTextEdit {{ background-color: {tokens['raised']}; color: {tokens['text_secondary']}; border: 1px solid {border}; border-radius: 3px; }}
+            QProgressBar {{ border: 1px solid {border}; border-radius: 0; background-color: {field}; text-align: center; color: {text}; }}
+            QProgressBar::chunk {{ background-color: {tokens['success']}; border-radius: 0; }}
+            QTextEdit {{ background-color: {tokens['raised']}; color: {tokens['text_secondary']}; border: 1px solid {border}; border-radius: 0; }}
         """)
 
     def _set_all_checked(self, checked: bool):

@@ -17,12 +17,12 @@ def _status_bar_meter_style(t: dict) -> str:
     return f"""
             QProgressBar {{
                 border: 1px solid {t['border']};
-                border-radius: 3px;
+                border-radius: 0;
                 background-color: {t['raised']};
             }}
             QProgressBar::chunk {{
                 background-color: {t['success']};
-                border-radius: 2px;
+                border-radius: 0;
             }}
         """
 
@@ -38,14 +38,14 @@ def _modal_progress_style(t: dict) -> str:
             }}
             QProgressBar {{
                 border: 1px solid {t['border']};
-                border-radius: 3px;
+                border-radius: 0;
                 background-color: {t['raised']};
                 text-align: center;
                 color: {t['text']};
             }}
             QProgressBar::chunk {{
                 background-color: {t['success']};
-                border-radius: 2px;
+                border-radius: 0;
             }}
         """
 
@@ -55,13 +55,13 @@ def _log_dialog_style(t: dict) -> str:
             QDialog {{ background-color: {t['window']}; }}
             QLabel {{ color: {t['text']}; font-size: 12px; }}
             QProgressBar {{
-                border: 1px solid {t['border']}; border-radius: 3px;
+                border: 1px solid {t['border']}; border-radius: 0;
                 background-color: {t['raised']}; text-align: center; color: {t['text']};
             }}
-            QProgressBar::chunk {{ background-color: {t['success']}; border-radius: 2px; }}
+            QProgressBar::chunk {{ background-color: {t['success']}; border-radius: 0; }}
             QTextEdit {{
                 background-color: {t['raised']}; color: {t['text_secondary']};
-                border: 1px solid {t['border']}; border-radius: 3px;
+                border: 1px solid {t['border']}; border-radius: 0;
             }}
         """
 

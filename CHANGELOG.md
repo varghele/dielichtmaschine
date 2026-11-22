@@ -91,9 +91,10 @@ verbatim as the GitHub Release notes (see [docs/releasing.md](docs/releasing.md)
   They now use the same window, field, border and text colours as every
   other dialog (the log text in the secondary text colour, the disabled
   Render button in the border colour), and so does the status-bar
-  progress meter. The light theme already looked this way and is
-  unchanged. The Windows screenshot goldens are unaffected: no visual test
-  shows these dialogs or the meter.
+  progress meter. Their corners are square now too, like the rest of the
+  app (frames, fields, progress bars, the log and the Render and Cancel
+  buttons used to round by 2 to 4 px). The Windows screenshot goldens are
+  unaffected: no visual test shows these dialogs or the meter.
 - **The core packages import without Qt.** The Auto Mode widgets moved from
   `auto/widgets/` to `gui/widgets/auto/`, the waveform widget from `audio/` to
   `timeline_ui/audio_waveform_widget.py` (next to the audio lane that uses
