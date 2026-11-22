@@ -65,13 +65,14 @@ from PyQt6.QtCore import (Qt, QObject, QTimer, pyqtSignal, QCoreApplication,
 from PyQt6.QtGui import QColor, QFont, QPainter, QPolygon
 from PyQt6.QtCore import QPoint
 from PyQt6.QtWidgets import (
-    QApplication, QWidget, QVBoxLayout, QHBoxLayout, QGridLayout, QScrollArea,
+    QWidget, QVBoxLayout, QHBoxLayout, QGridLayout, QScrollArea,
     QFrame, QPushButton, QLabel, QButtonGroup, QComboBox,
 )
 
 from auto.bpm_detector import TapBPM
 from config.models import Configuration
 from gui.typography import DisplayLabel, MicroLabel, display_font, mono_font
+from gui.theme_style import active_tokens
 from utils.artnet.live_layer import level_local
 from utils.position_presets import (
     ELEMENT_PRESET_PREFIX, KIND_POINT, MARK_PREFIX, PRESET_PREFIX,
@@ -225,23 +226,6 @@ def _display_name(raw: Optional[str]) -> str:
     an unbreakable token past the cell edge. Keys stay raw everywhere;
     only what the operator reads goes through here."""
     return " ".join((raw or "").replace("_", " ").split())
-
-
-def _active_tokens() -> dict:
-    """The token dict of the theme currently applied to the app.
-
-    Sniffs the applied stylesheet (ThemeManager.apply doesn't persist);
-    the light theme's window color is unique to light. Falls back to
-    dark. Same trick as gui/tabs/stage_tab.py::_active_tokens.
-    """
-    from gui.theme_tokens import THEMES
-
-    app = QApplication.instance()
-    qss = app.styleSheet() if app is not None else ""
-    light = THEMES.get("light")
-    if light is not None and light["window"] in qss:
-        return light
-    return THEMES["dark"]
 
 
 def _contrast_text(hex_color: str) -> str:
@@ -878,7 +862,7 @@ class _RateSlider(QWidget):
             self._set_from_x(event.position().x())
 
     def paintEvent(self, event):
-        tokens = _active_tokens()
+        tokens = active_tokens()
         painter = QPainter(self)
         track_top = (self.height() - 8) // 2
         painter.fillRect(0, track_top, self.width(), 8,
@@ -937,7 +921,7 @@ class _VerticalFader(QWidget):
             self._set_from_y(event.position().y())
 
     def paintEvent(self, event):
-        tokens = _active_tokens()
+        tokens = active_tokens()
         painter = QPainter(self)
         w, h = self.width(), self.height()
         track_w = 8
@@ -1016,7 +1000,7 @@ class _SelectTile(QWidget):
         self.effect_label.setText(label or "-")
 
     def _restyle(self) -> None:
-        tokens = _active_tokens()
+        tokens = active_tokens()
         bg = tokens["raised"] if self._selected else tokens["panel"]
         border = tokens["accent"] if self._selected else tokens["border"]
         self.setStyleSheet(
@@ -1073,7 +1057,7 @@ class _ColourSwatch(QWidget):
             self.clicked.emit(self.colour_id)
 
     def paintEvent(self, event):
-        tokens = _active_tokens()
+        tokens = active_tokens()
         painter = QPainter(self)
         w, h = self.width(), self.height()
         painter.fillRect(0, 0, w, h, QColor(self._primary))
@@ -1142,7 +1126,7 @@ class _PlaceholderCell(QWidget):
         self._restyle()
 
     def _restyle(self) -> None:
-        tokens = _active_tokens()
+        tokens = active_tokens()
         style = "dashed" if self._dashed else "solid"
         self.setStyleSheet(
             "#LivePlaceholderCell {"
@@ -1168,7 +1152,7 @@ class _LibraryCell(QWidget):
     palette when its enabled state changes (effects pool greys out with
     no selection, position pool with no mover groups selected).
 
-    Colours come from :func:`_active_tokens` (never hardcoded) via
+    Colours come from :func:`gui.theme_style.active_tokens` (never hardcoded) via
     ``_restyle``; the same restyle runs on a theme switch.
     """
 
@@ -1228,7 +1212,7 @@ class _LibraryCell(QWidget):
             self._restyle()
 
     def _restyle(self) -> None:
-        tokens = _active_tokens()
+        tokens = active_tokens()
         if not self.isEnabled():
             border = tokens["border"]
             text_color = tokens["text_disabled"]
@@ -2016,7 +2000,7 @@ class LiveTab(BaseTab):
         return host
 
     def _restyle_pools_host(self) -> None:
-        tokens = _active_tokens()
+        tokens = active_tokens()
         self._pools_host.setStyleSheet(
             f"#LivePoolsHost {{ background-color: {tokens['border']}; }}")
 
@@ -2064,7 +2048,7 @@ class LiveTab(BaseTab):
             if tag_accent:
                 self._accent_labels.append(tag_label)
                 tag_label.setStyleSheet(
-                    f"color: {_active_tokens()['accent_line']};")
+                    f"color: {active_tokens()['accent_line']};")
             row.addWidget(tag_label)
         return header
 
@@ -2693,7 +2677,7 @@ class LiveTab(BaseTab):
         self._programmer_label.setMinimumWidth(1)
         self._accent_labels.append(self._programmer_label)
         self._programmer_label.setStyleSheet(
-            f"color: {_active_tokens()['accent_line']};")
+            f"color: {active_tokens()['accent_line']};")
         row.addWidget(self._programmer_label, 1)
         # Transient no-op feedback: a palette touch with nothing
         # selected changes no output; instead of silence the bar shows
@@ -2914,7 +2898,7 @@ class LiveTab(BaseTab):
         """The GRAND master column: an accent vertical fader with the DBO
         dead-blackout button under it. Always the first column of the
         bank, set off from the per-group columns by a thin divider."""
-        accent = _active_tokens()["accent"]
+        accent = active_tokens()["accent"]
         column = QWidget()
         column.setObjectName("LiveMasterColumn")
         column.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
@@ -2965,12 +2949,12 @@ class LiveTab(BaseTab):
         return divider
 
     def _restyle_bank_divider(self, divider: QWidget) -> None:
-        tokens = _active_tokens()
+        tokens = active_tokens()
         divider.setStyleSheet(
             f"#LiveBankDivider {{ background-color: {tokens['border']}; }}")
 
     def _restyle_master_column(self, column: QWidget, accent: str) -> None:
-        tokens = _active_tokens()
+        tokens = active_tokens()
         column.setStyleSheet(
             "#LiveMasterColumn {"
             f" background-color: {tokens['panel']};"
@@ -3013,7 +2997,7 @@ class LiveTab(BaseTab):
         return column
 
     def _restyle_submaster_column(self, column: QWidget, color: str) -> None:
-        tokens = _active_tokens()
+        tokens = active_tokens()
         column.setStyleSheet(
             "#LiveSubmasterColumn {"
             f" background-color: {tokens['panel']};"
@@ -3426,7 +3410,7 @@ class LiveTab(BaseTab):
                 fader.update()
             if hasattr(self, "_pools_host"):
                 self._restyle_pools_host()
-            accent_line = _active_tokens()["accent_line"]
+            accent_line = active_tokens()["accent_line"]
             for label in self._accent_labels:
                 label.setStyleSheet(f"color: {accent_line};")
             # Re-tint submaster columns (data colour top border stays).
@@ -3436,7 +3420,7 @@ class LiveTab(BaseTab):
                     self._restyle_submaster_column(
                         column, self._group_colors.get(name, DEFAULT_GROUP_COLOR))
             # Re-tint the GRAND master column + divider in the new accent.
-            accent = _active_tokens()["accent"]
+            accent = active_tokens()["accent"]
             if getattr(self, "_grand_column", None) is not None:
                 self._restyle_master_column(self._grand_column, accent)
             if getattr(self, "_grand_fader", None) is not None:

@@ -4,6 +4,7 @@ from PyQt6.QtGui import QPen, QBrush, QColor, QPainter, QFontMetrics
 from math import sin, cos, radians, atan2, sqrt
 
 from utils.fixture_capabilities import chassis_from_legacy_type
+from gui.theme_style import active_tokens
 from gui.widgets.fixture_icons import (
     ACCENT_LAMPS,
     ACCENT_PIXELS,
@@ -517,16 +518,6 @@ class SpotItem(QGraphicsItem):
         self.z_height = 0.0  # Z height in meters (for 3D targeting)
         self.last_pos = self.pos()  # Store last position for snapping
 
-    @staticmethod
-    def _tokens() -> dict:
-        """Active theme tokens; safe fallback for bare-item tests."""
-        try:
-            from gui.tabs.stage_tab import _active_tokens
-            return _active_tokens()
-        except Exception:
-            from gui.theme_tokens import THEMES
-            return THEMES["dark"]
-
     def _label_fonts(self):
         from gui.typography import mono_font
         return mono_font(8), mono_font(7)
@@ -595,7 +586,7 @@ class SpotItem(QGraphicsItem):
     def paint(self, painter, option, widget):
         from gui.widgets.fixture_icons import _paint_symbol_icon
 
-        tokens = self._tokens()
+        tokens = active_tokens()
         selected = self.isSelected()
         # Spike marks always wear the brand accent; selection adds a
         # ring in the text colour around the mark.
@@ -704,7 +695,7 @@ class StageElementItem(QGraphicsItem):
     def _placeholder_color() -> str:
         """Dashed outline of an element whose SVG failed to load: the
         active theme's token (same tab sniff as SpotItem._tokens)."""
-        return SpotItem._tokens()["stage_placeholder"]
+        return active_tokens()["stage_placeholder"]
 
     def paint(self, painter, option, widget):
         painter.save()

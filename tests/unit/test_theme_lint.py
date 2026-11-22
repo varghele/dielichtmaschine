@@ -423,3 +423,75 @@ def test_scopes_name_assignment_targets_and_defs():
     assert sorted(hex_sites_in(tree)) == [
         ("#111111", "A"), ("#222222", "K.B"), ("#333333", "K.f"),
         ("#444444", "K.f.g"), ("#555555", "<module>")]
+
+
+# --- One theme sniff -------------------------------------------------
+
+#: The one module allowed to read the applied stylesheet for the theme.
+SNIFF_HOME = "gui/theme_style.py"
+#: Helper names that mean "a private copy of active_tokens".
+SNIFF_NAME_RE = re.compile(r"^_*(active|current|theme|applied)_tokens$")
+
+
+def _tracked_sources():
+    """Every tracked production .py file (tests excluded)."""
+    import subprocess
+    out = subprocess.run(["git", "ls-files", "*.py"], cwd=ROOT,
+                         capture_output=True, text=True, check=True).stdout
+    return [p for p in out.split() if not p.startswith("tests/")]
+
+
+def sniff_copies_in(tree: ast.AST) -> list:
+    """Functions that are (or look like) a private copy of
+    gui.theme_style.active_tokens: named like it, or reading the app
+    stylesheet (``.styleSheet()``) and the THEMES table together."""
+    found = []
+    for node in ast.walk(tree):
+        if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            continue
+        if SNIFF_NAME_RE.match(node.name):
+            found.append((node.lineno, node.name))
+            continue
+        reads_sheet = any(
+            isinstance(n, ast.Call) and isinstance(n.func, ast.Attribute)
+            and n.func.attr == "styleSheet" and not n.args
+            for n in ast.walk(node))
+        reads_themes = any(isinstance(n, ast.Name) and n.id == "THEMES"
+                           for n in ast.walk(node))
+        if reads_sheet and reads_themes:
+            found.append((node.lineno, node.name))
+    return found
+
+
+def test_no_private_copy_of_the_theme_sniff():
+    """The v1.5.6 follow-up folded a dozen per-module ``_active_tokens``
+    copies onto gui.theme_style.active_tokens; keep it the only one."""
+    offenders = []
+    for rel in _tracked_sources():
+        if rel == SNIFF_HOME:
+            continue
+        path = os.path.join(ROOT, rel)
+        if not os.path.isfile(path):
+            continue
+        for line, name in sniff_copies_in(_parse(path)):
+            offenders.append(f"{rel}:{line}: {name}")
+    assert not offenders, (
+        "read the active theme through gui.theme_style.active_tokens "
+        "(deferred import inside timeline_ui, which the gui package "
+        "imports); no private copies:\n  " + "\n  ".join(offenders))
+
+
+def test_sniff_scanner_finds_a_copy():
+    """Self-test: both shapes of copy are caught, the real one is the
+    reference, and an unrelated styleSheet() read is not a copy."""
+    copy = ast.parse(
+        "def _active_tokens():\n    return {}\n"
+        "def pick():\n"
+        "    qss = QApplication.instance().styleSheet()\n"
+        "    return THEMES['light'] if 'x' in qss else THEMES['dark']\n"
+        "def unrelated(w):\n"
+        "    w.setStyleSheet(w.styleSheet() + 'padding: 2px;')\n")
+    assert [n for _l, n in sniff_copies_in(copy)] == ["_active_tokens",
+                                                       "pick"]
+    home = _parse(os.path.join(ROOT, SNIFF_HOME))
+    assert [n for _l, n in sniff_copies_in(home)] == ["active_tokens"]

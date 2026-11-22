@@ -89,9 +89,9 @@ def test_theme_manager_apply_sets_stylesheet(qapp, name):
         assert "#F0562E" in qapp.styleSheet()
     finally:
         # Never leak a non-dark theme into other tests on this xdist
-        # worker: token painters sniff the GLOBAL stylesheet (timeline_ui
-        # active_tokens, the tab _active_tokens helpers), so a left-over
-        # light theme flips brand-token assertions elsewhere - an
+        # worker: token painters sniff the GLOBAL stylesheet
+        # (gui.theme_style.active_tokens), so a left-over light theme
+        # flips brand-token assertions elsewhere - an
         # order-dependent flake. Restore the default (dark).
         tm.apply(qapp, "dark")
 

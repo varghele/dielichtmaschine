@@ -16,7 +16,7 @@ import json
 from PyQt6.QtWidgets import (
     QDockWidget, QWidget, QVBoxLayout, QHBoxLayout,
     QLineEdit, QTreeWidget, QTreeWidgetItem, QPushButton,
-    QLabel, QFrame, QStackedWidget, QApplication
+    QLabel, QFrame, QStackedWidget
 )
 from PyQt6.QtCore import QT_TRANSLATE_NOOP, QCoreApplication, Qt, pyqtSignal, QMimeData
 from PyQt6.QtGui import QDrag, QPixmap, QPainter, QColor, QFont
@@ -39,24 +39,6 @@ SCENES_EMPTY_TEXT = QT_TRANSLATE_NOOP(
     "RiffBrowserWidget", "No scenes yet · predefined looks arrive later")
 
 
-def _active_tokens() -> dict:
-    """The token dict of the theme currently applied to the app.
-
-    The applied stylesheet is the only reliable record of the active
-    theme, so sniff it the same way ``gui/tabs/stage_tab.py::_active_tokens``
-    does: the light theme's window color is unique to light. Falls back
-    to dark (the default before a theme is applied).
-    """
-    from gui.theme_tokens import THEMES
-
-    app = QApplication.instance()
-    qss = app.styleSheet() if app is not None else ""
-    light = THEMES.get("light")
-    if light is not None and light["window"] in qss:
-        return light
-    return THEMES["dark"]
-
-
 class RiffItemWidget(QFrame):
     """Widget representing a single riff in the browser."""
 
@@ -71,7 +53,8 @@ class RiffItemWidget(QFrame):
         # accent hover. No single theme role covers "raised surface + accent
         # hover", so this stays widget-local, but every color is a brand
         # token (radius 0 per the brand).
-        t = _active_tokens()
+        from gui.theme_style import active_tokens  # deferred (cycle)
+        t = active_tokens()
         self.setStyleSheet(f"""
             RiffItemWidget {{
                 background-color: {t['raised']};
@@ -173,7 +156,8 @@ class RiffItemWidget(QFrame):
         height = 30
         # Brand-colored preview: raised surface + primary text, read from
         # the active theme tokens (a QPainter can't reach QSS roles).
-        t = _active_tokens()
+        from gui.theme_style import active_tokens  # deferred (cycle)
+        t = active_tokens()
         fill = QColor(t['raised'])
         fill.setAlpha(220)
         pixmap = QPixmap(width, height)
@@ -214,7 +198,8 @@ class SceneItemWidget(QFrame):
     def _setup_ui(self):
         # Same raised-card treatment as RiffItemWidget so riffs and
         # scenes read as one library.
-        t = _active_tokens()
+        from gui.theme_style import active_tokens  # deferred (cycle)
+        t = active_tokens()
         self.setStyleSheet(f"""
             SceneItemWidget {{
                 background-color: {t['raised']};
@@ -295,7 +280,8 @@ class SceneItemWidget(QFrame):
         """Simple brand-colored drag preview (mirrors the riff one)."""
         width = 120
         height = 30
-        t = _active_tokens()
+        from gui.theme_style import active_tokens  # deferred (cycle)
+        t = active_tokens()
         fill = QColor(t['raised'])
         fill.setAlpha(220)
         pixmap = QPixmap(width, height)

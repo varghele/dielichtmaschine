@@ -71,8 +71,13 @@ verbatim as the GitHub Release notes (see [docs/releasing.md](docs/releasing.md)
   and song palettes, light colours) are its documented allowlist, keyed by
   where each one sits (file, enclosing function or constant, count) rather
   than by value, so a chrome colour that happens to equal a data colour
-  (the old white separator, the accent) is still caught. Nothing
-  looks different: every screen renders pixel-identical in both themes.
+  (the old white separator, the accent) is still caught. The active theme
+  is read in one place, `gui/theme_style.active_tokens`: the eleven
+  per-module copies of that stylesheet check (Structure, Stage, Live, Auto
+  and Fixtures tabs, the About, Autogen, colour and movement dialogs, the
+  riff browser, the timeline painters) are gone, and the lint rejects a
+  new one. Nothing looks different: every screen renders pixel-identical
+  in both themes.
 - **The core packages import without Qt.** The Auto Mode widgets moved from
   `auto/widgets/` to `gui/widgets/auto/`, the waveform widget from `audio/` to
   `timeline_ui/audio_waveform_widget.py` (next to the audio lane that uses

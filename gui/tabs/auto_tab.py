@@ -54,7 +54,7 @@ from PyQt6.QtWidgets import (
     QLabel, QPushButton, QSpinBox, QCheckBox, QSlider,
     QLineEdit, QComboBox, QGroupBox, QTableWidget, QTableWidgetItem,
     QHeaderView, QFrame, QScrollArea, QMenu, QInputDialog, QDialog,
-    QApplication, QSizePolicy,
+    QSizePolicy,
 )
 from PyQt6.QtCore import (QT_TRANSLATE_NOOP, QCoreApplication, Qt, QTimer,
                           QEvent, QPointF, pyqtSignal)
@@ -71,6 +71,7 @@ from audio.live_input import (GAIN_MAX, GAIN_MIN, LiveAudioInput,
 from audio.realtime_spectral import RealtimeSpectralAnalyzer, LiveFeatureFrame
 from gui.live_feature_bridge import LiveFeatureBridge
 from gui.fonts import FONT_MONO
+from gui.theme_style import active_tokens
 from gui.icons import shell_icon
 from gui.typography import DisplayLabel, MicroLabel, display_font, mono_font
 from gui.widgets.embedded_visualizer import EmbeddedVisualizer
@@ -157,23 +158,6 @@ ENGINE_LOG_CAPACITY = 50
 ENGINE_LOG_VISIBLE = 8
 
 
-def _active_tokens() -> dict:
-    """The token dict of the theme currently applied to the app.
-
-    Sniffs the applied stylesheet (ThemeManager.apply doesn't persist);
-    the light theme's window color is unique to light. Falls back to
-    dark. Same trick as gui/tabs/fixtures_tab.py.
-    """
-    from gui.theme_tokens import THEMES
-
-    app = QApplication.instance()
-    qss = app.styleSheet() if app is not None else ""
-    light = THEMES.get("light")
-    if light is not None and light["window"] in qss:
-        return light
-    return THEMES["dark"]
-
-
 def _mono_supports(char: str) -> bool:
     """Does the mono family actually carry ``char``?
 
@@ -242,7 +226,7 @@ class _Bar(QWidget):
         self.update()
 
     def paintEvent(self, event):
-        tokens = _active_tokens()
+        tokens = active_tokens()
         painter = QPainter(self)
         painter.fillRect(self.rect(), QColor(tokens["border"]))
         if self._fraction:
@@ -312,7 +296,7 @@ class _BarSlider(QWidget):
             self._set_from_x(event.position().x())
 
     def paintEvent(self, event):
-        tokens = _active_tokens()
+        tokens = active_tokens()
         painter = QPainter(self)
         track_top = (self.height() - 8) // 2
         painter.fillRect(0, track_top, self.width(), 8,
@@ -341,7 +325,7 @@ class _ColorWheelButton(QWidget):
             self.clicked.emit()
 
     def paintEvent(self, event):
-        tokens = _active_tokens()
+        tokens = active_tokens()
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         centre = QPointF(self.width() / 2.0, self.height() / 2.0)
@@ -385,7 +369,7 @@ class _Swatch(QWidget):
             self.clicked.emit(self._color)
 
     def paintEvent(self, event):
-        tokens = _active_tokens()
+        tokens = active_tokens()
         painter = QPainter(self)
         painter.fillRect(self.rect(), QColor(self._color))
         if self._selected:
@@ -413,7 +397,7 @@ class _EngineLogView(QWidget):
         self._layout.addStretch(1)
 
     def render_entries(self, entries) -> None:
-        tokens = _active_tokens()
+        tokens = active_tokens()
         while self._layout.count() > 1:
             item = self._layout.takeAt(0)
             widget = item.widget()
@@ -696,7 +680,7 @@ class AutoTab(BaseTab):
     # -- Center panel: the engine stage ------------------------------------
 
     def _build_center_panel(self) -> QWidget:
-        tokens = _active_tokens()
+        tokens = active_tokens()
         panel = QWidget()
         panel.setObjectName("AutoEngineStage")
         panel.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
@@ -1775,7 +1759,7 @@ class AutoTab(BaseTab):
         """Update the ASIO status label below the device combo (warn/info
         only - the ``ok`` message would just add noise)."""
         from audio.device_manager import asio_status
-        tokens = _active_tokens()
+        tokens = active_tokens()
         status = asio_status()
         level = status["level"]
         if level == "ok":

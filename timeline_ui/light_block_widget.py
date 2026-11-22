@@ -23,25 +23,6 @@ logger = logging.getLogger(__name__)
 ACCENT = QColor(240, 86, 46)
 
 
-def active_tokens() -> dict:
-    """Token dict of the theme currently applied to the app.
-
-    Custom painters cannot reach QSS roles, so they read the brand
-    tokens directly. Same stylesheet sniff the tabs use (see
-    gui/dialogs/autogen_dialog._active_tokens): the light theme's
-    window color only ever appears in the light stylesheet.
-    """
-    from PyQt6.QtWidgets import QApplication
-    from gui.theme_tokens import THEMES
-
-    app = QApplication.instance()
-    qss = app.styleSheet() if app is not None else ""
-    light = THEMES.get("light")
-    if light is not None and light["window"] in qss:
-        return light
-    return THEMES["dark"]
-
-
 def token_qcolor(key: str, alpha: int = 255) -> QColor:
     """Brand token as a QColor, optionally with an alpha override.
 
@@ -49,6 +30,8 @@ def token_qcolor(key: str, alpha: int = 255) -> QColor:
     string tokens (e.g. accent_tint) are not QColor-parseable, so we
     pass the base accent through with an explicit alpha instead.
     """
+    # Deferred: importing the gui package pulls in timeline_ui.
+    from gui.theme_style import active_tokens
     tok = active_tokens()
     color = QColor(tok[key])
     if alpha != 255:

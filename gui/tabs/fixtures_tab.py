@@ -50,6 +50,7 @@ from config.models import (
     primary_group_name,
 )
 from gui.theme_tokens import THEMES
+from gui.theme_style import active_tokens
 from utils.fixture_utils import get_cached_fixture_definitions
 from utils.dmx_conflicts import (
     AddressConflict,
@@ -364,25 +365,6 @@ def group_stripe_pixmap(color_names) -> QtGui.QPixmap:
     return pixmap
 
 
-def _active_tokens() -> dict:
-    """The token dict of the theme currently applied to the app.
-
-    The applied stylesheet is the only reliable record of the active
-    theme (ThemeManager.apply deliberately doesn't persist), so sniff
-    it: the light theme's window color is unique to light. Falls back
-    to dark.
-    """
-    from PyQt6.QtWidgets import QApplication
-    from gui.theme_tokens import THEMES
-
-    app = QApplication.instance()
-    qss = app.styleSheet() if app is not None else ""
-    light = THEMES.get("light")
-    if light is not None and light["window"] in qss:
-        return light
-    return THEMES["dark"]
-
-
 # The wrapping chip layout moved to gui/widgets/flow_layout.py when the
 # morph patchbay needed it too; the alias keeps this tab's call sites.
 from gui.widgets.flow_layout import FlowLayout as _FlowLayout  # noqa: E402
@@ -494,7 +476,7 @@ class FixturesTab(BaseTab):
         from gui.typography import MicroLabel, display_font
         from gui.widgets.chip import Chip
 
-        self._tokens = _active_tokens()
+        self._tokens = active_tokens()
 
         main_layout = QtWidgets.QVBoxLayout(self)
         main_layout.setContentsMargins(0, 0, 0, 0)
@@ -906,7 +888,7 @@ class FixturesTab(BaseTab):
     def _update_from_config_inner(self, current_fingerprint):
         """Inner implementation of update_from_config."""
         self._last_fixture_fingerprint = current_fingerprint
-        self._tokens = _active_tokens()
+        self._tokens = active_tokens()
         self._style_groups_hint()
         self.existing_groups = set(self.config.groups.keys())
 
@@ -996,7 +978,7 @@ class FixturesTab(BaseTab):
         if row >= len(self.config.fixtures):
             return
         fixture = self.config.fixtures[row]
-        tokens = self._tokens or _active_tokens()
+        tokens = self._tokens or active_tokens()
 
         base = QtGui.QColor(tokens["panel"])
         member_colors = [QtGui.QColor(self._ensure_group_color(name))
@@ -1146,7 +1128,7 @@ class FixturesTab(BaseTab):
         from gui.typography import MicroLabel
         from gui.fonts import FONT_UI
 
-        tokens = self._tokens or _active_tokens()
+        tokens = self._tokens or active_tokens()
         color = self._ensure_group_color(name)
         selected = (name == self._selected_group)
 

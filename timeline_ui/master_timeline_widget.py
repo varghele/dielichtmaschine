@@ -220,7 +220,8 @@ class MasterTimelineWidget(TimelineWidget):
         the BPM tag drops before anything paints outside its region."""
         from PyQt6.QtGui import QFont
         from gui.typography import display_font, mono_font
-        from .light_block_widget import active_tokens, elided
+        from gui.theme_style import active_tokens
+        from .light_block_widget import elided
 
         tokens = active_tokens()
         name_color = QColor(tokens["text"])
@@ -412,7 +413,7 @@ class MasterTimelineContainer(QWidget):
         theme (text_secondary), not a hardcoded #333 that only reads on a
         light background. Custom-styled QLabels can't reach a QSS role, so
         we sniff the brand tokens the same way the block painter does."""
-        from .light_block_widget import active_tokens
+        from gui.theme_style import active_tokens
         return (f"color: {active_tokens()['text_secondary']}; "
                 f"font-size: {point_size}px;")
 

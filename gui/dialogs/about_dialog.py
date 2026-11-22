@@ -21,6 +21,7 @@ from PyQt6.QtWidgets import (QDialog, QFrame, QHBoxLayout, QLabel,
                              QPushButton, QVBoxLayout)
 
 from gui.fonts import FONT_MONO
+from gui.theme_style import active_tokens
 from gui.typography import DisplayLabel, MicroLabel, mono_font
 from utils import app_identity
 
@@ -58,20 +59,6 @@ ABOUT_BODY = QT_TRANSLATE_NOOP("AboutDialog", (
 ))
 
 
-def _active_tokens() -> dict:
-    """The token dict of the applied theme (same sniff as the tabs:
-    the applied stylesheet is the only record of the active theme)."""
-    from PyQt6.QtWidgets import QApplication
-    from gui.theme_tokens import THEMES
-
-    app = QApplication.instance()
-    qss = app.styleSheet() if app is not None else ""
-    light = THEMES.get("light")
-    if light is not None and light["window"] in qss:
-        return light
-    return THEMES["dark"]
-
-
 class AboutDialog(QDialog):
     """Modal About card: brand block, body, rating plate, links."""
 
@@ -81,7 +68,7 @@ class AboutDialog(QDialog):
         self.setObjectName("AboutDialog")
         self.setFixedWidth(520)
 
-        tokens = _active_tokens()
+        tokens = active_tokens()
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(28, 24, 28, 20)

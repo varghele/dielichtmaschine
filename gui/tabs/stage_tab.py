@@ -47,6 +47,7 @@ from PyQt6.QtCore import Qt, QTimer, QEvent, QCoreApplication
 from utils.app_settings import app_settings
 from config.models import Configuration, primary_group_name
 from .base_tab import BaseTab
+from gui.theme_style import active_tokens
 from gui.StageView import StageView
 from gui.stage_items import FixtureItem
 from gui.dialogs.orientation_dialog import OrientationDialog, OrientationPanel
@@ -71,24 +72,6 @@ REFERENCE_ELEMENT_ORDER = (
     "drum-riser", "wedge", "amp", "mic-stand",
     "keys", "distro", "riser", "foh",
 )
-
-
-def _active_tokens() -> dict:
-    """The token dict of the theme currently applied to the app.
-
-    Same sniff as the Fixtures screen: the applied stylesheet is the
-    only reliable record of the active theme (ThemeManager.apply
-    deliberately doesn't persist). Falls back to dark.
-    """
-    from PyQt6.QtWidgets import QApplication
-    from gui.theme_tokens import THEMES
-
-    app = QApplication.instance()
-    qss = app.styleSheet() if app is not None else ""
-    light = THEMES.get("light")
-    if light is not None and light["window"] in qss:
-        return light
-    return THEMES["dark"]
 
 
 def _chevron_icon(expanded: bool, color: str, size: int = 12):
@@ -299,7 +282,7 @@ class StageTab(BaseTab):
             config: Shared Configuration object
             parent: Parent widget (typically MainWindow)
         """
-        self._tokens = _active_tokens()
+        self._tokens = active_tokens()
 
         super().__init__(config, parent)
 
@@ -318,7 +301,7 @@ class StageTab(BaseTab):
     def setup_ui(self):
         """Build the reference screen: action strip, library panel, plan
         with overlay chrome, 3D preview + inspector column."""
-        self._tokens = _active_tokens()
+        self._tokens = active_tokens()
 
         outer_layout = QtWidgets.QVBoxLayout(self)
         outer_layout.setContentsMargins(0, 0, 0, 0)

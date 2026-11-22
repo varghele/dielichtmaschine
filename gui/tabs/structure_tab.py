@@ -82,7 +82,7 @@ PART_MIME_TYPE = "application/x-lichtmaschine-part"
 SETLIST_MIME_TYPE = "application/x-lichtmaschine-setlist-entry"
 from config.models import (Configuration, Song, ShowPart, TimelineData,
                            SetlistEntry)
-from gui.theme_style import bind_style, unbind_style
+from gui.theme_style import active_tokens, bind_style, unbind_style
 from gui.typography import DisplayLabel, MicroLabel, display_font, mono_font
 from gui.widgets.chip import Chip
 from timeline.song_structure import SongStructure
@@ -91,25 +91,6 @@ from timeline_ui import AudioLaneWidget, MasterTimelineContainer, TimelineGrid
 from .base_tab import BaseTab
 
 logger = logging.getLogger(__name__)
-
-
-def _active_tokens() -> dict:
-    """The token dict of the theme currently applied to the app.
-
-    The applied stylesheet is the only reliable record of the active
-    theme (ThemeManager.apply deliberately doesn't persist), so sniff
-    it: the light theme's window color is unique to light. Falls back
-    to dark. Same trick as gui/tabs/fixtures_tab.py.
-    """
-    from PyQt6.QtWidgets import QApplication
-    from gui.theme_tokens import THEMES
-
-    app = QApplication.instance()
-    qss = app.styleSheet() if app is not None else ""
-    light = THEMES.get("light")
-    if light is not None and light["window"] in qss:
-        return light
-    return THEMES["dark"]
 
 
 def format_clock(seconds: float) -> str:
@@ -318,7 +299,7 @@ class MeterBar(QWidget):
         self.setSizePolicy(QSizePolicy.Policy.Expanding,
                            QSizePolicy.Policy.Fixed)
         self._fraction = 0.0
-        tokens = _active_tokens()
+        tokens = active_tokens()
         self._track = QColor(tokens["meter_track"])
         self._fill = QColor(tokens["meter_fill"])
 
@@ -365,7 +346,7 @@ class AnalysisRow(QWidget):
         self.value_label.setFont(mono_font(9))
         layout.addWidget(self.value_label)
 
-        self._tokens = _active_tokens()
+        self._tokens = active_tokens()
         self._fraction = 0.0
         self._text = ""
         self._leading = False
@@ -636,7 +617,7 @@ class PartCard(QWidget):
             f"BPM · {getattr(part, 'duration', 0.0):.1f} s")
         self.check_label.setVisible(selected)
         self._apply_part_style(part.color, selected, playing,
-                               tokens or _active_tokens())
+                               tokens or active_tokens())
 
     def _apply_part_style(self, color: str, selected: bool,
                           playing: bool, tokens: dict) -> None:
@@ -1012,7 +993,7 @@ class StructureTab(BaseTab):
         (title row, parts strip, master grid + transport + hint), 340px
         inspector (SONG / AFTER THE SONG / PART / AUDIO ANALYSIS), mono
         status strip."""
-        self._tokens = _active_tokens()
+        self._tokens = active_tokens()
 
         main_layout = QVBoxLayout(self)
         main_layout.setContentsMargins(0, 0, 0, 0)
@@ -1184,7 +1165,7 @@ class StructureTab(BaseTab):
         widget-local). The CTA's chrome is theme-owned via
         ``QPushButton[role="cta-outline"]``.
         """
-        tokens = self._tokens or _active_tokens()
+        tokens = self._tokens or active_tokens()
         has_audio = getattr(self, "_audio_readout_has_file", False)
         color = tokens["text_secondary"] if has_audio else tokens["text_disabled"]
         self.audio_readout.setStyleSheet(
@@ -1280,7 +1261,7 @@ class StructureTab(BaseTab):
     def _build_setlist_rail(self) -> QWidget:
         """The 330px left rail: header (setlist name + totals + SYNC
         segments + device hint), the scrolling card list, footer hint."""
-        tokens = self._tokens or _active_tokens()
+        tokens = self._tokens or active_tokens()
 
         rail = QWidget()
         rail.setObjectName("SetlistRail")
@@ -1498,7 +1479,7 @@ class StructureTab(BaseTab):
         unlisted = [name for name in sorted(self.config.songs)
                     if name not in listed]
         if unlisted:
-            tokens = self._tokens or _active_tokens()
+            tokens = self._tokens or active_tokens()
             self._unlisted_divider = self._rail_divider(tokens)
             self._rail_layout.addSpacing(6)
             self._rail_layout.addWidget(self._unlisted_divider)
@@ -1518,7 +1499,7 @@ class StructureTab(BaseTab):
         for the drag that may follow the press)."""
         if self._rail_host is None:
             return
-        tokens = self._tokens or _active_tokens()
+        tokens = self._tokens or active_tokens()
         setlist = self.config.setlist
 
         name = setlist.name or self._config_display_name()
@@ -1638,7 +1619,7 @@ class StructureTab(BaseTab):
         column.setContentsMargins(0, 0, 0, 0)
         column.setSpacing(0)
 
-        tokens = self._tokens or _active_tokens()
+        tokens = self._tokens or active_tokens()
         self._inspector_dividers = []
         self._inspector_segment_hosts = []
 
@@ -2399,7 +2380,7 @@ class StructureTab(BaseTab):
     def _style_master_grid_header(self):
         """Hairline chrome of the master grid frame + header column
         (token-read, so it follows theme switches)."""
-        tokens = self._tokens or _active_tokens()
+        tokens = self._tokens or active_tokens()
         self._grid_frame.setStyleSheet(
             f"QWidget#MasterGridFrame {{"
             f" border: 1px solid {tokens['border']}; }}")
@@ -2611,7 +2592,7 @@ class StructureTab(BaseTab):
     def _refresh_cards(self):
         """Push part data into the existing cards and chips."""
         parts = self.current_show.parts if self.current_show else []
-        tokens = self._tokens or _active_tokens()
+        tokens = self._tokens or active_tokens()
         for i, card in enumerate(self._cards):
             if i < len(parts):
                 card.update_data(parts[i], i == self._selected_index,
@@ -3206,7 +3187,7 @@ class StructureTab(BaseTab):
     def _apply_tokens(self):
         """Re-read the active theme's tokens and push them into the
         widget-local (data-colored) chrome."""
-        self._tokens = _active_tokens()
+        self._tokens = active_tokens()
         for tile in self._stat_tiles + (self.stat_colour,):
             tile.apply_tokens(self._tokens)
         for analysis_row in self._analysis_rows:

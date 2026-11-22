@@ -25,8 +25,8 @@ from timeline_ui.riff_browser_widget import (
     CollapsedRiffBar,
     SCENE_MIME_TYPE,
     SCENES_EMPTY_TEXT,
-    _active_tokens,
 )
+from gui.theme_style import active_tokens
 
 # The pre-rebrand palette that must be gone from the widget.
 MATERIAL_HEXES = ("#0078d4", "#4a4a4a", "#3c3c3c", "#2d2d2d")
@@ -77,7 +77,7 @@ def test_riff_item_uses_brand_tokens_not_material(qapp):
         for hexv in MATERIAL_HEXES:
             assert hexv not in ss, f"{hexv} still present in riff item style"
 
-        tokens = _active_tokens()  # dark when no theme is applied
+        tokens = active_tokens()  # dark when no theme is applied
         # The card surface + accent hover come from brand tokens.
         assert tokens["raised"].lower() in ss
         assert tokens["accent"].lower() in ss

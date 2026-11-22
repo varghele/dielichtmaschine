@@ -36,6 +36,7 @@ from PyQt6.QtGui import QColor, QFont
 from autogen.matcher import AutogenConfig
 from autogen.color_generator import SongPalette, get_preset_names, get_preset_palette
 from gui.typography import DisplayLabel, MicroLabel, mono_font
+from gui.theme_style import active_tokens
 from gui.widgets.chip import Chip
 
 #: Width of the reference board's left configuration column.
@@ -63,23 +64,6 @@ KEY_SIGNATURES = [
     "Db major", "Eb major", "Eb minor",
     "Gb major", "Ab major", "Ab minor", "Bb major", "Bb minor",
 ]
-
-
-def _active_tokens() -> dict:
-    """Token dict of the theme currently applied to the app.
-
-    Same stylesheet sniff as gui/tabs/structure_tab.py: the light
-    theme's window color only ever appears in the light stylesheet.
-    """
-    from PyQt6.QtWidgets import QApplication
-    from gui.theme_tokens import THEMES
-
-    app = QApplication.instance()
-    qss = app.styleSheet() if app is not None else ""
-    light = THEMES.get("light")
-    if light is not None and light["window"] in qss:
-        return light
-    return THEMES["dark"]
 
 
 class AutogenWorker(QThread):
@@ -280,7 +264,7 @@ class _ColorButton(QPushButton):
 
     def _update_style(self):
         r, g, b = self.color
-        border = _active_tokens()["border"]
+        border = active_tokens()["border"]
         self.setStyleSheet(
             f"background-color: rgb({r},{g},{b}); "
             f"border: 1px solid {border}; border-radius: 0px;"
@@ -651,7 +635,7 @@ class AutogenDialog(QDialog):
         self.white_swatch.setFixedSize(30, 30)
         self.white_swatch.setStyleSheet(
             f"background-color: #FFFFFF; "
-            f"border: 1px solid {_active_tokens()['border']};")
+            f"border: 1px solid {active_tokens()['border']};")
         swatch_row.addWidget(self.white_swatch)
         swatch_row.addStretch()
         layout.addWidget(swatches)

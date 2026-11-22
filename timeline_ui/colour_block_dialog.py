@@ -11,6 +11,7 @@ from PyQt6.QtCore import QT_TRANSLATE_NOOP, QCoreApplication, Qt
 from PyQt6.QtGui import QColor
 from config.models import ColourBlock
 from gui.typography import mono_font
+from gui.theme_style import active_tokens
 
 #: role combo sentinel labels (v1.5 palette roles). English sources,
 #: translated where shown; the combo's itemData is the key ("" literal,
@@ -20,25 +21,6 @@ LITERAL_LABEL = QT_TRANSLATE_NOOP("ColourBlockDialog",
 NEW_ROLE_LABEL = QT_TRANSLATE_NOOP("ColourBlockDialog", "New role...")
 
 
-def _active_tokens() -> dict:
-    """Token dict of the theme currently applied to the app.
-
-    Same stylesheet sniff as gui/tabs/stage_tab.py: the light theme's
-    window color only ever appears in the light stylesheet. The colour
-    swatches below are *data* colors (the user's chosen colour), so only
-    their neutral chrome (borders) is sourced from the theme.
-    """
-    from PyQt6.QtWidgets import QApplication
-    from gui.theme_tokens import THEMES
-
-    app = QApplication.instance()
-    qss = app.styleSheet() if app is not None else ""
-    light = THEMES.get("light")
-    if light is not None and light["window"] in qss:
-        return light
-    return THEMES["dark"]
-
-
 class ColorPreviewWidget(QFrame):
     """Widget showing color preview."""
 
@@ -46,7 +28,7 @@ class ColorPreviewWidget(QFrame):
         super().__init__(parent)
         self.setMinimumHeight(60)
         self.setFrameShape(QFrame.Shape.Box)
-        self._border = _active_tokens()["border"]
+        self._border = active_tokens()["border"]
         self.setStyleSheet(
             f"background-color: #000000; border: 1px solid {self._border};")
         self._color = QColor(0, 0, 0)
@@ -74,7 +56,7 @@ class ColorPresetButton(QPushButton):
         self.color_value = color
         self.setFixedHeight(35)
         self.setMinimumWidth(70)
-        tokens = _active_tokens()
+        tokens = active_tokens()
         border = tokens["border"]
         accent = tokens["accent"]
         # Set button style with the color
@@ -175,7 +157,7 @@ class PaletteEditorDialog(QDialog):
 
     def _set_swatch(self, swatch: QPushButton, rgb: tuple) -> None:
         swatch.rgb = (int(rgb[0]), int(rgb[1]), int(rgb[2]))
-        border = _active_tokens()["border"]
+        border = active_tokens()["border"]
         swatch.setStyleSheet(
             f"QPushButton {{ background-color: "
             f"rgb({swatch.rgb[0]}, {swatch.rgb[1]}, {swatch.rgb[2]}); "

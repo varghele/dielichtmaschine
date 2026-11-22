@@ -9,24 +9,7 @@ from PyQt6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QFormLayout,
 from PyQt6.QtCore import QCoreApplication, Qt, pyqtSignal
 from PyQt6.QtGui import QPainter, QColor, QPen, QBrush, QPainterPath
 from config.models import MovementBlock
-
-
-def _active_tokens() -> dict:
-    """Token dict of the theme currently applied to the app.
-
-    Same stylesheet sniff as gui/tabs/stage_tab.py. Used only for the
-    neutral chrome (backdrop/border) of the pan/tilt canvas; the shape,
-    boundary and position overlays it paints are data colors.
-    """
-    from PyQt6.QtWidgets import QApplication
-    from gui.theme_tokens import THEMES
-
-    app = QApplication.instance()
-    qss = app.styleSheet() if app is not None else ""
-    light = THEMES.get("light")
-    if light is not None and light["window"] in qss:
-        return light
-    return THEMES["dark"]
+from gui.theme_style import active_tokens
 
 
 def generate_shape_points(effect_type: str, center_pan: float, center_tilt: float,
@@ -191,7 +174,7 @@ class PanTiltWidget(QFrame):
         super().__init__(parent)
         self.setMinimumSize(250, 250)
         self.setFrameShape(QFrame.Shape.Box)
-        tokens = _active_tokens()
+        tokens = active_tokens()
         self.setStyleSheet(
             f"background-color: {tokens['window']}; "
             f"border: 1px solid {tokens['border']};")
