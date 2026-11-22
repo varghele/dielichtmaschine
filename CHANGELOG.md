@@ -39,7 +39,10 @@ verbatim as the GitHub Release notes (see [docs/releasing.md](docs/releasing.md)
   the tokens on every theme switch (`gui/theme_style.py`), and the TCP
   status and the separator are styled by the theme template. A new lint
   test rejects colour literals outside the token file; data colours (group
-  and song palettes, light colours) are its documented allowlist. Nothing
+  and song palettes, light colours) are its documented allowlist, keyed by
+  where each one sits (file, enclosing function or constant, count) rather
+  than by value, so a chrome colour that happens to equal a data colour
+  (the old white separator, the accent) is still caught. Nothing
   looks different: every screen renders pixel-identical in both themes.
 - **The core packages import without Qt.** The Auto Mode widgets moved from
   `auto/widgets/` to `gui/widgets/auto/`, the waveform widget from `audio/` to

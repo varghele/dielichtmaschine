@@ -13,7 +13,8 @@ static checks keep it that way:
    key a template rule by objectName / dynamic property instead.
 2. Every hex colour literal anywhere in the UI packages' string
    constants (docstrings excluded) must be listed in ``HEX_ALLOWLIST``
-   below, which exists only for DATA colours: fixture/group/song data
+   below, by file, enclosing scope and count, which exists only for
+   DATA colours: fixture/group/song data
    palettes, light colours the user picks or busks, contrast ink chosen
    from a data fill, and self-contained palettes that are deliberately
    theme-independent. A new chrome colour belongs in theme_tokens.py.
@@ -70,51 +71,87 @@ COLOUR_PROPS = re.compile(
 #: DATA colours only; empty since the v1.5.6 sweep.
 NAMED_ALLOWLIST = set()
 
-#: Hex literals allowed in UI string constants, per file. DATA ONLY.
+def _in(scope, *literals):
+    """Allow each literal once in ``scope`` (repeat one to allow it
+    twice). Literals are upper-cased hex, as the scanner reports them."""
+    return {(lit, scope): literals.count(lit) for lit in literals}
+
+
+#: The default group/song data palette (the Fixtures-screen palette and
+#: its copies).
+DATA_PALETTE = ("#D9A441", "#4ECBD4", "#C95FD0", "#6F9E4C",
+                "#5F86C9", "#C96A5F", "#9A7FD0", "#8D9299")
+
+#: Hex literals allowed in UI string constants, DATA ONLY, as
+#: {relpath: {(LITERAL, scope): count}}. The scope is the dotted chain
+#: of enclosing classes/functions, or the target of a module- or
+#: class-level assignment (see ``_scopes``). Keying by location, not by
+#: value, matters: many data colours equal chrome literals the sweep
+#: removed (#FFFFFF contrast ink vs the old white "/" separator, the
+#: #8D9299 palette entry vs the old patchbay neutral, the accent in a
+#: lane palette), so a value-only list would let those come back.
 HEX_ALLOWLIST = {
-    # Default group/song data palettes (the Fixtures-screen palette and
-    # its copies) and the "no colour set" group default.
+    # The group palette, and the "no colour set" group default.
     "gui/tabs/fixtures_tab.py": {
-        "#D9A441", "#4ECBD4", "#C95FD0", "#6F9E4C", "#5F86C9", "#C96A5F",
-        "#9A7FD0", "#8D9299", "#808080"},
+        **_in("GROUP_PALETTE", *DATA_PALETTE),
+        **_in("FixturesTab._ensure_group_color", "#808080"),
+        **_in("FixturesTab._update_groups", "#808080"),
+        **_in("FixturesTab._update_groups.build_group", "#808080")},
     "gui/tabs/structure_tab.py": {
-        "#D9A441", "#4ECBD4", "#C95FD0", "#6F9E4C", "#5F86C9", "#C96A5F",
-        "#9A7FD0", "#8D9299",
-        # ColorButton: default part colour, and black/white contrast ink
-        # picked from the user's part colour.
-        "#FFFFFF", "#4CAF50", "#000000"},
+        **_in("SONG_COLOR_PALETTE", *DATA_PALETTE),
+        # ColorButton: its default colour, and the black/white contrast
+        # ink picked from the user's part colour.
+        **_in("ColorButton.__init__", "#FFFFFF"),
+        **_in("ColorButton._update_style", "#000000", "#FFFFFF"),
+        # The default part colour of a new part / song.
+        **_in("StructureTab._build_part_section", "#4CAF50"),
+        **_in("StructureTab._add_new_part", "#4CAF50"),
+        **_in("StructureTab._create_new_show", "#4CAF50")},
     "gui/tabs/auto_tab.py": {
-        "#D9A441", "#4ECBD4", "#C95FD0", "#6F9E4C", "#5F86C9", "#C96A5F",
-        "#9A7FD0", "#8D9299", "#808080",
+        **_in("GROUP_PALETTE", *DATA_PALETTE),
+        **_in("VOCAL_COLOR", "#4ECBD4"),
+        **_in("INPUT_LEVEL_COLOR", "#D9A441"),
+        **_in("AutoTab._group_color", "#808080"),
         # Colour-override presets + the hue-ring gradient (light colours).
-        "#FF2850", "#FF4040", "#F0562E", "#40FF70", "#40C8FF", "#8040FF",
-        "#FF40C0"},
+        **_in("COLOR_PRESETS", "#FF2850", "#C95FD0", "#4ECBD4"),
+        **_in("_ColorWheelButton.paintEvent", "#FF4040", "#F0562E",
+              "#40FF70", "#40C8FF", "#8040FF", "#FF40C0", "#FF4040")},
     "gui/tabs/live_tab.py": {
-        "#D9A441", "#4ECBD4", "#C95FD0", "#6F9E4C", "#5F86C9", "#C96A5F",
-        "#9A7FD0", "#8D9299", "#808080",
+        **_in("GROUP_PALETTE", *DATA_PALETTE),
+        **_in("DEFAULT_GROUP_COLOR", "#808080"),
         # The busk COLOUR pool: light colours sent to fixtures.
-        "#FFFFFF", "#FFB43C", "#FF2850", "#4060FF", "#40FF70"},
+        **_in("COLOUR_SWATCHES", "#FFFFFF", "#FFB43C", "#FF2850",
+              "#C95FD0", "#4ECBD4", "#4060FF", "#40FF70", "#FF2850",
+              "#4ECBD4", "#C95FD0", "#FFB43C")},
     # Source-lane wire colours of the morph patchbay (data palette, one
     # per source group, cycled).
     "gui/dialogs/morph_patchbay.py": {
-        "#D9A441", "#4ECBD4", "#C95FD0", "#6F9E4C", "#F0562E", "#8D9299"},
+        **_in("LANE_COLOURS", "#D9A441", "#4ECBD4", "#C95FD0", "#6F9E4C",
+              "#F0562E", "#8D9299")},
     # Group data-colour default when a fixture's group has none.
-    "gui/StageView.py": {"#808080"},
-    "visualizer/tcp/client.py": {"#808080"},
+    "gui/StageView.py": _in("StageView.update_from_config", "#808080"),
+    "visualizer/tcp/client.py": _in(
+        "VisualizerTCPClient._handle_groups", "#808080"),
     # Contrast ink on a user-picked colour preset (black/white by
     # lightness of the DATA fill), and the initial black preview.
-    "timeline_ui/colour_block_dialog.py": {"#000000", "#FFFFFF"},
+    "timeline_ui/colour_block_dialog.py": {
+        **_in("ColorPresetButton.__init__", "#000000", "#FFFFFF"),
+        **_in("ColorPreviewWidget.__init__", "#000000"),
+        **_in("ColourBlockDialog.setup_ui", "#000000")},
     # The autogen white swatch: the white light every generated palette
     # carries (data, shown next to the three picked fills).
-    "gui/dialogs/autogen_dialog.py": {"#FFFFFF"},
-    # Developer analysis plots with their own fixed dark data-viz
-    # palette (QColor constants at the module top); the rich-text role
-    # spans mirror ROLE_COLORS.
-    "gui/dialogs/generation_inspector.py": {
-        "#666", "#4B4", "#48C", "#E84", "#888"},
-    # The fixture icon SVGs ship with this stroke colour; it is the
-    # placeholder the loader substitutes with the fixture's data colour.
-    "gui/widgets/fixture_icons.py": {"#8D9299"},
+    "gui/dialogs/autogen_dialog.py": _in(
+        "AutogenDialog._build_palette_block", "#FFFFFF"),
+    # Developer analysis plot with its own fixed dark data-viz palette;
+    # the rich-text role spans mirror ROLE_COLORS.
+    "gui/dialogs/generation_inspector.py": _in(
+        "GenerationInspector._update_info",
+        "#666", "#4B4", "#48C", "#E84", "#888", "#888"),
+    # The fixture icon SVGs ship with this stroke colour (both cases);
+    # it is the placeholder the loader substitutes with the fixture's
+    # data colour.
+    "gui/widgets/fixture_icons.py": _in(
+        "_SYMBOL_COLOR_TOKENS", "#8D9299", "#8D9299"),
 }
 
 
@@ -154,8 +191,44 @@ def _docstring_nodes(tree: ast.AST) -> set:
     return ids
 
 
+def _scopes(tree: ast.AST) -> dict:
+    """{id(node): scope} for every node: the dotted chain of enclosing
+    classes and functions, plus the assignment target when the string
+    sits in a module- or class-level assignment (``LANE_COLOURS``,
+    ``ColorButton.__init__``). ``<module>`` for anything else at the
+    top level."""
+    scopes = {}
+
+    def targets(stmt):
+        if isinstance(stmt, ast.Assign):
+            nodes = stmt.targets
+        elif isinstance(stmt, ast.AnnAssign):
+            nodes = [stmt.target]
+        else:
+            return []
+        return [n.id for t in nodes for n in ast.walk(t)
+                if isinstance(n, ast.Name)]
+
+    def visit(node, chain, top_level):
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef,
+                             ast.ClassDef)):
+            chain = chain + [node.name]
+            top_level = isinstance(node, ast.ClassDef)
+        elif top_level and isinstance(node, ast.stmt):
+            names = targets(node)
+            if names:
+                chain = chain + ["/".join(names)]
+            top_level = False
+        scopes[id(node)] = ".".join(chain) or "<module>"
+        for child in ast.iter_child_nodes(node):
+            visit(child, chain, top_level)
+
+    visit(tree, [], True)
+    return scopes
+
+
 def _strings(tree: ast.AST):
-    """(lineno, text) of every string in the module, docstrings
+    """(node, lineno, text) of every string in the module, docstrings
     excluded. An f-string is one string with its holes as 'X' (a token
     read), so a declaration split across holes is still seen whole."""
     docs = _docstring_nodes(tree)
@@ -169,18 +242,18 @@ def _strings(tree: ast.AST):
                     text.append(str(part.value))
                 else:
                     text.append("X")
-            yield node.lineno, "".join(text)
+            yield node, node.lineno, "".join(text)
     for node in ast.walk(tree):
         if (isinstance(node, ast.Constant) and isinstance(node.value, str)
                 and id(node) not in docs and id(node) not in inside_fstring):
-            yield node.lineno, node.value
+            yield node, node.lineno, node.value
 
 
 def named_colour_violations():
     out = []
     for path in _ui_sources():
         rel = _rel(path)
-        for line, text in _strings(_parse(path)):
+        for _node, line, text in _strings(_parse(path)):
             for prop, value in DECL_RE.findall(text):
                 if not COLOUR_PROPS.match(prop):
                     continue
@@ -191,16 +264,40 @@ def named_colour_violations():
     return out
 
 
-def hex_literals():
-    """{relpath: {(LITERAL, lineno), ...}} over non-docstring strings."""
+def hex_sites_in(tree: ast.AST) -> dict:
+    """{(LITERAL, scope): [lineno, ...]} over non-docstring strings."""
+    scopes = _scopes(tree)
+    found = {}
+    for node, line, text in _strings(tree):
+        for m in HEX_RE.finditer(text):
+            key = ("#" + m.group(1).upper(), scopes[id(node)])
+            found.setdefault(key, []).append(line)
+    return found
+
+
+def hex_sites():
+    """{relpath: {(LITERAL, scope): [lineno, ...]}} over the UI sources."""
     found = {}
     for path in _ui_sources():
-        rel = _rel(path)
-        for line, text in _strings(_parse(path)):
-            for m in HEX_RE.finditer(text):
-                found.setdefault(rel, set()).add(
-                    ("#" + m.group(1).upper(), line))
+        sites = hex_sites_in(_parse(path))
+        if sites:
+            found[_rel(path)] = sites
     return found
+
+
+def hex_offenders(rel: str, sites: dict) -> list:
+    """Occurrences beyond what HEX_ALLOWLIST grants ``rel``: a literal
+    in a scope the allowlist does not name, or more occurrences of it
+    there than the listed count."""
+    allowed = HEX_ALLOWLIST.get(rel, {})
+    out = []
+    for (literal, scope), lines in sorted(sites.items()):
+        extra = len(lines) - allowed.get((literal, scope), 0)
+        if extra > 0:
+            where = ",".join(str(n) for n in sorted(lines))
+            out.append(f"{rel}:{where}: {literal} in {scope} "
+                       f"({len(lines)} found, {len(lines) - extra} allowed)")
+    return out
 
 
 def test_no_named_colours_in_qss():
@@ -212,26 +309,30 @@ def test_no_named_colours_in_qss():
 
 
 def test_hex_literals_only_for_allowlisted_data_colours():
-    offenders = []
-    for rel, hits in sorted(hex_literals().items()):
-        allowed = HEX_ALLOWLIST.get(rel, set())
-        for literal, line in sorted(hits, key=lambda h: h[1]):
-            if literal not in allowed:
-                offenders.append(f"{rel}:{line}: {literal}")
+    offenders = [o for rel, sites in sorted(hex_sites().items())
+                 for o in hex_offenders(rel, sites)]
     assert not offenders, (
         "hex colour literal outside gui/theme_tokens.py: chrome colours "
-        "are theme tokens; only DATA colours may be allowlisted in "
-        "tests/unit/test_theme_lint.py. Offenders:\n  "
-        + "\n  ".join(offenders))
+        "are theme tokens; only DATA colours may be allowlisted (per "
+        "file, scope and count) in tests/unit/test_theme_lint.py. "
+        "Offenders:\n  " + "\n  ".join(offenders))
 
 
 def test_allowlists_have_no_stale_entries():
-    present = {rel: {lit for lit, _ in hits}
-               for rel, hits in hex_literals().items()}
-    stale = [f"{rel}: {lit}" for rel, lits in sorted(HEX_ALLOWLIST.items())
-             for lit in sorted(lits) if lit not in present.get(rel, set())]
+    """Exact: a listed (literal, scope) that occurs fewer times than its
+    count fails too, so the list only ever shrinks with the code."""
+    present = hex_sites()
+    stale = []
+    for rel, allowed in sorted(HEX_ALLOWLIST.items()):
+        sites = present.get(rel, {})
+        for (lit, scope), count in sorted(allowed.items()):
+            found = len(sites.get((lit, scope), []))
+            if found < count:
+                stale.append(f"{rel}: {lit} in {scope} "
+                             f"({count} allowed, {found} found)")
     assert not stale, ("allowlisted hex literal no longer in the code; "
-                       "drop it from HEX_ALLOWLIST:\n  " + "\n  ".join(stale))
+                       "lower or drop it in HEX_ALLOWLIST:\n  "
+                       + "\n  ".join(stale))
     for rel, _name in NAMED_ALLOWLIST:
         assert os.path.isfile(os.path.join(ROOT, rel)), rel
 
@@ -267,3 +368,58 @@ def test_scanner_reads_colours_not_selectors(snippet, expected):
 def test_hex_scanner_skips_object_names():
     assert not HEX_RE.search("#GroupRow { } #AutoBpmDisplay { }")
     assert HEX_RE.search("color: #888;")
+
+
+def _offenders_after(rel: str, old: str, new: str) -> list:
+    """hex_offenders for ``rel`` with ``old`` replaced by ``new`` (once,
+    in memory): what the lint would say about that edit."""
+    with open(os.path.join(ROOT, rel), "r", encoding="utf-8") as f:
+        source = f.read()
+    assert source.count(old) == 1, f"{rel}: anchor {old!r} not unique"
+    return hex_offenders(rel, hex_sites_in(ast.parse(source.replace(old, new))))
+
+
+@pytest.mark.parametrize("rel,old,new", [
+    # The white time-signature "/" the sweep exists for. #FFFFFF is
+    # allowlisted in this file, but only as ColorButton's ink/default.
+    ("gui/tabs/structure_tab.py",
+     'separator.setObjectName("TimeSignatureSeparator")',
+     'separator.setStyleSheet("color: #FFFFFF;")'),
+    # A second #FFFFFF QSS declaration inside an allowlisted scope: the
+    # count grows past what the allowlist grants.
+    ("gui/tabs/structure_tab.py",
+     'text_color = "#000000" if luminance > 0.5 else "#FFFFFF"',
+     'text_color = "#000000" if luminance > 0.5 else "#FFFFFF"\n'
+     '        self.setStyleSheet("border: 1px solid #FFFFFF;")'),
+    # The dark-only patchbay neutral d824bcb fixed for light; #8D9299 is
+    # allowlisted here only as the last LANE_COLOURS entry.
+    ("gui/dialogs/morph_patchbay.py",
+     "colour = NEUTRAL", 'colour = "#8d9299"'),
+    # The accent, allowlisted only in the lane palette and the hue ring.
+    ("gui/dialogs/morph_patchbay.py",
+     "colour = NEUTRAL", 'colour = "#F0562E"'),
+    ("gui/tabs/structure_tab.py",
+     'separator.setObjectName("TimeSignatureSeparator")',
+     'separator.setStyleSheet("color: #4CAF50;")'),
+])
+def test_allowlisted_value_in_a_new_place_is_rejected(rel, old, new):
+    """Self-test: the allowlist is keyed by location, not by value, so
+    a chrome literal that happens to equal a data colour of the same
+    file is still caught."""
+    assert not _offenders_after(rel, old, old)
+    assert _offenders_after(rel, old, new)
+
+
+def test_scopes_name_assignment_targets_and_defs():
+    tree = ast.parse(
+        'A = ("#111111",)\n'
+        'class K:\n'
+        '    B = "#222222"\n'
+        '    def f(self):\n'
+        '        x = "#333333"\n'
+        '        def g():\n'
+        '            return "#444444"\n'
+        'print("#555555")\n')
+    assert sorted(hex_sites_in(tree)) == [
+        ("#111111", "A"), ("#222222", "K.B"), ("#333333", "K.f"),
+        ("#444444", "K.f.g"), ("#555555", "<module>")]
