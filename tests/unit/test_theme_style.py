@@ -178,16 +178,11 @@ class TestLightThemeRoles:
     light theme had inherited. Each role now uses the light palette."""
 
     @pytest.mark.parametrize("role", [
-        "separator_glyph", "legacy_dialog_text", "patchbay_halo"])
+        "separator_glyph", "patchbay_halo"])
     def test_ink_roles_read_on_the_light_window(self, role):
         assert _contrast(LIGHT[role], LIGHT["window"]) >= 4.5, role
 
     @pytest.mark.parametrize("role,palette", [
-        ("legacy_dialog_bg", "window"),
-        ("legacy_dialog_field", "raised"),
-        ("legacy_dialog_border", "border"),
-        ("legacy_dialog_text", "text"),
-        ("legacy_dialog_log_bg", "raised"),
         ("separator_glyph", "text"),
         ("patchbay_rule", "border"),
         ("patchbay_chip_border", "border"),
@@ -197,13 +192,59 @@ class TestLightThemeRoles:
         assert LIGHT[role] == LIGHT[palette]
 
     def test_no_light_surface_role_is_a_dark_surface(self):
-        for role in ("legacy_dialog_bg", "legacy_dialog_field",
-                     "legacy_dialog_log_bg", "meter_track"):
+        for role in ("meter_track",):
             assert _luminance(LIGHT[role]) > 0.5, role
 
     def test_dark_keeps_its_historic_values(self):
         """The fix is light-only: the dark theme renders as before."""
         assert DARK["separator_glyph"] == "#ffffff"
-        assert DARK["legacy_dialog_bg"] == "#3d3d3d"
         assert DARK["meter_track"] == "#2D2D2D"
         assert DARK["patchbay_halo"] == "#F4F1EA"
+
+
+class TestProgressAndRenderDialogsUseTheRegularTokens:
+    """The legacy_dialog_* roles kept the pre-rebrand dark look (#3d3d3d
+    frame, #2d2d2d fields, white text) on the render and progress
+    dialogs; they now sit on the regular surfaces in both themes and the
+    roles are gone."""
+
+    def test_no_legacy_dialog_roles_left(self):
+        for tokens in (DARK, LIGHT):
+            assert not [k for k in tokens if k.startswith("legacy_dialog")]
+
+    @pytest.mark.parametrize("name", ["dark", "light"])
+    def test_progress_styles(self, name):
+        from gui.progress_manager import (_log_dialog_style,
+                                          _modal_progress_style,
+                                          _status_bar_meter_style)
+        t = THEMES[name]
+        modal = _modal_progress_style(t)
+        assert f"background-color: {t['window']};" in modal
+        assert f"color: {t['text']};" in modal
+        assert f"background-color: {t['raised']};" in modal
+        log = _log_dialog_style(t)
+        assert f"color: {t['text_secondary']};" in log
+        assert f"border: 1px solid {t['border']};" in log
+        meter = _status_bar_meter_style(t)
+        assert f"background-color: {t['raised']};" in meter
+        for old in ("#3d3d3d", "#2d2d2d", "#555555", "#1e1e1e", "#cccccc"):
+            assert old not in (modal + log + meter).lower()
+
+    @pytest.mark.parametrize("name", ["dark", "light"])
+    def test_render_dialog(self, qapp, name):
+        from config.models import Configuration
+        from gui.dialogs.render_dialog import RenderDialog
+        from gui.theme_manager import ThemeManager
+        ThemeManager().apply(qapp, name)
+        try:
+            dialog = RenderDialog(Configuration(), {})
+            t = THEMES[name]
+            sheet = dialog.styleSheet()
+            assert f"QDialog {{ background-color: {t['window']}; }}" in sheet
+            assert f"background-color: {t['raised']}; color: {t['text']}" \
+                in sheet
+            assert f"background-color: {t['border']};" in \
+                dialog._render_btn.styleSheet()
+            dialog.deleteLater()
+        finally:
+            ThemeManager().apply(qapp, "dark")

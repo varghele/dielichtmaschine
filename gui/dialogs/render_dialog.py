@@ -167,7 +167,7 @@ class RenderDialog(QDialog):
                 border: none; border-radius: 4px; padding: 8px 20px; font-size: 14px;
             }}
             QPushButton:hover {{ background-color: {tokens['success_light']}; }}
-            QPushButton:disabled {{ background-color: {tokens['legacy_dialog_disabled']}; }}
+            QPushButton:disabled {{ background-color: {tokens['border']}; }}
         """)
         self._render_btn.clicked.connect(self._start_render)
 
@@ -206,10 +206,11 @@ class RenderDialog(QDialog):
         layout.addWidget(self._log)
 
         # Styling
-        # Pre-rebrand dialog look, token-sourced (a modal: no theme
-        # switch can happen while it is open, so read once).
-        bg, field = tokens['legacy_dialog_bg'], tokens['legacy_dialog_field']
-        border, text = tokens['legacy_dialog_border'], tokens['legacy_dialog_text']
+        # The regular surfaces (window, raised fields, border, text) like
+        # every other dialog; a modal: no theme switch can happen while
+        # it is open, so read once.
+        bg, field = tokens['window'], tokens['raised']
+        border, text = tokens['border'], tokens['text']
         self.setStyleSheet(f"""
             QDialog {{ background-color: {bg}; }}
             QLabel {{ color: {text}; }}
@@ -221,7 +222,7 @@ class RenderDialog(QDialog):
             QScrollArea > QWidget > QWidget {{ background-color: {field}; }}
             QProgressBar {{ border: 1px solid {border}; border-radius: 3px; background-color: {field}; text-align: center; color: {text}; }}
             QProgressBar::chunk {{ background-color: {tokens['success']}; border-radius: 2px; }}
-            QTextEdit {{ background-color: {tokens['legacy_dialog_log_bg']}; color: {tokens['legacy_dialog_log_text']}; border: 1px solid {border}; border-radius: 3px; }}
+            QTextEdit {{ background-color: {tokens['raised']}; color: {tokens['text_secondary']}; border: 1px solid {border}; border-radius: 3px; }}
         """)
 
     def _set_all_checked(self, checked: bool):

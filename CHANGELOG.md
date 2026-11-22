@@ -85,6 +85,15 @@ verbatim as the GitHub Release notes (see [docs/releasing.md](docs/releasing.md)
   riff browser, the timeline painters) are gone, and the lint rejects a
   new one. Nothing looks different: every screen renders pixel-identical
   in both themes.
+- **The Render Video and progress dialogs match the rest of the app.** In
+  the dark theme they kept the pre-rebrand look: a mid-grey `#3d3d3d`
+  frame, `#2d2d2d` fields, `#555555` borders, white labels and a grey log.
+  They now use the same window, field, border and text colours as every
+  other dialog (the log text in the secondary text colour, the disabled
+  Render button in the border colour), and so does the status-bar
+  progress meter. The light theme already looked this way and is
+  unchanged. The Windows screenshot goldens are unaffected: no visual test
+  shows these dialogs or the meter.
 - **The core packages import without Qt.** The Auto Mode widgets moved from
   `auto/widgets/` to `gui/widgets/auto/`, the waveform widget from `audio/` to
   `timeline_ui/audio_waveform_widget.py` (next to the audio lane that uses

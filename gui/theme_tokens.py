@@ -242,15 +242,6 @@ DARK = {
     "phase_fill": "#FF9800",
     # --- Chrome roles from the v1.5.6 theme sweep (formerly inline hex
     # literals; tests/unit/test_theme_lint.py keeps them here) ---
-    # Pre-rebrand dialog look: render dialog + progress dialogs + the
-    # status-bar progress meter.
-    "legacy_dialog_bg": "#3d3d3d",
-    "legacy_dialog_field": "#2d2d2d",
-    "legacy_dialog_border": "#555555",
-    "legacy_dialog_text": "#ffffff",
-    "legacy_dialog_log_bg": "#1e1e1e",
-    "legacy_dialog_log_text": "#cccccc",
-    "legacy_dialog_disabled": "#555555",
     # Muted explanatory text in dialogs, and its dimmer variant
     # (empty-state notes, the Stage tab's idle TCP status).
     "hint_text": "#888888",
@@ -327,13 +318,6 @@ LIGHT = {
     # text / text_secondary / text_disabled). The gray hints, swatch
     # borders, morph step rail, status dot and stage placeholder kept
     # the value they always showed: it reads on light ground ---
-    "legacy_dialog_bg": "#ECE9E2",
-    "legacy_dialog_field": "#FAF8F3",
-    "legacy_dialog_border": "#C9C4B8",
-    "legacy_dialog_text": "#141416",
-    "legacy_dialog_log_bg": "#FAF8F3",
-    "legacy_dialog_log_text": "#5C6068",
-    "legacy_dialog_disabled": "#C9C4B8",
     "hint_text": "#888888",
     "hint_text_dim": "#666666",
     "color_button_border": "#666666",

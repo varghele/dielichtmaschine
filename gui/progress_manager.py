@@ -10,12 +10,15 @@ from PyQt6.QtGui import QFont
 from gui.theme_style import active_tokens, bind_style
 
 
+# The progress surfaces use the regular tokens (window, raised fields,
+# border, text, text_secondary for the log), like every other dialog.
+
 def _status_bar_meter_style(t: dict) -> str:
     return f"""
             QProgressBar {{
-                border: 1px solid {t['legacy_dialog_border']};
+                border: 1px solid {t['border']};
                 border-radius: 3px;
-                background-color: {t['legacy_dialog_field']};
+                background-color: {t['raised']};
             }}
             QProgressBar::chunk {{
                 background-color: {t['success']};
@@ -27,18 +30,18 @@ def _status_bar_meter_style(t: dict) -> str:
 def _modal_progress_style(t: dict) -> str:
     return f"""
             QProgressDialog {{
-                background-color: {t['legacy_dialog_bg']};
+                background-color: {t['window']};
             }}
             QLabel {{
-                color: {t['legacy_dialog_text']};
+                color: {t['text']};
                 font-size: 12px;
             }}
             QProgressBar {{
-                border: 1px solid {t['legacy_dialog_border']};
+                border: 1px solid {t['border']};
                 border-radius: 3px;
-                background-color: {t['legacy_dialog_field']};
+                background-color: {t['raised']};
                 text-align: center;
-                color: {t['legacy_dialog_text']};
+                color: {t['text']};
             }}
             QProgressBar::chunk {{
                 background-color: {t['success']};
@@ -49,16 +52,16 @@ def _modal_progress_style(t: dict) -> str:
 
 def _log_dialog_style(t: dict) -> str:
     return f"""
-            QDialog {{ background-color: {t['legacy_dialog_bg']}; }}
-            QLabel {{ color: {t['legacy_dialog_text']}; font-size: 12px; }}
+            QDialog {{ background-color: {t['window']}; }}
+            QLabel {{ color: {t['text']}; font-size: 12px; }}
             QProgressBar {{
-                border: 1px solid {t['legacy_dialog_border']}; border-radius: 3px;
-                background-color: {t['legacy_dialog_field']}; text-align: center; color: {t['legacy_dialog_text']};
+                border: 1px solid {t['border']}; border-radius: 3px;
+                background-color: {t['raised']}; text-align: center; color: {t['text']};
             }}
             QProgressBar::chunk {{ background-color: {t['success']}; border-radius: 2px; }}
             QTextEdit {{
-                background-color: {t['legacy_dialog_log_bg']}; color: {t['legacy_dialog_log_text']};
-                border: 1px solid {t['legacy_dialog_border']}; border-radius: 3px;
+                background-color: {t['raised']}; color: {t['text_secondary']};
+                border: 1px solid {t['border']}; border-radius: 3px;
             }}
         """
 
