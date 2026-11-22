@@ -11,6 +11,20 @@ verbatim as the GitHub Release notes (see [docs/releasing.md](docs/releasing.md)
 
 ## [Unreleased]
 
+### Added
+
+- **Project files carry a schema version.** Every save (`.lms`, YAML and the
+  crash-recovery autosave) now writes one extra top-level line,
+  `schema_version: 1`; nothing else in the saved file changes. On load,
+  `config/migrations.py` runs its ordered upgrade steps from the file's
+  version up to the current one. Files without the line (everything written
+  before this release) are version 0 and get the same legacy upgrades as
+  before (`shows:` to `songs`, a fixture's single `group:` to `groups`, the
+  old `direction` / `rotation` keys dropped), so every existing project loads
+  exactly as it did. A file written by a newer version still loads as far as
+  this build understands it and adds a Help > Warnings entry; an unreadable
+  version value is treated as 0 and warned about. Export output is unchanged.
+
 ### Changed
 
 - **The core packages import without Qt.** The Auto Mode widgets moved from

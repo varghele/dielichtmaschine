@@ -53,10 +53,12 @@ class Fixture:
     # intensity all come from it. Empty list = ungrouped.
     groups: List[str] = field(default_factory=list)
 
-    # Legacy single-group constructor keyword / YAML key, kept so files
-    # written before multi-group (only `group:`) load forever. Consumed
-    # by __post_init__: Fixture(group="X") becomes groups=["X"] ("" ->
-    # []) unless `groups` was given too, in which case `groups` wins.
+    # Legacy single-group constructor keyword, kept for the CSV/JSON
+    # fixture import. Project files written before multi-group (only
+    # `group:`) are rewritten by the schema 0 -> 1 step in
+    # config/migrations.py, same rule. Consumed by __post_init__:
+    # Fixture(group="X") becomes groups=["X"] ("" -> []) unless
+    # `groups` was given too, in which case `groups` wins.
     # There is NO `fixture.group` attribute (the compat property was
     # removed in multi-group stage 5, v1.5.6): read the primary with
     # primary_group_name(fixture), write `fixture.groups`.
@@ -1245,7 +1247,8 @@ class LightBlock:
         end_time = data.get("end_time")
 
         # Legacy: blocks written before end_time existed carry a duration
-        # instead (the field itself is gone since v1.5.6).
+        # instead (the field itself is gone since v1.5.6). Not a schema
+        # step: the effect clipboard and song YAML import come here too.
         if end_time is None:
             duration = data.get("duration", 4.0)
             end_time = start_time + duration
@@ -1873,7 +1876,11 @@ class Configuration:
 
     def save(self, filename: str):
         """Save configuration to YAML file"""
+        from config.migrations import (CURRENT_SCHEMA_VERSION,
+                                       SCHEMA_VERSION_KEY)
         data = {
+            # Load runs config/migrations.py steps from this stamp up.
+            SCHEMA_VERSION_KEY: CURRENT_SCHEMA_VERSION,
             # `groups` is the only membership key written; the legacy
             # `group` key is load-only since multi-group stage 5.
             'fixtures': [asdict(f) for f in self.fixtures],
@@ -1942,13 +1949,16 @@ class Configuration:
         with open(filename, 'r') as f:
             data = yaml.load(f, Loader=_YAML_SAFE_LOADER)
 
-        # Legacy key migration: configs written before the setlist rework
-        # store the songs under a top-level `shows:` key. Accept it forever;
-        # the per-file block tables (block_defs / light_block_defs) are
-        # untouched by the rename, so expand_compact works on the migrated
-        # key exactly as before.
-        if 'songs' not in data and 'shows' in data:
-            data['songs'] = data.pop('shows')
+        # Raw-dict schema migrations (config/migrations.py): runs every
+        # step from the file's `schema_version` (missing = 0) up to the
+        # current one, on the compact dict, before expansion. Legacy
+        # `shows:` -> `songs`, fixture `group:` -> `groups` and the
+        # deprecated fixture `direction` / `rotation` drop live there.
+        from config.migrations import migrate
+        from utils import user_warnings
+        _version, migration_warnings = migrate(data)
+        for warning in migration_warnings:
+            user_warnings.warn(warning, category="config-load")
 
         from config.compact_serializer import expand_compact
         data = expand_compact(data)
@@ -1970,10 +1980,6 @@ class Configuration:
                     modes.append(mode)
                 f_data['available_modes'] = modes
 
-            # Remove deprecated fields if present (direction, rotation)
-            f_data.pop('direction', None)
-            f_data.pop('rotation', None)
-
             fixtures.append(
                 _from_known_keys(Fixture, f_data, 'Fixtures', unknown_keys))
 
@@ -1982,10 +1988,11 @@ class Configuration:
         # differently-named modes; without this, such fixtures fall back
         # to empty channel maps (docs/gdtf-coverage-note.md item 4).
         from utils.fixture_io import reconcile_fixture_modes
-        from utils import user_warnings
         for warning in reconcile_fixture_modes(fixtures):
             user_warnings.warn(warning, category="config-load")
 
+        # Not a schema step (config/migrations.py): this also repairs
+        # hand-edited or imported angles, so it runs on every load.
         # Bring stored orientations onto the canonical mounting table
         # (utils/orientation.py). Configs written before 2026-07-12 saved
         # `mounting: hanging` next to yaw/pitch/roll = 0, and every
@@ -2034,7 +2041,8 @@ class Configuration:
             )
             groups[name].apply_fixture_order()
 
-        # Handle songs (legacy `shows:` was migrated to `songs` above)
+        # Handle songs (legacy `shows:` was migrated to `songs` by the
+        # schema step above)
         songs = {}
         if 'songs' in data:
             for song_name, song_data in data['songs'].items():

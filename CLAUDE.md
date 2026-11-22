@@ -206,6 +206,11 @@ misreporting state, so a green suite does not mean a working surface.
   carry the primary as `group`). Indexed targets (`Group:N`) index into
   that group's derived order. Two groups' lanes writing the same
   channel is the output arbiter's job: lane order wins.
+- Project files carry a top-level `schema_version` (missing = 0);
+  raw-dict upgrades go in `config/migrations.py` as ONE new step per
+  version (append, bump CURRENT, never renumber), run on the compact
+  dict before `expand_compact`. Repairs that must run on every load
+  stay at object level (orientation correction).
 - `Configuration.save` writes a temp file and swaps it in; unknown keys
   from newer files are skipped and listed in Help > Warnings. libyaml C
   dumper/loader; autosave snapshots on the UI thread and writes on a
