@@ -28,7 +28,7 @@ verbatim as the GitHub Release notes (see [docs/releasing.md](docs/releasing.md)
 - **German covers the whole interface, not just the shell.** Every screen,
   dialog, menu, tooltip and message of the main app now goes through the
   translation catalog: `translations/lichtmaschine_de.ts` grew from 40 to
-  1743 strings in 53 contexts (one per module), all translated, with one
+  1733 strings in 53 contexts (one per module), all translated, with one
   glossary across the app (lighting terms such as Fixture, Show, Timeline,
   Riff, Dimmer stay English, Stage is Bühne, Universe is Universum, neutral
   imperative style). English stays the default and reads exactly as before,
@@ -42,7 +42,11 @@ verbatim as the GitHub Release notes (see [docs/releasing.md](docs/releasing.md)
   effect, movement and dimmer types, musical keys, presets, roles, groups,
   songs, riff categories, protocol names, the default names written into
   projects, the timeline block-face codes, the stage plot PDF (a rider for
-  venue crews), log messages and Help > Warnings entries.
+  venue crews), log messages and Help > Warnings entries (those two stay
+  English so every log and bug report reads the same; the coverage test
+  rejects a translated string handed to either). A message whose wording
+  depends on a count is a whole sentence per form, so the German verb
+  agrees too ("ist noch 1 Fixture gepatcht" / "sind noch 2 Fixtures").
   `scripts/update_translations.py` now scans the `gui`, `timeline_ui` and
   `visualizer` packages whole and keeps the catalog's layout stable on any
   OS, and `tests/unit/test_i18n_coverage.py` fails on any UI string without

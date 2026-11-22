@@ -3493,7 +3493,7 @@ class StructureTab(BaseTab):
                 if os.path.exists(audio_filename):
                     self.audio_lane.load_audio_file(audio_filename)
                 else:
-                    user_warnings.warn(QCoreApplication.translate("StructureTab", "Audio file not found: {0}; the song plays without audio").format(audio_filename), category="audio")
+                    user_warnings.warn(f"Audio file not found: {audio_filename}; the song plays without audio", category="audio")
                     self.audio_lane.clear_audio()
             else:
                 # New format: filename only. Resolve via Configuration's
@@ -3506,7 +3506,7 @@ class StructureTab(BaseTab):
                 if audio_path and os.path.exists(audio_path):
                     self.audio_lane.load_audio_file(audio_path)
                 else:
-                    user_warnings.warn(QCoreApplication.translate("StructureTab", "Audio file not found for '{0}' (looked in {1}); the song plays without audio").format(audio_filename, bundle_dir), category="audio")
+                    user_warnings.warn(f"Audio file not found for '{audio_filename}' (looked in {bundle_dir}); the song plays without audio", category="audio")
                     self.audio_lane.clear_audio()
         else:
             # No audio for this show, clear it

@@ -402,7 +402,8 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         except Exception as e:
             from utils import user_warnings
             user_warnings.warn(
-                QCoreApplication.translate("MainWindow", "Live output fixture maps could not be built; busk output is degraded: {0}").format(e),
+                f"Live output fixture maps could not be built; busk "
+                f"output is degraded: {e}",
                 category="output", once_key="arbiter-maps")
         return self._output_arbiter
 
@@ -1529,7 +1530,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
                     load_from = backup
                     recovered = True
             from utils import user_warnings
-            with user_warnings.operation(QCoreApplication.translate("MainWindow", "Load project")):
+            with user_warnings.operation("Load project"):
                 self.config = Configuration.load(load_from)
             self.config_path = file_path
             if hasattr(self, "_autosave") and not recovered:
@@ -1796,7 +1797,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             except Exception as e:
                 from utils import user_warnings
                 user_warnings.warn(
-                    QCoreApplication.translate("MainWindow", "Legacy CSV show skipped (unreadable): {0}: {1}").format(path, e),
+                    f"Legacy CSV show skipped (unreadable): {path}: {e}",
                     category="import")
         if imported:
             self.structure_tab.update_from_config()
@@ -1826,7 +1827,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         except Exception as e:
             from utils import user_warnings
             user_warnings.warn(
-                QCoreApplication.translate("MainWindow", "Could not pre-load fixture definitions: {0}").format(e),
+                f"Could not pre-load fixture definitions: {e}",
                 category="fixture-library")
 
     def import_workspace(self):
@@ -2368,7 +2369,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             from utils import user_warnings
             self.progress_manager.start_log_capture()
             try:
-                with user_warnings.operation(QCoreApplication.translate("MainWindow", "Export QLC+ workspace")):
+                with user_warnings.operation("Export QLC+ workspace"):
                     create_qlc_workspace(self.config, vc_options)
             finally:
                 self.progress_manager.stop_log_capture()

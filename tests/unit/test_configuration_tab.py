@@ -364,7 +364,12 @@ class TestRemoveConfirmation:
                                 staticmethod(no))
             tab._remove_universe_by_id(2)
             assert sorted(tab.config.universes) == [1, 2]  # kept
-            assert "patched" in asked["text"]
+            assert asked["text"].startswith(
+                "Universe 2 still has 1 fixture patched to it.")
+            tab.config.fixtures.append(_patch_fixture(2, 20))
+            tab._remove_universe_by_id(2)
+            assert asked["text"].startswith(
+                "Universe 2 still has 2 fixtures patched to it.")
         finally:
             tab.deleteLater()
 

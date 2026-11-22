@@ -1214,7 +1214,7 @@ Den vollständigen Traceback zeigt die Konsole.</translation>
       <translation>+ UNIVERSUM HINZUFÜGEN</translation>
     </message>
     <message>
-      <location filename="..\gui\tabs\configuration_tab.py" line="875" />
+      <location filename="..\gui\tabs\configuration_tab.py" line="883" />
       <location filename="..\gui\tabs\configuration_tab.py" line="312" />
       <source>Add Universe</source>
       <translation>Universum hinzufügen</translation>
@@ -1340,7 +1340,7 @@ Deaktiviert: Unicast-IP (manuelle Eingabe)</translation>
       <translation>Die ArtNet-Universumsnummerierung beginnt wie im Protokoll bei 0. QLC+ zeigt dieses Universum als "1".</translation>
     </message>
     <message>
-      <location filename="..\gui\tabs\configuration_tab.py" line="879" />
+      <location filename="..\gui\tabs\configuration_tab.py" line="887" />
       <location filename="..\gui\tabs\configuration_tab.py" line="542" />
       <source>Remove Universe</source>
       <translation>Universum entfernen</translation>
@@ -1366,28 +1366,27 @@ Deaktiviert: Unicast-IP (manuelle Eingabe)</translation>
       <translation>Kein Universum</translation>
     </message>
     <message>
-      <location filename="..\gui\tabs\configuration_tab.py" line="842" />
-      <source>fixture</source>
-      <translation>Fixture</translation>
-    </message>
-    <message>
-      <location filename="..\gui\tabs\configuration_tab.py" line="843" />
-      <source>fixtures</source>
-      <translation>Fixtures</translation>
-    </message>
-    <message>
       <location filename="..\gui\tabs\configuration_tab.py" line="846" />
-      <source>Remove universe</source>
-      <translation>Universum entfernen</translation>
-    </message>
-    <message>
-      <location filename="..\gui\tabs\configuration_tab.py" line="848" />
-      <source>Universe {0} still has {1} {2} patched to it. Removing the universe leaves them with no output.
+      <source>Universe {0} still has 1 fixture patched to it. Removing the universe leaves that fixture with no output.
 
 Remove it anyway?</source>
-      <translation>Auf Universum {0} sind noch {1} {2} gepatcht. Wird das Universum entfernt, haben sie keinen Output mehr.
+      <translation>Auf Universum {0} ist noch 1 Fixture gepatcht. Wird das Universum entfernt, hat dieses Fixture keinen Output mehr.
 
 Trotzdem entfernen?</translation>
+    </message>
+    <message>
+      <location filename="..\gui\tabs\configuration_tab.py" line="852" />
+      <source>Universe {0} still has {1} fixtures patched to it. Removing the universe leaves them with no output.
+
+Remove it anyway?</source>
+      <translation>Auf Universum {0} sind noch {1} Fixtures gepatcht. Wird das Universum entfernt, haben sie keinen Output mehr.
+
+Trotzdem entfernen?</translation>
+    </message>
+    <message>
+      <location filename="..\gui\tabs\configuration_tab.py" line="858" />
+      <source>Remove universe</source>
+      <translation>Universum entfernen</translation>
     </message>
   </context>
   <context>
@@ -2234,11 +2233,6 @@ was einen wellenartigen Atmen-Effekt über die Gruppe erzeugt</translation>
       <translation>Räumlich ordnen (Bühne X, Y)</translation>
     </message>
     <message>
-      <location filename="..\gui\tabs\fixtures_tab.py" line="1969" />
-      <source>Adding the fixture failed: {0}</source>
-      <translation>Hinzufügen des Fixtures fehlgeschlagen: {0}</translation>
-    </message>
-    <message>
       <location filename="..\gui\tabs\fixtures_tab.py" line="2081" />
       <source>Loading Fixture</source>
       <translation>Fixture wird geladen</translation>
@@ -2249,17 +2243,12 @@ was einen wellenartigen Atmen-Effekt über die Gruppe erzeugt</translation>
       <translation>Lade {0} {1}...</translation>
     </message>
     <message>
-      <location filename="..\gui\tabs\fixtures_tab.py" line="2121" />
-      <source>Loading the definition of {0} {1} failed: {2}</source>
-      <translation>Laden der Definition von {0} {1} fehlgeschlagen: {2}</translation>
-    </message>
-    <message>
-      <location filename="..\gui\tabs\fixtures_tab.py" line="2218" />
+      <location filename="..\gui\tabs\fixtures_tab.py" line="2219" />
       <source>No Selection</source>
       <translation>Keine Auswahl</translation>
     </message>
     <message>
-      <location filename="..\gui\tabs\fixtures_tab.py" line="2219" />
+      <location filename="..\gui\tabs\fixtures_tab.py" line="2220" />
       <source>Please select a fixture to duplicate.</source>
       <translation>Bitte ein Fixture zum Duplizieren auswählen.</translation>
     </message>
@@ -3669,43 +3658,38 @@ was einen wellenartigen Atmen-Effekt über die Gruppe erzeugt</translation>
 {0}</translation>
     </message>
     <message>
-      <location filename="..\gui\gui.py" line="405" />
-      <source>Live output fixture maps could not be built; busk output is degraded: {0}</source>
-      <translation>Die Fixture-Zuordnungen für den Live-Output konnten nicht erstellt werden; der Busk-Output ist eingeschränkt: {0}</translation>
-    </message>
-    <message>
-      <location filename="..\gui\gui.py" line="469" />
+      <location filename="..\gui\gui.py" line="470" />
       <source>Set the setlist sync mode to SMPTE on the Structure tab before arming the chase</source>
       <translation>Vor dem Scharfschalten des Chase den Sync-Modus der Setlist im Tab Struktur auf SMPTE stellen</translation>
     </message>
     <message>
-      <location filename="..\gui\gui.py" line="491" />
+      <location filename="..\gui\gui.py" line="492" />
       <source>LTC input could not be opened - check the sync device in the Structure tab</source>
       <translation>LTC-Eingang konnte nicht geöffnet werden - Sync-Gerät im Tab Struktur prüfen</translation>
     </message>
     <message>
-      <location filename="..\gui\gui.py" line="753" />
+      <location filename="..\gui\gui.py" line="754" />
       <source>Edit</source>
       <translation>Bearbeiten</translation>
     </message>
     <message>
-      <location filename="..\gui\gui.py" line="760" />
+      <location filename="..\gui\gui.py" line="761" />
       <source>Undo</source>
       <translation>Rückgängig</translation>
     </message>
     <message>
-      <location filename="..\gui\gui.py" line="766" />
+      <location filename="..\gui\gui.py" line="767" />
       <source>Redo</source>
       <translation>Wiederholen</translation>
     </message>
     <message>
-      <location filename="..\gui\gui.py" line="1523" />
-      <location filename="..\gui\gui.py" line="982" />
+      <location filename="..\gui\gui.py" line="1524" />
+      <location filename="..\gui\gui.py" line="983" />
       <source>Recover unsaved changes</source>
       <translation>Ungespeicherte Änderungen wiederherstellen</translation>
     </message>
     <message>
-      <location filename="..\gui\gui.py" line="983" />
+      <location filename="..\gui\gui.py" line="984" />
       <source>Unsaved changes from your last session were found.
 
 Recover them?</source>
@@ -3714,138 +3698,138 @@ Recover them?</source>
 Wiederherstellen?</translation>
     </message>
     <message>
-      <location filename="..\gui\gui.py" line="1084" />
+      <location filename="..\gui\gui.py" line="1085" />
       <source>Auto Mode</source>
       <translation>Auto-Modus</translation>
     </message>
     <message>
-      <location filename="..\gui\gui.py" line="1266" />
+      <location filename="..\gui\gui.py" line="1267" />
       <source>Save Project</source>
       <translation>Projekt speichern</translation>
     </message>
     <message>
-      <location filename="..\gui\gui.py" line="2401" />
-      <location filename="..\gui\gui.py" line="1900" />
-      <location filename="..\gui\gui.py" line="1362" />
-      <location filename="..\gui\gui.py" line="1280" />
+      <location filename="..\gui\gui.py" line="2402" />
+      <location filename="..\gui\gui.py" line="1901" />
+      <location filename="..\gui\gui.py" line="1363" />
+      <location filename="..\gui\gui.py" line="1281" />
       <source>Success</source>
       <translation>Erfolg</translation>
     </message>
     <message>
-      <location filename="..\gui\gui.py" line="1363" />
-      <location filename="..\gui\gui.py" line="1281" />
+      <location filename="..\gui\gui.py" line="1364" />
+      <location filename="..\gui\gui.py" line="1282" />
       <source>Configuration saved to {0}</source>
       <translation>Konfiguration gespeichert unter {0}</translation>
     </message>
     <message>
-      <location filename="..\gui\gui.py" line="2504" />
-      <location filename="..\gui\gui.py" line="2435" />
-      <location filename="..\gui\gui.py" line="2411" />
-      <location filename="..\gui\gui.py" line="1909" />
-      <location filename="..\gui\gui.py" line="1576" />
-      <location filename="..\gui\gui.py" line="1370" />
-      <location filename="..\gui\gui.py" line="1288" />
+      <location filename="..\gui\gui.py" line="2505" />
+      <location filename="..\gui\gui.py" line="2436" />
+      <location filename="..\gui\gui.py" line="2412" />
+      <location filename="..\gui\gui.py" line="1910" />
+      <location filename="..\gui\gui.py" line="1577" />
+      <location filename="..\gui\gui.py" line="1371" />
+      <location filename="..\gui\gui.py" line="1289" />
       <source>Error</source>
       <translation>Fehler</translation>
     </message>
     <message>
-      <location filename="..\gui\gui.py" line="1371" />
-      <location filename="..\gui\gui.py" line="1289" />
+      <location filename="..\gui\gui.py" line="1372" />
+      <location filename="..\gui\gui.py" line="1290" />
       <source>Failed to save configuration: {0}</source>
       <translation>Konfiguration konnte nicht gespeichert werden: {0}</translation>
     </message>
     <message>
-      <location filename="..\gui\gui.py" line="1308" />
+      <location filename="..\gui\gui.py" line="1309" />
       <source>File missing</source>
       <translation>Datei fehlt</translation>
     </message>
     <message>
-      <location filename="..\gui\gui.py" line="1309" />
+      <location filename="..\gui\gui.py" line="1310" />
       <source>The file no longer exists:
 {0}</source>
       <translation>Die Datei existiert nicht mehr:
 {0}</translation>
     </message>
     <message>
-      <location filename="..\gui\gui.py" line="1489" />
-      <location filename="..\gui\gui.py" line="1458" />
-      <location filename="..\gui\gui.py" line="1316" />
+      <location filename="..\gui\gui.py" line="1490" />
+      <location filename="..\gui\gui.py" line="1459" />
+      <location filename="..\gui\gui.py" line="1317" />
       <source>Loading Configuration</source>
       <translation>Konfiguration wird geladen</translation>
     </message>
     <message>
-      <location filename="..\gui\gui.py" line="1490" />
-      <location filename="..\gui\gui.py" line="1459" />
-      <location filename="..\gui\gui.py" line="1316" />
+      <location filename="..\gui\gui.py" line="1491" />
+      <location filename="..\gui\gui.py" line="1460" />
+      <location filename="..\gui\gui.py" line="1317" />
       <source>Opening file...</source>
       <translation>Datei wird geöffnet...</translation>
     </message>
     <message>
-      <location filename="..\gui\gui.py" line="1346" />
+      <location filename="..\gui\gui.py" line="1347" />
       <source>Save Project As</source>
       <translation>Projekt speichern unter</translation>
     </message>
     <message>
-      <location filename="..\gui\gui.py" line="1388" />
+      <location filename="..\gui\gui.py" line="1389" />
       <source>No Templates</source>
       <translation>Keine Vorlagen</translation>
     </message>
     <message>
-      <location filename="..\gui\gui.py" line="1389" />
+      <location filename="..\gui\gui.py" line="1390" />
       <source>No starter rigs found (demos/rigs/ is missing).</source>
       <translation>Keine Starter-Rigs gefunden (demos/rigs/ fehlt).</translation>
     </message>
     <message>
-      <location filename="..\gui\gui.py" line="1394" />
+      <location filename="..\gui\gui.py" line="1395" />
       <source>New Project from Template</source>
       <translation>Neues Projekt aus Vorlage</translation>
     </message>
     <message>
-      <location filename="..\gui\gui.py" line="1398" />
+      <location filename="..\gui\gui.py" line="1399" />
       <source>Choose a starter rig:</source>
       <translation>Starter-Rig wählen:</translation>
     </message>
     <message>
-      <location filename="..\gui\gui.py" line="1402" />
+      <location filename="..\gui\gui.py" line="1403" />
       <source>{0}  ({1} fixtures)
     {2}</source>
       <translation>{0}  ({1} Fixtures)
     {2}</translation>
     </message>
     <message>
-      <location filename="..\gui\gui.py" line="1410" />
+      <location filename="..\gui\gui.py" line="1411" />
       <source>Include the ready-to-play demo show + audio clip</source>
       <translation>Spielfertige Demo-Show + Audioclip mitnehmen</translation>
     </message>
     <message>
-      <location filename="..\gui\gui.py" line="1432" />
+      <location filename="..\gui\gui.py" line="1433" />
       <source>Create Project From Template</source>
       <translation>Projekt aus Vorlage anlegen</translation>
     </message>
     <message>
-      <location filename="..\gui\gui.py" line="1448" />
+      <location filename="..\gui\gui.py" line="1449" />
       <source>Template Failed</source>
       <translation>Vorlage fehlgeschlagen</translation>
     </message>
     <message>
-      <location filename="..\gui\gui.py" line="1449" />
+      <location filename="..\gui\gui.py" line="1450" />
       <source>Could not create the project:
 {0}</source>
       <translation>Das Projekt konnte nicht angelegt werden:
 {0}</translation>
     </message>
     <message>
-      <location filename="..\gui\gui.py" line="1473" />
+      <location filename="..\gui\gui.py" line="1474" />
       <source>Open Project</source>
       <translation>Projekt öffnen</translation>
     </message>
     <message>
-      <location filename="..\gui\gui.py" line="1516" />
+      <location filename="..\gui\gui.py" line="1517" />
       <source>Parsing configuration...</source>
       <translation>Konfiguration wird gelesen...</translation>
     </message>
     <message>
-      <location filename="..\gui\gui.py" line="1524" />
+      <location filename="..\gui\gui.py" line="1525" />
       <source>Autosaved changes newer than this project were found, from a session that did not save.
 
 Recover them?</source>
@@ -3854,72 +3838,67 @@ Recover them?</source>
 Wiederherstellen?</translation>
     </message>
     <message>
-      <location filename="..\gui\gui.py" line="1532" />
-      <source>Load project</source>
-      <translation>Projekt laden</translation>
-    </message>
-    <message>
-      <location filename="..\gui\gui.py" line="1543" />
+      <location filename="..\gui\gui.py" line="1544" />
       <source>Updating tabs...</source>
       <translation>Tabs werden aktualisiert...</translation>
     </message>
     <message>
-      <location filename="..\gui\gui.py" line="1546" />
+      <location filename="..\gui\gui.py" line="1547" />
       <source>Done</source>
       <translation>Fertig</translation>
     </message>
     <message>
-      <location filename="..\gui\gui.py" line="1577" />
+      <location filename="..\gui\gui.py" line="1578" />
       <source>Failed to load {0}:
 {1}</source>
       <translation>{0} konnte nicht geladen werden:
 {1}</translation>
     </message>
     <message>
-      <location filename="..\gui\gui.py" line="1653" />
+      <location filename="..\gui\gui.py" line="1654" />
       <source>GDTF Share: fetched {0} fixture definition(s) ({1}) - the visualizer uses them on next open</source>
       <translation>GDTF Share: {0} Fixture-Definition(en) geholt ({1}) - der Visualizer verwendet sie beim nächsten Öffnen</translation>
     </message>
     <message>
-      <location filename="..\gui\gui.py" line="1672" />
+      <location filename="..\gui\gui.py" line="1673" />
       <source>Morph to Venue</source>
       <translation>Auf Venue morphen</translation>
     </message>
     <message>
-      <location filename="..\gui\gui.py" line="1673" />
+      <location filename="..\gui\gui.py" line="1674" />
       <source>The open project has no songs to morph. Open the show you want to take to another venue first.</source>
       <translation>Das geöffnete Projekt hat keine Songs zum Morphen. Zuerst die Show öffnen, die auf eine andere Venue übertragen werden soll.</translation>
     </message>
     <message>
-      <location filename="..\gui\gui.py" line="1730" />
+      <location filename="..\gui\gui.py" line="1731" />
       <source>Import Legacy CSV Songs</source>
       <translation>Alte CSV-Songs importieren</translation>
     </message>
     <message>
-      <location filename="..\gui\gui.py" line="1751" />
+      <location filename="..\gui\gui.py" line="1752" />
       <source>No Folder</source>
       <translation>Kein Ordner</translation>
     </message>
     <message>
-      <location filename="..\gui\gui.py" line="1752" />
+      <location filename="..\gui\gui.py" line="1753" />
       <source>The chosen folder does not exist.</source>
       <translation>Der gewählte Ordner existiert nicht.</translation>
     </message>
     <message>
-      <location filename="..\gui\gui.py" line="1771" />
-      <location filename="..\gui\gui.py" line="1759" />
+      <location filename="..\gui\gui.py" line="1772" />
+      <location filename="..\gui\gui.py" line="1760" />
       <source>No Legacy Songs</source>
       <translation>Keine alten Songs</translation>
     </message>
     <message>
-      <location filename="..\gui\gui.py" line="1760" />
+      <location filename="..\gui\gui.py" line="1761" />
       <source>Could not read the folder:
 {0}</source>
       <translation>Der Ordner konnte nicht gelesen werden:
 {0}</translation>
     </message>
     <message>
-      <location filename="..\gui\gui.py" line="1772" />
+      <location filename="..\gui\gui.py" line="1773" />
       <source>No CSV songs found in:
 {0}
 
@@ -3930,17 +3909,17 @@ Wiederherstellen?</translation>
 (Songs, die bereits in der Konfiguration sind, werden übersprungen.)</translation>
     </message>
     <message>
-      <location filename="..\gui\gui.py" line="1776" />
+      <location filename="..\gui\gui.py" line="1777" />
       <source> (and {0} more)</source>
       <translation> (und {0} weitere)</translation>
     </message>
     <message>
-      <location filename="..\gui\gui.py" line="1779" />
+      <location filename="..\gui\gui.py" line="1780" />
       <source>Legacy CSV Shows Found</source>
       <translation>Alte CSV-Shows gefunden</translation>
     </message>
     <message>
-      <location filename="..\gui\gui.py" line="1780" />
+      <location filename="..\gui\gui.py" line="1781" />
       <source>Found {0} show CSV file(s) in:
 {1}
 
@@ -3955,124 +3934,114 @@ die nicht in der config.yaml sind: {2}{3}
 In die Konfiguration importieren? (Zum dauerhaften Übernehmen muss danach noch gespeichert werden.)</translation>
     </message>
     <message>
-      <location filename="..\gui\gui.py" line="1799" />
-      <source>Legacy CSV show skipped (unreadable): {0}: {1}</source>
-      <translation>Alte CSV-Show übersprungen (nicht lesbar): {0}: {1}</translation>
-    </message>
-    <message>
-      <location filename="..\gui\gui.py" line="1805" />
+      <location filename="..\gui\gui.py" line="1806" />
       <source>Shows Imported</source>
       <translation>Shows importiert</translation>
     </message>
     <message>
-      <location filename="..\gui\gui.py" line="1806" />
+      <location filename="..\gui\gui.py" line="1807" />
       <source>Imported {0} legacy CSV show(s) into the config.
 Save the config to persist them.</source>
       <translation>{0} alte CSV-Show(s) in die Konfiguration importiert.
 Zum Übernehmen die Konfiguration speichern.</translation>
     </message>
     <message>
-      <location filename="..\gui\gui.py" line="1829" />
-      <source>Could not pre-load fixture definitions: {0}</source>
-      <translation>Fixture-Definitionen konnten nicht vorgeladen werden: {0}</translation>
-    </message>
-    <message>
-      <location filename="..\gui\gui.py" line="1837" />
+      <location filename="..\gui\gui.py" line="1838" />
       <source>Import QLC+ Workspace</source>
       <translation>QLC+-Workspace importieren</translation>
     </message>
     <message>
-      <location filename="..\gui\gui.py" line="1840" />
+      <location filename="..\gui\gui.py" line="1841" />
       <source>All Files</source>
       <translation>Alle Dateien</translation>
     </message>
     <message>
-      <location filename="..\gui\gui.py" line="1848" />
+      <location filename="..\gui\gui.py" line="1849" />
       <source>Importing Workspace</source>
       <translation>Workspace wird importiert</translation>
     </message>
     <message>
-      <location filename="..\gui\gui.py" line="1849" />
+      <location filename="..\gui\gui.py" line="1850" />
       <source>Parsing QLC+ workspace file...</source>
       <translation>QLC+-Workspace-Datei wird gelesen...</translation>
     </message>
     <message>
-      <location filename="..\gui\gui.py" line="1854" />
+      <location filename="..\gui\gui.py" line="1855" />
       <source>Importing fixtures and universes...</source>
       <translation>Fixtures und Universen werden importiert...</translation>
     </message>
     <message>
-      <location filename="..\gui\gui.py" line="1858" />
+      <location filename="..\gui\gui.py" line="1859" />
       <source>Loading fixture definitions...</source>
       <translation>Fixture-Definitionen werden geladen...</translation>
     </message>
     <message>
-      <location filename="..\gui\gui.py" line="1875" />
+      <location filename="..\gui\gui.py" line="1876" />
       <source>Updating Configuration tab...</source>
       <translation>Tab Konfiguration wird aktualisiert...</translation>
     </message>
     <message>
-      <location filename="..\gui\gui.py" line="1878" />
+      <location filename="..\gui\gui.py" line="1879" />
       <source>Updating Fixtures tab...</source>
       <translation>Tab Fixtures wird aktualisiert...</translation>
     </message>
     <message>
-      <location filename="..\gui\gui.py" line="1881" />
+      <location filename="..\gui\gui.py" line="1882" />
       <source>Updating Stage tab...</source>
       <translation>Tab Bühne wird aktualisiert...</translation>
     </message>
     <message>
-      <location filename="..\gui\gui.py" line="1884" />
+      <location filename="..\gui\gui.py" line="1885" />
       <source>Updating Structure tab...</source>
       <translation>Tab Struktur wird aktualisiert...</translation>
     </message>
     <message>
-      <location filename="..\gui\gui.py" line="1887" />
+      <location filename="..\gui\gui.py" line="1888" />
       <source>Updating Shows tab...</source>
       <translation>Tab Shows wird aktualisiert...</translation>
     </message>
     <message>
-      <location filename="..\gui\gui.py" line="1901" />
+      <location filename="..\gui\gui.py" line="1902" />
       <source>Workspace imported from {0}</source>
       <translation>Workspace importiert aus {0}</translation>
     </message>
     <message>
-      <location filename="..\gui\gui.py" line="1910" />
+      <location filename="..\gui\gui.py" line="1911" />
       <source>Failed to import workspace: {0}</source>
       <translation>Workspace konnte nicht importiert werden: {0}</translation>
     </message>
     <message>
-      <location filename="..\gui\gui.py" line="1931" />
+      <location filename="..\gui\gui.py" line="1932" />
       <source>Import Show Structure</source>
       <translation>Showstruktur importieren</translation>
     </message>
     <message>
-      <location filename="..\gui\gui.py" line="1933" />
+      <location filename="..\gui\gui.py" line="1934" />
       <source>Show files</source>
       <translation>Show-Dateien</translation>
     </message>
     <message>
-      <location filename="..\gui\gui.py" line="2178" />
-      <location filename="..\gui\gui.py" line="2049" />
-      <location filename="..\gui\gui.py" line="1942" />
+      <location filename="..\gui\gui.py" line="2179" />
+      <location filename="..\gui\gui.py" line="2050" />
+      <location filename="..\gui\gui.py" line="1943" />
       <source>Import Failed</source>
       <translation>Import fehlgeschlagen</translation>
     </message>
     <message>
-      <location filename="..\gui\gui.py" line="2179" />
-      <location filename="..\gui\gui.py" line="1943" />
+      <location filename="..\gui\gui.py" line="2180" />
+      <location filename="..\gui\gui.py" line="1944" />
       <source>Could not import {0}:
 {1}</source>
       <translation>{0} konnte nicht importiert werden:
 {1}</translation>
     </message>
     <message>
-      <location filename="..\gui\gui.py" line="1949" />
+      <location filename="..\gui\gui.py" line="1950" />
       <source>Overwrite Show?</source>
       <translation>Show überschreiben?</translation>
     </message>
     <message>
-      <location filename="..\gui\gui.py" line="1950" />
+      <location filename="..\gui\gui.py" line="1951" />
       <source>A show named '{0}' already exists in the config.
 
 Overwrite it with the imported one?</source>
@@ -4081,182 +4050,182 @@ Overwrite it with the imported one?</source>
 Mit der importierten überschreiben?</translation>
     </message>
     <message>
-      <location filename="..\gui\gui.py" line="2254" />
-      <location filename="..\gui\gui.py" line="2219" />
-      <location filename="..\gui\gui.py" line="2148" />
-      <location filename="..\gui\gui.py" line="1967" />
+      <location filename="..\gui\gui.py" line="2255" />
+      <location filename="..\gui\gui.py" line="2220" />
+      <location filename="..\gui\gui.py" line="2149" />
+      <location filename="..\gui\gui.py" line="1968" />
       <source>Imported</source>
       <translation>Importiert</translation>
     </message>
     <message>
-      <location filename="..\gui\gui.py" line="1968" />
+      <location filename="..\gui\gui.py" line="1969" />
       <source>Imported show '{0}' from {1}.
 Save the config to persist it.</source>
       <translation>Show '{0}' aus {1} importiert.
 Zum Übernehmen die Konfiguration speichern.</translation>
     </message>
     <message>
-      <location filename="..\gui\gui.py" line="1983" />
+      <location filename="..\gui\gui.py" line="1984" />
       <source>No Show Selected</source>
       <translation>Keine Show ausgewählt</translation>
     </message>
     <message>
-      <location filename="..\gui\gui.py" line="1984" />
+      <location filename="..\gui\gui.py" line="1985" />
       <source>Open a show in the Structure tab before exporting.</source>
       <translation>Vor dem Export eine Show im Tab Struktur öffnen.</translation>
     </message>
     <message>
-      <location filename="..\gui\gui.py" line="1993" />
+      <location filename="..\gui\gui.py" line="1994" />
       <source>Export Show Structure</source>
       <translation>Showstruktur exportieren</translation>
     </message>
     <message>
-      <location filename="..\gui\gui.py" line="2286" />
-      <location filename="..\gui\gui.py" line="2007" />
+      <location filename="..\gui\gui.py" line="2287" />
+      <location filename="..\gui\gui.py" line="2008" />
       <source>Export Failed</source>
       <translation>Export fehlgeschlagen</translation>
     </message>
     <message>
-      <location filename="..\gui\gui.py" line="2287" />
-      <location filename="..\gui\gui.py" line="2008" />
+      <location filename="..\gui\gui.py" line="2288" />
+      <location filename="..\gui\gui.py" line="2009" />
       <source>Could not export to {0}:
 {1}</source>
       <translation>Export nach {0} fehlgeschlagen:
 {1}</translation>
     </message>
     <message>
-      <location filename="..\gui\gui.py" line="2291" />
-      <location filename="..\gui\gui.py" line="2013" />
+      <location filename="..\gui\gui.py" line="2292" />
+      <location filename="..\gui\gui.py" line="2014" />
       <source>Exported</source>
       <translation>Exportiert</translation>
     </message>
     <message>
-      <location filename="..\gui\gui.py" line="2014" />
+      <location filename="..\gui\gui.py" line="2015" />
       <source>Exported '{0}' to {1}:
 {2}</source>
       <translation>'{0}' als {1} exportiert:
 {2}</translation>
     </message>
     <message>
-      <location filename="..\gui\gui.py" line="2032" />
+      <location filename="..\gui\gui.py" line="2033" />
       <source>Import Shows from Config</source>
       <translation>Shows aus Konfiguration importieren</translation>
     </message>
     <message>
-      <location filename="..\gui\gui.py" line="2034" />
+      <location filename="..\gui\gui.py" line="2035" />
       <source>Config files</source>
       <translation>Konfigurationsdateien</translation>
     </message>
     <message>
-      <location filename="..\gui\gui.py" line="2040" />
+      <location filename="..\gui\gui.py" line="2041" />
       <source>Same Config</source>
       <translation>Gleiche Konfiguration</translation>
     </message>
     <message>
-      <location filename="..\gui\gui.py" line="2041" />
+      <location filename="..\gui\gui.py" line="2042" />
       <source>That is the currently open config: nothing to import.</source>
       <translation>Das ist die aktuell geöffnete Konfiguration: nichts zu importieren.</translation>
     </message>
     <message>
-      <location filename="..\gui\gui.py" line="2050" />
+      <location filename="..\gui\gui.py" line="2051" />
       <source>Could not load {0}:
 {1}</source>
       <translation>{0} konnte nicht geladen werden:
 {1}</translation>
     </message>
     <message>
-      <location filename="..\gui\gui.py" line="2420" />
-      <location filename="..\gui\gui.py" line="2055" />
+      <location filename="..\gui\gui.py" line="2421" />
+      <location filename="..\gui\gui.py" line="2056" />
       <source>No Shows</source>
       <translation>Keine Shows</translation>
     </message>
     <message>
-      <location filename="..\gui\gui.py" line="2056" />
+      <location filename="..\gui\gui.py" line="2057" />
       <source>{0} contains no shows.</source>
       <translation>{0} enthält keine Shows.</translation>
     </message>
     <message>
-      <location filename="..\gui\gui.py" line="2064" />
+      <location filename="..\gui\gui.py" line="2065" />
       <source>Import Shows from {0}</source>
       <translation>Shows aus {0} importieren</translation>
     </message>
     <message>
-      <location filename="..\gui\gui.py" line="2068" />
+      <location filename="..\gui\gui.py" line="2069" />
       <source>Select the shows to import:</source>
       <translation>Zu importierende Shows auswählen:</translation>
     </message>
     <message>
-      <location filename="..\gui\gui.py" line="2071" />
+      <location filename="..\gui\gui.py" line="2072" />
       <source>{0} · {1} part(s)</source>
       <translation>{0} · {1} Teil(e)</translation>
     </message>
     <message>
-      <location filename="..\gui\gui.py" line="2073" />
+      <location filename="..\gui\gui.py" line="2074" />
       <source>, audio: {0}</source>
       <translation>, Audio: {0}</translation>
     </message>
     <message>
-      <location filename="..\gui\gui.py" line="2075" />
+      <location filename="..\gui\gui.py" line="2076" />
       <source>   [name exists]</source>
       <translation>   [Name existiert]</translation>
     </message>
     <message>
-      <location filename="..\gui\gui.py" line="2077" />
+      <location filename="..\gui\gui.py" line="2078" />
       <source>   [missing groups: {0}]</source>
       <translation>   [fehlende Gruppen: {0}]</translation>
     </message>
     <message>
-      <location filename="..\gui\gui.py" line="2087" />
+      <location filename="..\gui\gui.py" line="2088" />
       <source>Rename the imported show</source>
       <translation>Importierte Show umbenennen</translation>
     </message>
     <message>
-      <location filename="..\gui\gui.py" line="2088" />
+      <location filename="..\gui\gui.py" line="2089" />
       <source>Overwrite the existing show</source>
       <translation>Vorhandene Show überschreiben</translation>
     </message>
     <message>
-      <location filename="..\gui\gui.py" line="2089" />
+      <location filename="..\gui\gui.py" line="2090" />
       <source>Skip the imported show</source>
       <translation>Importierte Show überspringen</translation>
     </message>
     <message>
-      <location filename="..\gui\gui.py" line="2090" />
+      <location filename="..\gui\gui.py" line="2091" />
       <source>If a show name exists:</source>
       <translation>Wenn ein Showname existiert:</translation>
     </message>
     <message>
-      <location filename="..\gui\gui.py" line="2091" />
+      <location filename="..\gui\gui.py" line="2092" />
       <source>Copy audio files into this config's bundle</source>
       <translation>Audiodateien in das Bundle dieser Konfiguration kopieren</translation>
     </message>
     <message>
-      <location filename="..\gui\gui.py" line="2127" />
+      <location filename="..\gui\gui.py" line="2128" />
       <source>- {0}: skipped (name exists)</source>
       <translation>- {0}: übersprungen (Name existiert)</translation>
     </message>
     <message>
-      <location filename="..\gui\gui.py" line="2131" />
+      <location filename="..\gui\gui.py" line="2132" />
       <source> as '{0}'</source>
       <translation> als '{0}'</translation>
     </message>
     <message>
-      <location filename="..\gui\gui.py" line="2133" />
+      <location filename="..\gui\gui.py" line="2134" />
       <source>, audio copied</source>
       <translation>, Audio kopiert</translation>
     </message>
     <message>
-      <location filename="..\gui\gui.py" line="2135" />
+      <location filename="..\gui\gui.py" line="2136" />
       <source>, AUDIO FILE NOT FOUND</source>
       <translation>, AUDIODATEI NICHT GEFUNDEN</translation>
     </message>
     <message>
-      <location filename="..\gui\gui.py" line="2137" />
+      <location filename="..\gui\gui.py" line="2138" />
       <source>, missing groups: {0}</source>
       <translation>, fehlende Gruppen: {0}</translation>
     </message>
     <message>
-      <location filename="..\gui\gui.py" line="2140" />
+      <location filename="..\gui\gui.py" line="2141" />
       <source>Imported {0} show(s) from {1}:
 
 </source>
@@ -4265,7 +4234,7 @@ Zum Übernehmen die Konfiguration speichern.</translation>
 </translation>
     </message>
     <message>
-      <location filename="..\gui\gui.py" line="2144" />
+      <location filename="..\gui\gui.py" line="2145" />
       <source>
 
 Lanes targeting missing groups stay dormant until you re-point them at this config's groups.</source>
@@ -4274,7 +4243,7 @@ Lanes targeting missing groups stay dormant until you re-point them at this conf
 Lanes mit fehlenden Zielgruppen bleiben inaktiv, bis sie auf Gruppen dieser Konfiguration umgestellt werden.</translation>
     </message>
     <message>
-      <location filename="..\gui\gui.py" line="2147" />
+      <location filename="..\gui\gui.py" line="2148" />
       <source>
 
 Save the config to persist the imported shows.</source>
@@ -4283,28 +4252,28 @@ Save the config to persist the imported shows.</source>
 Zum Übernehmen der importierten Shows die Konfiguration speichern.</translation>
     </message>
     <message>
-      <location filename="..\gui\gui.py" line="2192" />
-      <location filename="..\gui\gui.py" line="2167" />
+      <location filename="..\gui\gui.py" line="2193" />
+      <location filename="..\gui\gui.py" line="2168" />
       <source>Import Fixture List</source>
       <translation>Fixture-Liste importieren</translation>
     </message>
     <message>
-      <location filename="..\gui\gui.py" line="2169" />
+      <location filename="..\gui\gui.py" line="2170" />
       <source>Fixture lists</source>
       <translation>Fixture-Listen</translation>
     </message>
     <message>
-      <location filename="..\gui\gui.py" line="2184" />
+      <location filename="..\gui\gui.py" line="2185" />
       <source>Nothing to Import</source>
       <translation>Nichts zu importieren</translation>
     </message>
     <message>
-      <location filename="..\gui\gui.py" line="2185" />
+      <location filename="..\gui\gui.py" line="2186" />
       <source>{0} contains no fixtures.</source>
       <translation>{0} enthält keine Fixtures.</translation>
     </message>
     <message>
-      <location filename="..\gui\gui.py" line="2194" />
+      <location filename="..\gui\gui.py" line="2195" />
       <source>The config already has {0} fixture(s).
 
 Replace the current rig with the {1} imported fixture(s), or add them to it?</source>
@@ -4313,23 +4282,23 @@ Replace the current rig with the {1} imported fixture(s), or add them to it?</so
 Das aktuelle Rig durch die {1} importierten Fixture(s) ersetzen oder sie hinzufügen?</translation>
     </message>
     <message>
-      <location filename="..\gui\gui.py" line="2197" />
+      <location filename="..\gui\gui.py" line="2198" />
       <source>Replace</source>
       <translation>Ersetzen</translation>
     </message>
     <message>
-      <location filename="..\gui\gui.py" line="2198" />
+      <location filename="..\gui\gui.py" line="2199" />
       <source>Add</source>
       <translation>Hinzufügen</translation>
     </message>
     <message>
-      <location filename="..\gui\gui.py" line="2215" />
+      <location filename="..\gui\gui.py" line="2216" />
       <source>Imported {0} fixture(s) from {1}.</source>
       <translation>{0} Fixture(s) aus {1} importiert.</translation>
     </message>
     <message>
-      <location filename="..\gui\gui.py" line="2252" />
-      <location filename="..\gui\gui.py" line="2217" />
+      <location filename="..\gui\gui.py" line="2253" />
+      <location filename="..\gui\gui.py" line="2218" />
       <source>
 
 Warnings:
@@ -4340,8 +4309,8 @@ Warnungen:
 - </translation>
     </message>
     <message>
-      <location filename="..\gui\gui.py" line="2253" />
-      <location filename="..\gui\gui.py" line="2218" />
+      <location filename="..\gui\gui.py" line="2254" />
+      <location filename="..\gui\gui.py" line="2219" />
       <source>
 
 Save the config to persist the imported rig.</source>
@@ -4350,85 +4319,80 @@ Save the config to persist the imported rig.</source>
 Zum Übernehmen des importierten Rigs die Konfiguration speichern.</translation>
     </message>
     <message>
-      <location filename="..\gui\gui.py" line="2249" />
+      <location filename="..\gui\gui.py" line="2250" />
       <source>Imported {0} fixture(s) from the lighting table.</source>
       <translation>{0} Fixture(s) aus der Lichttabelle importiert.</translation>
     </message>
     <message>
-      <location filename="..\gui\gui.py" line="2266" />
+      <location filename="..\gui\gui.py" line="2267" />
       <source>No Fixtures</source>
       <translation>Keine Fixtures</translation>
     </message>
     <message>
-      <location filename="..\gui\gui.py" line="2267" />
+      <location filename="..\gui\gui.py" line="2268" />
       <source>Add fixtures in the Fixtures tab before exporting a fixture list.</source>
       <translation>Vor dem Export einer Fixture-Liste Fixtures im Tab Fixtures hinzufügen.</translation>
     </message>
     <message>
-      <location filename="..\gui\gui.py" line="2274" />
+      <location filename="..\gui\gui.py" line="2275" />
       <source>Export Fixture List</source>
       <translation>Fixture-Liste exportieren</translation>
     </message>
     <message>
-      <location filename="..\gui\gui.py" line="2292" />
+      <location filename="..\gui\gui.py" line="2293" />
       <source>Exported {0} fixture(s) to {1}:
 {2}</source>
       <translation>{0} Fixture(s) als {1} exportiert:
 {2}</translation>
     </message>
     <message>
-      <location filename="..\gui\gui.py" line="2319" />
+      <location filename="..\gui\gui.py" line="2320" />
       <source>Venue pre-flight incomplete</source>
       <translation>Venue-Pre-Flight unvollständig</translation>
     </message>
     <message>
-      <location filename="..\gui\gui.py" line="2322" />
+      <location filename="..\gui\gui.py" line="2323" />
       <source>Continue Anyway</source>
       <translation>Trotzdem fortfahren</translation>
     </message>
     <message>
-      <location filename="..\gui\gui.py" line="2348" />
+      <location filename="..\gui\gui.py" line="2349" />
       <source>Creating Workspace</source>
       <translation>Workspace wird erstellt</translation>
     </message>
     <message>
-      <location filename="..\gui\gui.py" line="2349" />
+      <location filename="..\gui\gui.py" line="2350" />
       <source>Saving configuration...</source>
       <translation>Konfiguration wird gespeichert...</translation>
     </message>
     <message>
-      <location filename="..\gui\gui.py" line="2354" />
+      <location filename="..\gui\gui.py" line="2355" />
       <source>Saving tab data...</source>
       <translation>Tab-Daten werden gespeichert...</translation>
     </message>
     <message>
-      <location filename="..\gui\gui.py" line="2363" />
+      <location filename="..\gui\gui.py" line="2364" />
       <source>Generating Virtual Console...</source>
       <translation>Virtual Console wird generiert...</translation>
     </message>
     <message>
-      <location filename="..\gui\gui.py" line="2366" />
-      <location filename="..\gui\gui.py" line="2364" />
+      <location filename="..\gui\gui.py" line="2367" />
+      <location filename="..\gui\gui.py" line="2365" />
       <source>Generating QLC+ workspace XML...</source>
       <translation>QLC+-Workspace-XML wird generiert...</translation>
     </message>
     <message>
-      <location filename="..\gui\gui.py" line="2371" />
-      <source>Export QLC+ workspace</source>
-      <translation>QLC+-Workspace exportieren</translation>
-    </message>
-    <message>
-      <location filename="..\gui\gui.py" line="2378" />
+      <location filename="..\gui\gui.py" line="2379" />
       <source>Done!</source>
       <translation>Fertig!</translation>
     </message>
     <message>
-      <location filename="..\gui\gui.py" line="2389" />
+      <location filename="..\gui\gui.py" line="2390" />
       <source>Workspace created with warnings</source>
       <translation>Workspace mit Warnungen erstellt</translation>
     </message>
     <message>
-      <location filename="..\gui\gui.py" line="2391" />
+      <location filename="..\gui\gui.py" line="2392" />
       <source>Workspace created at {0}
 
 {1} warning(s) during export - parts of the show may be missing from the file.</source>
@@ -4437,37 +4401,37 @@ Zum Übernehmen des importierten Rigs die Konfiguration speichern.</translation>
 {1} Warnung(en) beim Export - Teile der Show fehlen möglicherweise in der Datei.</translation>
     </message>
     <message>
-      <location filename="..\gui\gui.py" line="2393" />
+      <location filename="..\gui\gui.py" line="2394" />
       <source>View Warnings</source>
       <translation>Warnungen anzeigen</translation>
     </message>
     <message>
-      <location filename="..\gui\gui.py" line="2402" />
+      <location filename="..\gui\gui.py" line="2403" />
       <source>Workspace created at {0}</source>
       <translation>Workspace erstellt unter {0}</translation>
     </message>
     <message>
-      <location filename="..\gui\gui.py" line="2412" />
+      <location filename="..\gui\gui.py" line="2413" />
       <source>Failed to create workspace: {0}</source>
       <translation>Workspace konnte nicht erstellt werden: {0}</translation>
     </message>
     <message>
-      <location filename="..\gui\gui.py" line="2420" />
+      <location filename="..\gui\gui.py" line="2421" />
       <source>No shows available to render.</source>
       <translation>Keine Shows zum Rendern vorhanden.</translation>
     </message>
     <message>
-      <location filename="..\gui\gui.py" line="2435" />
+      <location filename="..\gui\gui.py" line="2436" />
       <source>Failed to open render dialog: {0}</source>
       <translation>Render-Dialog konnte nicht geöffnet werden: {0}</translation>
     </message>
     <message>
-      <location filename="..\gui\gui.py" line="2475" />
+      <location filename="..\gui\gui.py" line="2476" />
       <source>Converted {0} movement block(s) to world targets (save the config to persist)</source>
       <translation>{0} Bewegungsblock/-blöcke in Weltziele umgewandelt (zum Übernehmen die Konfiguration speichern)</translation>
     </message>
     <message>
-      <location filename="..\gui\gui.py" line="2505" />
+      <location filename="..\gui\gui.py" line="2506" />
       <source>Failed to open audio settings: {0}</source>
       <translation>Audioeinstellungen konnten nicht geöffnet werden: {0}</translation>
     </message>
@@ -8826,16 +8790,6 @@ Dieser Vorgang kann nicht rückgängig gemacht werden.</translation>
       <location filename="..\gui\tabs\structure_tab.py" line="3451" />
       <source>Song deleted successfully.</source>
       <translation>Song erfolgreich gelöscht.</translation>
-    </message>
-    <message>
-      <location filename="..\gui\tabs\structure_tab.py" line="3496" />
-      <source>Audio file not found: {0}; the song plays without audio</source>
-      <translation>Audiodatei nicht gefunden: {0}; der Song läuft ohne Audio</translation>
-    </message>
-    <message>
-      <location filename="..\gui\tabs\structure_tab.py" line="3509" />
-      <source>Audio file not found for '{0}' (looked in {1}); the song plays without audio</source>
-      <translation>Audiodatei für '{0}' nicht gefunden (gesucht in {1}); der Song läuft ohne Audio</translation>
     </message>
     <message>
       <location filename="..\gui\tabs\structure_tab.py" line="3525" />

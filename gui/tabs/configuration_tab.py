@@ -839,17 +839,25 @@ class ConfigurationTab(BaseTab):
                                       count: int) -> bool:
         """Ask before removing a universe that still has fixtures on it.
         Returns True to proceed. Defaults to No (the safe choice)."""
-        noun = QCoreApplication.translate(
-            "ConfigurationTab", "fixture") if count == 1 else QCoreApplication.translate(
-                "ConfigurationTab", "fixtures")
+        # Whole singular and plural templates: German changes the verb
+        # with the count (ist / sind), so a shared template with a
+        # translated noun reads wrong for one fixture.
+        if count == 1:
+            text = QCoreApplication.translate(
+                "ConfigurationTab",
+                "Universe {0} still has 1 fixture patched to it. Removing "
+                "the universe leaves that fixture with no output.\n"
+                "\nRemove it anyway?").format(universe_id)
+        else:
+            text = QCoreApplication.translate(
+                "ConfigurationTab",
+                "Universe {0} still has {1} fixtures patched to it. Removing "
+                "the universe leaves them with no output.\n"
+                "\nRemove it anyway?").format(universe_id, count)
         resp = QtWidgets.QMessageBox.question(
             self, QCoreApplication.translate(
                 "ConfigurationTab", "Remove universe"),
-            QCoreApplication.translate(
-                "ConfigurationTab",
-                "Universe {0} still has {1} {2} patched to it. Removing the "
-                "universe leaves them with no output.\n"
-                "\nRemove it anyway?").format(universe_id, count, noun),
+            text,
             QtWidgets.QMessageBox.StandardButton.Yes
             | QtWidgets.QMessageBox.StandardButton.No,
             QtWidgets.QMessageBox.StandardButton.No)

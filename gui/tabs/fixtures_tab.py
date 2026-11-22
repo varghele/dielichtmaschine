@@ -1966,7 +1966,7 @@ class FixturesTab(BaseTab):
                     self._add_fixtures_from_qxf(path, quantity)
 
         except Exception as e:
-            user_warnings.warn(QCoreApplication.translate("FixturesTab", "Adding the fixture failed: {0}").format(e), category="fixture-library")
+            user_warnings.warn(f"Adding the fixture failed: {e}", category="fixture-library")
             logger.exception("Adding the fixture failed")
 
     def _find_next_available_address(self, channel_count: int) -> tuple:
@@ -2118,7 +2118,8 @@ class FixturesTab(BaseTab):
             worker.wait()  # Ensure thread is fully done
             if worker.error is not None:
                 user_warnings.warn(
-                    QCoreApplication.translate("FixturesTab", "Loading the definition of {0} {1} failed: {2}").format(manufacturer, model, worker.error), category="fixture-library")
+                    f"Loading the definition of {manufacturer} {model} "
+                    f"failed: {worker.error}", category="fixture-library")
         else:
             # Already cached, no need for loading dialog
             get_cached_fixture_definitions({(manufacturer, model)})

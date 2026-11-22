@@ -200,6 +200,76 @@ def test_german_uses_no_em_dash_and_no_du_form(catalog):
     assert not bad, "\n".join(bad)
 
 
+_LOGGER_NAMES = {"logger", "_logger", "_audio_logger", "log", "logging"}
+_LOG_METHODS = {"debug", "info", "warning", "warn", "error", "exception",
+                "critical", "log"}
+
+
+def _is_english_sink(func) -> bool:
+    """user_warnings.warn / .operation and logger calls: their text lands
+    in the file log and Help > Warnings, which stay English on purpose
+    (one language for bug reports, whatever the UI shows)."""
+    if not isinstance(func, ast.Attribute):
+        return False
+    receiver = ast.unparse(func.value)
+    if func.attr in ("warn", "operation") and (
+            receiver == "user_warnings" or receiver.endswith("get_log()")):
+        return True
+    return receiver in _LOGGER_NAMES and func.attr in _LOG_METHODS
+
+
+def _contains_translate(node) -> bool:
+    return any(isinstance(n, ast.Call) and _is_qt_translate(n.func)
+               for n in ast.walk(node))
+
+
+def test_warnings_and_log_messages_stay_english():
+    """No translate() reaches user_warnings or a logger, directly or via
+    a local name assigned from a translate() in the same function."""
+    offenders = []
+    for path in _ui_files():
+        rel = os.path.relpath(path, ROOT)
+        with open(path, encoding="utf-8") as fh:
+            tree = ast.parse(fh.read(), filename=rel)
+        scopes = [tree] + [n for n in ast.walk(tree)
+                           if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef))]
+        for scope in scopes:
+            translated = {t.id for n in ast.walk(scope)
+                          if isinstance(n, ast.Assign) and _contains_translate(n.value)
+                          for t in n.targets if isinstance(t, ast.Name)}
+            for node in ast.walk(scope):
+                if not (isinstance(node, ast.Call) and _is_english_sink(node.func)):
+                    continue
+                for arg in list(node.args) + [k.value for k in node.keywords]:
+                    if _contains_translate(arg) or any(
+                            isinstance(n, ast.Name) and n.id in translated
+                            for n in ast.walk(arg)):
+                        offenders.append(f"{rel}:{node.lineno}")
+    assert not offenders, ("user_warnings entries and log messages stay "
+                           "English: " + ", ".join(sorted(set(offenders))))
+
+
+def test_english_sink_rule_catches_direct_and_indirect_translate():
+    """The rule above is only as good as its matcher: prove it fires."""
+    src = (
+        "def f(e):\n"
+        "    user_warnings.warn(QCoreApplication.translate('X', 'a {0}').format(e))\n"
+        "def g():\n"
+        "    msg = QCoreApplication.translate('X', 'b')\n"
+        "    logger.warning(msg)\n"
+        "def h():\n"
+        "    with user_warnings.operation(QCoreApplication.translate('X', 'c')):\n"
+        "        pass\n"
+        "def ok(e):\n"
+        "    user_warnings.warn(f'fine {e}')\n"
+    )
+    hits = [node.lineno for node in ast.walk(ast.parse(src))
+            if isinstance(node, ast.Call) and _is_english_sink(node.func)
+            and any(_contains_translate(a) or (isinstance(a, ast.Name) and a.id == "msg")
+                    for a in node.args)]
+    assert hits == [2, 5, 7]
+
+
 # -- runtime: German installed ------------------------------------------------
 
 @pytest.fixture
@@ -294,3 +364,25 @@ def test_no_translate_runs_at_import_time():
         with open(path, encoding="utf-8") as fh:
             visit(ast.parse(fh.read(), filename=rel), False, rel)
     assert not offenders, "use QT_TRANSLATE_NOOP: " + ", ".join(offenders)
+
+
+@pytest.mark.parametrize("count, expected", [
+    (1, "Auf Universum 2 ist noch 1 Fixture gepatcht."),
+    (2, "Auf Universum 2 sind noch 2 Fixtures gepatcht."),
+])
+def test_remove_universe_confirmation_agrees_with_the_count_in_german(
+        qapp, german, monkeypatch, count, expected):
+    """Whole singular and plural templates, not a translated noun in a
+    shared one: German changes the verb with the count (ist / sind)."""
+    from PyQt6 import QtWidgets
+    from gui.tabs.configuration_tab import ConfigurationTab
+    asked = {}
+
+    def no(parent, title, text, *a, **k):
+        asked["text"] = text
+        return QtWidgets.QMessageBox.StandardButton.No
+
+    monkeypatch.setattr(QtWidgets.QMessageBox, "question", staticmethod(no))
+    assert ConfigurationTab._confirm_remove_with_fixtures(None, 2, count) is False
+    assert asked["text"].startswith(expected)
+    assert "{" not in asked["text"]
