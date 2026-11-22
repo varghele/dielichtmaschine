@@ -430,7 +430,8 @@ def test_scopes_name_assignment_targets_and_defs():
 #: The one module allowed to read the applied stylesheet for the theme.
 SNIFF_HOME = "gui/theme_style.py"
 #: Helper names that mean "a private copy of active_tokens".
-SNIFF_NAME_RE = re.compile(r"^_*(active|current|theme|applied)_tokens$")
+SNIFF_NAME_RE = re.compile(
+    r"^_*((active|current|theme|applied)_tokens|active_theme(_name)?)$")
 
 
 def _tracked_sources():
@@ -494,4 +495,5 @@ def test_sniff_scanner_finds_a_copy():
     assert [n for _l, n in sniff_copies_in(copy)] == ["_active_tokens",
                                                        "pick"]
     home = _parse(os.path.join(ROOT, SNIFF_HOME))
-    assert [n for _l, n in sniff_copies_in(home)] == ["active_tokens"]
+    assert sorted(n for _l, n in sniff_copies_in(home)) == [
+        "active_theme_name", "active_tokens"]

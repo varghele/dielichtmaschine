@@ -20,7 +20,7 @@ from PyQt6.QtCore import QT_TRANSLATE_NOOP, QCoreApplication, Qt, QTimer, pyqtSi
 
 from utils.fixture_capabilities import Chassis, chassis_from_legacy_type
 from utils.geometry import GeometryBuilder
-from gui.theme_style import active_tokens
+from gui.theme_style import bind_style, unbind_style
 from utils.orientation import MOUNTING_PRESET_ANGLES
 
 logger = logging.getLogger(__name__)
@@ -2134,11 +2134,19 @@ class OrientationPanel(QWidget):
                 # +90° text fits inside the narrow button without clipping.
                 rotate_btn.setMinimumWidth(1)
                 rotate_btn.setMaximumWidth(46)
-                rotate_btn.setStyleSheet(rotate_btn.styleSheet() + " padding: 4px 2px;")
+                # The button's sheet is token-bound: extend the builder,
+                # or a theme switch would rebuild it without the padding.
+                build = unbind_style(rotate_btn)
+                bind_style(rotate_btn, lambda t, b=build: (
+                    (b(t) if b else "") + " padding: 4px 2px;"))
                 adjust_layout.addWidget(rotate_btn, row_index, 2)
 
-        # Axis colours match the 3D gizmo rings (shared tokens).
-        tokens = active_tokens()
+        # Axis colours match the 3D gizmo rings (shared tokens). Bound,
+        # not baked: the panel also lives in the Stage tab inspector.
+        def axis_button_style(axis):
+            return lambda t: (f"background-color: {t['axis_' + axis]};"
+                              f" color: {t['on_function']}; font-weight: bold; "
+                              "padding: 4px 6px;")
 
         # Yaw
         self.yaw_spin = QDoubleSpinBox()
@@ -2148,11 +2156,7 @@ class OrientationPanel(QWidget):
         self.yaw_spin.setToolTip(QCoreApplication.translate("OrientationDialog", "Rotation around vertical axis (blue ring)"))
         self.yaw_90_btn = QPushButton("+90°")
         self.yaw_90_btn.setToolTip(QCoreApplication.translate("OrientationDialog", "Rotate yaw by +90°"))
-        self.yaw_90_btn.setStyleSheet(
-            f"background-color: {tokens['axis_yaw']};"
-            f" color: {tokens['on_function']}; font-weight: bold; "
-            "padding: 4px 6px;"
-        )
+        bind_style(self.yaw_90_btn, axis_button_style("yaw"))
         self.yaw_90_btn.clicked.connect(lambda: self._rotate_by_90('yaw'))
         _add_axis_row(0, QCoreApplication.translate("OrientationDialog", "Yaw:"), self.yaw_spin, self.yaw_90_btn)
 
@@ -2164,11 +2168,7 @@ class OrientationPanel(QWidget):
         self.pitch_spin.setToolTip(QCoreApplication.translate("OrientationDialog", "Tilt angle (green ring)"))
         self.pitch_90_btn = QPushButton("+90°")
         self.pitch_90_btn.setToolTip(QCoreApplication.translate("OrientationDialog", "Rotate pitch by +90°"))
-        self.pitch_90_btn.setStyleSheet(
-            f"background-color: {tokens['axis_pitch']};"
-            f" color: {tokens['on_function']}; font-weight: bold; "
-            "padding: 4px 6px;"
-        )
+        bind_style(self.pitch_90_btn, axis_button_style("pitch"))
         self.pitch_90_btn.clicked.connect(lambda: self._rotate_by_90('pitch'))
         _add_axis_row(1, QCoreApplication.translate("OrientationDialog", "Pitch:"), self.pitch_spin, self.pitch_90_btn)
 
@@ -2180,11 +2180,7 @@ class OrientationPanel(QWidget):
         self.roll_spin.setToolTip(QCoreApplication.translate("OrientationDialog", "Rotation around beam axis (red ring)"))
         self.roll_90_btn = QPushButton("+90°")
         self.roll_90_btn.setToolTip(QCoreApplication.translate("OrientationDialog", "Rotate roll by +90°"))
-        self.roll_90_btn.setStyleSheet(
-            f"background-color: {tokens['axis_roll']};"
-            f" color: {tokens['on_function']}; font-weight: bold; "
-            "padding: 4px 6px;"
-        )
+        bind_style(self.roll_90_btn, axis_button_style("roll"))
         self.roll_90_btn.clicked.connect(lambda: self._rotate_by_90('roll'))
         _add_axis_row(2, QCoreApplication.translate("OrientationDialog", "Roll:"), self.roll_spin, self.roll_90_btn)
 

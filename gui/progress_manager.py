@@ -183,6 +183,8 @@ class ProgressManager:
         self.modal_dialog.setMinimumHeight(100)
 
         # Style the dialog
+        # Read once: window-modal, so the main window (and View > Theme)
+        # is blocked while it is open.
         self.modal_dialog.setStyleSheet(_modal_progress_style(active_tokens()))
 
         # Force the dialog to show immediately (bypass minimumDuration timer)
@@ -302,6 +304,8 @@ class ProgressDialogWithLog(QDialog):
         layout.addWidget(self._log, stretch=1)
 
         # Styling
+        # Read once: window-modal, so the main window (and View > Theme)
+        # is blocked while it is open.
         self.setStyleSheet(_log_dialog_style(active_tokens()))
 
         self._line_count = 0

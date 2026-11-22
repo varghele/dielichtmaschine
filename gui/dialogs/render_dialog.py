@@ -158,6 +158,8 @@ class RenderDialog(QDialog):
         # Render / Cancel buttons
         self._render_btn = QPushButton(QCoreApplication.translate(
             "RenderDialog", "Render"))
+        # Read once: only ever inside a modal dialog (exec'd), so no
+        # theme switch can happen while it is open.
         tokens = active_tokens()
         self._render_btn.setStyleSheet(f"""
             QPushButton {{

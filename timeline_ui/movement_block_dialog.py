@@ -174,6 +174,8 @@ class PanTiltWidget(QFrame):
         super().__init__(parent)
         self.setMinimumSize(250, 250)
         self.setFrameShape(QFrame.Shape.Box)
+        # Read once: only ever inside a modal dialog (exec'd), so no
+        # theme switch can happen while it is open.
         tokens = active_tokens()
         self.setStyleSheet(
             f"background-color: {tokens['window']}; "

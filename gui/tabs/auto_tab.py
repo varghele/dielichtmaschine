@@ -71,7 +71,7 @@ from audio.live_input import (GAIN_MAX, GAIN_MIN, LiveAudioInput,
 from audio.realtime_spectral import RealtimeSpectralAnalyzer, LiveFeatureFrame
 from gui.live_feature_bridge import LiveFeatureBridge
 from gui.fonts import FONT_MONO
-from gui.theme_style import active_tokens
+from gui.theme_style import active_theme_name, active_tokens, bind_style
 from gui.icons import shell_icon
 from gui.typography import DisplayLabel, MicroLabel, display_font, mono_font
 from gui.widgets.embedded_visualizer import EmbeddedVisualizer
@@ -208,12 +208,15 @@ def vocal_word(value: float) -> str:
 # ---------------------------------------------------------------------------
 
 class _Bar(QWidget):
-    """A flat two-tone bar: track + fill. Fill color is a data color."""
+    """A flat two-tone bar: track + fill. Fill color is a data color
+    (``#rrggbb``) or a theme token name, read at paint time so it
+    follows a theme switch."""
 
     def __init__(self, width: int, height: int, fill: str, parent=None):
         super().__init__(parent)
         self.setFixedSize(width, height)
-        self._fill = QColor(fill)
+        self._fill_role = fill if fill in active_tokens() else None
+        self._fill = QColor(fill) if self._fill_role is None else None
         self._fraction: Optional[float] = None
 
     def fraction(self) -> Optional[float]:
@@ -232,7 +235,9 @@ class _Bar(QWidget):
         if self._fraction:
             filled = int(round(self.width() * self._fraction))
             if filled > 0:
-                painter.fillRect(0, 0, filled, self.height(), self._fill)
+                fill = (self._fill if self._fill_role is None
+                        else QColor(tokens[self._fill_role]))
+                painter.fillRect(0, 0, filled, self.height(), fill)
         painter.end()
 
 
@@ -397,7 +402,6 @@ class _EngineLogView(QWidget):
         self._layout.addStretch(1)
 
     def render_entries(self, entries) -> None:
-        tokens = active_tokens()
         while self._layout.count() > 1:
             item = self._layout.takeAt(0)
             widget = item.widget()
@@ -410,15 +414,15 @@ class _EngineLogView(QWidget):
             row_layout.setSpacing(8)
             time_label = QLabel(stamp, row)
             time_label.setFont(mono_font(8))
-            time_label.setStyleSheet(
-                f"color: {tokens['text_disabled']};"
-                f" font-family: '{FONT_MONO}';")
+            bind_style(time_label, lambda t: (
+                f"color: {t['text_disabled']};"
+                f" font-family: '{FONT_MONO}';"))
             row_layout.addWidget(time_label)
             text_label = QLabel(message, row)
             text_label.setFont(mono_font(8))
-            color = tokens["accent_line"] if accent else tokens["text_secondary"]
-            text_label.setStyleSheet(
-                f"color: {color}; font-family: '{FONT_MONO}';")
+            role = "accent_line" if accent else "text_secondary"
+            bind_style(text_label, lambda t, role=role: (
+                f"color: {t[role]}; font-family: '{FONT_MONO}';"))
             row_layout.addWidget(text_label, 1)
             self._layout.insertWidget(self._layout.count() - 1, row)
 
@@ -680,7 +684,6 @@ class AutoTab(BaseTab):
     # -- Center panel: the engine stage ------------------------------------
 
     def _build_center_panel(self) -> QWidget:
-        tokens = active_tokens()
         panel = QWidget()
         panel.setObjectName("AutoEngineStage")
         panel.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
@@ -758,8 +761,8 @@ class AutoTab(BaseTab):
         # the centre panel past the 720p width budget.
         layout.addLayout(self._build_input_row())
         for key, caption, color in (
-            ("rms", QCoreApplication.translate("AutoTab", "RMS energy"), tokens["accent"]),
-            ("contrast", QCoreApplication.translate("AutoTab", "Contrast"), tokens["text_secondary"]),
+            ("rms", QCoreApplication.translate("AutoTab", "RMS energy"), "accent"),
+            ("contrast", QCoreApplication.translate("AutoTab", "Contrast"), "text_secondary"),
             ("vocal", QCoreApplication.translate("AutoTab", "Vocals"), VOCAL_COLOR),
         ):
             column = QVBoxLayout()
@@ -1440,7 +1443,8 @@ class AutoTab(BaseTab):
     def _apply_chrome_icons(self) -> None:
         expanded = self._pane_toggle_btn.isChecked()
         self._pane_toggle_btn.setIcon(
-            shell_icon("chevron-right" if expanded else "chevron-left"))
+            shell_icon("chevron-right" if expanded else "chevron-left",
+                       active_theme_name()))
 
     def changeEvent(self, event):
         # Theme switches restyle the whole app via app.setStyleSheet, which
@@ -1759,14 +1763,13 @@ class AutoTab(BaseTab):
         """Update the ASIO status label below the device combo (warn/info
         only - the ``ok`` message would just add noise)."""
         from audio.device_manager import asio_status
-        tokens = active_tokens()
         status = asio_status()
         level = status["level"]
         if level == "ok":
             self._asio_hint_label.setVisible(False)
             return
-        color = tokens["warning"] if level == "warn" else tokens["text_secondary"]
-        self._asio_hint_label.setStyleSheet(f"color: {color};")
+        role = "warning" if level == "warn" else "text_secondary"
+        bind_style(self._asio_hint_label, lambda t: f"color: {t[role]};")
         self._asio_hint_label.setText(status["message"])
         self._asio_hint_label.setVisible(True)
 

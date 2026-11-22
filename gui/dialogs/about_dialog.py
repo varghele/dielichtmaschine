@@ -68,6 +68,8 @@ class AboutDialog(QDialog):
         self.setObjectName("AboutDialog")
         self.setFixedWidth(520)
 
+        # Read once: only ever inside a modal dialog (exec'd), so no
+        # theme switch can happen while it is open.
         tokens = active_tokens()
 
         layout = QVBoxLayout(self)

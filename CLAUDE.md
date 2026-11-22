@@ -182,7 +182,10 @@ misreporting state, so a green suite does not mean a working surface.
   `tests/unit/test_theme_lint.py`; data palettes are its allowlist).
   Inline `setStyleSheet` strings are baked and never see a theme
   switch: use `gui/theme_style.bind_style` (re-applies on StyleChange)
-  or a template rule keyed by objectName/property.
+  or a template rule keyed by objectName/property. Read the theme only
+  through `gui/theme_style.active_tokens` / `active_theme_name` (the
+  APPLIED theme; `ThemeManager.current()` lags a switch); no private
+  copies (lint), deferred import inside `timeline_ui`.
 - ALL QSettings access goes through `utils/app_settings.app_settings()`;
   identity lives in `utils/app_identity.py`.
 - i18n: every UI string is a literal

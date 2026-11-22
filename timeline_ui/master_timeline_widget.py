@@ -408,14 +408,15 @@ class MasterTimelineContainer(QWidget):
         self.embedded_row_height = PARTS_BAND_HEIGHT if compact else None
         self.setup_ui()
 
-    def _info_style(self, point_size: int) -> str:
+    def _bind_info_style(self, point_size: int) -> None:
         """Info-readout stylesheet with the color sourced from the active
         theme (text_secondary), not a hardcoded #333 that only reads on a
-        light background. Custom-styled QLabels can't reach a QSS role, so
-        we sniff the brand tokens the same way the block painter does."""
-        from gui.theme_style import active_tokens
-        return (f"color: {active_tokens()['text_secondary']}; "
-                f"font-size: {point_size}px;")
+        light background. Custom-styled QLabels can't reach a QSS role,
+        so the sheet is token-built and bound: it follows a theme switch.
+        (Deferred import: the gui package imports timeline_ui.)"""
+        from gui.theme_style import bind_style
+        bind_style(self.info_widget, lambda t: (
+            f"color: {t['text_secondary']}; font-size: {point_size}px;"))
 
     def setup_ui(self):
         layout = QVBoxLayout(self)
@@ -440,7 +441,7 @@ class MasterTimelineContainer(QWidget):
         # (fanned out via TimelineGrid) drive the master's grid drawing,
         # and per-lane snap lives on each lane's own checkbox.
         self.info_widget = QLabel()
-        self.info_widget.setStyleSheet(self._info_style(10))
+        self._bind_info_style(10)
         self.info_widget.setText(QCoreApplication.translate("MasterTimelineWidget", "Time: 0.00s | BPM: 120.0 | Zoom: 1.0x"))
 
         # NOTE: this top_row_layout is what shows BEFORE detach_pieces() runs
@@ -591,7 +592,7 @@ class MasterTimelineContainer(QWidget):
         # Row 2 — info display (Time/BPM/Zoom/Part).
         if hasattr(self, "info_widget") and self.info_widget is not None:
             self.info_widget.setParent(header)
-            self.info_widget.setStyleSheet(self._info_style(9))
+            self._bind_info_style(9)
             outer.addWidget(self.info_widget)
 
         # Detach the timeline from the scrollarea so TimelineGrid can take it.

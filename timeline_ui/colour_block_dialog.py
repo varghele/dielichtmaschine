@@ -28,6 +28,8 @@ class ColorPreviewWidget(QFrame):
         super().__init__(parent)
         self.setMinimumHeight(60)
         self.setFrameShape(QFrame.Shape.Box)
+        # Read once: only ever inside a modal dialog (exec'd), so no
+        # theme switch can happen while it is open.
         self._border = active_tokens()["border"]
         self.setStyleSheet(
             f"background-color: #000000; border: 1px solid {self._border};")
@@ -56,6 +58,8 @@ class ColorPresetButton(QPushButton):
         self.color_value = color
         self.setFixedHeight(35)
         self.setMinimumWidth(70)
+        # Read once: only ever inside a modal dialog (exec'd), so no
+        # theme switch can happen while it is open.
         tokens = active_tokens()
         border = tokens["border"]
         accent = tokens["accent"]
@@ -157,6 +161,8 @@ class PaletteEditorDialog(QDialog):
 
     def _set_swatch(self, swatch: QPushButton, rgb: tuple) -> None:
         swatch.rgb = (int(rgb[0]), int(rgb[1]), int(rgb[2]))
+        # Read once: only ever inside a modal dialog (exec'd), so no
+        # theme switch can happen while it is open.
         border = active_tokens()["border"]
         swatch.setStyleSheet(
             f"QPushButton {{ background-color: "

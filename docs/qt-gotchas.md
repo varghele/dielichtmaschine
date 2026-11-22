@@ -311,6 +311,20 @@ objectName or a dynamic property. `tests/unit/test_theme_lint.py`
 rejects colour literals outside `gui/theme_tokens.py` (2026-11-22
 theme sweep).
 
+Two traps with bound sheets (2026-11-22 follow-up). Appending to a
+bound widget's `styleSheet()` is lost on the next switch, because the
+builder rebuilds the sheet without the suffix: extend the builder
+instead (`build = unbind_style(w)`, then bind `build(t) + suffix`; the
+orientation panel's +90 buttons). And a `StyleChange` handler must read
+the APPLIED theme (`active_tokens()` / `active_theme_name()`), never
+`ThemeManager.current()`: View > Theme applies before it persists, so
+the settings store still names the old theme while the handlers run
+(the Shows and Auto pane chevrons re-inked in the old colour).
+Caches of tokens in a tab (`self._tokens`, item brushes, line icons)
+need the tab's own `changeEvent` re-run; `tests/e2e/test_theme_switch.py`
+scans every sheet in the main window for the old theme's colours after
+a switch.
+
 ---
 
 ## 6. Tab caches derived from `self.config` need invalidation on the same triggers as the config rebind ladder

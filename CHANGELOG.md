@@ -127,6 +127,21 @@ verbatim as the GitHub Release notes (see [docs/releasing.md](docs/releasing.md)
 
 ### Fixed
 
+- **Switching the theme (View > Theme) restyles everything.** Several
+  surfaces kept the old theme's colours until the app was restarted: the
+  Stage plan's title block, legend, layer badge, layer rows and group
+  rows, its section and button icons; the Fixtures table's group tints
+  and text; the Structure part cards; the master timeline readout; the
+  riff and scene cards and riff tags; the Auto engine log, contrast meter
+  and audio-driver hint; and the Shows and Auto pane chevrons, which
+  re-inked in the colour of the theme being left. Their stylesheets now
+  follow the switch (`gui/theme_style.bind_style`), and the tabs that
+  cache tokens (Stage, Fixtures, Structure) refresh them on the switch.
+  The orientation panel's +90 buttons keep their narrow padding across
+  a switch. Dialogs that block the main window while open (render,
+  progress, About, Autogen, colour and movement blocks, workspace
+  export options) still read the theme once, which is all they need.
+  Nothing changes in either theme's first render.
 - **Light theme: dark-only colours left over in a few places.** The
   time-signature "/" in the Structure inspector was white (invisible on
   light), the Render Video dialog and the progress dialogs (plain, with log,

@@ -3184,6 +3184,18 @@ class StructureTab(BaseTab):
             self._playing_index = playing
             self._refresh_cards()
 
+    def changeEvent(self, event):
+        """A theme switch (app.setStyleSheet) lands here as a
+        StyleChange: re-run the token pass and rebuild the part cards
+        (their data-tinted sheets are built from the token cache)."""
+        from PyQt6.QtCore import QEvent
+        if (event.type() == QEvent.Type.StyleChange
+                and getattr(self, "_tokens", None) is not None
+                and active_tokens() is not self._tokens):
+            self._apply_tokens()
+            self._refresh_cards()
+        super().changeEvent(event)
+
     def _apply_tokens(self):
         """Re-read the active theme's tokens and push them into the
         widget-local (data-colored) chrome."""

@@ -264,6 +264,8 @@ class _ColorButton(QPushButton):
 
     def _update_style(self):
         r, g, b = self.color
+        # Read once: only ever inside a modal dialog (exec'd), so no
+        # theme switch can happen while it is open.
         border = active_tokens()["border"]
         self.setStyleSheet(
             f"background-color: rgb({r},{g},{b}); "
@@ -633,6 +635,8 @@ class AutogenDialog(QDialog):
             swatch_row.addWidget(btn)
         self.white_swatch = QLabel()
         self.white_swatch.setFixedSize(30, 30)
+        # Read once: only ever inside a modal dialog (exec'd), so no
+        # theme switch can happen while it is open.
         self.white_swatch.setStyleSheet(
             f"background-color: #FFFFFF; "
             f"border: 1px solid {active_tokens()['border']};")

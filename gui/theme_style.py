@@ -30,20 +30,28 @@ _BUILD_ATTR = "_theme_style_build"
 _FILTER_ATTR = "_theme_style_filtered"
 
 
-def active_tokens() -> dict:
-    """Token dict of the theme currently applied to the app.
+def active_theme_name() -> str:
+    """Name of the theme currently applied to the app.
 
     ThemeManager.apply deliberately does not persist, so the applied
     stylesheet is the only reliable record of the active theme: the
     light theme's window colour only ever appears in the light sheet.
-    Falls back to dark (also before the first apply).
+    Falls back to dark (also before the first apply). Not
+    ThemeManager.current(): View > Theme applies BEFORE it persists, so
+    a StyleChange handler reading the settings store sees the old theme.
     """
     app = QApplication.instance()
     qss = app.styleSheet() if app is not None else ""
     light = THEMES.get("light")
     if light is not None and light["window"] in qss:
-        return light
-    return THEMES["dark"]
+        return "light"
+    return "dark"
+
+
+def active_tokens() -> dict:
+    """Token dict of the theme currently applied to the app (see
+    active_theme_name)."""
+    return THEMES[active_theme_name()]
 
 
 class _ThemeRestyler(QObject):

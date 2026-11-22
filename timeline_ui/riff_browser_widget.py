@@ -53,9 +53,9 @@ class RiffItemWidget(QFrame):
         # accent hover. No single theme role covers "raised surface + accent
         # hover", so this stays widget-local, but every color is a brand
         # token (radius 0 per the brand).
-        from gui.theme_style import active_tokens  # deferred (cycle)
-        t = active_tokens()
-        self.setStyleSheet(f"""
+        # Bound, not baked: the card follows a theme switch.
+        from gui.theme_style import bind_style  # deferred (cycle)
+        bind_style(self, lambda t: f"""
             RiffItemWidget {{
                 background-color: {t['raised']};
                 border: 1px solid {t['border']};
@@ -110,8 +110,7 @@ class RiffItemWidget(QFrame):
         if self.riff.tags:
             tags_label = QLabel(" ".join(f"#{t}" for t in self.riff.tags))
             tags_label.setProperty("role", "micro")
-            tags_label.setStyleSheet(
-                f"color: {t['accent']};")
+            bind_style(tags_label, lambda t: f"color: {t['accent']};")
             layout.addWidget(tags_label)
 
     def mousePressEvent(self, event):
@@ -198,9 +197,9 @@ class SceneItemWidget(QFrame):
     def _setup_ui(self):
         # Same raised-card treatment as RiffItemWidget so riffs and
         # scenes read as one library.
-        from gui.theme_style import active_tokens  # deferred (cycle)
-        t = active_tokens()
-        self.setStyleSheet(f"""
+        # Bound, not baked: the card follows a theme switch.
+        from gui.theme_style import bind_style  # deferred (cycle)
+        bind_style(self, lambda t: f"""
             SceneItemWidget {{
                 background-color: {t['raised']};
                 border: 1px solid {t['border']};

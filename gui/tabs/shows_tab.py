@@ -23,6 +23,7 @@ from timeline_ui.light_block_widget import (bar_range_label,
                                             blend_white_channel,
                                             dimmer_segment_label)
 from gui.icons import line_icon, shell_icon
+from gui.theme_style import active_theme_name
 from gui.typography import DisplayLabel, MicroLabel, mono_font
 from gui.tabs.configuration_tab import TOOLBAR_BTN_WIDTH
 from timeline_ui.locking import flash_locked
@@ -1015,9 +1016,10 @@ class ShowsTab(BaseTab):
         self.stop_btn.setIcon(line_icon("stop", on_function))
         expanded = self.pane_toggle_btn.isChecked()
         self.pane_toggle_btn.setIcon(
-            shell_icon("chevron-right" if expanded else "chevron-left"))
+            shell_icon("chevron-right" if expanded else "chevron-left",
+                       active_theme_name()))
         if hasattr(self, "pane_collapse_btn"):
-            self.pane_collapse_btn.setIcon(shell_icon("chevron-right"))
+            self.pane_collapse_btn.setIcon(shell_icon("chevron-right", active_theme_name()))
 
     def changeEvent(self, event):
         # Theme switches restyle the whole app via app.setStyleSheet,

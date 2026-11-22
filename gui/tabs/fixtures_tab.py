@@ -868,6 +868,19 @@ class FixturesTab(BaseTab):
         if main_window and hasattr(main_window, 'on_groups_changed'):
             main_window.on_groups_changed()
 
+    def changeEvent(self, event):
+        """A theme switch (app.setStyleSheet) lands here as a
+        StyleChange: the table's row tints and column inks are item
+        brushes built from the token cache, so re-tint them."""
+        if (event.type() == QtCore.QEvent.Type.StyleChange
+                and getattr(self, "table", None) is not None):
+            tokens = active_tokens()
+            if tokens is not self._tokens:
+                self._tokens = tokens
+                self._refresh_all_row_visuals()
+                self._update_conflict_indicators()
+        super().changeEvent(event)
+
     def update_from_config(self, force: bool = False):
         """Refresh the tab from the configuration.
 

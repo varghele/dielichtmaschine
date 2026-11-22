@@ -47,7 +47,7 @@ from PyQt6.QtCore import Qt, QTimer, QEvent, QCoreApplication
 from utils.app_settings import app_settings
 from config.models import Configuration, primary_group_name
 from .base_tab import BaseTab
-from gui.theme_style import active_tokens
+from gui.theme_style import active_tokens, bind_style, unbind_style
 from gui.StageView import StageView
 from gui.stage_items import FixtureItem
 from gui.dialogs.orientation_dialog import OrientationDialog, OrientationPanel
@@ -170,6 +170,11 @@ class _CollapsibleSection(QtWidgets.QWidget):
 
     def is_expanded(self) -> bool:
         return self.toggle.isChecked()
+
+    def set_marker_color(self, color: str) -> None:
+        """Re-ink the chevron (theme switch)."""
+        self._color = color
+        self._sync_marker(self.is_expanded())
 
     def _sync_marker(self, expanded: bool) -> None:
         self.toggle.setIcon(_chevron_icon(expanded, self._color))
@@ -926,8 +931,6 @@ class StageTab(BaseTab):
         """The StageView plus its non-interactive overlay chrome."""
         from gui.typography import MicroLabel, mono_font
 
-        tokens = self._tokens
-
         self.stage_view = StageView(self)
         self.stage_view.set_config(self.config)
         self.stage_view.installEventFilter(self)
@@ -948,32 +951,29 @@ class StageTab(BaseTab):
         self.active_layer_badge.setAttribute(
             Qt.WidgetAttribute.WA_StyledBackground, True)
         self.active_layer_badge.setFont(mono_font(7, tracking_em=0.1))
-        self.active_layer_badge.setStyleSheet(
+        bind_style(self.active_layer_badge, lambda t: (
             "#StagePlanBadge {"
-            f" background-color: {tokens['raised']};"
-            f" border: 1px solid {tokens['accent']};"
-            f" color: {tokens['accent_line']};"
-            " padding: 4px 10px; }")
+            f" background-color: {t['raised']};"
+            f" border: 1px solid {t['accent']};"
+            f" color: {t['accent_line']};"
+            " padding: 4px 10px; }"))
         self.active_layer_badge.setVisible(False)
 
         self.plan_legend = overlay(self._build_legend())
         self.title_block = overlay(self._build_title_block())
         return self.stage_view
 
-    def _swatch(self, style: str, width: int, height: int) -> QtWidgets.QWidget:
+    def _swatch(self, style, width: int, height: int) -> QtWidgets.QWidget:
+        """A legend swatch; ``style(tokens)`` returns its declarations."""
         swatch = QtWidgets.QWidget()
         swatch.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
         swatch.setFixedSize(width, height)
-        swatch.setStyleSheet(f"QWidget {{ {style} }}")
+        bind_style(swatch, lambda t: f"QWidget {{ {style(t)} }}")
         return swatch
 
     def _build_legend(self) -> QtWidgets.QWidget:
         """Bottom-left legend row (mono 9px, four swatched entries)."""
         from gui.typography import mono_font
-
-        tokens = self._tokens
-        line = tokens["stage_outline"]
-        dim = tokens["text_disabled"]
 
         legend = QtWidgets.QWidget()
         row = QtWidgets.QHBoxLayout(legend)
@@ -988,20 +988,24 @@ class StageTab(BaseTab):
             inner.addWidget(swatch)
             label = QtWidgets.QLabel(text)
             label.setFont(mono_font(7, tracking_em=0.05))
-            label.setStyleSheet(f"color: {tokens['text_secondary']};")
+            bind_style(label, lambda t: f"color: {t['text_secondary']};")
             inner.addWidget(label)
             row.addWidget(holder)
             return label
 
         self.legend_active_label = entry(
-            self._swatch(f"border-top: 2px solid {line};", 20, 3),
+            self._swatch(lambda t: f"border-top: 2px solid {t['stage_outline']};",
+                         20, 3),
             QCoreApplication.translate("StageTab", "ALL LAYERS"))
-        entry(self._swatch(f"border-top: 2px dashed {dim};", 20, 3),
+        entry(self._swatch(
+            lambda t: f"border-top: 2px dashed {t['text_disabled']};", 20, 3),
               QCoreApplication.translate("StageTab", "OTHER LAYERS"))
         entry(self._swatch(
-            f"border: 2px dashed {dim}; border-radius: 6px;", 12, 12),
+            lambda t: (f"border: 2px dashed {t['text_disabled']};"
+                       " border-radius: 6px;"), 12, 12),
             QCoreApplication.translate("StageTab", "FIXTURE (OTHER LAYER)"))
-        entry(self._swatch(f"border: 2px solid {line};", 14, 9),
+        entry(self._swatch(
+            lambda t: f"border: 2px solid {t['stage_outline']};", 14, 9),
               QCoreApplication.translate("StageTab", "FIXTURE (ACTIVE)"))
         return legend
 
@@ -1009,14 +1013,13 @@ class StageTab(BaseTab):
         """Bottom-right 2x2 mono title block (drawing-sheet convention)."""
         from gui.typography import mono_font
 
-        tokens = self._tokens
         block = QtWidgets.QWidget()
         block.setObjectName("StageTitleBlock")
         block.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
-        block.setStyleSheet(
+        bind_style(block, lambda t: (
             "#StageTitleBlock {"
-            f" background-color: {tokens['raised']};"
-            f" border: 1px solid {tokens['border']}; }}")
+            f" background-color: {t['raised']};"
+            f" border: 1px solid {t['border']}; }}"))
         grid = QtWidgets.QGridLayout(block)
         grid.setContentsMargins(0, 0, 0, 0)
         grid.setSpacing(0)
@@ -1024,14 +1027,16 @@ class StageTab(BaseTab):
         def cell(row, col, strong=False):
             label = QtWidgets.QLabel("")
             label.setFont(mono_font(7, tracking_em=0.05))
-            color = tokens["text"] if strong else tokens["text_secondary"]
-            right = (f"border-right: 1px solid {tokens['border']};"
-                     if col == 0 else "")
-            bottom = (f"border-bottom: 1px solid {tokens['border']};"
-                      if row == 0 else "")
-            label.setStyleSheet(
-                f"QLabel {{ color: {color}; padding: 5px 10px;"
-                f" {right} {bottom} }}")
+
+            def build(t):
+                color = t["text"] if strong else t["text_secondary"]
+                right = (f"border-right: 1px solid {t['border']};"
+                         if col == 0 else "")
+                bottom = (f"border-bottom: 1px solid {t['border']};"
+                          if row == 0 else "")
+                return (f"QLabel {{ color: {color}; padding: 5px 10px;"
+                        f" {right} {bottom} }}")
+            bind_style(label, build)
             grid.addWidget(label, row, col)
             return label
 
@@ -1527,6 +1532,31 @@ class StageTab(BaseTab):
                 "the MARKS list").format(spot.name, x_m, y_m)
             + ("" if keep_going else QCoreApplication.translate(
                 "StageTab", " · Shift-click to place several")))
+
+    def changeEvent(self, event):
+        """A theme switch (app.setStyleSheet) lands here as a
+        StyleChange: refresh the token cache and re-ink the line icons
+        rasterized from it. Widget-local sheets follow by themselves
+        (bind_style)."""
+        if (event.type() == QEvent.Type.StyleChange
+                and hasattr(self, "preview_collapse_btn")):
+            tokens = active_tokens()
+            if tokens is not self._tokens:
+                self._tokens = tokens
+                self._apply_token_icons()
+        super().changeEvent(event)
+
+    def _apply_token_icons(self) -> None:
+        from gui.icons import line_icon
+        tokens = self._tokens
+        self.morph_btn.setIcon(line_icon("morph", tokens["text_disabled"]))
+        self.export_rider_btn.setIcon(
+            line_icon("export", tokens["text_secondary"]))
+        for section in self.sections.values():
+            section.set_marker_color(tokens["text_secondary"])
+        self.preview_collapse_btn.setIcon(line_icon(
+            "chevron-left" if self.preview_collapse_btn.isChecked()
+            else "chevron-right", tokens["text_secondary"]))
 
     def _on_preview_collapsed(self, collapsed: bool) -> None:
         """Chevron in the 3D preview header: hide/show the GL pane."""
@@ -2040,13 +2070,16 @@ class StageTab(BaseTab):
         from gui.typography import MicroLabel
 
         group = self.config.groups.get(name)
-        color = getattr(group, "color", "") or self._tokens["text_secondary"]
+        data_color = getattr(group, "color", "")
         fixtures = self._fixtures_of_group(name)
 
         row = _GroupRow(name)
         # Only the DATA color is widget-local; the hairline comes from
-        # the theme's #GroupRow rule.
-        row.setStyleSheet(f"#GroupRow {{ border-left: 3px solid {color}; }}")
+        # the theme's #GroupRow rule. No data color: the theme's
+        # secondary text, so the row is bound to follow a switch.
+        bind_style(row, lambda t: (
+            "#GroupRow { border-left: 3px solid "
+            f"{data_color or t['text_secondary']}; }}"))
         row.setToolTip(QCoreApplication.translate(
             "StageTab", "Select the fixtures of '{0}' on the plan").format(
                 name))
@@ -2171,7 +2204,6 @@ class StageTab(BaseTab):
 
         if not hasattr(self, "_layer_rows_layout"):
             return
-        tokens = self._tokens
         while self._layer_rows_layout.count():
             entry = self._layer_rows_layout.takeAt(0)
             widget = entry.widget()
@@ -2186,11 +2218,11 @@ class StageTab(BaseTab):
             row_layout.setContentsMargins(0, 6, 0, 6)
             name_label = QtWidgets.QLabel(layer.name)
             name_label.setFont(mono_font(9))
-            name_label.setStyleSheet(f"color: {tokens['text_secondary']};")
+            bind_style(name_label, lambda t: f"color: {t['text_secondary']};")
             row_layout.addWidget(name_label, 1)
             height_label = QtWidgets.QLabel(f"H {layer.z_height:g} m")
             height_label.setFont(mono_font(9))
-            height_label.setStyleSheet(f"color: {tokens['text']};")
+            bind_style(height_label, lambda t: f"color: {t['text']};")
             row_layout.addWidget(height_label)
             self._layer_rows_layout.addWidget(row)
 
@@ -2587,13 +2619,13 @@ class StageTab(BaseTab):
         if len(group_names) == 1 and next(iter(group_names)):
             name = next(iter(group_names))
             group = self.config.groups.get(name) if self.config else None
-            color = (getattr(group, "color", "")
-                     or self._tokens["text_secondary"])
+            data_color = getattr(group, "color", "")
             self.selection_group_label.setText(name)
-            self.selection_group_label.setStyleSheet(f"color: {color};")
+            bind_style(self.selection_group_label, lambda t: (
+                f"color: {data_color or t['text_secondary']};"))
         else:
             self.selection_group_label.setText("")
-            self.selection_group_label.setStyleSheet("")
+            unbind_style(self.selection_group_label)
 
         if len(selected) == 1:
             item = selected[0]
