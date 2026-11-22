@@ -90,6 +90,16 @@ verbatim as the GitHub Release notes (see [docs/releasing.md](docs/releasing.md)
 
 ### Fixed
 
+- **Light theme: dark-only colours left over in a few places.** The
+  time-signature "/" in the Structure inspector was white (invisible on
+  light), the Render Video dialog and the progress dialogs (plain, with log,
+  and the status-bar meter) kept their dark frame, fields and white labels,
+  the universe "channels used" meters had a near-black track, and the morph
+  patchbay drew near-black row rules and chip borders with an invisible
+  light halo on the selected wire. All of them now use the light palette.
+  The dark theme is unchanged, and so are the Windows screenshot goldens
+  (the only light-theme goldens, `topbar_light.png` and `subnav_light.png`,
+  show none of these surfaces).
 - **Opening a song from a very old config** (lighting stored as legacy
   effects, no timeline yet) no longer crashes the Shows tab. The tab's own
   conversion used arguments the data model no longer takes; it now goes

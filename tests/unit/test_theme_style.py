@@ -156,3 +156,54 @@ class TestTemplateRules:
                 assert label.styleSheet() == ""
         finally:
             tab.deleteLater()
+
+
+def _luminance(hex_color: str) -> float:
+    def channel(c: int) -> float:
+        c = c / 255.0
+        return c / 12.92 if c <= 0.03928 else ((c + 0.055) / 1.055) ** 2.4
+    h = hex_color.lstrip("#")
+    r, g, b = (int(h[i:i + 2], 16) for i in (0, 2, 4))
+    return 0.2126 * channel(r) + 0.7152 * channel(g) + 0.0722 * channel(b)
+
+
+def _contrast(a: str, b: str) -> float:
+    la, lb = sorted((_luminance(a), _luminance(b)), reverse=True)
+    return (la + 0.05) / (lb + 0.05)
+
+
+class TestLightThemeRoles:
+    """The light-theme breakages the sweep exposed: dark-only literals
+    (white text, near-black fills and rules, a light halo) that the
+    light theme had inherited. Each role now uses the light palette."""
+
+    @pytest.mark.parametrize("role", [
+        "separator_glyph", "legacy_dialog_text", "patchbay_halo"])
+    def test_ink_roles_read_on_the_light_window(self, role):
+        assert _contrast(LIGHT[role], LIGHT["window"]) >= 4.5, role
+
+    @pytest.mark.parametrize("role,palette", [
+        ("legacy_dialog_bg", "window"),
+        ("legacy_dialog_field", "raised"),
+        ("legacy_dialog_border", "border"),
+        ("legacy_dialog_text", "text"),
+        ("legacy_dialog_log_bg", "raised"),
+        ("separator_glyph", "text"),
+        ("patchbay_rule", "border"),
+        ("patchbay_chip_border", "border"),
+        ("meter_track", "border"),
+    ])
+    def test_light_roles_come_from_the_light_palette(self, role, palette):
+        assert LIGHT[role] == LIGHT[palette]
+
+    def test_no_light_surface_role_is_a_dark_surface(self):
+        for role in ("legacy_dialog_bg", "legacy_dialog_field",
+                     "legacy_dialog_log_bg", "meter_track"):
+            assert _luminance(LIGHT[role]) > 0.5, role
+
+    def test_dark_keeps_its_historic_values(self):
+        """The fix is light-only: the dark theme renders as before."""
+        assert DARK["separator_glyph"] == "#ffffff"
+        assert DARK["legacy_dialog_bg"] == "#3d3d3d"
+        assert DARK["meter_track"] == "#2D2D2D"
+        assert DARK["patchbay_halo"] == "#F4F1EA"
