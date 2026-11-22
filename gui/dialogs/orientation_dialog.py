@@ -16,7 +16,7 @@ from PyQt6.QtWidgets import (
 )
 from PyQt6.QtOpenGLWidgets import QOpenGLWidget
 from PyQt6.QtGui import QSurfaceFormat
-from PyQt6.QtCore import Qt, QTimer, pyqtSignal
+from PyQt6.QtCore import QT_TRANSLATE_NOOP, QCoreApplication, Qt, QTimer, pyqtSignal
 
 from utils.fixture_capabilities import Chassis, chassis_from_legacy_type
 from utils.geometry import GeometryBuilder
@@ -1982,14 +1982,16 @@ class OrientationPanel(QWidget):
     values_changed = pyqtSignal()
 
     # Mounting preset definitions
+    # Labels and tooltips are marked with QT_TRANSLATE_NOOP and
+    # translated where the buttons are built.
     PRESETS = {
-        'hanging': {'label': 'Hanging', 'tooltip': 'Fixture hanging from truss, beam pointing down'},
-        'standing': {'label': 'Standing', 'tooltip': 'Fixture on floor, beam pointing up'},
-        'wall_left': {'label': 'Wall-L', 'tooltip': 'Mounted on stage-left wall'},
-        'wall_right': {'label': 'Wall-R', 'tooltip': 'Mounted on stage-right wall'},
-        'wall_back': {'label': 'Wall-Back', 'tooltip': 'Mounted on back wall, beam toward audience'},
-        'wall_front': {'label': 'Wall-Front', 'tooltip': 'Mounted facing audience, beam toward back'},
-        'custom': {'label': 'Custom', 'tooltip': 'Custom orientation (manually adjusted)'},
+        'hanging': {'label': QT_TRANSLATE_NOOP("OrientationDialog", "Hanging"), 'tooltip': QT_TRANSLATE_NOOP("OrientationDialog", "Fixture hanging from truss, beam pointing down")},
+        'standing': {'label': QT_TRANSLATE_NOOP("OrientationDialog", "Standing"), 'tooltip': QT_TRANSLATE_NOOP("OrientationDialog", "Fixture on floor, beam pointing up")},
+        'wall_left': {'label': QT_TRANSLATE_NOOP("OrientationDialog", "Wall-L"), 'tooltip': QT_TRANSLATE_NOOP("OrientationDialog", "Mounted on stage-left wall")},
+        'wall_right': {'label': QT_TRANSLATE_NOOP("OrientationDialog", "Wall-R"), 'tooltip': QT_TRANSLATE_NOOP("OrientationDialog", "Mounted on stage-right wall")},
+        'wall_back': {'label': QT_TRANSLATE_NOOP("OrientationDialog", "Wall-Back"), 'tooltip': QT_TRANSLATE_NOOP("OrientationDialog", "Mounted on back wall, beam toward audience")},
+        'wall_front': {'label': QT_TRANSLATE_NOOP("OrientationDialog", "Wall-Front"), 'tooltip': QT_TRANSLATE_NOOP("OrientationDialog", "Mounted facing audience, beam toward back")},
+        'custom': {'label': QT_TRANSLATE_NOOP("OrientationDialog", "Custom"), 'tooltip': QT_TRANSLATE_NOOP("OrientationDialog", "Custom orientation (manually adjusted)")},
     }
 
     # Absolute orientation values for each preset (yaw, pitch, roll),
@@ -2042,7 +2044,7 @@ class OrientationPanel(QWidget):
         # the same column, so a second preview here is redundant and only
         # steals vertical space from the presets and fine-adjustment
         # controls. The standalone modal keeps it visible.
-        self.preview_group = QGroupBox("3D Preview")
+        self.preview_group = QGroupBox(QCoreApplication.translate("OrientationDialog", "3D Preview"))
         preview_layout = QVBoxLayout(self.preview_group)
         # The theme's QGroupBox only reserves top padding for the title, so
         # the GL widget would otherwise render flush against (and appear to
@@ -2065,7 +2067,7 @@ class OrientationPanel(QWidget):
         # Custom on a 4th row spanning both columns. Custom is the
         # "this doesn't match a preset" indicator and reads naturally
         # as a wide bottom button.
-        presets_group = QGroupBox("Presets")
+        presets_group = QGroupBox(QCoreApplication.translate("OrientationDialog", "Presets"))
         presets_layout = QGridLayout(presets_group)
         presets_layout.setHorizontalSpacing(4)
         presets_layout.setVerticalSpacing(4)
@@ -2076,8 +2078,10 @@ class OrientationPanel(QWidget):
         self.preset_buttons = {}
         for index, preset_id in enumerate(named_presets):
             preset_info = self.PRESETS[preset_id]
-            btn = QPushButton(preset_info['label'])
-            btn.setToolTip(preset_info['tooltip'])
+            btn = QPushButton(QCoreApplication.translate(
+                "OrientationDialog", preset_info['label']))
+            btn.setToolTip(QCoreApplication.translate(
+                "OrientationDialog", preset_info['tooltip']))
             btn.setCheckable(True)
             btn.setMaximumWidth(84)
             # Trim the theme's 14px horizontal button padding so the longest
@@ -2089,8 +2093,10 @@ class OrientationPanel(QWidget):
             presets_layout.addWidget(btn, row, col)
             self.preset_buttons[preset_id] = btn
 
-        custom_btn = QPushButton(self.PRESETS['custom']['label'])
-        custom_btn.setToolTip(self.PRESETS['custom']['tooltip'])
+        custom_btn = QPushButton(QCoreApplication.translate(
+            "OrientationDialog", self.PRESETS['custom']['label']))
+        custom_btn.setToolTip(QCoreApplication.translate(
+            "OrientationDialog", self.PRESETS['custom']['tooltip']))
         custom_btn.setCheckable(True)
         custom_btn.clicked.connect(lambda checked: self._on_preset_clicked('custom'))
         # Span both columns at the bottom — visually marks Custom as the
@@ -2107,7 +2113,7 @@ class OrientationPanel(QWidget):
         # Apply-to-group lives at the bottom of this same grid spanning
         # every column, so the panel reads as a single block instead of
         # leaving an orphan checkbox below.
-        adjust_group = QGroupBox("Fine Adjustment")
+        adjust_group = QGroupBox(QCoreApplication.translate("OrientationDialog", "Fine Adjustment"))
         adjust_layout = QGridLayout(adjust_group)
         adjust_layout.setHorizontalSpacing(4)
         adjust_layout.setVerticalSpacing(4)
@@ -2139,48 +2145,48 @@ class OrientationPanel(QWidget):
         self.yaw_spin.setRange(-180, 180)
         self.yaw_spin.setSuffix("°")
         self.yaw_spin.setSingleStep(5)
-        self.yaw_spin.setToolTip("Rotation around vertical axis (blue ring)")
+        self.yaw_spin.setToolTip(QCoreApplication.translate("OrientationDialog", "Rotation around vertical axis (blue ring)"))
         self.yaw_90_btn = QPushButton("+90°")
-        self.yaw_90_btn.setToolTip("Rotate yaw by +90°")
+        self.yaw_90_btn.setToolTip(QCoreApplication.translate("OrientationDialog", "Rotate yaw by +90°"))
         self.yaw_90_btn.setStyleSheet(
             f"background-color: {tokens['axis_yaw']};"
             f" color: {tokens['on_function']}; font-weight: bold; "
             "padding: 4px 6px;"
         )
         self.yaw_90_btn.clicked.connect(lambda: self._rotate_by_90('yaw'))
-        _add_axis_row(0, "Yaw:", self.yaw_spin, self.yaw_90_btn)
+        _add_axis_row(0, QCoreApplication.translate("OrientationDialog", "Yaw:"), self.yaw_spin, self.yaw_90_btn)
 
         # Pitch
         self.pitch_spin = QDoubleSpinBox()
         self.pitch_spin.setRange(-90, 90)
         self.pitch_spin.setSuffix("°")
         self.pitch_spin.setSingleStep(5)
-        self.pitch_spin.setToolTip("Tilt angle (green ring)")
+        self.pitch_spin.setToolTip(QCoreApplication.translate("OrientationDialog", "Tilt angle (green ring)"))
         self.pitch_90_btn = QPushButton("+90°")
-        self.pitch_90_btn.setToolTip("Rotate pitch by +90°")
+        self.pitch_90_btn.setToolTip(QCoreApplication.translate("OrientationDialog", "Rotate pitch by +90°"))
         self.pitch_90_btn.setStyleSheet(
             f"background-color: {tokens['axis_pitch']};"
             f" color: {tokens['on_function']}; font-weight: bold; "
             "padding: 4px 6px;"
         )
         self.pitch_90_btn.clicked.connect(lambda: self._rotate_by_90('pitch'))
-        _add_axis_row(1, "Pitch:", self.pitch_spin, self.pitch_90_btn)
+        _add_axis_row(1, QCoreApplication.translate("OrientationDialog", "Pitch:"), self.pitch_spin, self.pitch_90_btn)
 
         # Roll
         self.roll_spin = QDoubleSpinBox()
         self.roll_spin.setRange(-180, 180)
         self.roll_spin.setSuffix("°")
         self.roll_spin.setSingleStep(5)
-        self.roll_spin.setToolTip("Rotation around beam axis (red ring)")
+        self.roll_spin.setToolTip(QCoreApplication.translate("OrientationDialog", "Rotation around beam axis (red ring)"))
         self.roll_90_btn = QPushButton("+90°")
-        self.roll_90_btn.setToolTip("Rotate roll by +90°")
+        self.roll_90_btn.setToolTip(QCoreApplication.translate("OrientationDialog", "Rotate roll by +90°"))
         self.roll_90_btn.setStyleSheet(
             f"background-color: {tokens['axis_roll']};"
             f" color: {tokens['on_function']}; font-weight: bold; "
             "padding: 4px 6px;"
         )
         self.roll_90_btn.clicked.connect(lambda: self._rotate_by_90('roll'))
-        _add_axis_row(2, "Roll:", self.roll_spin, self.roll_90_btn)
+        _add_axis_row(2, QCoreApplication.translate("OrientationDialog", "Roll:"), self.roll_spin, self.roll_90_btn)
 
         # Z-height (no rotate button — column 2 stays empty for that row)
         self.z_spin = QDoubleSpinBox()
@@ -2188,8 +2194,8 @@ class OrientationPanel(QWidget):
         self.z_spin.setSuffix(" m")
         self.z_spin.setSingleStep(0.1)
         self.z_spin.setDecimals(2)
-        self.z_spin.setToolTip("Height above stage floor")
-        _add_axis_row(3, "Z-Height:", self.z_spin)
+        self.z_spin.setToolTip(QCoreApplication.translate("OrientationDialog", "Height above stage floor"))
+        _add_axis_row(3, QCoreApplication.translate("OrientationDialog", "Z-Height:"), self.z_spin)
 
         # Trailing stretch column absorbs any leftover horizontal space so
         # spinboxes don't get pushed wide and rows align cell-for-cell.
@@ -2211,11 +2217,11 @@ class OrientationPanel(QWidget):
         # sub-panels. Below (rather than beside) it always has room for
         # the indicator and label, and reads naturally as "this applies to
         # the whole selection", which is what the checkbox does.
-        group_defaults_group = QGroupBox("Group Defaults")
+        group_defaults_group = QGroupBox(QCoreApplication.translate("OrientationDialog", "Group Defaults"))
         gd_layout = QVBoxLayout(group_defaults_group)
-        self.apply_to_group_checkbox = QCheckBox("Apply to group default")
+        self.apply_to_group_checkbox = QCheckBox(QCoreApplication.translate("OrientationDialog", "Apply to group default"))
         self.apply_to_group_checkbox.setToolTip(
-            "If checked, also updates the group's default orientation"
+            QCoreApplication.translate("OrientationDialog", "If checked, also updates the group's default orientation")
         )
         gd_layout.addWidget(self.apply_to_group_checkbox)
         self._refresh_apply_to_group(self.fixtures)
@@ -2224,14 +2230,14 @@ class OrientationPanel(QWidget):
         # sliver): for a head whose physical pan/tilt runs opposite to
         # its definition. Wire + export boundaries only; the 3D preview
         # above deliberately ignores it (it shows solver convention).
-        self.invert_pan_checkbox = QCheckBox("Invert pan DMX output")
-        self.invert_tilt_checkbox = QCheckBox("Invert tilt DMX output")
+        self.invert_pan_checkbox = QCheckBox(QCoreApplication.translate("OrientationDialog", "Invert pan DMX output"))
+        self.invert_tilt_checkbox = QCheckBox(QCoreApplication.translate("OrientationDialog", "Invert tilt DMX output"))
         for box in (self.invert_pan_checkbox, self.invert_tilt_checkbox):
             box.setToolTip(
-                "Flips this fixture's channel direction on the wire and "
+                QCoreApplication.translate("OrientationDialog", "Flips this fixture's channel direction on the wire and "
                 "in the QLC+ export - use when the physical head runs "
                 "opposite to every calculated aim. The 3D preview is "
-                "unaffected.")
+                "unaffected."))
             gd_layout.addWidget(box)
         first = self._first_config_fixture()
         if first is not None:
@@ -2257,10 +2263,10 @@ class OrientationPanel(QWidget):
     @staticmethod
     def _format_info_text(fixtures: list) -> str:
         if not fixtures:
-            return "No fixture selected"
+            return QCoreApplication.translate("OrientationDialog", "No fixture selected")
         if len(fixtures) == 1:
-            return f"Fixture: {fixtures[0].fixture_name}"
-        return f"Editing {len(fixtures)} fixtures"
+            return QCoreApplication.translate("OrientationDialog", "Fixture: {0}").format(fixtures[0].fixture_name)
+        return QCoreApplication.translate("OrientationDialog", "Editing {0} fixtures").format(len(fixtures))
 
     def _refresh_apply_to_group(self, fixtures: list) -> None:
         """Enable the apply-to-group checkbox only when every selected
@@ -2289,12 +2295,12 @@ class OrientationPanel(QWidget):
         if len(groups) == 1:
             self.apply_to_group_checkbox.setEnabled(True)
             self.apply_to_group_checkbox.setText(
-                f"Apply to group default ({next(iter(groups))})"
+                QCoreApplication.translate("OrientationDialog", "Apply to group default ({0})").format(next(iter(groups)))
             )
         else:
             self.apply_to_group_checkbox.setEnabled(False)
             self.apply_to_group_checkbox.setChecked(False)
-            self.apply_to_group_checkbox.setText("Apply to group default")
+            self.apply_to_group_checkbox.setText(QCoreApplication.translate("OrientationDialog", "Apply to group default"))
 
     def set_fixtures(self, fixtures: list) -> None:
         """Re-bind the panel to a new selection without rebuilding widgets.
@@ -2570,7 +2576,7 @@ class OrientationDialog(QDialog):
 
     def __init__(self, fixtures: List, config=None, parent=None):
         super().__init__(parent)
-        self.setWindowTitle("Set Orientation")
+        self.setWindowTitle(QCoreApplication.translate("OrientationDialog", "Set Orientation"))
         self.setMinimumSize(500, 550)
 
         layout = QVBoxLayout(self)
@@ -2580,11 +2586,11 @@ class OrientationDialog(QDialog):
         button_layout = QHBoxLayout()
         button_layout.addStretch()
 
-        self.cancel_btn = QPushButton("Cancel")
+        self.cancel_btn = QPushButton(QCoreApplication.translate("OrientationDialog", "Cancel"))
         self.cancel_btn.clicked.connect(self.reject)
         button_layout.addWidget(self.cancel_btn)
 
-        self.apply_btn = QPushButton("Apply")
+        self.apply_btn = QPushButton(QCoreApplication.translate("OrientationDialog", "Apply"))
         self.apply_btn.setDefault(True)
         self.apply_btn.clicked.connect(self.accept)
         button_layout.addWidget(self.apply_btn)

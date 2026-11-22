@@ -12,7 +12,11 @@ Kept in timeline_ui so both the timeline widgets and the gui tabs can
 import it without a gui -> timeline_ui -> gui cycle.
 """
 
-LOCKED_MSG = "Song is locked · unlock to edit"
+from PyQt6.QtCore import QT_TRANSLATE_NOOP, QCoreApplication
+
+# Marked for pylupdate6, translated where it is shown (a translate()
+# at import time would run before the translator is installed).
+LOCKED_MSG = QT_TRANSLATE_NOOP("Locking", "Song is locked · unlock to edit")
 
 
 def flash_locked(widget) -> None:
@@ -25,6 +29,7 @@ def flash_locked(widget) -> None:
     statusbar = getattr(window, "statusbar", None)
     if statusbar is not None:
         try:
-            statusbar.showMessage(LOCKED_MSG, 6000)
+            statusbar.showMessage(
+                QCoreApplication.translate("Locking", LOCKED_MSG), 6000)
         except Exception:
             pass

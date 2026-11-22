@@ -4,7 +4,7 @@ HSV Color Wheel widget for Auto mode color override.
 
 import math
 from PyQt6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QLabel
-from PyQt6.QtCore import Qt, pyqtSignal, QPointF
+from PyQt6.QtCore import QCoreApplication, Qt, pyqtSignal, QPointF
 from PyQt6.QtGui import QPainter, QColor, QImage, QPen
 
 from gui.theme_style import bind_style
@@ -51,10 +51,10 @@ class HSVColorWheel(QWidget):
 
         # Override / Auto buttons
         btn_layout = QHBoxLayout()
-        self._override_btn = QPushButton("Override")
+        self._override_btn = QPushButton(QCoreApplication.translate("HSVColorWheel", "Override"))
         self._override_btn.setCheckable(True)
         self._override_btn.toggled.connect(self._on_override_toggled)
-        self._auto_btn = QPushButton("Auto")
+        self._auto_btn = QPushButton(QCoreApplication.translate("HSVColorWheel", "Auto"))
         self._auto_btn.setCheckable(True)
         self._auto_btn.setChecked(True)
         self._auto_btn.toggled.connect(self._on_auto_toggled)

@@ -10,7 +10,7 @@ import numpy as np
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QLabel, QSplitter, QSizePolicy,
 )
-from PyQt6.QtCore import Qt, QRectF, QPointF
+from PyQt6.QtCore import Qt, QRectF, QPointF, QCoreApplication
 from PyQt6.QtGui import (
     QPainter, QPen, QColor, QBrush, QPainterPath, QFont, QFontMetrics,
     QImage, QPixmap,
@@ -424,7 +424,8 @@ class FluxPlot3DWidget(QWidget):
             p.setPen(QPen(TEXT_COLOR, 1))
             p.setFont(QFont("Arial", 10))
             p.drawText(QRectF(0, 0, w, h), Qt.AlignmentFlag.AlignCenter,
-                       "Loading audio data...")
+                       QCoreApplication.translate(
+                           "GenerationInspector", "Loading audio data..."))
             p.end()
             return
 
@@ -453,9 +454,12 @@ class FluxPlot3DWidget(QWidget):
         z_end = self._project(0, 0, 1)
 
         axes = [
-            (origin, x_end, "Time", QColor(200, 80, 80)),
-            (origin, y_end, "Flux", QColor(80, 200, 80)),
-            (origin, z_end, "Transient", QColor(80, 80, 200)),
+            (origin, x_end, QCoreApplication.translate(
+                "GenerationInspector", "Time"), QColor(200, 80, 80)),
+            (origin, y_end, QCoreApplication.translate(
+                "GenerationInspector", "Flux"), QColor(80, 200, 80)),
+            (origin, z_end, QCoreApplication.translate(
+                "GenerationInspector", "Transient"), QColor(80, 80, 200)),
         ]
 
         p.setFont(QFont("Arial", 8, QFont.Weight.Bold))
@@ -536,9 +540,12 @@ class FluxPlot3DWidget(QWidget):
         """Draw axis legend in corner."""
         p.setFont(QFont("Arial", 7))
         x, y = 6, self.height() - 36
-        for label, color in [("X: Time", QColor(200, 80, 80)),
-                              ("Y: Flux", QColor(80, 200, 80)),
-                              ("Z: Transient", QColor(80, 80, 200))]:
+        legend = [
+            (QCoreApplication.translate("GenerationInspector", "X: Time"), QColor(200, 80, 80)),
+            (QCoreApplication.translate("GenerationInspector", "Y: Flux"), QColor(80, 200, 80)),
+            (QCoreApplication.translate("GenerationInspector", "Z: Transient"), QColor(80, 80, 200)),
+        ]
+        for label, color in legend:
             p.setPen(QPen(color, 2))
             p.drawLine(QPointF(x, y + 4), QPointF(x + 12, y + 4))
             p.setPen(QPen(TEXT_COLOR, 1))
@@ -645,7 +652,8 @@ class MelSpectrogramWidget(QWidget):
             p.setPen(QPen(TEXT_COLOR, 1))
             p.setFont(QFont("Arial", 9))
             p.drawText(QRectF(0, 0, w, h), Qt.AlignmentFlag.AlignCenter,
-                       "No spectrogram data")
+                       QCoreApplication.translate(
+                           "GenerationInspector", "No spectrogram data"))
             p.end()
             return
 
@@ -830,14 +838,18 @@ class RudimentScoresWidget(QWidget):
             p.setPen(QPen(TEXT_COLOR, 1))
             p.setFont(QFont("Arial", 9))
             p.drawText(QRectF(0, 0, w, h), Qt.AlignmentFlag.AlignCenter,
-                       "Click a group cell to see match scores")
+                       QCoreApplication.translate(
+                           "GenerationInspector",
+                           "Click a group cell to see match scores"))
             p.end()
             return
 
         # Header
         p.setPen(QPen(TEXT_COLOR, 1))
         p.setFont(QFont("Arial", 8, QFont.Weight.Bold))
-        p.drawText(QPointF(4, 12), f"Match scores: {self._group_name}")
+        p.drawText(QPointF(4, 12), QCoreApplication.translate(
+            "GenerationInspector", "Match scores: {0}").format(
+                self._group_name))
 
         margin_top = 20
         margin_left = 90
@@ -921,7 +933,8 @@ class ColorPaletteWidget(QWidget):
         # Header
         p.setPen(QPen(TEXT_COLOR, 1))
         p.setFont(QFont("Arial", 8, QFont.Weight.Bold))
-        p.drawText(QPointF(4, 12), "Color Palette")
+        p.drawText(QPointF(4, 12), QCoreApplication.translate(
+            "GenerationInspector", "Color Palette"))
 
         # Wheel center and radius
         cx = w / 2
@@ -985,7 +998,8 @@ class GenerationInspector(QWidget):
         self._current_section_idx = -1
         self._selected_group = None
 
-        self.setWindowTitle("Generation Inspector")
+        self.setWindowTitle(QCoreApplication.translate(
+            "GenerationInspector", "Generation Inspector"))
         self.setWindowFlags(Qt.WindowType.Window)
         self.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose)
         self.resize(900, 750)
@@ -1039,7 +1053,8 @@ class GenerationInspector(QWidget):
             f"padding: 6px; font-family: monospace; font-size: 9pt;"
         )
         self.info_label.setAlignment(Qt.AlignmentFlag.AlignTop)
-        self.info_label.setText("Waiting for playback...")
+        self.info_label.setText(QCoreApplication.translate(
+            "GenerationInspector", "Waiting for playback..."))
         right_layout.addWidget(self.info_label, stretch=2)
 
         bottom_splitter.addWidget(right_widget)
@@ -1117,20 +1132,33 @@ class GenerationInspector(QWidget):
         def esc(value) -> str:
             return html.escape(str(value))
         lines.append(f"<b>{esc(section.name)}</b>")
-        lines.append(f"Energy: <b>{section.relative_energy:.2f}</b> | "
-                      f"Flux: {section.spectral_flux:.2f} | "
-                      f"Transient: {section.transient_sharpness:.2f}")
-        lines.append(f"Richness: {section.spectral_richness:.2f} | "
-                      f"Vocal: {section.vocal_presence:.2f} | "
-                      f"Centroid: {section.spectral_centroid:.0f}")
-        lines.append(f"Movement: <b>{esc(section.movement_shape)}</b> "
-                      f"(amp={section.movement_amplitude:.0f}, "
-                      f"target={esc(section.movement_target or 'none')})")
+        lines.append(QCoreApplication.translate(
+            "GenerationInspector",
+            "Energy: <b>{0:.2f}</b> | Flux: {1:.2f} | Transient: {2:.2f}").format(
+                section.relative_energy, section.spectral_flux,
+                section.transient_sharpness))
+        lines.append(QCoreApplication.translate(
+            "GenerationInspector",
+            "Richness: {0:.2f} | Vocal: {1:.2f} | Centroid: {2:.0f}").format(
+                section.spectral_richness, section.vocal_presence,
+                section.spectral_centroid))
+        lines.append(QCoreApplication.translate(
+            "GenerationInspector",
+            "Movement: <b>{0}</b> (amp={1:.0f}, target={2})").format(
+                esc(section.movement_shape), section.movement_amplitude,
+                esc(section.movement_target or 'none')))
         lines.append("")
         lines.append("<table cellspacing='2' style='font-size:8pt'>")
-        lines.append("<tr><td><b>Group</b></td><td><b>Groove</b></td>"
-                      "<td><b>Fill</b></td><td><b>Role</b></td>"
-                      "<td><b>Wt</b></td><td><b>Spd</b></td></tr>")
+        headers = (
+            QCoreApplication.translate("GenerationInspector", "Group"),
+            QCoreApplication.translate("GenerationInspector", "Groove"),
+            QCoreApplication.translate("GenerationInspector", "Fill"),
+            QCoreApplication.translate("GenerationInspector", "Role"),
+            QCoreApplication.translate("GenerationInspector", "Wt"),
+            QCoreApplication.translate("GenerationInspector", "Spd"),
+        )
+        lines.append("<tr>" + "".join(f"<td><b>{esc(h)}</b></td>"
+                                      for h in headers) + "</tr>")
 
         for name, gr in section.group_reports.items():
             if gr.weight <= 0:

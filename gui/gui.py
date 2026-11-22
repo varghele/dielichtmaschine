@@ -6,7 +6,7 @@ import os
 import sys
 from PyQt6 import QtWidgets
 from PyQt6.QtWidgets import QMainWindow, QFileDialog, QMessageBox
-from PyQt6.QtCore import QTimer, Qt
+from PyQt6.QtCore import QCoreApplication, QTimer, Qt
 from PyQt6.QtGui import QUndoStack, QKeySequence, QAction
 from config.models import Configuration
 from utils import app_identity
@@ -106,16 +106,16 @@ class MainWindow(QMainWindow, Ui_MainWindow):
                 name = os.path.basename(self.config_path)
             elif dirty:
                 # Edits exist but the project was never saved: own it.
-                name = "untitled"
+                name = QCoreApplication.translate("MainWindow", "untitled")
             else:
                 # Reference screen 01: the filename slot reads
                 # "no project loaded" until a project exists.
-                name = "no project loaded"
+                name = QCoreApplication.translate("MainWindow", "no project loaded")
             if dirty:
                 name += " *"
             self.topbar.set_filename(
                 name,
-                tooltip="Unsaved changes · Ctrl+S saves" if dirty else "")
+                tooltip=QCoreApplication.translate("MainWindow", "Unsaved changes · Ctrl+S saves") if dirty else "")
             # Keep the Home checklist live while the user works.
             if hasattr(self, 'home_screen') and self.home_screen.isVisible():
                 self.home_screen.refresh_checklist(self.config)
@@ -127,19 +127,19 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         arbiter = getattr(self, "_output_arbiter", None)
         streaming = arbiter is not None and arbiter.running
         if (artnet_controller and artnet_enabled) or streaming:
-            self.artnet_status_indicator.setText("ON")
+            self.artnet_status_indicator.setText(QCoreApplication.translate("MainWindow", "ON"))
             self._set_status(self.artnet_status_indicator, "on")
             self._set_status(self.artnet_toggle_btn, "on")
             self.artnet_status_indicator.setToolTip(
-                "DMX output is streaming (native ArtNet)")
-            self.artnet_toggle_btn.setToolTip("Click to disable DMX output")
+                QCoreApplication.translate("MainWindow", "DMX output is streaming (native ArtNet)"))
+            self.artnet_toggle_btn.setToolTip(QCoreApplication.translate("MainWindow", "Click to disable DMX output"))
         else:
-            self.artnet_status_indicator.setText("OFF")
+            self.artnet_status_indicator.setText(QCoreApplication.translate("MainWindow", "OFF"))
             self._set_status(self.artnet_status_indicator, "off")
             self._set_status(self.artnet_toggle_btn, "off")
             self.artnet_status_indicator.setToolTip(
-                "DMX output is off (native ArtNet)")
-            self.artnet_toggle_btn.setToolTip("Click to enable DMX output")
+                QCoreApplication.translate("MainWindow", "DMX output is off (native ArtNet)"))
+            self.artnet_toggle_btn.setToolTip(QCoreApplication.translate("MainWindow", "Click to enable DMX output"))
 
         # VISUALIZER: one labelled action button (OPEN launches the
         # standalone visualizer AND starts its TCP feed; STOP ends the
@@ -152,25 +152,25 @@ class MainWindow(QMainWindow, Ui_MainWindow):
                 self._set_status(self.tcp_status_indicator, "active")
                 self._set_status(self.tcp_toggle_btn, "active")
                 self.tcp_status_indicator.setToolTip(
-                    f"Visualizer feed: {client_count} viewer(s) connected"
+                    QCoreApplication.translate("MainWindow", "Visualizer feed: {0} viewer(s) connected").format(client_count)
                 )
             else:
-                self.tcp_status_indicator.setText("ON")
+                self.tcp_status_indicator.setText(QCoreApplication.translate("MainWindow", "ON"))
                 self._set_status(self.tcp_status_indicator, "ready")
                 self._set_status(self.tcp_toggle_btn, "ready")
                 self.tcp_status_indicator.setToolTip(
-                    "Visualizer feed running · no viewer connected yet")
-            self.tcp_toggle_btn.setText("STOP")
+                    QCoreApplication.translate("MainWindow", "Visualizer feed running · no viewer connected yet"))
+            self.tcp_toggle_btn.setText(QCoreApplication.translate("MainWindow", "STOP"))
             self.tcp_toggle_btn.setToolTip(
-                "Stop the visualizer feed (the viewer window stays open)")
+                QCoreApplication.translate("MainWindow", "Stop the visualizer feed (the viewer window stays open)"))
         else:
-            self.tcp_status_indicator.setText("OFF")
+            self.tcp_status_indicator.setText(QCoreApplication.translate("MainWindow", "OFF"))
             self._set_status(self.tcp_status_indicator, "off")
             self._set_status(self.tcp_toggle_btn, "off")
-            self.tcp_status_indicator.setToolTip("Visualizer feed: off")
-            self.tcp_toggle_btn.setText("OPEN")
+            self.tcp_status_indicator.setToolTip(QCoreApplication.translate("MainWindow", "Visualizer feed: off"))
+            self.tcp_toggle_btn.setText(QCoreApplication.translate("MainWindow", "OPEN"))
             self.tcp_toggle_btn.setToolTip(
-                "Launch the standalone visualizer and start its feed")
+                QCoreApplication.translate("MainWindow", "Launch the standalone visualizer and start its feed"))
 
     def _set_status(self, widget, value):
         """Set the `status` dynamic property on a widget and re-polish so QSS
@@ -263,8 +263,8 @@ class MainWindow(QMainWindow, Ui_MainWindow):
                 except Exception as e:
                     QMessageBox.critical(
                         self,
-                        "Launch Error",
-                        f"Failed to launch Visualizer:\n{str(e)}"
+                        QCoreApplication.translate("MainWindow", "Launch Error"),
+                        QCoreApplication.translate("MainWindow", "Failed to launch Visualizer:\n{0}").format(str(e))
                     )
 
     def _initialize_paths(self):
@@ -402,8 +402,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         except Exception as e:
             from utils import user_warnings
             user_warnings.warn(
-                f"Live output fixture maps could not be built; busk "
-                f"output is degraded: {e}",
+                QCoreApplication.translate("MainWindow", "Live output fixture maps could not be built; busk output is degraded: {0}").format(e),
                 category="output", once_key="arbiter-maps")
         return self._output_arbiter
 
@@ -467,8 +466,8 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         if armed:
             if getattr(self.config.setlist, "sync_mode", "") != "smpte":
                 self.statusBar().showMessage(
-                    "Set the setlist sync mode to SMPTE on the "
-                    "Structure tab before arming the chase", 6000)
+                    QCoreApplication.translate("MainWindow", "Set the setlist sync mode to SMPTE on the "
+                    "Structure tab before arming the chase"), 6000)
                 self.structure_tab.set_chase_armed(False)
                 self.live_tab.set_chase_armed(False)
                 return
@@ -489,8 +488,8 @@ class MainWindow(QMainWindow, Ui_MainWindow):
                                       "sync_device", "")
         if not service.start():
             self.statusBar().showMessage(
-                "LTC input could not be opened - check the sync device "
-                "in the Structure tab", 6000)
+                QCoreApplication.translate("MainWindow", "LTC input could not be opened - check the sync device "
+                "in the Structure tab"), 6000)
             return False
         self._ltc_runner = None    # built once the incoming rate is known
         self.shows_tab.set_chase_armed(True, disarm=self.disarm_ltc_chase)
@@ -751,20 +750,20 @@ class MainWindow(QMainWindow, Ui_MainWindow):
 
         # Create Edit menu if it doesn't exist
         if not hasattr(self, 'menuEdit'):
-            self.menuEdit = QtWidgets.QMenu("Edit", parent=self)
+            self.menuEdit = QtWidgets.QMenu(QCoreApplication.translate("MainWindow", "Edit"), parent=self)
             # Menu order (user call 2026-07-23): File, Edit, View,
             # Tools, Settings, Help - Edit slots in before View.
             self.overflow_menu.insertMenu(self.menuView.menuAction(),
                                           self.menuEdit)
 
         # Create undo action
-        self.undo_action = self.undo_stack.createUndoAction(self, "Undo")
+        self.undo_action = self.undo_stack.createUndoAction(self, QCoreApplication.translate("MainWindow", "Undo"))
         self.undo_action.setShortcut(QKeySequence.StandardKey.Undo)
         self.undo_action.setShortcutContext(Qt.ShortcutContext.ApplicationShortcut)
         self.menuEdit.addAction(self.undo_action)
 
         # Create redo action
-        self.redo_action = self.undo_stack.createRedoAction(self, "Redo")
+        self.redo_action = self.undo_stack.createRedoAction(self, QCoreApplication.translate("MainWindow", "Redo"))
         self.redo_action.setShortcut(QKeySequence.StandardKey.Redo)
         self.redo_action.setShortcutContext(Qt.ShortcutContext.ApplicationShortcut)
         self.menuEdit.addAction(self.redo_action)
@@ -980,9 +979,9 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         if not backup:
             return
         resp = QMessageBox.question(
-            self, "Recover unsaved changes",
-            "Unsaved changes from your last session were found.\n\n"
-            "Recover them?",
+            self, QCoreApplication.translate("MainWindow", "Recover unsaved changes"),
+            QCoreApplication.translate("MainWindow", "Unsaved changes from your last session were found.\n\n"
+            "Recover them?"),
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
         if resp != QMessageBox.StandardButton.Yes:
             return
@@ -1082,7 +1081,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         # as the sixth tab. Renamed from "Live" to "Auto" since the
         # engine is the auto-generation pipeline driven by live audio
         # rather than a generic "live mode".
-        self.actionGotoAuto = QAction("Auto Mode", self)
+        self.actionGotoAuto = QAction(QCoreApplication.translate("MainWindow", "Auto Mode"), self)
         self.actionGotoAuto.setShortcut("Ctrl+L")
         self.actionGotoAuto.triggered.connect(
             lambda: self.tabWidget.setCurrentIndex(5)
@@ -1264,7 +1263,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             if not self.config_path:
                 file_path, _ = QFileDialog.getSaveFileName(
                     self,
-                    "Save Project",
+                    QCoreApplication.translate("MainWindow", "Save Project"),
                     "",
                     app_identity.project_save_filter()
                 )
@@ -1278,16 +1277,16 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             self._record_recent_config(self.config_path)
             QMessageBox.information(
                 self,
-                "Success",
-                f"Configuration saved to {self.config_path}"
+                QCoreApplication.translate("MainWindow", "Success"),
+                QCoreApplication.translate("MainWindow", "Configuration saved to {0}").format(self.config_path)
             )
             logger.info(f"Configuration saved to {self.config_path}")
 
         except Exception as e:
             QMessageBox.critical(
                 self,
-                "Error",
-                f"Failed to save configuration: {str(e)}"
+                QCoreApplication.translate("MainWindow", "Error"),
+                QCoreApplication.translate("MainWindow", "Failed to save configuration: {0}").format(str(e))
             )
             logger.exception(f"Error saving configuration: {e}")
 
@@ -1306,15 +1305,15 @@ class MainWindow(QMainWindow, Ui_MainWindow):
     def open_recent_config(self, path: str):
         """Open a config picked from the Home screen recent list."""
         if not os.path.isfile(path):
-            QMessageBox.warning(self, "File missing",
-                                f"The file no longer exists:\n{path}")
+            QMessageBox.warning(self, QCoreApplication.translate("MainWindow", "File missing"),
+                                QCoreApplication.translate("MainWindow", "The file no longer exists:\n{0}").format(path))
             self._record_recent_config(self.config_path or "")
             return
         # Same deferred load flow as File -> Load Configuration.
         self._pending_config_path = path
         from PyQt6.QtWidgets import QApplication
         dialog = self.progress_manager.start_modal(
-            "Loading Configuration", "Opening file...", maximum=8)
+            QCoreApplication.translate("MainWindow", "Loading Configuration"), QCoreApplication.translate("MainWindow", "Opening file..."), maximum=8)
         for _ in range(5):
             QApplication.processEvents()
         if dialog:
@@ -1344,7 +1343,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             default_dir = os.path.dirname(self.config_path) if self.config_path else ""
             file_path, _ = QFileDialog.getSaveFileName(
                 self,
-                "Save Project As",
+                QCoreApplication.translate("MainWindow", "Save Project As"),
                 default_dir,
                 app_identity.project_save_filter()
             )
@@ -1360,16 +1359,16 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             self._record_recent_config(self.config_path)
             QMessageBox.information(
                 self,
-                "Success",
-                f"Configuration saved to {self.config_path}"
+                QCoreApplication.translate("MainWindow", "Success"),
+                QCoreApplication.translate("MainWindow", "Configuration saved to {0}").format(self.config_path)
             )
             logger.info(f"Configuration saved to {self.config_path}")
 
         except Exception as e:
             QMessageBox.critical(
                 self,
-                "Error",
-                f"Failed to save configuration: {str(e)}"
+                QCoreApplication.translate("MainWindow", "Error"),
+                QCoreApplication.translate("MainWindow", "Failed to save configuration: {0}").format(str(e))
             )
             logger.exception(f"Error saving configuration: {e}")
 
@@ -1386,22 +1385,21 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         templates = list_templates()
         if not templates:
             QMessageBox.warning(
-                self, "No Templates",
-                "No starter rigs found (demos/rigs/ is missing)."
+                self, QCoreApplication.translate("MainWindow", "No Templates"),
+                QCoreApplication.translate("MainWindow", "No starter rigs found (demos/rigs/ is missing).")
             )
             return
 
         dialog = QtWidgets.QDialog(self)
-        dialog.setWindowTitle("New Project from Template")
+        dialog.setWindowTitle(QCoreApplication.translate("MainWindow", "New Project from Template"))
         dialog.resize(560, 380)
         layout = QtWidgets.QVBoxLayout(dialog)
 
-        layout.addWidget(QtWidgets.QLabel("Choose a starter rig:"))
+        layout.addWidget(QtWidgets.QLabel(QCoreApplication.translate("MainWindow", "Choose a starter rig:")))
         template_list = QtWidgets.QListWidget()
         for template in templates:
             item = QtWidgets.QListWidgetItem(
-                f"{template.name}  ({template.fixture_count} fixtures)\n"
-                f"    {template.description}"
+                QCoreApplication.translate("MainWindow", "{0}  ({1} fixtures)\n    {2}").format(template.name, template.fixture_count, template.description)
             )
             item.setData(Qt.ItemDataRole.UserRole, template)
             template_list.addItem(item)
@@ -1409,7 +1407,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         layout.addWidget(template_list)
 
         include_show_check = QtWidgets.QCheckBox(
-            "Include the ready-to-play demo show + audio clip"
+            QCoreApplication.translate("MainWindow", "Include the ready-to-play demo show + audio clip")
         )
         include_show_check.setChecked(True)
         layout.addWidget(include_show_check)
@@ -1431,7 +1429,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
 
         dest_path, _ = QFileDialog.getSaveFileName(
             self,
-            "Create Project From Template",
+            QCoreApplication.translate("MainWindow", "Create Project From Template"),
             os.path.join(os.path.expanduser("~"),
                          f"{template.key}{app_identity.PROJECT_EXT}"),
             app_identity.project_save_filter()
@@ -1447,8 +1445,8 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             )
         except Exception as e:
             QMessageBox.critical(
-                self, "Template Failed",
-                f"Could not create the project:\n{e}"
+                self, QCoreApplication.translate("MainWindow", "Template Failed"),
+                QCoreApplication.translate("MainWindow", "Could not create the project:\n{0}").format(e)
             )
             return
 
@@ -1457,8 +1455,8 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self._pending_config_path = new_path
         from PyQt6.QtWidgets import QApplication
         dialog = self.progress_manager.start_modal(
-            "Loading Configuration",
-            "Opening file...",
+            QCoreApplication.translate("MainWindow", "Loading Configuration"),
+            QCoreApplication.translate("MainWindow", "Opening file..."),
             maximum=8
         )
         for _ in range(5):
@@ -1472,7 +1470,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         """Load a project (.lms, or a legacy .yaml/.yml)."""
         file_path, _ = QFileDialog.getOpenFileName(
             self,
-            "Open Project",
+            QCoreApplication.translate("MainWindow", "Open Project"),
             "",
             app_identity.project_open_filter()
         )
@@ -1488,8 +1486,8 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         from PyQt6.QtCore import QTimer
 
         dialog = self.progress_manager.start_modal(
-            "Loading Configuration",
-            "Opening file...",
+            QCoreApplication.translate("MainWindow", "Loading Configuration"),
+            QCoreApplication.translate("MainWindow", "Opening file..."),
             maximum=8  # Steps: open, parse, pre-cache, 5 tabs
         )
 
@@ -1515,23 +1513,23 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             # Step 1: Parse YAML. If a crash left an autosave backup newer
             # than this project, offer to recover it; either way the project
             # path is what Ctrl+S writes to.
-            self.progress_manager.update_modal(1, "Parsing configuration...")
+            self.progress_manager.update_modal(1, QCoreApplication.translate("MainWindow", "Parsing configuration..."))
             load_from = file_path
             recovered = False
             from utils.autosave import autosave_dir, find_recoverable
             backup = find_recoverable(file_path, autosave_dir())
             if backup:
                 resp = QMessageBox.question(
-                    self, "Recover unsaved changes",
-                    "Autosaved changes newer than this project were found, "
-                    "from a session that did not save.\n\nRecover them?",
+                    self, QCoreApplication.translate("MainWindow", "Recover unsaved changes"),
+                    QCoreApplication.translate("MainWindow", "Autosaved changes newer than this project were found, "
+                    "from a session that did not save.\n\nRecover them?"),
                     QMessageBox.StandardButton.Yes
                     | QMessageBox.StandardButton.No)
                 if resp == QMessageBox.StandardButton.Yes:
                     load_from = backup
                     recovered = True
             from utils import user_warnings
-            with user_warnings.operation("Load project"):
+            with user_warnings.operation(QCoreApplication.translate("MainWindow", "Load project")):
                 self.config = Configuration.load(load_from)
             self.config_path = file_path
             if hasattr(self, "_autosave") and not recovered:
@@ -1542,10 +1540,10 @@ class MainWindow(QMainWindow, Ui_MainWindow):
                 self._mark_config_clean()
 
             # Steps 2-7: rebind every tab and preview to the new config.
-            self.progress_manager.update_modal(4, "Updating tabs...")
+            self.progress_manager.update_modal(4, QCoreApplication.translate("MainWindow", "Updating tabs..."))
             self._rebind_tabs_to_config()
 
-            self.progress_manager.update_modal(8, "Done")
+            self.progress_manager.update_modal(8, QCoreApplication.translate("MainWindow", "Done"))
             self.progress_manager.finish_modal()
 
             logger.info(f"Configuration loaded from {file_path}")
@@ -1575,10 +1573,8 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             # A failed load used to be console-only - the UI just sat
             # there with the old (or no) project. Say it out loud.
             QMessageBox.critical(
-                self, "Error",
-                f"Failed to load "
-                f"{getattr(self, '_pending_config_path', 'project')}:"
-                f"\n{e}")
+                self, QCoreApplication.translate("MainWindow", "Error"),
+                QCoreApplication.translate("MainWindow", "Failed to load {0}:\n{1}").format(getattr(self, '_pending_config_path', 'project'), e))
 
     def _start_gdtf_autopull(self):
         """After a project load: pull GDTF definitions for the loaded
@@ -1654,8 +1650,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
                           .split("@")[1] if "@" in os.path.basename(p)
                           else os.path.basename(p) for p in kept)
         self.statusbar.showMessage(
-            f"GDTF Share: fetched {len(kept)} fixture definition(s) "
-            f"({names}) - the visualizer uses them on next open", 10000)
+            QCoreApplication.translate("MainWindow", "GDTF Share: fetched {0} fixture definition(s) ({1}) - the visualizer uses them on next open").format(len(kept), names), 10000)
 
     def open_morph_screen(self):
         """Tools > Morph to Venue: the full-window morph flow
@@ -1674,9 +1669,9 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         if screen is None:
             if not self.config.songs:
                 QMessageBox.information(
-                    self, "Morph to Venue",
-                    "The open project has no songs to morph. Open the "
-                    "show you want to take to another venue first.")
+                    self, QCoreApplication.translate("MainWindow", "Morph to Venue"),
+                    QCoreApplication.translate("MainWindow", "The open project has no songs to morph. Open the "
+                    "show you want to take to another venue first."))
                 return
             from gui.screens.morph_screen import MorphScreen
             screen = MorphScreen(
@@ -1732,7 +1727,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
                          if getattr(self, 'config_path', None) else '')
                      or os.path.expanduser('~'))
         chosen = QFileDialog.getExistingDirectory(
-            self, "Import Legacy CSV Songs", start_dir,
+            self, QCoreApplication.translate("MainWindow", "Import Legacy CSV Songs"), start_dir,
             QFileDialog.Option.ShowDirsOnly)
         if not chosen:
             return
@@ -1753,16 +1748,16 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         if not shows_dir or not os.path.isdir(shows_dir):
             if interactive:
                 QMessageBox.information(
-                    self, "No Folder",
-                    "The chosen folder does not exist.")
+                    self, QCoreApplication.translate("MainWindow", "No Folder"),
+                    QCoreApplication.translate("MainWindow", "The chosen folder does not exist."))
             return
         try:
             csv_files = [f for f in os.listdir(shows_dir) if f.lower().endswith('.csv')]
         except OSError:
             if interactive:
                 QMessageBox.information(
-                    self, "No Legacy Songs",
-                    f"Could not read the folder:\n{shows_dir}")
+                    self, QCoreApplication.translate("MainWindow", "No Legacy Songs"),
+                    QCoreApplication.translate("MainWindow", "Could not read the folder:\n{0}").format(shows_dir))
             return
         candidates = []
         for csv_name in csv_files:
@@ -1773,20 +1768,16 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         if not candidates:
             if interactive:
                 QMessageBox.information(
-                    self, "No Legacy Songs",
-                    f"No CSV songs found in:\n{shows_dir}\n\n"
-                    "(Songs already in the config are skipped.)")
+                    self, QCoreApplication.translate("MainWindow", "No Legacy Songs"),
+                    QCoreApplication.translate("MainWindow", "No CSV songs found in:\n{0}\n\n(Songs already in the config are skipped.)").format(shows_dir))
             return
 
         names_preview = ', '.join(stem for stem, _ in candidates[:5])
-        more = f' (and {len(candidates) - 5} more)' if len(candidates) > 5 else ''
+        more = QCoreApplication.translate("MainWindow", " (and {0} more)").format(len(candidates) - 5) if len(candidates) > 5 else ''
         reply = QMessageBox.question(
             self,
-            "Legacy CSV Shows Found",
-            f"Found {len(candidates)} show CSV file(s) in:\n{shows_dir}\n\n"
-            f"that aren't in your config.yaml: {names_preview}{more}\n\n"
-            "Import them into the config? (You will still need to Save to "
-            "persist the result.)",
+            QCoreApplication.translate("MainWindow", "Legacy CSV Shows Found"),
+            QCoreApplication.translate("MainWindow", "Found {0} show CSV file(s) in:\n{1}\n\nthat aren't in your config.yaml: {2}{3}\n\nImport them into the config? (You will still need to Save to persist the result.)").format(len(candidates), shows_dir, names_preview, more),
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
         )
         if reply != QMessageBox.StandardButton.Yes:
@@ -1805,15 +1796,14 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             except Exception as e:
                 from utils import user_warnings
                 user_warnings.warn(
-                    f"Legacy CSV show skipped (unreadable): {path}: {e}",
+                    QCoreApplication.translate("MainWindow", "Legacy CSV show skipped (unreadable): {0}: {1}").format(path, e),
                     category="import")
         if imported:
             self.structure_tab.update_from_config()
             self.shows_tab.update_from_config()
             QMessageBox.information(
-                self, "Shows Imported",
-                f"Imported {imported} legacy CSV show(s) into the config.\n"
-                "Save the config to persist them."
+                self, QCoreApplication.translate("MainWindow", "Shows Imported"),
+                QCoreApplication.translate("MainWindow", "Imported {0} legacy CSV show(s) into the config.\nSave the config to persist them.").format(imported)
             )
 
     def _preload_fixture_definitions(self):
@@ -1836,7 +1826,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         except Exception as e:
             from utils import user_warnings
             user_warnings.warn(
-                f"Could not pre-load fixture definitions: {e}",
+                QCoreApplication.translate("MainWindow", "Could not pre-load fixture definitions: {0}").format(e),
                 category="fixture-library")
 
     def import_workspace(self):
@@ -1844,9 +1834,10 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         try:
             file_path, _ = QFileDialog.getOpenFileName(
                 self,
-                "Import QLC+ Workspace",
+                QCoreApplication.translate("MainWindow", "Import QLC+ Workspace"),
                 "",
-                "QLC+ Workspace (*.qxw);;All Files (*)"
+                "QLC+ Workspace (*.qxw);;"
+                + QCoreApplication.translate("MainWindow", "All Files") + " (*)"
             )
 
             if not file_path:
@@ -1854,17 +1845,17 @@ class MainWindow(QMainWindow, Ui_MainWindow):
 
             # Show progress dialog
             self.progress_manager.start_modal(
-                "Importing Workspace",
-                "Parsing QLC+ workspace file...",
+                QCoreApplication.translate("MainWindow", "Importing Workspace"),
+                QCoreApplication.translate("MainWindow", "Parsing QLC+ workspace file..."),
                 maximum=7  # Steps: import, pre-cache, 5 tabs
             )
 
             # Import from workspace
-            self.progress_manager.update_modal(1, "Importing fixtures and universes...")
+            self.progress_manager.update_modal(1, QCoreApplication.translate("MainWindow", "Importing fixtures and universes..."))
             self.config = Configuration.from_workspace(file_path)
 
             # Pre-load fixture definitions into cache
-            self.progress_manager.update_modal(2, "Loading fixture definitions...")
+            self.progress_manager.update_modal(2, QCoreApplication.translate("MainWindow", "Loading fixture definitions..."))
             self._preload_fixture_definitions()
 
             # Update all tabs — every tab's self.config was bound at
@@ -1881,19 +1872,19 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             self.live_tab.config = self.config
 
             # Refresh all tabs
-            self.progress_manager.update_modal(3, "Updating Configuration tab...")
+            self.progress_manager.update_modal(3, QCoreApplication.translate("MainWindow", "Updating Configuration tab..."))
             self.config_tab.update_from_config()
 
-            self.progress_manager.update_modal(4, "Updating Fixtures tab...")
+            self.progress_manager.update_modal(4, QCoreApplication.translate("MainWindow", "Updating Fixtures tab..."))
             self.fixtures_tab.update_from_config()
 
-            self.progress_manager.update_modal(5, "Updating Stage tab...")
+            self.progress_manager.update_modal(5, QCoreApplication.translate("MainWindow", "Updating Stage tab..."))
             self.stage_tab.update_from_config()
 
-            self.progress_manager.update_modal(6, "Updating Structure tab...")
+            self.progress_manager.update_modal(6, QCoreApplication.translate("MainWindow", "Updating Structure tab..."))
             self.structure_tab.update_from_config()
 
-            self.progress_manager.update_modal(7, "Updating Shows tab...")
+            self.progress_manager.update_modal(7, QCoreApplication.translate("MainWindow", "Updating Shows tab..."))
             self.shows_tab.update_from_config()
 
             # Auto tab refresh + central visualizer push so all 3D
@@ -1906,8 +1897,8 @@ class MainWindow(QMainWindow, Ui_MainWindow):
 
             QMessageBox.information(
                 self,
-                "Success",
-                f"Workspace imported from {file_path}"
+                QCoreApplication.translate("MainWindow", "Success"),
+                QCoreApplication.translate("MainWindow", "Workspace imported from {0}").format(file_path)
             )
             logger.info(f"Workspace imported from {file_path}")
 
@@ -1915,8 +1906,8 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             self.progress_manager.finish_modal()
             QMessageBox.critical(
                 self,
-                "Error",
-                f"Failed to import workspace: {str(e)}"
+                QCoreApplication.translate("MainWindow", "Error"),
+                QCoreApplication.translate("MainWindow", "Failed to import workspace: {0}").format(str(e))
             )
             logger.exception(f"Error importing workspace: {e}")
 
@@ -1937,9 +1928,10 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         )
         file_path, _ = QFileDialog.getOpenFileName(
             self,
-            "Import Show Structure",
+            QCoreApplication.translate("MainWindow", "Import Show Structure"),
             default_dir,
-            "Show files (*.csv *.yaml *.yml);;CSV (*.csv);;YAML (*.yaml *.yml)"
+            QCoreApplication.translate("MainWindow", "Show files")
+            + " (*.csv *.yaml *.yml);;CSV (*.csv);;YAML (*.yaml *.yml)"
         )
         if not file_path:
             return
@@ -1947,16 +1939,15 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             show, fmt = read_show(file_path)
         except Exception as e:
             QMessageBox.critical(
-                self, "Import Failed",
-                f"Could not import {os.path.basename(file_path)}:\n{e}"
+                self, QCoreApplication.translate("MainWindow", "Import Failed"),
+                QCoreApplication.translate("MainWindow", "Could not import {0}:\n{1}").format(os.path.basename(file_path), e)
             )
             return
 
         if show.name in self.config.songs:
             reply = QMessageBox.question(
-                self, "Overwrite Show?",
-                f"A show named '{show.name}' already exists in the config.\n\n"
-                "Overwrite it with the imported one?",
+                self, QCoreApplication.translate("MainWindow", "Overwrite Show?"),
+                QCoreApplication.translate("MainWindow", "A show named '{0}' already exists in the config.\n\nOverwrite it with the imported one?").format(show.name),
                 QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
             )
             if reply != QMessageBox.StandardButton.Yes:
@@ -1973,9 +1964,8 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.config.shows_directory = os.path.dirname(file_path)
 
         QMessageBox.information(
-            self, "Imported",
-            f"Imported show '{show.name}' from {fmt.upper()}.\n"
-            f"Save the config to persist it."
+            self, QCoreApplication.translate("MainWindow", "Imported"),
+            QCoreApplication.translate("MainWindow", "Imported show '{0}' from {1}.\nSave the config to persist it.").format(show.name, fmt.upper())
         )
 
     def export_show_structure_file(self):
@@ -1990,8 +1980,8 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         show = self.config.songs.get(current_name) if current_name else None
         if not show:
             QMessageBox.warning(
-                self, "No Show Selected",
-                "Open a show in the Structure tab before exporting."
+                self, QCoreApplication.translate("MainWindow", "No Show Selected"),
+                QCoreApplication.translate("MainWindow", "Open a show in the Structure tab before exporting.")
             )
             return
         default_dir = self.config.shows_directory or (
@@ -2000,7 +1990,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         default_path = os.path.join(default_dir, f"{show.name}.csv") if default_dir else f"{show.name}.csv"
         file_path, _ = QFileDialog.getSaveFileName(
             self,
-            "Export Show Structure",
+            QCoreApplication.translate("MainWindow", "Export Show Structure"),
             default_path,
             "CSV (*.csv);;YAML (*.yaml)"
         )
@@ -2014,14 +2004,14 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             fmt = write_show(file_path, show)
         except Exception as e:
             QMessageBox.critical(
-                self, "Export Failed",
-                f"Could not export to {os.path.basename(file_path)}:\n{e}"
+                self, QCoreApplication.translate("MainWindow", "Export Failed"),
+                QCoreApplication.translate("MainWindow", "Could not export to {0}:\n{1}").format(os.path.basename(file_path), e)
             )
             return
         self.config.shows_directory = os.path.dirname(file_path)
         QMessageBox.information(
-            self, "Exported",
-            f"Exported '{show.name}' to {fmt.upper()}:\n{file_path}"
+            self, QCoreApplication.translate("MainWindow", "Exported"),
+            QCoreApplication.translate("MainWindow", "Exported '{0}' to {1}:\n{2}").format(show.name, fmt.upper(), file_path)
         )
 
     def import_shows_from_config_file(self):
@@ -2039,16 +2029,16 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         default_dir = os.path.dirname(self.config_path) if self.config_path else ""
         file_path, _ = QFileDialog.getOpenFileName(
             self,
-            "Import Shows from Config",
+            QCoreApplication.translate("MainWindow", "Import Shows from Config"),
             default_dir,
-            "Config files (*.yaml *.yml)"
+            QCoreApplication.translate("MainWindow", "Config files") + " (*.yaml *.yml)"
         )
         if not file_path:
             return
         if self.config_path and os.path.abspath(file_path) == os.path.abspath(self.config_path):
             QMessageBox.warning(
-                self, "Same Config",
-                "That is the currently open config — nothing to import."
+                self, QCoreApplication.translate("MainWindow", "Same Config"),
+                QCoreApplication.translate("MainWindow", "That is the currently open config: nothing to import.")
             )
             return
 
@@ -2056,14 +2046,14 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             source = Configuration.load(file_path)
         except Exception as e:
             QMessageBox.critical(
-                self, "Import Failed",
-                f"Could not load {os.path.basename(file_path)}:\n{e}"
+                self, QCoreApplication.translate("MainWindow", "Import Failed"),
+                QCoreApplication.translate("MainWindow", "Could not load {0}:\n{1}").format(os.path.basename(file_path), e)
             )
             return
         if not source.songs:
             QMessageBox.warning(
-                self, "No Shows",
-                f"{os.path.basename(file_path)} contains no shows."
+                self, QCoreApplication.translate("MainWindow", "No Shows"),
+                QCoreApplication.translate("MainWindow", "{0} contains no shows.").format(os.path.basename(file_path))
             )
             return
 
@@ -2071,20 +2061,20 @@ class MainWindow(QMainWindow, Ui_MainWindow):
 
         # ── Picker dialog ────────────────────────────────────────────
         dialog = QtWidgets.QDialog(self)
-        dialog.setWindowTitle(f"Import Shows from {os.path.basename(file_path)}")
+        dialog.setWindowTitle(QCoreApplication.translate("MainWindow", "Import Shows from {0}").format(os.path.basename(file_path)))
         dialog.resize(520, 420)
         layout = QtWidgets.QVBoxLayout(dialog)
 
-        layout.addWidget(QtWidgets.QLabel("Select the shows to import:"))
+        layout.addWidget(QtWidgets.QLabel(QCoreApplication.translate("MainWindow", "Select the shows to import:")))
         show_list = QtWidgets.QListWidget()
         for candidate in candidates:
-            text = f"{candidate.name}  —  {candidate.num_parts} part(s)"
+            text = QCoreApplication.translate("MainWindow", "{0} · {1} part(s)").format(candidate.name, candidate.num_parts)
             if candidate.audio_file:
-                text += f", audio: {candidate.audio_file}"
+                text += QCoreApplication.translate("MainWindow", ", audio: {0}").format(candidate.audio_file)
             if candidate.name_conflict:
-                text += "   [name exists]"
+                text += QCoreApplication.translate("MainWindow", "   [name exists]")
             if candidate.missing_groups:
-                text += f"   [missing groups: {', '.join(candidate.missing_groups)}]"
+                text += QCoreApplication.translate("MainWindow", "   [missing groups: {0}]").format(', '.join(candidate.missing_groups))
             item = QtWidgets.QListWidgetItem(text)
             item.setFlags(item.flags() | Qt.ItemFlag.ItemIsUserCheckable)
             item.setCheckState(Qt.CheckState.Checked)
@@ -2094,11 +2084,11 @@ class MainWindow(QMainWindow, Ui_MainWindow):
 
         form = QtWidgets.QFormLayout()
         conflict_combo = QtWidgets.QComboBox()
-        conflict_combo.addItem("Rename the imported show", "rename")
-        conflict_combo.addItem("Overwrite the existing show", "overwrite")
-        conflict_combo.addItem("Skip the imported show", "skip")
-        form.addRow("If a show name exists:", conflict_combo)
-        copy_audio_check = QtWidgets.QCheckBox("Copy audio files into this config's bundle")
+        conflict_combo.addItem(QCoreApplication.translate("MainWindow", "Rename the imported show"), "rename")
+        conflict_combo.addItem(QCoreApplication.translate("MainWindow", "Overwrite the existing show"), "overwrite")
+        conflict_combo.addItem(QCoreApplication.translate("MainWindow", "Skip the imported show"), "skip")
+        form.addRow(QCoreApplication.translate("MainWindow", "If a show name exists:"), conflict_combo)
+        copy_audio_check = QtWidgets.QCheckBox(QCoreApplication.translate("MainWindow", "Copy audio files into this config's bundle"))
         copy_audio_check.setChecked(True)
         form.addRow(copy_audio_check)
         layout.addLayout(form)
@@ -2134,28 +2124,28 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         lines = []
         for r in results:
             if r.action == 'skipped':
-                lines.append(f"- {r.source_name}: skipped (name exists)")
+                lines.append(QCoreApplication.translate("MainWindow", "- {0}: skipped (name exists)").format(r.source_name))
                 continue
             line = f"- {r.source_name}: {r.action}"
             if r.action == 'renamed':
-                line += f" as '{r.final_name}'"
+                line += QCoreApplication.translate("MainWindow", " as '{0}'").format(r.final_name)
             if r.audio_action == 'copied':
-                line += ", audio copied"
+                line += QCoreApplication.translate("MainWindow", ", audio copied")
             elif r.audio_action == 'not-found':
-                line += ", AUDIO FILE NOT FOUND"
+                line += QCoreApplication.translate("MainWindow", ", AUDIO FILE NOT FOUND")
             if r.missing_groups:
-                line += f", missing groups: {', '.join(r.missing_groups)}"
+                line += QCoreApplication.translate("MainWindow", ", missing groups: {0}").format(', '.join(r.missing_groups))
             lines.append(line)
         imported = sum(1 for r in results if r.action != 'skipped')
-        msg = f"Imported {imported} show(s) from {os.path.basename(file_path)}:\n\n"
+        msg = QCoreApplication.translate("MainWindow", "Imported {0} show(s) from {1}:\n\n").format(imported, os.path.basename(file_path))
         msg += "\n".join(lines)
         if any(r.missing_groups for r in results):
             msg += (
-                "\n\nLanes targeting missing groups stay dormant until you "
-                "re-point them at this config's groups."
+                QCoreApplication.translate("MainWindow", "\n\nLanes targeting missing groups stay dormant until you "
+                "re-point them at this config's groups.")
             )
-        msg += "\n\nSave the config to persist the imported shows."
-        QMessageBox.information(self, "Imported", msg)
+        msg += QCoreApplication.translate("MainWindow", "\n\nSave the config to persist the imported shows.")
+        QMessageBox.information(self, QCoreApplication.translate("MainWindow", "Imported"), msg)
 
     def import_fixture_list_file(self):
         """File -> Import Fixture List: read a rig .csv or .json into the config.
@@ -2174,9 +2164,10 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         default_dir = os.path.dirname(self.config_path) if self.config_path else ""
         file_path, _ = QFileDialog.getOpenFileName(
             self,
-            "Import Fixture List",
+            QCoreApplication.translate("MainWindow", "Import Fixture List"),
             default_dir,
-            "Fixture lists (*.csv *.json);;CSV (*.csv);;JSON (*.json)"
+            QCoreApplication.translate("MainWindow", "Fixture lists")
+            + " (*.csv *.json);;CSV (*.csv);;JSON (*.json)"
         )
         if not file_path:
             return
@@ -2184,29 +2175,27 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             fixtures, group_props, layers, fmt = read_fixture_list(file_path)
         except Exception as e:
             QMessageBox.critical(
-                self, "Import Failed",
-                f"Could not import {os.path.basename(file_path)}:\n{e}"
+                self, QCoreApplication.translate("MainWindow", "Import Failed"),
+                QCoreApplication.translate("MainWindow", "Could not import {0}:\n{1}").format(os.path.basename(file_path), e)
             )
             return
         if not fixtures:
             QMessageBox.warning(
-                self, "Nothing to Import",
-                f"{os.path.basename(file_path)} contains no fixtures."
+                self, QCoreApplication.translate("MainWindow", "Nothing to Import"),
+                QCoreApplication.translate("MainWindow", "{0} contains no fixtures.").format(os.path.basename(file_path))
             )
             return
 
         replace = False
         if self.config.fixtures:
             box = QMessageBox(self)
-            box.setWindowTitle("Import Fixture List")
+            box.setWindowTitle(QCoreApplication.translate("MainWindow", "Import Fixture List"))
             box.setText(
-                f"The config already has {len(self.config.fixtures)} fixture(s).\n\n"
-                f"Replace the current rig with the {len(fixtures)} imported "
-                f"fixture(s), or add them to it?"
+                QCoreApplication.translate("MainWindow", "The config already has {0} fixture(s).\n\nReplace the current rig with the {1} imported fixture(s), or add them to it?").format(len(self.config.fixtures), len(fixtures))
             )
             replace_btn = box.addButton(
-                "Replace", QMessageBox.ButtonRole.DestructiveRole)
-            add_btn = box.addButton("Add", QMessageBox.ButtonRole.AcceptRole)
+                QCoreApplication.translate("MainWindow", "Replace"), QMessageBox.ButtonRole.DestructiveRole)
+            add_btn = box.addButton(QCoreApplication.translate("MainWindow", "Add"), QMessageBox.ButtonRole.AcceptRole)
             box.addButton(QMessageBox.StandardButton.Cancel)
             box.exec()
             clicked = box.clickedButton()
@@ -2223,11 +2212,11 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.fixtures_tab.update_from_config(force=True)
         self.on_groups_changed()
 
-        msg = f"Imported {len(fixtures)} fixture(s) from {fmt.upper()}."
+        msg = QCoreApplication.translate("MainWindow", "Imported {0} fixture(s) from {1}.").format(len(fixtures), fmt.upper())
         if warnings:
-            msg += "\n\nWarnings:\n- " + "\n- ".join(warnings)
-        msg += "\n\nSave the config to persist the imported rig."
-        QMessageBox.information(self, "Imported", msg)
+            msg += QCoreApplication.translate("MainWindow", "\n\nWarnings:\n- ") + "\n- ".join(warnings)
+        msg += QCoreApplication.translate("MainWindow", "\n\nSave the config to persist the imported rig.")
+        QMessageBox.information(self, QCoreApplication.translate("MainWindow", "Imported"), msg)
 
     def import_csv_lighting_table(self):
         """File -> Import Lighting Table (CSV): a foreign spreadsheet in,
@@ -2257,12 +2246,12 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.fixtures_tab.update_from_config(force=True)
         self.on_groups_changed()
 
-        msg = f"Imported {len(fixtures)} fixture(s) from the lighting table."
+        msg = QCoreApplication.translate("MainWindow", "Imported {0} fixture(s) from the lighting table.").format(len(fixtures))
         notes = wizard.row_errors() + wizard.resolution_warnings()
         if notes:
-            msg += "\n\nWarnings:\n- " + "\n- ".join(notes)
-        msg += "\n\nSave the config to persist the imported rig."
-        QMessageBox.information(self, "Imported", msg)
+            msg += QCoreApplication.translate("MainWindow", "\n\nWarnings:\n- ") + "\n- ".join(notes)
+        msg += QCoreApplication.translate("MainWindow", "\n\nSave the config to persist the imported rig.")
+        QMessageBox.information(self, QCoreApplication.translate("MainWindow", "Imported"), msg)
 
     def export_fixture_list_file(self):
         """File -> Export Fixture List: write the rig to .csv or .json.
@@ -2274,15 +2263,15 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         from utils.fixture_io import write_fixture_list
         if not self.config.fixtures:
             QMessageBox.warning(
-                self, "No Fixtures",
-                "Add fixtures in the Fixtures tab before exporting a fixture list."
+                self, QCoreApplication.translate("MainWindow", "No Fixtures"),
+                QCoreApplication.translate("MainWindow", "Add fixtures in the Fixtures tab before exporting a fixture list.")
             )
             return
         default_dir = os.path.dirname(self.config_path) if self.config_path else ""
         default_path = os.path.join(default_dir, "fixtures.csv") if default_dir else "fixtures.csv"
         file_path, _ = QFileDialog.getSaveFileName(
             self,
-            "Export Fixture List",
+            QCoreApplication.translate("MainWindow", "Export Fixture List"),
             default_path,
             "CSV (*.csv);;JSON (*.json)"
         )
@@ -2294,13 +2283,13 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             fmt = write_fixture_list(file_path, self.config)
         except Exception as e:
             QMessageBox.critical(
-                self, "Export Failed",
-                f"Could not export to {os.path.basename(file_path)}:\n{e}"
+                self, QCoreApplication.translate("MainWindow", "Export Failed"),
+                QCoreApplication.translate("MainWindow", "Could not export to {0}:\n{1}").format(os.path.basename(file_path), e)
             )
             return
         QMessageBox.information(
-            self, "Exported",
-            f"Exported {len(self.config.fixtures)} fixture(s) to {fmt.upper()}:\n{file_path}"
+            self, QCoreApplication.translate("MainWindow", "Exported"),
+            QCoreApplication.translate("MainWindow", "Exported {0} fixture(s) to {1}:\n{2}").format(len(self.config.fixtures), fmt.upper(), file_path)
         )
 
     def _preflight_export_warning(self):
@@ -2327,10 +2316,10 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         Split out so tests drive create_workspace without a modal."""
         box = QMessageBox(self)
         box.setIcon(QMessageBox.Icon.Warning)
-        box.setWindowTitle("Venue pre-flight incomplete")
+        box.setWindowTitle(QCoreApplication.translate("MainWindow", "Venue pre-flight incomplete"))
         box.setText(message)
         continue_btn = box.addButton(
-            "Continue Anyway", QMessageBox.ButtonRole.AcceptRole)
+            QCoreApplication.translate("MainWindow", "Continue Anyway"), QMessageBox.ButtonRole.AcceptRole)
         box.addButton(QMessageBox.StandardButton.Cancel)
         box.exec()
         return box.clickedButton() is continue_btn
@@ -2356,13 +2345,13 @@ class MainWindow(QMainWindow, Ui_MainWindow):
 
             # Show progress dialog with log area
             self.progress_manager.start_modal_with_log(
-                "Creating Workspace",
-                "Saving configuration...",
+                QCoreApplication.translate("MainWindow", "Creating Workspace"),
+                QCoreApplication.translate("MainWindow", "Saving configuration..."),
                 maximum=4 if vc_options.get('generate_vc') else 3
             )
 
             # Save all tabs to configuration first
-            self.progress_manager.update_modal(1, "Saving tab data...")
+            self.progress_manager.update_modal(1, QCoreApplication.translate("MainWindow", "Saving tab data..."))
             self.config_tab.save_to_config()
             self.fixtures_tab.save_to_config()
             self.stage_tab.save_to_config()
@@ -2371,22 +2360,22 @@ class MainWindow(QMainWindow, Ui_MainWindow):
 
             # Create workspace with log capture
             if vc_options.get('generate_vc'):
-                self.progress_manager.update_modal(2, "Generating Virtual Console...")
-                self.progress_manager.update_modal(3, "Generating QLC+ workspace XML...")
+                self.progress_manager.update_modal(2, QCoreApplication.translate("MainWindow", "Generating Virtual Console..."))
+                self.progress_manager.update_modal(3, QCoreApplication.translate("MainWindow", "Generating QLC+ workspace XML..."))
             else:
-                self.progress_manager.update_modal(2, "Generating QLC+ workspace XML...")
+                self.progress_manager.update_modal(2, QCoreApplication.translate("MainWindow", "Generating QLC+ workspace XML..."))
 
             from utils import user_warnings
             self.progress_manager.start_log_capture()
             try:
-                with user_warnings.operation("Export QLC+ workspace"):
+                with user_warnings.operation(QCoreApplication.translate("MainWindow", "Export QLC+ workspace")):
                     create_qlc_workspace(self.config, vc_options)
             finally:
                 self.progress_manager.stop_log_capture()
 
             self.progress_manager.update_modal(
                 4 if vc_options.get('generate_vc') else 3,
-                "Done!"
+                QCoreApplication.translate("MainWindow", "Done!")
             )
             self.progress_manager.finish_modal()
 
@@ -2397,13 +2386,11 @@ class MainWindow(QMainWindow, Ui_MainWindow):
                 # were silently dropped. Offer the panel directly.
                 box = QMessageBox(self)
                 box.setIcon(QMessageBox.Icon.Warning)
-                box.setWindowTitle("Workspace created with warnings")
+                box.setWindowTitle(QCoreApplication.translate("MainWindow", "Workspace created with warnings"))
                 box.setText(
-                    f"Workspace created at {workspace_path}\n\n"
-                    f"{len(export_warnings)} warning(s) during export - "
-                    f"parts of the show may be missing from the file.")
+                    QCoreApplication.translate("MainWindow", "Workspace created at {0}\n\n{1} warning(s) during export - parts of the show may be missing from the file.").format(workspace_path, len(export_warnings)))
                 view_btn = box.addButton(
-                    "View Warnings", QMessageBox.ButtonRole.ActionRole)
+                    QCoreApplication.translate("MainWindow", "View Warnings"), QMessageBox.ButtonRole.ActionRole)
                 box.addButton(QMessageBox.StandardButton.Ok)
                 box.exec()
                 if box.clickedButton() is view_btn:
@@ -2411,8 +2398,8 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             else:
                 QMessageBox.information(
                     self,
-                    "Success",
-                    f"Workspace created at {workspace_path}"
+                    QCoreApplication.translate("MainWindow", "Success"),
+                    QCoreApplication.translate("MainWindow", "Workspace created at {0}").format(workspace_path)
                 )
             logger.info(f"Workspace created at {workspace_path}")
 
@@ -2421,8 +2408,8 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             self.progress_manager.finish_modal()
             QMessageBox.critical(
                 self,
-                "Error",
-                f"Failed to create workspace: {str(e)}"
+                QCoreApplication.translate("MainWindow", "Error"),
+                QCoreApplication.translate("MainWindow", "Failed to create workspace: {0}").format(str(e))
             )
             logger.exception(f"Error creating workspace: {e}")
 
@@ -2430,7 +2417,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         """Open the render-to-video dialog."""
         try:
             if not self.config.songs:
-                QMessageBox.warning(self, "No Shows", "No shows available to render.")
+                QMessageBox.warning(self, QCoreApplication.translate("MainWindow", "No Shows"), QCoreApplication.translate("MainWindow", "No shows available to render."))
                 return
 
             # Load fixture definitions
@@ -2445,7 +2432,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             dialog.exec()
 
         except Exception as e:
-            QMessageBox.critical(self, "Error", f"Failed to open render dialog: {str(e)}")
+            QMessageBox.critical(self, QCoreApplication.translate("MainWindow", "Error"), QCoreApplication.translate("MainWindow", "Failed to open render dialog: {0}").format(str(e)))
             logger.exception("Failed to open render dialog")
 
     def _on_toggle_sublane_labels(self, checked):
@@ -2485,8 +2472,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.shows_tab.mark_config_dirty()
         self.shows_tab.update_from_config()
         self.statusbar.showMessage(
-            f"Converted {applied} movement block(s) to world targets "
-            "(save the config to persist)", 6000)
+            QCoreApplication.translate("MainWindow", "Converted {0} movement block(s) to world targets (save the config to persist)").format(applied), 6000)
 
     def open_diagnostics(self):
         """Help > Diagnostics: the copyable bug-report block."""
@@ -2515,8 +2501,8 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         except Exception as e:
             QMessageBox.critical(
                 self,
-                "Error",
-                f"Failed to open audio settings: {str(e)}"
+                QCoreApplication.translate("MainWindow", "Error"),
+                QCoreApplication.translate("MainWindow", "Failed to open audio settings: {0}").format(str(e))
             )
             logger.exception(f"Error opening audio settings: {e}")
 

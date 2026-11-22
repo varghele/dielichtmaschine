@@ -5,7 +5,7 @@ Displays waveform envelope as semi-transparent overlay on timeline.
 
 from PyQt6.QtWidgets import QWidget
 from PyQt6.QtGui import QPainter, QColor, QPen, QPixmap, QPolygonF
-from PyQt6.QtCore import Qt, QPointF, QThread, pyqtSignal
+from PyQt6.QtCore import QCoreApplication, Qt, QPointF, QThread, pyqtSignal
 from typing import Optional
 
 from audio.audio_file import AudioFile
@@ -56,9 +56,12 @@ class AudioLoaderThread(QThread):
             if success:
                 self.audio_loaded.emit(audio_file)
             else:
-                self.error_occurred.emit(f"Failed to load audio file: {self.file_path}")
+                self.error_occurred.emit(
+                    QCoreApplication.translate("AudioWaveformWidget", "Failed to load audio file: {0}").format(
+                        self.file_path))
         except Exception as e:
-            self.error_occurred.emit(f"Audio loading error: {str(e)}")
+            self.error_occurred.emit(
+                QCoreApplication.translate("AudioWaveformWidget", "Audio loading error: {0}").format(e))
 
 
 class WaveformGeneratorThread(QThread):
@@ -79,9 +82,11 @@ class WaveformGeneratorThread(QThread):
             if waveform_data:
                 self.waveform_ready.emit(waveform_data)
             else:
-                self.error_occurred.emit("Failed to generate waveform data")
+                self.error_occurred.emit(
+                    QCoreApplication.translate("AudioWaveformWidget", "Failed to generate waveform data"))
         except Exception as e:
-            self.error_occurred.emit(f"Waveform generation error: {str(e)}")
+            self.error_occurred.emit(
+                QCoreApplication.translate("AudioWaveformWidget", "Waveform generation error: {0}").format(e))
 
 
 class AudioWaveformWidget(QWidget):
@@ -121,7 +126,7 @@ class AudioWaveformWidget(QWidget):
             audio_file: Loaded AudioFile object
         """
         if not audio_file.is_loaded():
-            self.load_error = "Audio file not loaded"
+            self.load_error = QCoreApplication.translate("AudioWaveformWidget", "Audio file not loaded")
             self.update()
             return
 
@@ -300,19 +305,20 @@ class AudioWaveformWidget(QWidget):
         """Draw loading indicator"""
         painter.setPen(QColor(200, 200, 200))
         painter.drawText(0, 0, width, height, Qt.AlignmentFlag.AlignCenter,
-                         "Generating waveform...")
+                         QCoreApplication.translate("AudioWaveformWidget", "Generating waveform..."))
 
     def draw_error_state(self, painter: QPainter, width: int, height: int):
         """Draw error message"""
         painter.setPen(QColor(255, 100, 100))
         painter.drawText(0, 0, width, height, Qt.AlignmentFlag.AlignCenter,
-                         f"Error: {self.load_error}")
+                         QCoreApplication.translate("AudioWaveformWidget", "Error: {0}").format(
+                             self.load_error))
 
     def draw_no_audio_state(self, painter: QPainter, width: int, height: int):
         """Draw placeholder when no audio loaded"""
         painter.setPen(QColor(150, 150, 150))
         painter.drawText(0, 0, width, height, Qt.AlignmentFlag.AlignCenter,
-                         "No audio loaded")
+                         QCoreApplication.translate("AudioWaveformWidget", "No audio loaded"))
 
     def cleanup(self):
         """Cleanup resources"""

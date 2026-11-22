@@ -11,6 +11,7 @@ CLAUDE.md, screensaver gotcha).
 """
 
 from PyQt6 import QtWidgets
+from PyQt6.QtCore import QCoreApplication
 
 from gui.fonts import FONT_MONO
 
@@ -20,7 +21,8 @@ class DiagnosticsDialog(QtWidgets.QDialog):
 
     def __init__(self, main_window=None, parent=None, report_fn=None):
         super().__init__(parent)
-        self.setWindowTitle("Diagnostics")
+        self.setWindowTitle(QCoreApplication.translate(
+            "DiagnosticsDialog", "Diagnostics"))
         self.setModal(True)
         self.resize(640, 520)
 
@@ -36,8 +38,10 @@ class DiagnosticsDialog(QtWidgets.QDialog):
         layout.setSpacing(10)
 
         intro = QtWidgets.QLabel(
-            "Attach this block to a bug report (it contains no personal "
-            "data beyond file paths).")
+            QCoreApplication.translate(
+                "DiagnosticsDialog",
+                "Attach this block to a bug report (it contains no personal "
+                "data beyond file paths)."))
         intro.setWordWrap(True)
         layout.addWidget(intro)
 
@@ -49,12 +53,14 @@ class DiagnosticsDialog(QtWidgets.QDialog):
         layout.addWidget(self.text_view, 1)
 
         bottom = QtWidgets.QHBoxLayout()
-        self.copy_btn = QtWidgets.QPushButton("COPY TO CLIPBOARD")
+        self.copy_btn = QtWidgets.QPushButton(QCoreApplication.translate(
+            "DiagnosticsDialog", "COPY TO CLIPBOARD"))
         self.copy_btn.clicked.connect(self._copy)
         bottom.addWidget(self.copy_btn)
         self.copied_label = QtWidgets.QLabel("")
         bottom.addWidget(self.copied_label, 1)
-        close_btn = QtWidgets.QPushButton("Close")
+        close_btn = QtWidgets.QPushButton(QCoreApplication.translate(
+            "DiagnosticsDialog", "Close"))
         close_btn.clicked.connect(self.accept)
         bottom.addWidget(close_btn)
         layout.addLayout(bottom)
@@ -62,4 +68,5 @@ class DiagnosticsDialog(QtWidgets.QDialog):
     def _copy(self):
         QtWidgets.QApplication.clipboard().setText(
             self.text_view.toPlainText())
-        self.copied_label.setText("Copied.")
+        self.copied_label.setText(QCoreApplication.translate(
+            "DiagnosticsDialog", "Copied."))

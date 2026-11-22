@@ -6,7 +6,7 @@ import logging
 import json
 import math
 from PyQt6.QtWidgets import QWidget, QMenu
-from PyQt6.QtCore import Qt, pyqtSignal
+from PyQt6.QtCore import Qt, pyqtSignal, QCoreApplication
 from PyQt6.QtGui import QPainter, QPen, QColor, QWheelEvent, QBrush
 
 from utils.app_logging import warn_once
@@ -417,13 +417,16 @@ class TimelineWidget(QWidget):
             # Show count if multiple effects in clipboard
             if has_multi_clipboard_data():
                 count = get_multi_clipboard_count()
-                paste_label = f"Paste {count} Effects"
+                paste_label = QCoreApplication.translate(
+                    "TimelineWidget", "Paste {0} Effects").format(count)
             else:
-                paste_label = "Paste Effect"
+                paste_label = QCoreApplication.translate(
+                    "TimelineWidget", "Paste Effect")
             paste_action = menu.addAction(paste_label)
             paste_action.triggered.connect(lambda: self.paste_requested.emit(click_time))
         else:
-            paste_action = menu.addAction("Paste Effect (no effect copied)")
+            paste_action = menu.addAction(QCoreApplication.translate(
+                "TimelineWidget", "Paste Effect (no effect copied)"))
             paste_action.setEnabled(False)
 
         menu.exec(event.globalPos())

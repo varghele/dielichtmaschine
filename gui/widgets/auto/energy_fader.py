@@ -4,7 +4,7 @@ Controls how strongly the lighting algorithm reacts to audio features.
 """
 
 from PyQt6.QtWidgets import QWidget, QVBoxLayout, QSlider, QLabel
-from PyQt6.QtCore import Qt, pyqtSignal
+from PyQt6.QtCore import Qt, pyqtSignal, QCoreApplication
 
 
 class EnergySensitivityFader(QWidget):
@@ -19,7 +19,8 @@ class EnergySensitivityFader(QWidget):
         layout.setContentsMargins(4, 4, 4, 4)
         layout.setAlignment(Qt.AlignmentFlag.AlignHCenter)
 
-        title = QLabel("Energy")
+        title = QLabel(QCoreApplication.translate(
+            "EnergySensitivityFader", "Energy"))
         title.setAlignment(Qt.AlignmentFlag.AlignCenter)
         title.setStyleSheet("font-weight: bold; font-size: 11px;")
         layout.addWidget(title)

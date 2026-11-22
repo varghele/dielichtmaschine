@@ -27,20 +27,24 @@ import csv
 import os
 
 from PyQt6 import QtWidgets
-from PyQt6.QtCore import Qt
+from PyQt6.QtCore import Qt, QCoreApplication, QT_TRANSLATE_NOOP
 
 from utils.csv_table_import import (
     FIELDS, REQUIRED_FIELDS, apply_mapping, build_fixtures, guess_mapping,
     resolve_fixtures, sniff_csv,
 )
 
+# Labels are marked for translation here and translated where shown
+# (a module-level translate() would run before the translator exists).
 _DELIMITER_CHOICES = [
-    ("Auto-detect", None),
-    ("Comma (,)", ","),
-    ("Semicolon (;)", ";"),
-    ("Tab", "\t"),
+    (QT_TRANSLATE_NOOP("CsvImportWizard", "Auto-detect"), None),
+    (QT_TRANSLATE_NOOP("CsvImportWizard", "Comma (,)"), ","),
+    (QT_TRANSLATE_NOOP("CsvImportWizard", "Semicolon (;)"), ";"),
+    (QT_TRANSLATE_NOOP("CsvImportWizard", "Tab"), "\t"),
 ]
-_DELIMITER_NAMES = {",": "comma", ";": "semicolon", "\t": "tab"}
+_DELIMITER_NAMES = {",": QT_TRANSLATE_NOOP("CsvImportWizard", "comma"),
+                    ";": QT_TRANSLATE_NOOP("CsvImportWizard", "semicolon"),
+                    "\t": QT_TRANSLATE_NOOP("CsvImportWizard", "tab")}
 
 PREVIEW_ROWS = 20
 
@@ -51,7 +55,8 @@ class CsvImportWizard(QtWidgets.QDialog):
     def __init__(self, existing_fixture_count: int = 0, start_dir: str = "",
                  parent=None):
         super().__init__(parent)
-        self.setWindowTitle("Import Lighting Table (CSV)")
+        self.setWindowTitle(QCoreApplication.translate(
+            "CsvImportWizard", "Import Lighting Table (CSV)"))
         self.setModal(True)
         self.setMinimumSize(780, 540)
 
@@ -75,14 +80,17 @@ class CsvImportWizard(QtWidgets.QDialog):
         layout.addWidget(self._stack, 1)
 
         row = QtWidgets.QHBoxLayout()
-        self.back_btn = QtWidgets.QPushButton("Back")
+        self.back_btn = QtWidgets.QPushButton(QCoreApplication.translate(
+            "CsvImportWizard", "Back"))
         self.back_btn.clicked.connect(self._go_back)
         row.addWidget(self.back_btn)
         row.addStretch(1)
-        cancel_btn = QtWidgets.QPushButton("Cancel")
+        cancel_btn = QtWidgets.QPushButton(QCoreApplication.translate(
+            "CsvImportWizard", "Cancel"))
         cancel_btn.clicked.connect(self.reject)
         row.addWidget(cancel_btn)
-        self.next_btn = QtWidgets.QPushButton("Next")
+        self.next_btn = QtWidgets.QPushButton(QCoreApplication.translate(
+            "CsvImportWizard", "Next"))
         self.next_btn.setDefault(True)
         self.next_btn.clicked.connect(self._go_next)
         row.addWidget(self.next_btn)
@@ -98,10 +106,12 @@ class CsvImportWizard(QtWidgets.QDialog):
         layout.setSpacing(8)
 
         intro = QtWidgets.QLabel(
-            "Import fixtures from any spreadsheet saved as CSV - the venue's "
-            "lighting table, a hire list, a patch sheet. The next step maps "
-            "its columns onto the rig fields. Nothing is changed until you "
-            "confirm on the last page.")
+            QCoreApplication.translate(
+                "CsvImportWizard",
+                "Import fixtures from any spreadsheet saved as CSV - the "
+                "venue's lighting table, a hire list, a patch sheet. The "
+                "next step maps its columns onto the rig fields. Nothing is "
+                "changed until you confirm on the last page."))
         intro.setWordWrap(True)
         layout.addWidget(intro)
 
@@ -109,8 +119,10 @@ class CsvImportWizard(QtWidgets.QDialog):
         file_row.setSpacing(6)
         self.path_edit = QtWidgets.QLineEdit()
         self.path_edit.setReadOnly(True)
-        self.path_edit.setPlaceholderText("Choose a .csv file...")
-        browse = QtWidgets.QPushButton("Browse...")
+        self.path_edit.setPlaceholderText(QCoreApplication.translate(
+            "CsvImportWizard", "Choose a .csv file..."))
+        browse = QtWidgets.QPushButton(QCoreApplication.translate(
+            "CsvImportWizard", "Browse..."))
         browse.clicked.connect(self._browse)
         file_row.addWidget(self.path_edit, 1)
         file_row.addWidget(browse)
@@ -118,13 +130,16 @@ class CsvImportWizard(QtWidgets.QDialog):
 
         options_row = QtWidgets.QHBoxLayout()
         options_row.setSpacing(12)
-        options_row.addWidget(QtWidgets.QLabel("Delimiter:"))
+        options_row.addWidget(QtWidgets.QLabel(QCoreApplication.translate(
+            "CsvImportWizard", "Delimiter:")))
         self.delimiter_combo = QtWidgets.QComboBox()
         for label, value in _DELIMITER_CHOICES:
-            self.delimiter_combo.addItem(label, value)
+            self.delimiter_combo.addItem(
+                QCoreApplication.translate("CsvImportWizard", label), value)
         self.delimiter_combo.currentIndexChanged.connect(self._reparse)
         options_row.addWidget(self.delimiter_combo)
-        self.header_check = QtWidgets.QCheckBox("First row is column headers")
+        self.header_check = QtWidgets.QCheckBox(QCoreApplication.translate(
+            "CsvImportWizard", "First row is column headers"))
         self.header_check.toggled.connect(self._reparse)
         options_row.addWidget(self.header_check)
         options_row.addStretch(1)
@@ -141,8 +156,10 @@ class CsvImportWizard(QtWidgets.QDialog):
 
     def _browse(self) -> None:
         path, _ = QtWidgets.QFileDialog.getOpenFileName(
-            self, "Import Lighting Table", self._start_dir,
-            "CSV files (*.csv *.txt);;All files (*)")
+            self, QCoreApplication.translate(
+                "CsvImportWizard", "Import Lighting Table"), self._start_dir,
+            QCoreApplication.translate(
+                "CsvImportWizard", "CSV files (*.csv *.txt);;All files (*)"))
         if path:
             self.set_source_file(path)
 
@@ -179,9 +196,13 @@ class CsvImportWizard(QtWidgets.QDialog):
             self.raw_table.setColumnCount(0)
             self.detected_label.setText("")
             QtWidgets.QMessageBox.warning(
-                self, "Import Lighting Table",
-                f"{os.path.basename(self._path)} could not be read as a "
-                f"CSV text file.\n\nDetails: {exc}")
+                self, QCoreApplication.translate(
+                    "CsvImportWizard", "Import Lighting Table"),
+                QCoreApplication.translate(
+                    "CsvImportWizard",
+                    "{0} could not be read as a CSV text file.\n"
+                    "\nDetails: {1}").format(
+                        os.path.basename(self._path), exc))
             self._sync_buttons()
             return
         self._updating = True
@@ -190,9 +211,12 @@ class CsvImportWizard(QtWidgets.QDialog):
         finally:
             self._updating = False
         self.detected_label.setText(
-            f"Detected: {_DELIMITER_NAMES.get(self._sniff.delimiter, '?')}"
-            f" · {self._sniff.encoding}"
-            f" · {len(self._sniff.rows)} data row(s)")
+            QCoreApplication.translate(
+                "CsvImportWizard", "Detected: {0} · {1} · {2} data row(s)").format(
+                QCoreApplication.translate(
+                    "CsvImportWizard",
+                    _DELIMITER_NAMES.get(self._sniff.delimiter, '?')),
+                self._sniff.encoding, len(self._sniff.rows)))
         self._fill_raw_preview()
         self._sync_buttons()
 
@@ -217,9 +241,12 @@ class CsvImportWizard(QtWidgets.QDialog):
         layout.setSpacing(8)
 
         intro = QtWidgets.QLabel(
-            "Pick which CSV column feeds each rig field. Manufacturer and "
-            "model are required (the library looks fixtures up by them); "
-            "everything else is optional. Position becomes a stage layer.")
+            QCoreApplication.translate(
+                "CsvImportWizard",
+                "Pick which CSV column feeds each rig field. Manufacturer "
+                "and model are required (the library looks fixtures up by "
+                "them); everything else is optional. Position becomes a "
+                "stage layer."))
         intro.setWordWrap(True)
         layout.addWidget(intro)
 
@@ -231,11 +258,13 @@ class CsvImportWizard(QtWidgets.QDialog):
             combo.currentIndexChanged.connect(self._on_mapping_changed)
             self.field_combos[key] = combo
             if key in REQUIRED_FIELDS:
-                label += " (required)"
+                label += QCoreApplication.translate(
+                    "CsvImportWizard", " (required)")
             form.addRow(label, combo)
         layout.addLayout(form)
 
-        layout.addWidget(QtWidgets.QLabel("Mapped preview:"))
+        layout.addWidget(QtWidgets.QLabel(QCoreApplication.translate(
+            "CsvImportWizard", "Mapped preview:")))
         self.mapped_table = QtWidgets.QTableWidget()
         self.mapped_table.setEditTriggers(
             QtWidgets.QAbstractItemView.EditTrigger.NoEditTriggers)
@@ -253,7 +282,8 @@ class CsvImportWizard(QtWidgets.QDialog):
             previous = self.mapping() if self._guessed_for == key else None
             for combo in self.field_combos.values():
                 combo.clear()
-                combo.addItem("(none)", None)
+                combo.addItem(QCoreApplication.translate(
+                    "CsvImportWizard", "(none)"), None)
                 for i, name in enumerate(header):
                     combo.addItem(name, i)
             chosen = previous or guess_mapping(header)
@@ -314,11 +344,14 @@ class CsvImportWizard(QtWidgets.QDialog):
         self.errors_label.setWordWrap(True)
         layout.addWidget(self.errors_label)
 
-        mode_box = QtWidgets.QGroupBox("Apply as")
+        mode_box = QtWidgets.QGroupBox(QCoreApplication.translate(
+            "CsvImportWizard", "Apply as"))
         mode_layout = QtWidgets.QVBoxLayout(mode_box)
-        self.add_radio = QtWidgets.QRadioButton("Add to the current rig")
+        self.add_radio = QtWidgets.QRadioButton(QCoreApplication.translate(
+            "CsvImportWizard", "Add to the current rig"))
         self.replace_radio = QtWidgets.QRadioButton(
-            "Replace the current rig")
+            QCoreApplication.translate(
+                "CsvImportWizard", "Replace the current rig"))
         self.add_radio.setChecked(True)
         mode_layout.addWidget(self.add_radio)
         mode_layout.addWidget(self.replace_radio)
@@ -332,21 +365,37 @@ class CsvImportWizard(QtWidgets.QDialog):
         self._report = resolve_fixtures(self._fixtures)
 
         missing = len(self._report.missing)
-        parts = [f"{len(self._fixtures)} fixture(s) ready to import"]
+        parts = [QCoreApplication.translate(
+            "CsvImportWizard", "{0} fixture(s) ready to import").format(
+                len(self._fixtures))]
         if missing:
             parts.append(
-                f"{missing} model(s) not in the fixture library (marked "
-                f"below; they import with the mode from the sheet)")
+                QCoreApplication.translate(
+                    "CsvImportWizard",
+                    "{0} model(s) not in the fixture library (marked below; "
+                    "they import with the mode from the sheet)").format(
+                        missing))
         if self._row_errors:
-            parts.append(f"{len(self._row_errors)} row(s) skipped")
+            parts.append(QCoreApplication.translate(
+                "CsvImportWizard", "{0} row(s) skipped").format(
+                    len(self._row_errors)))
         self.summary_label.setText(" · ".join(parts) + ".")
         self.errors_label.setText(
             "\n".join(self._row_errors[:10])
             + ("\n..." if len(self._row_errors) > 10 else ""))
         self.errors_label.setVisible(bool(self._row_errors))
 
-        headers = ["Name", "Manufacturer", "Model", "Mode", "Universe",
-                   "Address", "Group", "Position", "Library"]
+        headers = [
+            QCoreApplication.translate("CsvImportWizard", "Name"),
+            QCoreApplication.translate("CsvImportWizard", "Manufacturer"),
+            QCoreApplication.translate("CsvImportWizard", "Model"),
+            QCoreApplication.translate("CsvImportWizard", "Mode"),
+            QCoreApplication.translate("CsvImportWizard", "Universe"),
+            QCoreApplication.translate("CsvImportWizard", "Address"),
+            QCoreApplication.translate("CsvImportWizard", "Group"),
+            QCoreApplication.translate("CsvImportWizard", "Position"),
+            QCoreApplication.translate("CsvImportWizard", "Library"),
+        ]
         self.resolved_table.clear()
         self.resolved_table.setColumnCount(len(headers))
         self.resolved_table.setHorizontalHeaderLabels(headers)
@@ -358,7 +407,10 @@ class CsvImportWizard(QtWidgets.QDialog):
                       str(fixture.address),
                       fixture.groups[0] if fixture.groups else "",
                       fixture.layer,
-                      "OK" if resolved else "NO DEFINITION"]
+                      QCoreApplication.translate("CsvImportWizard", "OK")
+                      if resolved else
+                      QCoreApplication.translate("CsvImportWizard",
+                                                 "NO DEFINITION")]
             for c, value in enumerate(values):
                 item = QtWidgets.QTableWidgetItem(value)
                 if not resolved:
@@ -371,8 +423,10 @@ class CsvImportWizard(QtWidgets.QDialog):
         if not has_rig:
             self.add_radio.setChecked(True)
         self.add_radio.setText(
-            f"Add to the current rig ({self._existing_fixture_count} "
-            f"fixture(s))" if has_rig else "Add to the current rig")
+            QCoreApplication.translate(
+                "CsvImportWizard", "Add to the current rig ({0} fixture(s))").format(
+                    self._existing_fixture_count) if has_rig else QCoreApplication.translate(
+                    "CsvImportWizard", "Add to the current rig"))
 
     # -- navigation ---------------------------------------------------------
 
@@ -398,14 +452,17 @@ class CsvImportWizard(QtWidgets.QDialog):
         index = self._stack.currentIndex()
         self.back_btn.setEnabled(index > 0)
         if index == 0:
-            self.next_btn.setText("Next")
+            self.next_btn.setText(QCoreApplication.translate(
+                "CsvImportWizard", "Next"))
             self.next_btn.setEnabled(
                 self._sniff is not None and bool(self._sniff.rows))
         elif index == 1:
-            self.next_btn.setText("Next")
+            self.next_btn.setText(QCoreApplication.translate(
+                "CsvImportWizard", "Next"))
             self.next_btn.setEnabled(self._required_mapped())
         else:
-            self.next_btn.setText("Import")
+            self.next_btn.setText(QCoreApplication.translate(
+                "CsvImportWizard", "Import"))
             self.next_btn.setEnabled(bool(self._fixtures))
 
     # -- results (valid after accept) ---------------------------------------

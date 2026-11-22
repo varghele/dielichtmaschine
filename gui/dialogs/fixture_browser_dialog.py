@@ -27,6 +27,7 @@ import logging
 from typing import Dict, List, Optional, Tuple
 
 from PyQt6 import QtCore, QtGui, QtWidgets
+from PyQt6.QtCore import QCoreApplication
 
 from utils.fixture_library import parse_fixture_file
 
@@ -52,7 +53,7 @@ class FixtureBrowserDialog(QtWidgets.QDialog):
         called after a GDTF Share download. share_pane: an optional
         GDTFSharePane shown as a second tab."""
         super().__init__(parent)
-        self.setWindowTitle("Add Fixture")
+        self.setWindowTitle(QCoreApplication.translate("FixtureBrowserDialog", "Add Fixture"))
         self.setModal(True)
         self.resize(760, 560)
         self._summary_cache: Dict[str, Dict] = {}
@@ -69,7 +70,7 @@ class FixtureBrowserDialog(QtWidgets.QDialog):
 
         self.search_box = QtWidgets.QLineEdit()
         self.search_box.setPlaceholderText(
-            "Search fixtures... (manufacturer or model)")
+            QCoreApplication.translate("FixtureBrowserDialog", "Search fixtures... (manufacturer or model)"))
         font = QtGui.QFont()
         font.setPointSize(12)
         self.search_box.setFont(font)
@@ -86,7 +87,7 @@ class FixtureBrowserDialog(QtWidgets.QDialog):
 
         self.details = QtWidgets.QTextBrowser()
         self.details.setOpenExternalLinks(False)
-        self.details.setPlaceholderText("Select a fixture to see its modes.")
+        self.details.setPlaceholderText(QCoreApplication.translate("FixtureBrowserDialog", "Select a fixture to see its modes."))
         split.addWidget(self.details)
         split.setStretchFactor(0, 3)
         split.setStretchFactor(1, 2)
@@ -94,8 +95,8 @@ class FixtureBrowserDialog(QtWidgets.QDialog):
 
         if share_pane is not None:
             self.tabs = QtWidgets.QTabWidget()
-            self.tabs.addTab(library_page, "LIBRARY")
-            self.tabs.addTab(share_pane, "GDTF SHARE")
+            self.tabs.addTab(library_page, QCoreApplication.translate("FixtureBrowserDialog", "LIBRARY"))
+            self.tabs.addTab(share_pane, QCoreApplication.translate("FixtureBrowserDialog", "GDTF SHARE"))
             layout.addWidget(self.tabs, stretch=1)
             share_pane.fixtures_downloaded.connect(
                 self._on_share_downloaded)
@@ -103,11 +104,12 @@ class FixtureBrowserDialog(QtWidgets.QDialog):
             layout.addWidget(library_page, stretch=1)
 
         bottom = QtWidgets.QHBoxLayout()
-        bottom.addWidget(QtWidgets.QLabel("Quantity:"))
+        bottom.addWidget(QtWidgets.QLabel(QCoreApplication.translate("FixtureBrowserDialog", "Quantity:")))
         self.quantity_spin = QtWidgets.QSpinBox()
         self.quantity_spin.setRange(1, 64)
         self.quantity_spin.setToolTip(
-            "Add this many copies, patched at consecutive free addresses.")
+            QCoreApplication.translate("FixtureBrowserDialog", "Add this many copies, patched at consecutive free "
+              "addresses."))
         bottom.addWidget(self.quantity_spin)
         bottom.addStretch()
 
@@ -141,11 +143,11 @@ class FixtureBrowserDialog(QtWidgets.QDialog):
             label = f"{entry['manufacturer']} · {entry['model']}"
             source = entry.get('source')
             if source == 'bundled':
-                label += "   [bundled]"
+                label += "   " + QCoreApplication.translate("FixtureBrowserDialog", "[bundled]")
             elif source in ('gdtf', 'user-gdtf'):
                 label += "   [GDTF]"
             elif source == 'user-qxf':
-                label += "   [user]"
+                label += "   " + QCoreApplication.translate("FixtureBrowserDialog", "[user]")
             item = QtWidgets.QListWidgetItem(label)
             item.setData(QtCore.Qt.ItemDataRole.UserRole, entry['path'])
             self.list_widget.addItem(item)
@@ -189,19 +191,23 @@ class FixtureBrowserDialog(QtWidgets.QDialog):
         summary = self._summary_for(path)
         if summary is None:
             self.details.setHtml(
-                f"<p><b>Could not read this fixture definition.</b></p>"
-                f"<p>{self._summary_cache[path]['error']}</p>"
+                "<p><b>"
+                + QCoreApplication.translate("FixtureBrowserDialog", "Could not read this fixture definition.")
+                + f"</b></p><p>{self._summary_cache[path]['error']}</p>"
             )
             self._ok_button.setEnabled(False)
             return
         mode_rows = "".join(
-            f"<tr><td>{name}</td><td align='right'>{channels} ch</td></tr>"
+            f"<tr><td>{name}</td><td align='right'>"
+            + QCoreApplication.translate("FixtureBrowserDialog", "{0} ch").format(channels)
+            + "</td></tr>"
             for name, channels in summary['modes']
-        ) or "<tr><td colspan='2'>(no modes)</td></tr>"
+        ) or ("<tr><td colspan='2'>" + QCoreApplication.translate("FixtureBrowserDialog", "(no modes)")
+              + "</td></tr>")
         self.details.setHtml(
             f"<h3>{summary['manufacturer']} {summary['model']}</h3>"
-            f"<p>Type: <b>{summary['type']}</b></p>"
-            f"<p><b>Modes</b></p>"
+            "<p>" + QCoreApplication.translate("FixtureBrowserDialog", "Type: <b>{0}</b>").format(summary['type'])
+            + "</p><p><b>" + QCoreApplication.translate("FixtureBrowserDialog", "Modes") + "</b></p>"
             f"<table width='100%' cellpadding='2'>{mode_rows}</table>"
         )
 

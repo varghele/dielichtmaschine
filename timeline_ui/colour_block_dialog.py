@@ -7,14 +7,17 @@ from PyQt6.QtWidgets import (QDialog, QButtonGroup, QVBoxLayout, QHBoxLayout, QF
                              QDialogButtonBox, QWidget, QPushButton,
                              QComboBox, QFrame, QGridLayout, QLineEdit,
                              QScrollArea)
-from PyQt6.QtCore import Qt
+from PyQt6.QtCore import QT_TRANSLATE_NOOP, QCoreApplication, Qt
 from PyQt6.QtGui import QColor
 from config.models import ColourBlock
 from gui.typography import mono_font
 
-#: role combo sentinel labels (v1.5 palette roles)
-LITERAL_LABEL = "Literal colour (no role)"
-NEW_ROLE_LABEL = "New role..."
+#: role combo sentinel labels (v1.5 palette roles). English sources,
+#: translated where shown; the combo's itemData is the key ("" literal,
+#: None new role), never the text.
+LITERAL_LABEL = QT_TRANSLATE_NOOP("ColourBlockDialog",
+                                  "Literal colour (no role)")
+NEW_ROLE_LABEL = QT_TRANSLATE_NOOP("ColourBlockDialog", "New role...")
 
 
 def _active_tokens() -> dict:
@@ -106,15 +109,17 @@ class PaletteEditorDialog(QDialog):
     def __init__(self, song, parent=None):
         super().__init__(parent)
         self.song = song
-        self.setWindowTitle("Edit Palette")
+        self.setWindowTitle(QCoreApplication.translate("ColourBlockDialog", "Edit Palette"))
         self.setMinimumWidth(380)
         self._rows = []   # (name_edit, swatch_btn, remove_btn, container)
 
         layout = QVBoxLayout(self)
         hint = QLabel(
-            "Roles resolve to colours per song. Blocks tagged with a "
-            "role re-resolve when the palette changes; literal blocks "
-            "are never touched.")
+            QCoreApplication.translate(
+                "ColourBlockDialog",
+                "Roles resolve to colours per song. Blocks tagged with a "
+                "role re-resolve when the palette changes; literal blocks "
+                "are never touched."))
         hint.setWordWrap(True)
         layout.addWidget(hint)
 
@@ -122,7 +127,7 @@ class PaletteEditorDialog(QDialog):
         self._rows_layout.setSpacing(4)
         layout.addLayout(self._rows_layout)
 
-        add_btn = QPushButton("Add Role")
+        add_btn = QPushButton(QCoreApplication.translate("ColourBlockDialog", "Add Role"))
         add_btn.clicked.connect(lambda: self.add_role("", (255, 255, 255)))
         layout.addWidget(add_btn)
         layout.addStretch()
@@ -147,7 +152,9 @@ class PaletteEditorDialog(QDialog):
         row.setSpacing(6)
 
         name_edit = QLineEdit(name)
-        name_edit.setPlaceholderText("role name (e.g. primary)")
+        name_edit.setPlaceholderText(QCoreApplication.translate(
+            "ColourBlockDialog",
+            "role name (e.g. primary)"))
         row.addWidget(name_edit, 1)
 
         swatch = QPushButton()
@@ -156,7 +163,7 @@ class PaletteEditorDialog(QDialog):
                                self._pick_colour(c))
         row.addWidget(swatch)
 
-        remove = QPushButton("Remove")
+        remove = QPushButton(QCoreApplication.translate("ColourBlockDialog", "Remove"))
         remove.clicked.connect(lambda _=False, c=container:
                                self._remove_row(c))
         row.addWidget(remove)
@@ -225,20 +232,22 @@ class ColourBlockDialog(QDialog):
     - Optional color wheel (if fixture supports it)
     """
 
-    # Standard light color presets (name, R, G, B, W values)
+    # Standard light color presets (name, R, G, B, W values). Names are
+    # QT_TRANSLATE_NOOP-marked and translated on the preset buttons.
     PRESET_COLORS = [
-        ("Red", 255, 0, 0, 0),
-        ("Green", 0, 255, 0, 0),
-        ("Blue", 0, 0, 255, 0),
-        ("White", 0, 0, 0, 255),  # Use W channel for white
-        ("Amber", 255, 100, 0, 0),
+        (QT_TRANSLATE_NOOP("ColourBlockDialog", "Red"), 255, 0, 0, 0),
+        (QT_TRANSLATE_NOOP("ColourBlockDialog", "Green"), 0, 255, 0, 0),
+        (QT_TRANSLATE_NOOP("ColourBlockDialog", "Blue"), 0, 0, 255, 0),
+        # Use W channel for white
+        (QT_TRANSLATE_NOOP("ColourBlockDialog", "White"), 0, 0, 0, 255),
+        (QT_TRANSLATE_NOOP("ColourBlockDialog", "Amber"), 255, 100, 0, 0),
         ("UV", 75, 0, 130, 0),
-        ("Lime", 180, 255, 0, 0),
-        ("Yellow", 255, 255, 0, 0),
-        ("Cyan", 0, 255, 255, 0),
-        ("Magenta", 255, 0, 255, 0),
-        ("Orange", 255, 165, 0, 0),
-        ("Pink", 255, 105, 180, 0),
+        (QT_TRANSLATE_NOOP("ColourBlockDialog", "Lime"), 180, 255, 0, 0),
+        (QT_TRANSLATE_NOOP("ColourBlockDialog", "Yellow"), 255, 255, 0, 0),
+        (QT_TRANSLATE_NOOP("ColourBlockDialog", "Cyan"), 0, 255, 255, 0),
+        (QT_TRANSLATE_NOOP("ColourBlockDialog", "Magenta"), 255, 0, 255, 0),
+        (QT_TRANSLATE_NOOP("ColourBlockDialog", "Orange"), 255, 165, 0, 0),
+        (QT_TRANSLATE_NOOP("ColourBlockDialog", "Pink"), 255, 105, 180, 0),
     ]
 
     def __init__(self, block: ColourBlock, color_wheel_options: list = None,
@@ -263,7 +272,7 @@ class ColourBlockDialog(QDialog):
         self.color_wheel_options = color_wheel_options or []
         self.has_rgb = has_rgb
 
-        self.setWindowTitle("Edit Colour Block")
+        self.setWindowTitle(QCoreApplication.translate("ColourBlockDialog", "Edit Colour Block"))
         self.setMinimumWidth(500)
         self.setMinimumHeight(650)
 
@@ -282,21 +291,21 @@ class ColourBlockDialog(QDialog):
         layout = QVBoxLayout(scroll_widget)
 
         # Timing info (read-only display)
-        timing_group = QGroupBox("Timing")
+        timing_group = QGroupBox(QCoreApplication.translate("ColourBlockDialog", "Timing"))
         timing_layout = QFormLayout()
 
         self.start_label = QLabel()
         self.end_label = QLabel()
         self.duration_label = QLabel()
-        timing_layout.addRow("Start:", self.start_label)
-        timing_layout.addRow("End:", self.end_label)
-        timing_layout.addRow("Duration:", self.duration_label)
+        timing_layout.addRow(QCoreApplication.translate("ColourBlockDialog", "Start:"), self.start_label)
+        timing_layout.addRow(QCoreApplication.translate("ColourBlockDialog", "End:"), self.end_label)
+        timing_layout.addRow(QCoreApplication.translate("ColourBlockDialog", "Duration:"), self.duration_label)
 
         timing_group.setLayout(timing_layout)
         layout.addWidget(timing_group)
 
         # Color preview and hex picker
-        preview_group = QGroupBox("Color Preview")
+        preview_group = QGroupBox(QCoreApplication.translate("ColourBlockDialog", "Color Preview"))
         preview_layout = QVBoxLayout()
 
         self.color_preview = ColorPreviewWidget()
@@ -304,7 +313,9 @@ class ColourBlockDialog(QDialog):
 
         # Hex picker row
         hex_layout = QHBoxLayout()
-        self.pick_color_btn = QPushButton("Pick Color...")
+        self.pick_color_btn = QPushButton(QCoreApplication.translate(
+            "ColourBlockDialog",
+            "Pick Color..."))
         self.pick_color_btn.clicked.connect(self._open_color_picker)
         self.hex_label = QLabel("#000000")
         self.hex_label.setFont(mono_font(11))
@@ -319,7 +330,7 @@ class ColourBlockDialog(QDialog):
         # Palette role (v1.5): the block can carry a role instead of
         # being a pure literal; Song.apply_palette() re-resolves tagged
         # blocks when the palette changes.
-        role_group = QGroupBox("Palette Role")
+        role_group = QGroupBox(QCoreApplication.translate("ColourBlockDialog", "Palette Role"))
         role_layout = QHBoxLayout()
 
         self.role_combo = QComboBox()
@@ -328,32 +339,38 @@ class ColourBlockDialog(QDialog):
         role_layout.addWidget(self.role_combo, 1)
 
         self.new_role_edit = QLineEdit()
-        self.new_role_edit.setPlaceholderText("new role name")
+        self.new_role_edit.setPlaceholderText(QCoreApplication.translate(
+            "ColourBlockDialog",
+            "new role name"))
         self.new_role_edit.setVisible(False)
         role_layout.addWidget(self.new_role_edit, 1)
 
-        self.edit_palette_btn = QPushButton("Edit Palette...")
+        self.edit_palette_btn = QPushButton(QCoreApplication.translate(
+            "ColourBlockDialog",
+            "Edit Palette..."))
         self.edit_palette_btn.clicked.connect(self._edit_palette)
         if self.song is None:
             self.edit_palette_btn.setEnabled(False)
             self.edit_palette_btn.setToolTip(
-                "The song owning this block could not be resolved; "
-                "roles can still be typed, the palette is edited from "
-                "the song's timeline.")
+                QCoreApplication.translate(
+                    "ColourBlockDialog",
+                    "The song owning this block could not be resolved; "
+                    "roles can still be typed, the palette is edited from "
+                    "the song's timeline."))
         role_layout.addWidget(self.edit_palette_btn)
 
         role_group.setLayout(role_layout)
         layout.addWidget(role_group)
 
         # Quick preset buttons
-        preset_group = QGroupBox("Quick Presets")
+        preset_group = QGroupBox(QCoreApplication.translate("ColourBlockDialog", "Quick Presets"))
         preset_layout = QGridLayout()
         preset_layout.setSpacing(5)
 
         self.preset_buttons = []
         for i, (name, r, g, b, w) in enumerate(self.PRESET_COLORS):
             color = QColor(r, g, b)
-            btn = ColorPresetButton(name, color)
+            btn = ColorPresetButton(QCoreApplication.translate("ColourBlockDialog", name), color)
             btn.clicked.connect(lambda checked, r=r, g=g, b=b, w=w: self._apply_preset(r, g, b, w))
             self.preset_buttons.append(btn)
             row = i // 4
@@ -365,7 +382,7 @@ class ColourBlockDialog(QDialog):
 
         # Color wheel (only if fixture has one)
         if self.color_wheel_options:
-            wheel_group = QGroupBox("Color Wheel")
+            wheel_group = QGroupBox(QCoreApplication.translate("ColourBlockDialog", "Color Wheel"))
             wheel_layout = QFormLayout()
 
             # Explicit output mode (decision 2026-10-12): RGB drives the
@@ -380,7 +397,9 @@ class ColourBlockDialog(QDialog):
             self.mode_group = QButtonGroup(self)
             self.mode_group.setExclusive(True)
             self.mode_rgb_btn = QPushButton("RGB")
-            self.mode_wheel_btn = QPushButton("WHEEL")
+            self.mode_wheel_btn = QPushButton(QCoreApplication.translate(
+                "ColourBlockDialog",
+                "WHEEL"))
             for idx, btn in enumerate((self.mode_rgb_btn, self.mode_wheel_btn)):
                 btn.setCheckable(True)
                 btn.setProperty("role", "segment")
@@ -392,31 +411,33 @@ class ColourBlockDialog(QDialog):
             if not self.has_rgb:
                 self.mode_rgb_btn.setEnabled(False)
                 self.mode_rgb_btn.setToolTip(
-                    "These fixtures have no RGB channels")
+                    QCoreApplication.translate(
+                        "ColourBlockDialog",
+                        "These fixtures have no RGB channels"))
             self.mode_wheel_btn.setChecked(True)
-            wheel_layout.addRow("Output:", mode_row)
+            wheel_layout.addRow(QCoreApplication.translate("ColourBlockDialog", "Output:"), mode_row)
 
             self.wheel_combo = QComboBox()
             for name, dmx_value, hex_color in self.color_wheel_options:
                 self.wheel_combo.addItem(name, (dmx_value, hex_color))
 
             self.wheel_combo.currentIndexChanged.connect(self._on_wheel_changed)
-            wheel_layout.addRow("Position:", self.wheel_combo)
+            wheel_layout.addRow(QCoreApplication.translate("ColourBlockDialog", "Position:"), self.wheel_combo)
 
             wheel_group.setLayout(wheel_layout)
             layout.addWidget(wheel_group)
 
         # RGBW sliders
-        rgbw_group = QGroupBox("RGBW Values")
+        rgbw_group = QGroupBox(QCoreApplication.translate("ColourBlockDialog", "RGBW Values"))
         rgbw_layout = QFormLayout()
 
         # Create sliders for R, G, B, W. The sliders adopt the themed
         # look (accent handle); the channel is named by the row label.
         self.sliders = {}
-        for channel, label in [("red", "Red"),
-                               ("green", "Green"),
-                               ("blue", "Blue"),
-                               ("white", "White")]:
+        for channel, label in [("red", QCoreApplication.translate("ColourBlockDialog", "Red")),
+                               ("green", QCoreApplication.translate("ColourBlockDialog", "Green")),
+                               ("blue", QCoreApplication.translate("ColourBlockDialog", "Blue")),
+                               ("white", QCoreApplication.translate("ColourBlockDialog", "White"))]:
             row = QHBoxLayout()
             slider = QSlider(Qt.Orientation.Horizontal)
             slider.setRange(0, 255)
@@ -468,10 +489,10 @@ class ColourBlockDialog(QDialog):
             roles.append(current)
         self.role_combo.blockSignals(True)
         self.role_combo.clear()
-        self.role_combo.addItem(LITERAL_LABEL, "")
+        self.role_combo.addItem(QCoreApplication.translate("ColourBlockDialog", LITERAL_LABEL), "")
         for role in roles:
             self.role_combo.addItem(role, role)
-        self.role_combo.addItem(NEW_ROLE_LABEL, None)
+        self.role_combo.addItem(QCoreApplication.translate("ColourBlockDialog", NEW_ROLE_LABEL), None)
         index = self.role_combo.findData(current) if current else 0
         self.role_combo.setCurrentIndex(max(0, index))
         self.role_combo.blockSignals(False)

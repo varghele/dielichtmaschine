@@ -29,7 +29,7 @@ import datetime
 import os
 
 from PyQt6 import QtWidgets
-from PyQt6.QtCore import Qt
+from PyQt6.QtCore import QT_TRANSLATE_NOOP, QCoreApplication, Qt
 
 from utils.morph.plan import config_hash
 from utils.morph.preflight import (PreflightChecklist, derive_plan_from_config,
@@ -45,19 +45,27 @@ logger = logging.getLogger(__name__)
 ORIENTATION_KINDS = ("spot_verify",)
 
 GUIDANCE = {
-    "flash": ("A silent fixture is a patch or address error. Fix the "
-              "fixture's universe/address (and DMX mode) in the Setup "
-              "section's fixture list, then re-test this item."),
-    "colour_sanity": ("Swapped colours mean wrong channel order - "
-                      "usually a different DMX mode than the rig list "
-                      "claimed. Fix the fixture's mode in the Setup "
-                      "section, then re-test this item."),
-    "special_verify": ("Mismatched gobo/prism states usually mean a "
-                       "different fixture mode or definition. Check the "
-                       "fixture's mode in the Setup section, then "
-                       "re-test this item."),
-    "scrub": ("Fix the offending looks on the Shows timeline (or the "
-              "geometry in the Stage tab), then re-run the scrub."),
+    "flash": QT_TRANSLATE_NOOP(
+        "PreflightDialog",
+        "A silent fixture is a patch or address error. Fix the "
+        "fixture's universe/address (and DMX mode) in the Setup "
+        "section's fixture list, then re-test this item."),
+    "colour_sanity": QT_TRANSLATE_NOOP(
+        "PreflightDialog",
+        "Swapped colours mean wrong channel order - "
+        "usually a different DMX mode than the rig list "
+        "claimed. Fix the fixture's mode in the Setup "
+        "section, then re-test this item."),
+    "special_verify": QT_TRANSLATE_NOOP(
+        "PreflightDialog",
+        "Mismatched gobo/prism states usually mean a "
+        "different fixture mode or definition. Check the "
+        "fixture's mode in the Setup section, then "
+        "re-test this item."),
+    "scrub": QT_TRANSLATE_NOOP(
+        "PreflightDialog",
+        "Fix the offending looks on the Shows timeline (or the "
+        "geometry in the Stage tab), then re-run the scrub."),
 }
 
 
@@ -98,7 +106,7 @@ class PreflightDialog(QtWidgets.QDialog):
     def __init__(self, config, config_path: str = "", plan=None,
                  source_config=None, arbiter_provider=None, parent=None):
         super().__init__(parent)
-        self.setWindowTitle("Venue Pre-Flight")
+        self.setWindowTitle(QCoreApplication.translate("PreflightDialog", "Venue Pre-Flight"))
         self.setModal(True)
         self.setMinimumSize(720, 480)
 
@@ -170,10 +178,12 @@ class PreflightDialog(QtWidgets.QDialog):
         """The stale-checklist prompt; split out so tests decide
         without a modal. True = throw the old one away."""
         answer = QtWidgets.QMessageBox.question(
-            self, "Venue Pre-Flight",
-            "A saved checklist exists for this config, but the plan or "
-            "the config changed since it was written.\n\nRegenerate the "
-            "checklist (recommended), or resume the old one anyway?",
+            self, QCoreApplication.translate("PreflightDialog", "Venue Pre-Flight"),
+            QCoreApplication.translate(
+                "PreflightDialog",
+                "A saved checklist exists for this config, but the plan or "
+                "the config changed since it was written.\n\nRegenerate the "
+                "checklist (recommended), or resume the old one anyway?"),
             QtWidgets.QMessageBox.StandardButton.Yes
             | QtWidgets.QMessageBox.StandardButton.No)
         return answer == QtWidgets.QMessageBox.StandardButton.Yes
@@ -203,14 +213,20 @@ class PreflightDialog(QtWidgets.QDialog):
 
         # DRIVE row.
         drive_row = QtWidgets.QHBoxLayout()
-        self.drive_btn = QtWidgets.QPushButton("DRIVE")
+        self.drive_btn = QtWidgets.QPushButton(QCoreApplication.translate(
+            "PreflightDialog",
+            "DRIVE"))
         self.drive_btn.setCheckable(True)
         self.drive_btn.setToolTip(
-            "Drive the rig into this item's test state (exclusive with "
-            "timeline/Auto playback)")
+            QCoreApplication.translate(
+                "PreflightDialog",
+                "Drive the rig into this item's test state (exclusive with "
+                "timeline/Auto playback)"))
         self.drive_btn.toggled.connect(self._on_drive_toggled)
         drive_row.addWidget(self.drive_btn)
-        self.step_btn = QtWidgets.QPushButton("NEXT STEP")
+        self.step_btn = QtWidgets.QPushButton(QCoreApplication.translate(
+            "PreflightDialog",
+            "NEXT STEP"))
         self.step_btn.clicked.connect(self._on_next_step)
         drive_row.addWidget(self.step_btn)
         self.step_label = QtWidgets.QLabel("")
@@ -220,20 +236,28 @@ class PreflightDialog(QtWidgets.QDialog):
 
         # CAPTURE row (focus_capture items only).
         capture_row = QtWidgets.QHBoxLayout()
-        capture_row.addWidget(QtWidgets.QLabel("Focus"))
+        capture_row.addWidget(QtWidgets.QLabel(QCoreApplication.translate(
+            "PreflightDialog",
+            "Focus")))
         self.focus_slider = QtWidgets.QSlider(Qt.Orientation.Horizontal)
         self.focus_slider.setRange(0, 255)
         self.focus_slider.valueChanged.connect(self._on_capture_levels)
         capture_row.addWidget(self.focus_slider, 1)
-        capture_row.addWidget(QtWidgets.QLabel("Zoom"))
+        capture_row.addWidget(QtWidgets.QLabel(QCoreApplication.translate(
+            "PreflightDialog",
+            "Zoom")))
         self.zoom_slider = QtWidgets.QSlider(Qt.Orientation.Horizontal)
         self.zoom_slider.setRange(0, 255)
         self.zoom_slider.valueChanged.connect(self._on_capture_levels)
         capture_row.addWidget(self.zoom_slider, 1)
-        self.capture_btn = QtWidgets.QPushButton("CAPTURE")
+        self.capture_btn = QtWidgets.QPushButton(QCoreApplication.translate(
+            "PreflightDialog",
+            "CAPTURE"))
         self.capture_btn.setToolTip(
-            "Store the trimmed focus/zoom into the fixtures' "
-            "calibration (the config, never the show)")
+            QCoreApplication.translate(
+                "PreflightDialog",
+                "Store the trimmed focus/zoom into the fixtures' "
+                "calibration (the config, never the show)"))
         self.capture_btn.clicked.connect(self.capture)
         capture_row.addWidget(self.capture_btn)
         self._capture_widgets = [
@@ -244,10 +268,14 @@ class PreflightDialog(QtWidgets.QDialog):
 
         # Verdict row.
         verdict_row = QtWidgets.QHBoxLayout()
-        self.correct_btn = QtWidgets.QPushButton("CORRECT")
+        self.correct_btn = QtWidgets.QPushButton(QCoreApplication.translate(
+            "PreflightDialog",
+            "CORRECT"))
         self.correct_btn.clicked.connect(self.mark_correct)
         verdict_row.addWidget(self.correct_btn)
-        self.incorrect_btn = QtWidgets.QPushButton("INCORRECT")
+        self.incorrect_btn = QtWidgets.QPushButton(QCoreApplication.translate(
+            "PreflightDialog",
+            "INCORRECT"))
         self.incorrect_btn.clicked.connect(self.mark_incorrect)
         verdict_row.addWidget(self.incorrect_btn)
         verdict_row.addStretch(1)
@@ -259,7 +287,7 @@ class PreflightDialog(QtWidgets.QDialog):
         bottom = QtWidgets.QHBoxLayout()
         self.status_label = QtWidgets.QLabel("")
         bottom.addWidget(self.status_label, 1)
-        close_btn = QtWidgets.QPushButton("Close")
+        close_btn = QtWidgets.QPushButton(QCoreApplication.translate("PreflightDialog", "Close"))
         close_btn.clicked.connect(self.accept)
         bottom.addWidget(close_btn)
         layout.addLayout(bottom)
@@ -271,7 +299,8 @@ class PreflightDialog(QtWidgets.QDialog):
         self.item_list.blockSignals(True)
         self.item_list.clear()
         for index, item in enumerate(self.checklist.items):
-            marker = "[DONE]" if item.done else "[    ]"
+            marker = (QCoreApplication.translate("PreflightDialog", "[DONE]")
+                      if item.done else "[    ]")
             self.item_list.addItem(f"{marker} {index + 1:02d} · "
                                    f"{item.title}")
         if 0 <= current < self.item_list.count():
@@ -281,11 +310,12 @@ class PreflightDialog(QtWidgets.QDialog):
         self.item_list.blockSignals(False)
         done = sum(1 for i in self.checklist.items if i.done)
         total = len(self.checklist.items)
-        pieces = [f"{done} / {total} items done"]
+        pieces = [QCoreApplication.translate("PreflightDialog", "{0} / {1} items done").format(done, total)]
         if self.resumed:
-            pieces.append("resumed")
+            pieces.append(QCoreApplication.translate("PreflightDialog", "resumed"))
         if self.checklist.completed_at:
-            pieces.append(f"completed {self.checklist.completed_at}")
+            pieces.append(QCoreApplication.translate("PreflightDialog", "completed {0}").format(
+                self.checklist.completed_at))
         self.progress_label.setText(" · ".join(pieces))
 
     def _select_first_pending(self) -> None:
@@ -322,7 +352,7 @@ class PreflightDialog(QtWidgets.QDialog):
                 widget.setEnabled(False)
             for widget in self._capture_widgets:
                 widget.setVisible(False)
-            self.title_label.setText("No items.")
+            self.title_label.setText(QCoreApplication.translate("PreflightDialog", "No items."))
             self.instruction_label.setText("")
             return
         self.title_label.setText(f"<b>{item.title}</b>")
@@ -361,8 +391,8 @@ class PreflightDialog(QtWidgets.QDialog):
             self.step_label.setText(RGB_STEP_LABELS[self.layer.rgb_step])
         elif item.kind == "special_verify":
             self.step_label.setText(
-                f"Gobo step {self.layer.special_step + 1} / "
-                f"{SPECIAL_STEP_COUNT}")
+                QCoreApplication.translate("PreflightDialog", "Gobo step {0} / {1}").format(
+                    self.layer.special_step + 1, SPECIAL_STEP_COUNT))
 
     # ── driving ───────────────────────────────────────────────────────────
 
@@ -383,7 +413,9 @@ class PreflightDialog(QtWidgets.QDialog):
                 arbiter = None
             if arbiter is not None and not self.layer.attach(arbiter):
                 self.status_label.setText(
-                    "Output is busy: stop timeline/Auto playback first.")
+                    QCoreApplication.translate(
+                        "PreflightDialog",
+                        "Output is busy: stop timeline/Auto playback first."))
                 self.drive_btn.setChecked(False)
                 return
         self._arm_current()
@@ -474,8 +506,8 @@ class PreflightDialog(QtWidgets.QDialog):
         if not pending:
             self.drive_btn.setChecked(False)
             self.status_label.setText(
-                "Checklist complete · "
-                f"{self.checklist.completed_at}")
+                QCoreApplication.translate("PreflightDialog", "Checklist complete") + " · "
+                + f"{self.checklist.completed_at}")
             self._sync_detail()
             return
         index = self.checklist.items.index(pending[0])
@@ -535,9 +567,15 @@ class PreflightDialog(QtWidgets.QDialog):
 
     def _show_guidance(self, item) -> None:
         QtWidgets.QMessageBox.information(
-            self, "Venue Pre-Flight",
-            GUIDANCE.get(item.kind,
-                         "Fix the underlying issue, then re-test."))
+            self, QCoreApplication.translate("PreflightDialog",
+                                             "Venue Pre-Flight"),
+            # GUIDANCE values are QT_TRANSLATE_NOOP-marked sources.
+            QCoreApplication.translate("PreflightDialog",
+                                       GUIDANCE[item.kind])
+            if item.kind in GUIDANCE else
+            QCoreApplication.translate(
+                "PreflightDialog",
+                "Fix the underlying issue, then re-test."))
 
     # ── persistence / teardown ────────────────────────────────────────────
 
@@ -548,7 +586,7 @@ class PreflightDialog(QtWidgets.QDialog):
             self.checklist.save(self.checklist_path)
         except OSError:
             self.status_label.setText(
-                f"Could not save {self.checklist_path}")
+                QCoreApplication.translate("PreflightDialog", "Could not save {0}").format(self.checklist_path))
 
     def done(self, result: int) -> None:
         self.layer.detach()

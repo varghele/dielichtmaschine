@@ -22,7 +22,7 @@ from PyQt6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QLabel, QStatusBar, QPushButton, QMessageBox
 )
-from PyQt6.QtCore import Qt, QTimer
+from PyQt6.QtCore import Qt, QTimer, QCoreApplication
 from PyQt6.QtGui import QFont, QIcon, QPixmap
 
 # Import shared modules from Die Lichtmaschine
@@ -49,7 +49,8 @@ class VisualizerWindow(QMainWindow):
 
     def __init__(self):
         super().__init__()
-        self.setWindowTitle(f"{APP_NAME} · Visualizer")
+        self.setWindowTitle(QCoreApplication.translate(
+            "VisualizerWindow", "{0} · Visualizer").format(APP_NAME))
         self.setMinimumSize(1024, 768)
 
         # Theme tokens for the status colors (the QSS handles the
@@ -135,7 +136,8 @@ class VisualizerWindow(QMainWindow):
     def _on_artnet_error(self, error_msg: str):
         """Handle ArtNet error."""
         logger.warning(f"ArtNet error: {error_msg}")
-        self.statusbar.showMessage(f"ArtNet error: {error_msg}", 5000)
+        self.statusbar.showMessage(QCoreApplication.translate(
+            "VisualizerWindow", "ArtNet error: {0}").format(error_msg), 5000)
 
     def _on_tcp_connected(self):
         """Handle TCP connected event."""
@@ -150,7 +152,9 @@ class VisualizerWindow(QMainWindow):
     def _on_tcp_error(self, error_msg: str):
         """Handle TCP connection error."""
         self._update_tcp_indicator(False)
-        self.statusbar.showMessage(f"Connection error: {error_msg}", 5000)
+        self.statusbar.showMessage(QCoreApplication.translate(
+            "VisualizerWindow", "Connection error: {0}").format(
+                error_msg), 5000)
 
     def _on_config_update(self, update_type: str, data: dict):
         """Handle configuration update from Show Creator."""
@@ -205,7 +209,8 @@ class VisualizerWindow(QMainWindow):
                                       tracking_em=0.08))
         row.addWidget(wordmark)
 
-        tag = MicroLabel("Visualizer", point_size=8, tracking_em=0.18)
+        tag = MicroLabel(QCoreApplication.translate(
+            "VisualizerWindow", "Visualizer"), point_size=8, tracking_em=0.18)
         row.addWidget(tag)
 
         row.addSpacing(16)
@@ -224,22 +229,31 @@ class VisualizerWindow(QMainWindow):
             return btn
 
         self.connect_btn = _chip(
-            "CONNECT", f"Connect to {APP_NAME} (TCP port 9000)",
+            QCoreApplication.translate(
+                "VisualizerWindow", "CONNECT"), QCoreApplication.translate(
+                    "VisualizerWindow", "Connect to {0} (TCP port 9000)").format(
+                        APP_NAME),
             self._on_connect_clicked)
         self.reset_view_btn = _chip(
-            "RESET VIEW", "Reset camera to default position",
+            QCoreApplication.translate(
+                "VisualizerWindow", "RESET VIEW"), QCoreApplication.translate(
+                "VisualizerWindow", "Reset camera to default position"),
             self._on_reset_view)
         self.build_btn = _chip(
-            "BUILD",
-            "Light the whole rig with a synthetic look (dimmer up, "
-            "shutter open, pan/tilt centred) to check orientation and "
-            "beam direction. Live DMX is ignored while on.")
+            QCoreApplication.translate("VisualizerWindow", "BUILD"),
+            QCoreApplication.translate(
+                "VisualizerWindow",
+                "Light the whole rig with a synthetic look (dimmer up, "
+                "shutter open, pan/tilt centred) to check orientation and "
+                "beam direction. Live DMX is ignored while on."))
         # A mode toggle, not an action: checkable, wired via toggled so
         # setChecked() from code follows the same path as a click.
         self.build_btn.setCheckable(True)
         self.build_btn.toggled.connect(self._on_build_toggled)
         self.help_btn = _chip(
-            "HELP", "How to feed DMX into the visualizer",
+            QCoreApplication.translate(
+                "VisualizerWindow", "HELP"), QCoreApplication.translate(
+                "VisualizerWindow", "How to feed DMX into the visualizer"),
             self._on_help_clicked)
 
         row.addStretch(1)
@@ -283,7 +297,8 @@ class VisualizerWindow(QMainWindow):
         self.statusbar.addWidget(self.stage_info_label)
 
         # FPS counter (right side)
-        self.fps_label = self._mono_status_label("FPS --")
+        self.fps_label = self._mono_status_label(QCoreApplication.translate(
+            "VisualizerWindow", "FPS --"))
         self.fps_label.setStyleSheet(
             f"color: {self._tokens['text_secondary']};")
         self.statusbar.addPermanentWidget(self.fps_label)
@@ -291,50 +306,61 @@ class VisualizerWindow(QMainWindow):
         self.statusbar.addPermanentWidget(self._separator())
 
         # Fixture count (right side)
-        self.fixture_count_label = self._mono_status_label("FIXTURES 0")
+        self.fixture_count_label = self._mono_status_label(QCoreApplication.translate(
+            "VisualizerWindow", "FIXTURES 0"))
         self.statusbar.addPermanentWidget(self.fixture_count_label)
 
     def _update_tcp_indicator(self, connected: bool):
         """Update TCP connection indicator."""
         self.tcp_connected = connected
         if connected:
-            self.tcp_status_label.setText("TCP CONNECTED")
+            self.tcp_status_label.setText(QCoreApplication.translate(
+                "VisualizerWindow", "TCP CONNECTED"))
             self.tcp_status_label.setStyleSheet(
                 f"color: {self._tokens['success']}; font-weight: bold;")
-            self.connect_btn.setText("DISCONNECT")
+            self.connect_btn.setText(QCoreApplication.translate(
+                "VisualizerWindow", "DISCONNECT"))
         else:
-            self.tcp_status_label.setText("TCP OFFLINE")
+            self.tcp_status_label.setText(QCoreApplication.translate(
+                "VisualizerWindow", "TCP OFFLINE"))
             self.tcp_status_label.setStyleSheet(
                 f"color: {self._tokens['destructive']};")
-            self.connect_btn.setText("CONNECT")
+            self.connect_btn.setText(QCoreApplication.translate(
+                "VisualizerWindow", "CONNECT"))
 
     def _update_artnet_indicator(self, receiving: bool):
         """Update ArtNet receiving indicator."""
         self.artnet_receiving = receiving
         if receiving:
-            self.artnet_status_label.setText("ARTNET RECEIVING")
+            self.artnet_status_label.setText(QCoreApplication.translate(
+                "VisualizerWindow", "ARTNET RECEIVING"))
             self.artnet_status_label.setStyleSheet(
                 f"color: {self._tokens['success']}; font-weight: bold;")
         else:
-            self.artnet_status_label.setText("ARTNET NO DATA")
+            self.artnet_status_label.setText(QCoreApplication.translate(
+                "VisualizerWindow", "ARTNET NO DATA"))
             self.artnet_status_label.setStyleSheet(
                 f"color: {self._tokens['text_disabled']};")
 
     def _update_stage_info(self):
         """Update stage dimensions display."""
         self.stage_info_label.setText(
-            f"STAGE {self.stage_width:.1f} x {self.stage_height:.1f} m")
+            QCoreApplication.translate(
+                "VisualizerWindow", "STAGE {0:.1f} x {1:.1f} m").format(
+                    self.stage_width, self.stage_height))
 
     def _update_fixture_count(self):
         """Update fixture count display."""
-        self.fixture_count_label.setText(f"FIXTURES {len(self.fixtures)}")
+        self.fixture_count_label.setText(QCoreApplication.translate(
+            "VisualizerWindow", "FIXTURES {0}").format(len(self.fixtures)))
 
     def _update_status(self):
         """Periodic status update (called by timer)."""
         # Update FPS display
         if hasattr(self, 'render_engine') and self.render_engine:
             fps = self.render_engine.get_fps()
-            self.fps_label.setText(f"FPS {fps:.0f}")
+            self.fps_label.setText(QCoreApplication.translate(
+                "VisualizerWindow", "FPS {0:.0f}").format(fps))
 
     def _on_connect_clicked(self):
         """Handle connect/disconnect button click."""
@@ -381,19 +407,22 @@ class VisualizerWindow(QMainWindow):
         """Show help dialog for feeding DMX into the visualizer."""
         QMessageBox.information(
             self,
-            "Feeding the visualizer",
-            f"From {APP_NAME}: use the topbar's VISUALIZER button - it\n"
-            "starts the TCP feed (rig + stage data on port 9000) and\n"
-            "this window connects on CONNECT. DMX arrives via ArtNet\n"
-            "whenever OUTPUT is enabled there.\n\n"
-            "From QLC+ (or any ArtNet source):\n"
-            "1. Open the Input/Output settings\n"
-            "2. Select an available universe\n"
-            "3. Enable ArtNet output for that universe\n"
-            "4. Set the output address to 255.255.255.255\n"
-            "5. DMX is received on port 6454 (standard ArtNet)\n\n"
-            "The bottom bar reads ARTNET RECEIVING once data\n"
-            "is coming through."
+            QCoreApplication.translate(
+                "VisualizerWindow", "Feeding the visualizer"),
+            QCoreApplication.translate(
+                "VisualizerWindow",
+                "From {0}: use the topbar's VISUALIZER button - it\n"
+                "starts the TCP feed (rig + stage data on port 9000) and\n"
+                "this window connects on CONNECT. DMX arrives via ArtNet\n"
+                "whenever OUTPUT is enabled there.\n"
+                "\nFrom QLC+ (or any ArtNet source):\n"
+                "1. Open the Input/Output settings\n"
+                "2. Select an available universe\n"
+                "3. Enable ArtNet output for that universe\n"
+                "4. Set the output address to 255.255.255.255\n"
+                "5. DMX is received on port 6454 (standard ArtNet)\n"
+                "\nThe bottom bar reads ARTNET RECEIVING once data\n"
+                "is coming through.").format(APP_NAME)
         )
 
     # --- Configuration Handling (will be called by TCP client in Phase V2) ---

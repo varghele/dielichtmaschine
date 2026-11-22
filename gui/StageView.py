@@ -1,7 +1,7 @@
 from math import cos, radians, sin
 
 from PyQt6 import QtWidgets, QtGui, QtCore
-from PyQt6.QtCore import pyqtProperty
+from PyQt6.QtCore import pyqtProperty, QCoreApplication
 from PyQt6.QtGui import QColor
 from gui.stage_items import FixtureItem, SpotItem
 from config.models import Spot, primary_group, primary_group_name
@@ -907,7 +907,7 @@ class StageView(QtWidgets.QGraphicsView):
                          width_px, self.padding - 4),
             QtCore.Qt.AlignmentFlag.AlignHCenter |
             QtCore.Qt.AlignmentFlag.AlignBottom,
-            "A U D I E N C E")
+            QCoreApplication.translate("StageView", "A U D I E N C E"))
 
         # Draw dimension labels
         self._draw_dimension_labels(painter, width_px, depth_px, center_x_px, center_y_px)
@@ -1188,27 +1188,32 @@ class StageView(QtWidgets.QGraphicsView):
         menu = QtWidgets.QMenu(self)
 
         # Set Orientation action
-        orientation_action = menu.addAction("Set Orientation...")
+        orientation_action = menu.addAction(QCoreApplication.translate(
+            "StageView", "Set Orientation..."))
         orientation_action.setEnabled(len(selected_fixtures) > 0)
 
         # Assign to Layer submenu — only offered once layers exist.
         layer_actions = {}
         clear_layer_action = None
         if self.config and self.config.stage_layers:
-            layer_menu = menu.addMenu("Assign to Layer")
+            layer_menu = menu.addMenu(QCoreApplication.translate(
+                "StageView", "Assign to Layer"))
             for layer in self.config.stage_layers:
                 action = layer_menu.addAction(f"{layer.name} ({layer.z_height:g} m)")
                 layer_actions[action] = layer.name
             layer_menu.addSeparator()
-            clear_layer_action = layer_menu.addAction("None")
+            clear_layer_action = layer_menu.addAction(QCoreApplication.translate(
+                "StageView", "None"))
 
         menu.addSeparator()
 
         # Select All action
-        select_all_action = menu.addAction("Select All Fixtures")
+        select_all_action = menu.addAction(QCoreApplication.translate(
+            "StageView", "Select All Fixtures"))
 
         # Deselect All action
-        deselect_action = menu.addAction("Deselect All")
+        deselect_action = menu.addAction(QCoreApplication.translate(
+            "StageView", "Deselect All"))
 
         # Execute menu
         action = menu.exec(self.mapToGlobal(pos))

@@ -9,7 +9,7 @@ from PyQt6.QtWidgets import (QVBoxLayout, QHBoxLayout, QComboBox, QPushButton,
                              QLabel, QSlider, QWidget,
                              QSplitter, QMessageBox,
                              QApplication, QDialog, QButtonGroup, QMenu)
-from PyQt6.QtCore import Qt, QTimer, QEvent, QPoint, QRect
+from PyQt6.QtCore import QCoreApplication, Qt, QTimer, QEvent, QPoint, QRect
 from PyQt6.QtGui import QShortcut, QKeySequence, QActionGroup
 from config.models import Configuration, Song, TimelineData
 from utils import user_warnings
@@ -296,7 +296,9 @@ class ShowsTab(BaseTab):
         riff_layout = QVBoxLayout(riff_pane)
         riff_layout.setContentsMargins(0, 0, 0, 0)
         riff_layout.setSpacing(2)
-        riff_layout.addWidget(self._caption_strip("Riff Library"))
+        riff_layout.addWidget(self._caption_strip(QCoreApplication.translate(
+            "ShowsTab",
+            "Riff Library")))
         riff_layout.addWidget(self.embedded_riff_panel, 1)
         self._riff_pane = riff_pane
 
@@ -387,7 +389,7 @@ class ShowsTab(BaseTab):
         # mock's bordered mono chip; the existing rule is QPushButton-only
         # (NEEDED-QSS: a QComboBox[role="lane-chip"] variant), so until
         # that lands the base QComboBox chrome applies - no inline styles.
-        toolbar.addWidget(MicroLabel("Song", point_size=8))
+        toolbar.addWidget(MicroLabel(QCoreApplication.translate("ShowsTab", "Song"), point_size=8))
 
         self.show_combo = QComboBox()
         self.show_combo.setMinimumWidth(120)
@@ -395,27 +397,33 @@ class ShowsTab(BaseTab):
         toolbar.addWidget(self.show_combo)
 
         # Add lane button ("+ LANE" per the 06b mock)
-        self.add_lane_btn = QPushButton("+ LANE")
+        self.add_lane_btn = QPushButton(QCoreApplication.translate("ShowsTab", "+ LANE"))
         self.add_lane_btn.setProperty("role", "success")
-        self.add_lane_btn.setToolTip("Add an empty light lane")
+        self.add_lane_btn.setToolTip(QCoreApplication.translate(
+            "ShowsTab",
+            "Add an empty light lane"))
         toolbar.addWidget(self.add_lane_btn)
 
         # Auto-generate button - the single loud CTA of the toolbar
         # ("AUTOGEN" in the 06b mock): accent-filled display caps, the
         # only accent-filled button in the strip.
-        self.autogen_btn = QPushButton("AUTOGEN")
+        self.autogen_btn = QPushButton(QCoreApplication.translate("ShowsTab", "AUTOGEN"))
         self.autogen_btn.setProperty("role", "cta-accent")
-        self.autogen_btn.setToolTip("Automatically generate the song from audio analysis")
+        self.autogen_btn.setToolTip(QCoreApplication.translate(
+            "ShowsTab",
+            "Automatically generate the song from audio analysis"))
         toolbar.addWidget(self.autogen_btn)
 
         # Inspector toggle - a bordered display-caps action so it reads
         # uniform with the other text actions (Save, POP OUT). Checkable:
         # the base :checked rule tints it while the inspector is open.
-        self.inspector_btn = QPushButton("INSPECTOR")
+        self.inspector_btn = QPushButton(QCoreApplication.translate("ShowsTab", "INSPECTOR"))
         self.inspector_btn.setProperty("role", "cta-outline")
         self.inspector_btn.setCheckable(True)
         self.inspector_btn.setEnabled(False)
-        self.inspector_btn.setToolTip("Show generation decision inspector (requires auto-generated show)")
+        self.inspector_btn.setToolTip(QCoreApplication.translate(
+            "ShowsTab",
+            "Show generation decision inspector (requires auto-generated show)"))
         toolbar.addWidget(self.inspector_btn)
 
         toolbar.addSpacing(4)
@@ -428,13 +436,13 @@ class ShowsTab(BaseTab):
         self.play_btn = QPushButton()
         self.play_btn.setFixedWidth(TOOLBAR_BTN_WIDTH)
         self.play_btn.setProperty("role", "success")
-        self.play_btn.setToolTip("Play / Pause")
+        self.play_btn.setToolTip(QCoreApplication.translate("ShowsTab", "Play / Pause"))
         toolbar.addWidget(self.play_btn)
 
         self.stop_btn = QPushButton()
         self.stop_btn.setFixedWidth(TOOLBAR_BTN_WIDTH)
         self.stop_btn.setProperty("role", "destructive")
-        self.stop_btn.setToolTip("Stop and return to start")
+        self.stop_btn.setToolTip(QCoreApplication.translate("ShowsTab", "Stop and return to start"))
         toolbar.addWidget(self.stop_btn)
 
         # Time display, inline right of the transport - styled by the
@@ -456,7 +464,7 @@ class ShowsTab(BaseTab):
         # panel background + 1px border, each cell is a borderless
         # role="segment" chip that fills with accent when checked. Clicks
         # fan out through TimelineGrid to master + audio + every lane.
-        toolbar.addWidget(MicroLabel("Grid", point_size=8))
+        toolbar.addWidget(MicroLabel(QCoreApplication.translate("ShowsTab", "Grid"), point_size=8))
         self.grid_group_frame = QWidget()
         self.grid_group_frame.setProperty("role", "card")
         self.grid_group_frame.setAttribute(
@@ -473,7 +481,7 @@ class ShowsTab(BaseTab):
             chip.setProperty("role", "segment")
             chip.setFont(mono_font(8, tracking_em=0.05))
             chip.setCursor(Qt.CursorShape.PointingHandCursor)
-            chip.setToolTip(f"Grid: a line every {label} beat(s)")
+            chip.setToolTip(QCoreApplication.translate("ShowsTab", "Grid: a line every {0} beat(s)").format(label))
             self.grid_chip_group.addButton(chip)
             self.grid_chips[value] = chip
             chips.addWidget(chip)
@@ -486,13 +494,15 @@ class ShowsTab(BaseTab):
         # every lane. Checked = accent border + accent text (output-select);
         # the mock's accent-TINTED checked background needs a theme rule
         # (NEEDED-QSS), not an inline style.
-        self.snap_chip = QPushButton("SNAP")
+        self.snap_chip = QPushButton(QCoreApplication.translate("ShowsTab", "SNAP"))
         self.snap_chip.setCheckable(True)
         self.snap_chip.setChecked(True)
         self.snap_chip.setProperty("role", "output-select")
         self.snap_chip.setFont(mono_font(8, tracking_em=0.05))
         self.snap_chip.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.snap_chip.setToolTip("Snap block edges to the grid")
+        self.snap_chip.setToolTip(QCoreApplication.translate(
+            "ShowsTab",
+            "Snap block edges to the grid"))
         toolbar.addWidget(self.snap_chip)
 
         # SWING percentage dropdown ("SWING 0% ▾" in the mock, right of
@@ -505,11 +515,13 @@ class ShowsTab(BaseTab):
         # and the chosen amount fans out through TimelineGrid.set_swing.
         # Session state only - like the on/off toggle it replaces, swing
         # is not persisted.
-        self.swing_btn = QPushButton("SWING 0% ↓")
+        self.swing_btn = QPushButton(QCoreApplication.translate("ShowsTab", "SWING 0% ↓"))
         self.swing_btn.setProperty("role", "lane-chip")
         self.swing_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self.swing_btn.setToolTip(
-            "Swing the off-beat grid (0% straight, 100% full triplet feel)")
+            QCoreApplication.translate(
+                "ShowsTab",
+                "Swing the off-beat grid (0% straight, 100% full triplet feel)"))
         self.swing_percent = 0
         self.swing_menu = QMenu(self.swing_btn)
         self._swing_action_group = QActionGroup(self.swing_menu)
@@ -531,14 +543,16 @@ class ShowsTab(BaseTab):
         # undo-stack/block_edited fan-in, so manual SAVE was a no-op
         # relic). Checkable, snap_chip treatment; checked = the current
         # song refuses timeline/structure edits everywhere.
-        self.lock_chip = QPushButton("LOCK")
+        self.lock_chip = QPushButton(QCoreApplication.translate("ShowsTab", "LOCK"))
         self.lock_chip.setCheckable(True)
         self.lock_chip.setProperty("role", "output-select")
         self.lock_chip.setFont(mono_font(8, tracking_em=0.05))
         self.lock_chip.setCursor(Qt.CursorShape.PointingHandCursor)
         self.lock_chip.setToolTip(
-            "Lock this song against timeline and structure edits · "
-            "playback, export and mute/solo stay live")
+            QCoreApplication.translate(
+                "ShowsTab",
+                "Lock this song against timeline and structure edits · "
+                "playback, export and mute/solo stay live"))
         toolbar.addWidget(self.lock_chip)
 
         # 3D-pane chevron (right-pane collapse affordance, kept in the
@@ -554,7 +568,9 @@ class ShowsTab(BaseTab):
         # one family; the base :checked accent border would fight an
         # always-checked toggle.
         self.pane_toggle_btn.setProperty("role", "pane-icon")
-        self.pane_toggle_btn.setToolTip("Show or hide the 3D preview pane")
+        self.pane_toggle_btn.setToolTip(QCoreApplication.translate(
+            "ShowsTab",
+            "Show or hide the 3D preview pane"))
         toolbar.addWidget(self.pane_toggle_btn)
 
         # Slim strip directly under the row: the shuttle (position) slider
@@ -579,7 +595,7 @@ class ShowsTab(BaseTab):
         sliders.addSpacing(8)
 
         # Zoom control
-        sliders.addWidget(MicroLabel("Zoom", point_size=8))
+        sliders.addWidget(MicroLabel(QCoreApplication.translate("ShowsTab", "Zoom"), point_size=8))
 
         self.zoom_slider = QSlider(Qt.Orientation.Horizontal)
         self.zoom_slider.setRange(10, 500)  # 0.1x to 5.0x
@@ -611,13 +627,15 @@ class ShowsTab(BaseTab):
 
     def _create_pane_header(self) -> QWidget:
         """The reference's "3D PREVIEW" header: caption, POP-OUT, chevron."""
-        header = self._caption_strip("3D Preview")
+        header = self._caption_strip(QCoreApplication.translate("ShowsTab", "3D Preview"))
         row = header.layout()
 
-        self.pane_popout_btn = QPushButton("POP OUT")
+        self.pane_popout_btn = QPushButton(QCoreApplication.translate("ShowsTab", "POP OUT"))
         self.pane_popout_btn.setProperty("role", "cta-outline")
         self.pane_popout_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.pane_popout_btn.setToolTip("Open the visualizer on a second monitor")
+        self.pane_popout_btn.setToolTip(QCoreApplication.translate(
+            "ShowsTab",
+            "Open the visualizer on a second monitor"))
         row.addWidget(self.pane_popout_btn)
 
         # Second affordance for the same collapse action the toolbar
@@ -627,7 +645,9 @@ class ShowsTab(BaseTab):
         # Flat icon-only chevron (role="pane-icon"), consistent with the
         # toolbar pane-toggle chevron.
         self.pane_collapse_btn.setProperty("role", "pane-icon")
-        self.pane_collapse_btn.setToolTip("Collapse the 3D preview pane")
+        self.pane_collapse_btn.setToolTip(QCoreApplication.translate(
+            "ShowsTab",
+            "Collapse the 3D preview pane"))
         row.addWidget(self.pane_collapse_btn)
         return header
 
@@ -671,7 +691,7 @@ class ShowsTab(BaseTab):
         outer.setContentsMargins(12, 10, 12, 10)
         outer.setSpacing(6)
 
-        self.inspector_title = DisplayLabel("Effect Block", point_size=11)
+        self.inspector_title = DisplayLabel(QCoreApplication.translate("ShowsTab", "Effect Block"), point_size=11)
         self.inspector_title.setObjectName("ShowBlockInspectorTitle")
         outer.addWidget(self.inspector_title)
 
@@ -701,7 +721,7 @@ class ShowsTab(BaseTab):
             row.addStretch()
             return row
 
-        range_row = field_row("RANGE")
+        range_row = field_row(QCoreApplication.translate("ShowsTab", "RANGE"))
         self.inspector_range_value = QLabel("")
         self.inspector_range_value.setObjectName("ShowBlockInspectorRange")
         self.inspector_range_value.setFont(mono_font(8))
@@ -740,7 +760,7 @@ class ShowsTab(BaseTab):
 
         # Dim empty state (dashed hint-box role = the theme's disabled
         # placeholder treatment).
-        self.inspector_empty = QLabel("No block selected")
+        self.inspector_empty = QLabel(QCoreApplication.translate("ShowsTab", "No block selected"))
         self.inspector_empty.setObjectName("ShowBlockInspectorEmpty")
         self.inspector_empty.setProperty("role", "hint-box")
         self.inspector_empty.setFont(mono_font(8, tracking_em=0.12))
@@ -810,7 +830,7 @@ class ShowsTab(BaseTab):
         bar = f"{bar_beat[0]}.{bar_beat[1]}" if bar_beat else "--.-"
         minutes = int(position // 60)
         seconds = position % 60
-        return f"BAR {bar} · {minutes:02d}:{seconds:04.1f}"
+        return QCoreApplication.translate("ShowsTab", "BAR {0}").format(bar) + f" · {minutes:02d}:{seconds:04.1f}"
 
     def _grid_label(self) -> str:
         labels = {value: label for label, value in SUBDIVISION_CHOICES}
@@ -829,10 +849,12 @@ class ShowsTab(BaseTab):
         # The lock is toggled on the Structure tab's song header (the
         # toolbar row is width-critical at 720p, no room for a chip);
         # here it reads as footer state.
-        locked = " · LOCKED" if self.is_current_song_locked() else ""
+        locked = (" · " + QCoreApplication.translate("ShowsTab", "LOCKED")
+                  if self.is_current_song_locked() else "")
         self.status_line.setText(
-            f"{lanes} LANES · {blocks} BLOCKS · "
-            f"GRID {self._grid_label()} · ZOOM {zoom:.1f}X{locked}"
+            QCoreApplication.translate("ShowsTab", "{0} LANES · {1} BLOCKS · GRID {2} · ZOOM {3}X").format(
+                lanes, blocks, self._grid_label(), f"{zoom:.1f}")
+            + locked
         )
 
     @staticmethod
@@ -907,19 +929,24 @@ class ShowsTab(BaseTab):
             self.inspector_rows.setVisible(False)
             self.inspector_empty.setVisible(True)
             if selected:
-                self.inspector_title.setText("Effect Blocks")
+                self.inspector_title.setText(QCoreApplication.translate(
+                    "ShowsTab",
+                    "Effect Blocks"))
                 self.inspector_empty.setText(
-                    f"{len(selected)} BLOCKS SELECTED")
+                    QCoreApplication.translate("ShowsTab", "{0} BLOCKS SELECTED").format(len(selected)))
             else:
-                self.inspector_title.setText("Effect Block")
-                self.inspector_empty.setText("NO BLOCK SELECTED")
+                self.inspector_title.setText(QCoreApplication.translate("ShowsTab", "Effect Block"))
+                self.inspector_empty.setText(QCoreApplication.translate(
+                    "ShowsTab",
+                    "NO BLOCK SELECTED"))
             return
 
         widget = selected[0]
         block = widget.block
         lane_widget = widget.lane_widget
         name = block.name or block.effect_name or "base"
-        self.inspector_title.setText(f"Effect Block · {name}")
+        self.inspector_title.setText(
+            QCoreApplication.translate("ShowsTab", "Effect Block · {0}").format(name))
 
         lane_name = lane_widget.lane.name if lane_widget else "-"
         color = None
@@ -937,8 +964,10 @@ class ShowsTab(BaseTab):
         # header strip) plus the live snap state.
         bars = bar_range_label(self.song_structure, block.start_time,
                                block.end_time) or "BARS -"
-        snap = (f"SNAP {self._grid_label()}"
-                if self.snap_chip.isChecked() else "SNAP OFF")
+        snap = (QCoreApplication.translate("ShowsTab", "SNAP {0}").format(self._grid_label())
+                if self.snap_chip.isChecked() else QCoreApplication.translate(
+                    "ShowsTab",
+                    "SNAP OFF"))
         self.inspector_range_value.setText(f"{bars} · {snap}")
 
         # DIM: the dimmer effect chain in timeline order.
@@ -1377,7 +1406,8 @@ class ShowsTab(BaseTab):
         self.lock_chip.setChecked(locked)
         self.lock_chip.setEnabled(bool(self.current_song_name))
         self.add_lane_btn.setEnabled(not locked)
-        if self.autogen_btn.text() != "GENERATING...":
+        # A flag, not the button text: the label is translated.
+        if not getattr(self, "_autogen_generating", False):
             self.autogen_btn.setEnabled(not locked)
         for lane_widget in self.lane_widgets:
             if hasattr(lane_widget, "set_locked"):
@@ -1470,8 +1500,10 @@ class ShowsTab(BaseTab):
         if not self.current_song_name:
             QMessageBox.warning(
                 self,
-                "No Show Selected",
-                "Please select or create a show first before adding lanes.",
+                QCoreApplication.translate("ShowsTab", "No Show Selected"),
+                QCoreApplication.translate(
+                    "ShowsTab",
+                    "Please select or create a show first before adding lanes."),
                 QMessageBox.StandardButton.Ok
             )
             return
@@ -1482,7 +1514,7 @@ class ShowsTab(BaseTab):
         # Show status indicator
         progress = get_progress_manager()
         if progress:
-            progress.start_status("Creating lane...", 0)  # Indeterminate
+            progress.start_status(QCoreApplication.translate("ShowsTab", "Creating lane..."), 0)  # Indeterminate
 
         # Create new lane with default name (no default targets - user selects them)
         lane_num = len(self.lane_widgets) + 1
@@ -1525,8 +1557,8 @@ class ShowsTab(BaseTab):
             # let Python destroy a QThread that is still running.
             return
         if not self.current_song_name:
-            QMessageBox.warning(self, "No Show Selected",
-                "Please select a show first.", QMessageBox.StandardButton.Ok)
+            QMessageBox.warning(self, QCoreApplication.translate("ShowsTab", "No Show Selected"),
+                QCoreApplication.translate("ShowsTab", "Please select a show first."), QMessageBox.StandardButton.Ok)
             return
         if self.is_current_song_locked():
             flash_locked(self)
@@ -1534,16 +1566,18 @@ class ShowsTab(BaseTab):
 
         show = self.config.songs.get(self.current_song_name)
         if not show or not show.parts:
-            QMessageBox.warning(self, "No Song Structure",
-                "The show has no song parts defined. Add parts in the Structure tab first.",
+            QMessageBox.warning(self, QCoreApplication.translate("ShowsTab", "No Song Structure"),
+                QCoreApplication.translate(
+                    "ShowsTab",
+                    "The show has no song parts defined. Add parts in the Structure tab first."),
                 QMessageBox.StandardButton.Ok)
             return
 
         # Get audio file path
         audio_path = self.audio_lane.get_audio_file_path() if hasattr(self, 'audio_lane') else None
         if not audio_path:
-            QMessageBox.warning(self, "No Audio File",
-                "Load an audio file first for analysis.",
+            QMessageBox.warning(self, QCoreApplication.translate("ShowsTab", "No Audio File"),
+                QCoreApplication.translate("ShowsTab", "Load an audio file first for analysis."),
                 QMessageBox.StandardButton.Ok)
             return
 
@@ -1554,15 +1588,19 @@ class ShowsTab(BaseTab):
             audio_path = os.path.join(shows_dir, "audiofiles", audio_path)
 
         if not os.path.exists(audio_path):
-            QMessageBox.warning(self, "Audio File Not Found",
-                f"Cannot find audio file:\n{audio_path}",
+            QMessageBox.warning(self, QCoreApplication.translate(
+                "ShowsTab",
+                "Audio File Not Found"),
+                QCoreApplication.translate("ShowsTab", "Cannot find audio file:\n{0}").format(audio_path),
                 QMessageBox.StandardButton.Ok)
             return
 
         # Check for fixture groups
         if not self.config.groups:
-            QMessageBox.warning(self, "No Fixture Groups",
-                "Define fixture groups in the Fixtures tab first.",
+            QMessageBox.warning(self, QCoreApplication.translate("ShowsTab", "No Fixture Groups"),
+                QCoreApplication.translate(
+                    "ShowsTab",
+                    "Define fixture groups in the Fixtures tab first."),
                 QMessageBox.StandardButton.Ok)
             return
 
@@ -1583,7 +1621,8 @@ class ShowsTab(BaseTab):
 
         # Disable button during generation
         self.autogen_btn.setEnabled(False)
-        self.autogen_btn.setText("GENERATING...")
+        self.autogen_btn.setText(QCoreApplication.translate("ShowsTab", "GENERATING..."))
+        self._autogen_generating = True
 
         # Run in background thread, bound to THIS song: the user may
         # switch songs (or edit the rig) while the worker runs, so the
@@ -1601,7 +1640,8 @@ class ShowsTab(BaseTab):
 
     def _reset_autogen_button(self):
         """Back from GENERATING... on every exit path of a run."""
-        self.autogen_btn.setText("AUTOGEN")
+        self._autogen_generating = False
+        self.autogen_btn.setText(QCoreApplication.translate("ShowsTab", "AUTOGEN"))
         self.autogen_btn.setEnabled(not self.is_current_song_locked())
 
     def _on_autogen_finished(self, lanes, report=None):
@@ -1612,9 +1652,11 @@ class ShowsTab(BaseTab):
         self._reset_autogen_button()
         song_name = job.song_name(self.config) if job is not None else None
         if song_name is None:
-            QMessageBox.information(self, "Auto-Generate",
-                "The song this generation was started for is no longer "
-                "in the project. The result was discarded.",
+            QMessageBox.information(self, QCoreApplication.translate("ShowsTab", "Auto-Generate"),
+                QCoreApplication.translate(
+                    "ShowsTab",
+                    "The song this generation was started for is no longer "
+                    "in the project. The result was discarded."),
                 QMessageBox.StandardButton.Ok)
             return
         song = job.song
@@ -1632,17 +1674,25 @@ class ShowsTab(BaseTab):
             self.inspector_btn.setEnabled(report is not None)
 
         if not lanes:
-            QMessageBox.information(self, "Auto-Generate",
-                "No lanes were generated. Check fixture groups and song structure.",
+            QMessageBox.information(self, QCoreApplication.translate("ShowsTab", "Auto-Generate"),
+                QCoreApplication.translate(
+                    "ShowsTab",
+                    "No lanes were generated. Check fixture groups and song structure."),
                 QMessageBox.StandardButton.Ok)
             return
 
         # Ask user whether to replace or append
-        where = "" if is_current else f" for \"{song_name}\""
+        if is_current:
+            generated = QCoreApplication.translate("ShowsTab", 
+                "Generated {0} lanes with light blocks.").format(len(lanes))
+        else:
+            generated = QCoreApplication.translate("ShowsTab", 
+                "Generated {0} lanes with light blocks for \"{1}\"."
+                ).format(len(lanes), song_name)
         result = QMessageBox.question(
-            self, "Auto-Generate Complete",
-            f"Generated {len(lanes)} lanes with light blocks{where}.\n\n"
-            "Replace existing lanes or append to them?",
+            self, QCoreApplication.translate("ShowsTab", "Auto-Generate Complete"),
+            generated + "\n\n"
+            + QCoreApplication.translate("ShowsTab", "Replace existing lanes or append to them?"),
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No | QMessageBox.StandardButton.Cancel,
         )
 
@@ -1666,9 +1716,9 @@ class ShowsTab(BaseTab):
                 song.timeline_data.lanes = new_lanes
             else:
                 song.timeline_data.lanes.extend(new_lanes)
-            QMessageBox.information(self, "Auto-Generate",
-                f"Successfully generated {len(lanes)} lanes for "
-                f"\"{song_name}\".",
+            QMessageBox.information(self, QCoreApplication.translate("ShowsTab", "Auto-Generate"),
+                QCoreApplication.translate("ShowsTab", "Successfully generated {0} lanes for \"{1}\".").format(
+                    len(lanes), song_name),
                 QMessageBox.StandardButton.Ok)
             return
 
@@ -1693,16 +1743,16 @@ class ShowsTab(BaseTab):
         # Save to config
         self.save_to_config()
 
-        QMessageBox.information(self, "Auto-Generate",
-            f"Successfully generated {len(lanes)} lanes.",
+        QMessageBox.information(self, QCoreApplication.translate("ShowsTab", "Auto-Generate"),
+            QCoreApplication.translate("ShowsTab", "Successfully generated {0} lanes.").format(len(lanes)),
             QMessageBox.StandardButton.Ok)
 
     def _on_autogen_error(self, error_msg):
         """Handle auto-generation error."""
         self._autogen_job = None
         self._reset_autogen_button()
-        QMessageBox.critical(self, "Auto-Generate Error",
-            f"Generation failed:\n{error_msg}",
+        QMessageBox.critical(self, QCoreApplication.translate("ShowsTab", "Auto-Generate Error"),
+            QCoreApplication.translate("ShowsTab", "Generation failed:\n{0}").format(error_msg),
             QMessageBox.StandardButton.Ok)
 
     def _on_inspector_toggled(self, checked):
@@ -1874,7 +1924,7 @@ class ShowsTab(BaseTab):
         persisted to QSettings or the config)."""
         percent = int(percent)
         self.swing_percent = percent
-        self.swing_btn.setText(f"SWING {percent}% ↓")
+        self.swing_btn.setText(QCoreApplication.translate("ShowsTab", "SWING {0}% ↓").format(percent))
         action = self.swing_actions.get(percent)
         if action is not None and not action.isChecked():
             action.setChecked(True)
@@ -1985,8 +2035,10 @@ class ShowsTab(BaseTab):
         self._chase_disarm = disarm if armed else None
         self.play_btn.setEnabled(not armed)
         self.play_btn.setToolTip(
-            "Transport follows the incoming timecode (chase armed)"
-            if armed else "Play / Pause")
+            QCoreApplication.translate(
+                "ShowsTab",
+                "Transport follows the incoming timecode (chase armed)")
+            if armed else QCoreApplication.translate("ShowsTab", "Play / Pause"))
 
     def _on_stop_clicked(self):
         """The operator's STOP: disarm an armed chase first, then stop.
@@ -2047,10 +2099,12 @@ class ShowsTab(BaseTab):
                 # transport running, only DMX stays with Auto.
                 if not self.artnet_controller.start_playback():
                     self.show_error(
-                        "DMX output busy",
-                        "Auto mode holds the DMX output. Stop Auto "
-                        "mode to send this show to the rig - playback "
-                        "continues without DMX.",
+                        QCoreApplication.translate("ShowsTab", "DMX output busy"),
+                        QCoreApplication.translate(
+                            "ShowsTab",
+                            "Auto mode holds the DMX output. Stop Auto "
+                            "mode to send this show to the rig - playback "
+                            "continues without DMX."),
                     )
 
         # Switch the embedded preview to live so the show drives it via
@@ -2885,14 +2939,19 @@ class ShowsTab(BaseTab):
 
         menu = QMenu(self)
         if count == 0:
-            empty = menu.addAction("No effects in selection")
+            empty = menu.addAction(QCoreApplication.translate(
+                "ShowsTab",
+                "No effects in selection"))
             empty.setEnabled(False)
         else:
-            label = "Delete Effect" if count == 1 else f"Delete {count} Effects"
+            if count == 1:
+                label = QCoreApplication.translate("ShowsTab", "Delete Effect")
+            else:
+                label = QCoreApplication.translate("ShowsTab", "Delete {0} Effects").format(count)
             delete = menu.addAction(label)
             delete.triggered.connect(self._delete_selected_blocks)
             menu.addSeparator()
-            cancel = menu.addAction("Cancel")
+            cancel = menu.addAction(QCoreApplication.translate("ShowsTab", "Cancel"))
             cancel.triggered.connect(self.selection_manager.clear_selection)
         menu.exec(global_pos)
 
@@ -2910,7 +2969,8 @@ class ShowsTab(BaseTab):
         undo_stack = self._get_undo_stack()
         if undo_stack is not None:
             undo_stack.beginMacro(
-                f"Delete {count} Block{'s' if count != 1 else ''}")
+                QCoreApplication.translate("ShowsTab", "Delete Block") if count == 1
+                else QCoreApplication.translate("ShowsTab", "Delete {0} Blocks").format(count))
 
         for block_widget in selected:
             # Find the lane widget this block belongs to

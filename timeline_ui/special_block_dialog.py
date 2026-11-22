@@ -5,7 +5,7 @@ from PyQt6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QFormLayout,
                              QGroupBox, QSlider, QDoubleSpinBox, QSpinBox,
                              QLabel, QDialogButtonBox, QCheckBox, QComboBox,
                              QScrollArea, QWidget, QFrame)
-from PyQt6.QtCore import Qt
+from PyQt6.QtCore import QCoreApplication, Qt
 from config.models import SpecialBlock
 
 
@@ -22,7 +22,7 @@ class SpecialBlockDialog(QDialog):
         super().__init__(parent)
         self.block = block
 
-        self.setWindowTitle("Edit Special Block")
+        self.setWindowTitle(QCoreApplication.translate("SpecialBlockDialog", "Edit Special Block"))
         self.setMinimumWidth(500)
         self.setMinimumHeight(550)
 
@@ -40,29 +40,29 @@ class SpecialBlockDialog(QDialog):
         layout = QVBoxLayout(scroll_widget)
 
         # Timing info (read-only display)
-        timing_group = QGroupBox("Timing")
+        timing_group = QGroupBox(QCoreApplication.translate("SpecialBlockDialog", "Timing"))
         timing_layout = QFormLayout()
 
         self.start_label = QLabel()
         self.end_label = QLabel()
         self.duration_label = QLabel()
-        timing_layout.addRow("Start:", self.start_label)
-        timing_layout.addRow("End:", self.end_label)
-        timing_layout.addRow("Duration:", self.duration_label)
+        timing_layout.addRow(QCoreApplication.translate("SpecialBlockDialog", "Start:"), self.start_label)
+        timing_layout.addRow(QCoreApplication.translate("SpecialBlockDialog", "End:"), self.end_label)
+        timing_layout.addRow(QCoreApplication.translate("SpecialBlockDialog", "Duration:"), self.duration_label)
 
         timing_group.setLayout(timing_layout)
         layout.addWidget(timing_group)
 
         # Gobo group
-        gobo_group = QGroupBox("Gobo")
+        gobo_group = QGroupBox(QCoreApplication.translate("SpecialBlockDialog", "Gobo"))
         gobo_layout = QFormLayout()
 
         # Gobo selection
         self.gobo_combo = QComboBox()
-        self.gobo_combo.addItem("Open (No Gobo)", 0)
+        self.gobo_combo.addItem(QCoreApplication.translate("SpecialBlockDialog", "Open (No Gobo)"), 0)
         for i in range(1, 10):
-            self.gobo_combo.addItem(f"Gobo {i}", i)
-        gobo_layout.addRow("Gobo:", self.gobo_combo)
+            self.gobo_combo.addItem(QCoreApplication.translate("SpecialBlockDialog", "Gobo {0}").format(i), i)
+        gobo_layout.addRow(QCoreApplication.translate("SpecialBlockDialog", "Gobo:"), self.gobo_combo)
 
         # Gobo rotation
         rotation_row = QHBoxLayout()
@@ -79,10 +79,10 @@ class SpecialBlockDialog(QDialog):
         )
         rotation_row.addWidget(self.gobo_rotation_slider, 1)
         rotation_row.addWidget(self.gobo_rotation_spinbox)
-        gobo_layout.addRow("Rotation:", rotation_row)
+        gobo_layout.addRow(QCoreApplication.translate("SpecialBlockDialog", "Rotation:"), rotation_row)
 
         # Rotation direction label
-        self.rotation_label = QLabel("Stopped")
+        self.rotation_label = QLabel(QCoreApplication.translate("SpecialBlockDialog", "Stopped"))
         self.gobo_rotation_slider.valueChanged.connect(self._update_rotation_label)
         gobo_layout.addRow("", self.rotation_label)
 
@@ -90,7 +90,7 @@ class SpecialBlockDialog(QDialog):
         layout.addWidget(gobo_group)
 
         # Beam group
-        beam_group = QGroupBox("Beam")
+        beam_group = QGroupBox(QCoreApplication.translate("SpecialBlockDialog", "Beam"))
         beam_layout = QFormLayout()
 
         # Focus
@@ -103,13 +103,13 @@ class SpecialBlockDialog(QDialog):
         self.focus_spinbox.valueChanged.connect(self.focus_slider.setValue)
         focus_row.addWidget(self.focus_slider, 1)
         focus_row.addWidget(self.focus_spinbox)
-        beam_layout.addRow("Focus:", focus_row)
+        beam_layout.addRow(QCoreApplication.translate("SpecialBlockDialog", "Focus:"), focus_row)
 
         # Focus labels
         focus_labels = QHBoxLayout()
-        focus_labels.addWidget(QLabel("Near"))
+        focus_labels.addWidget(QLabel(QCoreApplication.translate("SpecialBlockDialog", "Near")))
         focus_labels.addStretch()
-        focus_labels.addWidget(QLabel("Far"))
+        focus_labels.addWidget(QLabel(QCoreApplication.translate("SpecialBlockDialog", "Far")))
         beam_layout.addRow("", focus_labels)
 
         # Zoom
@@ -122,24 +122,24 @@ class SpecialBlockDialog(QDialog):
         self.zoom_spinbox.valueChanged.connect(self.zoom_slider.setValue)
         zoom_row.addWidget(self.zoom_slider, 1)
         zoom_row.addWidget(self.zoom_spinbox)
-        beam_layout.addRow("Zoom:", zoom_row)
+        beam_layout.addRow(QCoreApplication.translate("SpecialBlockDialog", "Zoom:"), zoom_row)
 
         # Zoom labels
         zoom_labels = QHBoxLayout()
-        zoom_labels.addWidget(QLabel("Narrow"))
+        zoom_labels.addWidget(QLabel(QCoreApplication.translate("SpecialBlockDialog", "Narrow")))
         zoom_labels.addStretch()
-        zoom_labels.addWidget(QLabel("Wide"))
+        zoom_labels.addWidget(QLabel(QCoreApplication.translate("SpecialBlockDialog", "Wide")))
         beam_layout.addRow("", zoom_labels)
 
         beam_group.setLayout(beam_layout)
         layout.addWidget(beam_group)
 
         # Prism group
-        prism_group = QGroupBox("Prism")
+        prism_group = QGroupBox(QCoreApplication.translate("SpecialBlockDialog", "Prism"))
         prism_layout = QFormLayout()
 
         # Prism enabled
-        self.prism_enabled = QCheckBox("Enable Prism")
+        self.prism_enabled = QCheckBox(QCoreApplication.translate("SpecialBlockDialog", "Enable Prism"))
         self.prism_enabled.toggled.connect(self._on_prism_toggled)
         prism_layout.addRow(self.prism_enabled)
 
@@ -158,10 +158,10 @@ class SpecialBlockDialog(QDialog):
         )
         prism_rotation_row.addWidget(self.prism_rotation_slider, 1)
         prism_rotation_row.addWidget(self.prism_rotation_spinbox)
-        prism_layout.addRow("Rotation:", prism_rotation_row)
+        prism_layout.addRow(QCoreApplication.translate("SpecialBlockDialog", "Rotation:"), prism_rotation_row)
 
         # Prism rotation direction label
-        self.prism_rotation_label = QLabel("Stopped")
+        self.prism_rotation_label = QLabel(QCoreApplication.translate("SpecialBlockDialog", "Stopped"))
         self.prism_rotation_slider.valueChanged.connect(self._update_prism_rotation_label)
         prism_layout.addRow("", self.prism_rotation_label)
 
@@ -188,20 +188,20 @@ class SpecialBlockDialog(QDialog):
     def _update_rotation_label(self, value):
         """Update the gobo rotation direction label."""
         if value < -10:
-            self.rotation_label.setText(f"Counter-clockwise ({abs(value)})")
+            self.rotation_label.setText(QCoreApplication.translate("SpecialBlockDialog", "Counter-clockwise ({0})").format(abs(value)))
         elif value > 10:
-            self.rotation_label.setText(f"Clockwise ({value})")
+            self.rotation_label.setText(QCoreApplication.translate("SpecialBlockDialog", "Clockwise ({0})").format(value))
         else:
-            self.rotation_label.setText("Stopped")
+            self.rotation_label.setText(QCoreApplication.translate("SpecialBlockDialog", "Stopped"))
 
     def _update_prism_rotation_label(self, value):
         """Update the prism rotation direction label."""
         if value < -10:
-            self.prism_rotation_label.setText(f"Counter-clockwise ({abs(value)})")
+            self.prism_rotation_label.setText(QCoreApplication.translate("SpecialBlockDialog", "Counter-clockwise ({0})").format(abs(value)))
         elif value > 10:
-            self.prism_rotation_label.setText(f"Clockwise ({value})")
+            self.prism_rotation_label.setText(QCoreApplication.translate("SpecialBlockDialog", "Clockwise ({0})").format(value))
         else:
-            self.prism_rotation_label.setText("Stopped")
+            self.prism_rotation_label.setText(QCoreApplication.translate("SpecialBlockDialog", "Stopped"))
 
     def _on_prism_toggled(self, enabled):
         """Handle prism enable/disable."""

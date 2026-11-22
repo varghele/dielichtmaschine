@@ -69,7 +69,7 @@ from PyQt6.QtWidgets import (QVBoxLayout, QHBoxLayout, QWidget, QLabel,
                              QMessageBox, QInputDialog, QSlider,
                              QGridLayout, QButtonGroup,
                              QSizePolicy, QMenu, QFileDialog)
-from PyQt6.QtCore import Qt, QTimer, pyqtSignal, QMimeData
+from PyQt6.QtCore import QT_TRANSLATE_NOOP, QCoreApplication, Qt, QTimer, pyqtSignal, QMimeData
 from PyQt6.QtGui import (QPainter, QColor, QFont, QAction,
                          QFontMetrics, QDrag, QCursor)
 import shutil
@@ -120,20 +120,46 @@ def format_clock(seconds: float) -> str:
 
 def energy_words(relative_energy: float) -> str:
     """'0.82 HIGH' - the reference's Energy read-out."""
-    band = ("HIGH" if relative_energy >= 0.66
-            else "MID" if relative_energy >= 0.33 else "LOW")
+    if relative_energy >= 0.66:
+        band = QCoreApplication.translate("StructureTab", "HIGH")
+    elif relative_energy >= 0.33:
+        band = QCoreApplication.translate("StructureTab", "MID")
+    else:
+        band = QCoreApplication.translate("StructureTab", "LOW")
     return f"{relative_energy:.2f} {band}"
+
+
+def _width_for_texts(button, floor: int, labels) -> int:
+    """Fixed width for a button whose label switches between ``labels``,
+    given as (english_source, shown_text) pairs.
+
+    ``floor`` is the width tuned for the English labels. A translation
+    that renders wider than the widest English label adds the
+    difference instead of clipping inside the fixed rect (CLAUDE.md
+    glyph rule); with English, or a shorter translation, the width
+    stays exactly ``floor``.
+    """
+    button.ensurePolished()
+    metrics = button.fontMetrics()
+    english = max(metrics.horizontalAdvance(src) for src, _ in labels)
+    shown = max(metrics.horizontalAdvance(text) for _, text in labels)
+    return floor + max(0, shown - english)
 
 
 def contrast_words(spectral_contrast: float) -> str:
     """'0.64 RICH' - the reference's Contrast read-out."""
-    band = "RICH" if spectral_contrast >= 0.5 else "FLAT"
+    if spectral_contrast >= 0.5:
+        band = QCoreApplication.translate("StructureTab", "RICH")
+    else:
+        band = QCoreApplication.translate("StructureTab", "FLAT")
     return f"{spectral_contrast:.2f} {band}"
 
 
 def vocal_words(vocal_presence: float) -> str:
     """'PRESENT' / 'ABSENT' - the reference's Vocals read-out."""
-    return "PRESENT" if vocal_presence >= 0.5 else "ABSENT"
+    if vocal_presence >= 0.5:
+        return QCoreApplication.translate("StructureTab", "PRESENT")
+    return QCoreApplication.translate("StructureTab", "ABSENT")
 
 
 # Data-colour fallback palette for song colour edges: the group palette
@@ -148,25 +174,41 @@ _NOTE_NAMES = ("C", "C#", "D", "D#", "E", "F",
 # The six SongTrigger modes, in inspector segment order (mock collapses
 # to four; the model has six - all six stay honest, two rows of three
 # so nothing clips at the 340px inspector width).
-TRIGGER_MODES = (("manual", "MANUAL"), ("midi_pc", "MIDI PC"),
-                 ("midi_note", "MIDI NOTE"), ("mtc", "MTC"),
-                 ("smpte", "SMPTE"), ("follow", "FOLLOW"))
+# Labels are marked with QT_TRANSLATE_NOOP and translated where the
+# buttons are built (the protocol names MIDI / MTC / SMPTE stay as is).
+TRIGGER_MODES = (("manual", QT_TRANSLATE_NOOP("StructureTab", "MANUAL")),
+                 ("midi_pc", QT_TRANSLATE_NOOP("StructureTab", "MIDI PC")),
+                 ("midi_note", QT_TRANSLATE_NOOP("StructureTab", "MIDI NOTE")),
+                 ("mtc", "MTC"),
+                 ("smpte", "SMPTE"),
+                 ("follow", QT_TRANSLATE_NOOP("StructureTab", "FOLLOW")))
 
 # One-line mono hints for the trigger modes that carry no value editor.
+# Marked with QT_TRANSLATE_NOOP, translated where they are shown.
 TRIGGER_MODE_HINTS = {
-    "manual": "Started from the app",
-    "follow": "Chains after the previous song's pause look",
+    "manual": QT_TRANSLATE_NOOP("StructureTab", "Started from the app"),
+    "follow": QT_TRANSLATE_NOOP(
+        "StructureTab", "Chains after the previous song's pause look"),
 }
 
 # PauseLook.mode display texts, in mock dropdown order. Shared between
 # the rail's pause rows and the inspector's mode chip + menu.
+# Marked with QT_TRANSLATE_NOOP; pause_mode_text() translates them.
 PAUSE_MODE_TEXTS = {
-    "blackout": "Blackout",
-    "warm_white": "Warm white",
-    "scene": "Scene",
-    "hold_last": "Hold last look",
-    "ambient_loop": "Ambient loop",
+    "blackout": QT_TRANSLATE_NOOP("StructureTab", "Blackout"),
+    "warm_white": QT_TRANSLATE_NOOP("StructureTab", "Warm white"),
+    "scene": QT_TRANSLATE_NOOP("StructureTab", "Scene"),
+    "hold_last": QT_TRANSLATE_NOOP("StructureTab", "Hold last look"),
+    "ambient_loop": QT_TRANSLATE_NOOP("StructureTab", "Ambient loop"),
 }
+
+
+def pause_mode_text(mode: str) -> str:
+    """The display text of a PauseLook.mode (unknown modes verbatim)."""
+    text = PAUSE_MODE_TEXTS.get(mode)
+    if text is None:
+        return mode
+    return QCoreApplication.translate("StructureTab", text)
 
 # Loose HH:MM:SS:FF check for the MTC/SMPTE start-time field.
 TIMECODE_RE = re.compile(r"^\d{1,2}:\d{2}:\d{2}:\d{2}$")
@@ -183,7 +225,7 @@ def trigger_line(trigger) -> str:
     """The mono trigger read-out under a setlist song card."""
     mode = trigger.mode
     if mode == "follow":
-        return "Follows automatically"
+        return QCoreApplication.translate("StructureTab", "Follows automatically")
     if mode == "midi_pc":
         return f"PC#{trigger.value} · CH {trigger.channel}"
     if mode == "midi_note":
@@ -193,19 +235,19 @@ def trigger_line(trigger) -> str:
         # The timecode string is the trigger; fall back to the mode name
         # while the start time is still unset.
         return trigger.timecode or mode.upper()
-    return "Manual start"
+    return QCoreApplication.translate("StructureTab", "Manual start")
 
 
 def pause_look_line(pause) -> str:
     """The dashed pause row between two setlist cards."""
-    text = PAUSE_MODE_TEXTS.get(pause.mode, pause.mode)
+    text = pause_mode_text(pause.mode)
     if pause.mode == "warm_white":
         text = f"{text} {pause.level}%"
     elif pause.mode == "scene" and getattr(pause, "scene", ""):
         text = f"{text} · {pause.scene.split('/')[-1]}"
-    tail = ("until trigger" if pause.until == "trigger"
+    tail = (QCoreApplication.translate("StructureTab", "until trigger") if pause.until == "trigger"
             else f"{pause.duration_s:g}s")
-    return f"PAUSE LOOK · {text} · {tail}"
+    return QCoreApplication.translate("StructureTab", "PAUSE LOOK · {0} · {1}").format(text, tail)
 
 
 def song_edge_color(name: str, song=None) -> str:
@@ -455,7 +497,7 @@ class ColorButton(QPushButton):
         # dialog (a child of this button), then re-bind it.
         build = unbind_style(self)
 
-        color = QColorDialog.getColor(self.current_color, self, "Select Color")
+        color = QColorDialog.getColor(self.current_color, self, QCoreApplication.translate("StructureTab", "Select Color"))
 
         if build is not None:
             bind_style(self, build)
@@ -588,7 +630,7 @@ class PartCard(QWidget):
     def update_data(self, part: ShowPart, selected: bool,
                     playing: bool = False, tokens: dict = None) -> None:
         self.name_label.setText(part.name)
-        self.meta_label.setText(f"{part.num_bars} BARS · {part.signature}")
+        self.meta_label.setText(QCoreApplication.translate("StructureTab", "{0} BARS · {1}").format(part.num_bars, part.signature))
         self.bpm_label.setText(f"{part.bpm:.1f}")
         self.bpm_unit_label.setText(
             f"BPM · {getattr(part, 'duration', 0.0):.1f} s")
@@ -696,7 +738,7 @@ class TransitionChip(Chip):
                          parent=parent)
         self.index = index
         self.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.setToolTip("Transition out of this part")
+        self.setToolTip(QCoreApplication.translate("StructureTab", "Transition out of this part"))
 
     def mousePressEvent(self, event):
         if event.button() == Qt.MouseButton.LeftButton:
@@ -761,11 +803,11 @@ class SetlistSongCard(QWidget):
         self.title_label.setFont(title_font)
         top.addWidget(self.title_label)
         top.addStretch(1)
-        self.unlisted_tag = Chip("Unlisted", variant="neutral")
+        self.unlisted_tag = Chip(QCoreApplication.translate("StructureTab", "Unlisted"), variant="neutral")
         self.unlisted_tag.setObjectName("SetlistCardUnlistedTag")
         self.unlisted_tag.hide()
         top.addWidget(self.unlisted_tag)
-        self.open_tag = MicroLabel("Open", point_size=7, tracking_em=0.1)
+        self.open_tag = MicroLabel(QCoreApplication.translate("StructureTab", "Open"), point_size=7, tracking_em=0.1)
         self.open_tag.setObjectName("SetlistCardOpenTag")
         self.open_tag.hide()
         top.addWidget(self.open_tag)
@@ -987,7 +1029,7 @@ class StructureTab(BaseTab):
         # before _create_parts_strip runs.
         inspector = self._build_inspector()
         setlist_rail = self._build_setlist_rail()
-        self.grid_caption = MicroLabel("Master", point_size=8,
+        self.grid_caption = MicroLabel(QCoreApplication.translate("StructureTab", "Master"), point_size=8,
                                        tracking_em=0.12)
         status_strip = self._create_status_strip()
 
@@ -1014,7 +1056,7 @@ class StructureTab(BaseTab):
         # Parts strip: micro caption + horizontal card row.
         parts_section = QVBoxLayout()
         parts_section.setSpacing(12)
-        self.parts_caption = MicroLabel("Parts · Drag to reorder",
+        self.parts_caption = MicroLabel(QCoreApplication.translate("StructureTab", "Parts · Drag to reorder"),
                                         point_size=8, tracking_em=0.12)
         parts_section.addWidget(self.parts_caption)
         parts_section.addWidget(self._create_parts_strip())
@@ -1100,12 +1142,15 @@ class StructureTab(BaseTab):
 
         # "neon_ruinen.wav · 03:42 · " + green "ANALYZED". Two labels
         # because a QLabel cannot carry two colors without rich text.
-        self.audio_readout = QLabel("no audio loaded")
+        self.audio_readout = QLabel(QCoreApplication.translate("StructureTab", "no audio loaded"))
+        # Whether the readout names a file; _style_action_strip reads
+        # this, never the (translated) label text.
+        self._audio_readout_has_file = False
         self.audio_readout.setObjectName("AudioReadout")
         self.audio_readout.setFont(mono_font(8))
         row.addWidget(self.audio_readout)
 
-        self.audio_status = QLabel("ANALYZED")
+        self.audio_status = QLabel(QCoreApplication.translate("StructureTab", "ANALYZED"))
         self.audio_status.setObjectName("AudioReadoutStatus")
         self.audio_status.setFont(mono_font(8))
         self.audio_status.hide()
@@ -1113,14 +1158,14 @@ class StructureTab(BaseTab):
 
         # Bordered display-caps CTA (the reference's outlined button:
         # transparent fill, 1px $border$, Barlow Condensed caps).
-        self.autogen_btn = QPushButton("AUTOGENERATE SONG...")
+        self.autogen_btn = QPushButton(QCoreApplication.translate("StructureTab", "AUTOGENERATE SONG..."))
         self.autogen_btn.setObjectName("AutogenButton")
         self._autogen_font = display_font(11, QFont.Weight.DemiBold,
                                           tracking_em=0.08)
         self.autogen_btn.setFont(self._autogen_font)
         self.autogen_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self.autogen_btn.setToolTip(
-            "Analyze the audio and generate a light show for this song")
+            QCoreApplication.translate("StructureTab", "Analyze the audio and generate a light show for this song"))
         # Pin the width from the display font's own metrics (theme's
         # 14px horizontal padding + border + slack) so the glyph never
         # clips inside the content rect and the geometry stays stable
@@ -1140,7 +1185,7 @@ class StructureTab(BaseTab):
         ``QPushButton[role="cta-outline"]``.
         """
         tokens = self._tokens or _active_tokens()
-        has_audio = self.audio_readout.text() != "no audio loaded"
+        has_audio = getattr(self, "_audio_readout_has_file", False)
         color = tokens["text_secondary"] if has_audio else tokens["text_disabled"]
         self.audio_readout.setStyleSheet(
             f"color: {color}; background: transparent;")
@@ -1158,7 +1203,7 @@ class StructureTab(BaseTab):
         row = QHBoxLayout()
         row.setContentsMargins(0, 0, 0, 0)
         row.setSpacing(10)
-        row.addWidget(MicroLabel("Snap: bar · 1/2 beat · 1/4 beat",
+        row.addWidget(MicroLabel(QCoreApplication.translate("StructureTab", "Snap: bar · 1/2 beat · 1/4 beat"),
                                  point_size=8, tracking_em=0.12))
         dot = QLabel("·")
         dot.setFont(mono_font(8))
@@ -1167,8 +1212,8 @@ class StructureTab(BaseTab):
         # Plain QLabel (not MicroLabel): sentence case must survive, and
         # role="micro" still hands it the secondary color from the theme.
         self.grid_hint = QLabel(
-            "Every downstream feature snaps to this grid: timeline "
-            "blocks, riffs, autogen phrases.")
+            QCoreApplication.translate("StructureTab", "Every downstream feature snaps to this grid: timeline "
+            "blocks, riffs, autogen phrases."))
         self.grid_hint.setObjectName("GridHint")
         self.grid_hint.setFont(mono_font(8))
         self.grid_hint.setProperty("role", "micro")
@@ -1187,7 +1232,7 @@ class StructureTab(BaseTab):
         row = QHBoxLayout(strip)
         row.setContentsMargins(16, 0, 16, 0)
         row.setSpacing(24)
-        self.status_summary = MicroLabel("0 parts", point_size=8,
+        self.status_summary = MicroLabel(QCoreApplication.translate("StructureTab", "0 parts"), point_size=8,
                                          tracking_em=0.1)
         row.addWidget(self.status_summary)
         row.addStretch()
@@ -1214,7 +1259,7 @@ class StructureTab(BaseTab):
         self.add_part_tile.setProperty("role", "add-tile")
         self.add_part_tile.setFixedSize(44, 44)
         self.add_part_tile.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.add_part_tile.setToolTip("Add Part")
+        self.add_part_tile.setToolTip(QCoreApplication.translate("StructureTab", "Add Part"))
 
         self.parts_scroll = QScrollArea()
         self.parts_scroll.setWidgetResizable(True)
@@ -1255,18 +1300,18 @@ class StructureTab(BaseTab):
 
         title_row = QHBoxLayout()
         title_row.setSpacing(8)
-        self.rail_title = MicroLabel("Setlist", point_size=8,
+        self.rail_title = MicroLabel(QCoreApplication.translate("StructureTab", "Setlist"), point_size=8,
                                      tracking_em=0.12)
         title_row.addWidget(self.rail_title)
         title_row.addStretch(1)
-        self.rail_summary = MicroLabel("0 songs · 0 min", point_size=8,
+        self.rail_summary = MicroLabel(QCoreApplication.translate("StructureTab", "0 songs · 0 min"), point_size=8,
                                        tracking_em=0.1)
         title_row.addWidget(self.rail_summary)
         header_column.addLayout(title_row)
 
         sync_row = QHBoxLayout()
         sync_row.setSpacing(8)
-        sync_row.addWidget(MicroLabel("Sync", point_size=8,
+        sync_row.addWidget(MicroLabel(QCoreApplication.translate("StructureTab", "Sync"), point_size=8,
                                       tracking_em=0.12))
         segment_host = QWidget()
         segment_host.setObjectName("SyncSegmentGroup")
@@ -1285,7 +1330,7 @@ class StructureTab(BaseTab):
         for i, (mode, label) in enumerate((("midi", "MIDI"),
                                            ("mtc", "MTC"),
                                            ("smpte", "SMPTE"),
-                                           ("manual", "MANUAL"))):
+                                           ("manual", QCoreApplication.translate("StructureTab", "MANUAL")))):
             btn = QPushButton(label)
             btn.setCheckable(True)
             btn.setProperty("role", "segment")
@@ -1311,15 +1356,15 @@ class StructureTab(BaseTab):
         device_row = QHBoxLayout()
         device_row.setSpacing(8)
         device_row.addStretch(1)
-        self.chase_arm_btn = QPushButton("ARM CHASE")
+        self.chase_arm_btn = QPushButton(QCoreApplication.translate("StructureTab", "ARM CHASE"))
         self.chase_arm_btn.setCheckable(True)
         self.chase_arm_btn.setProperty("role", "cta-outline")
         self.chase_arm_btn.setProperty("density", "compact")
         self.chase_arm_btn.setFont(display_font(8, QFont.Weight.DemiBold,
                                                 tracking_em=0.08))
         self.chase_arm_btn.setToolTip(
-            "Follow incoming SMPTE timecode: songs with an SMPTE "
-            "trigger fire at their start time and the playhead chases")
+            QCoreApplication.translate("StructureTab", "Follow incoming SMPTE timecode: songs with an SMPTE "
+            "trigger fire at their start time and the playhead chases"))
         self.chase_arm_btn.toggled.connect(self._on_chase_arm_toggled)
         device_row.addWidget(self.chase_arm_btn)
         header_column.addLayout(device_row)
@@ -1335,14 +1380,14 @@ class StructureTab(BaseTab):
         self._rail_layout.setSpacing(4)
 
         # Persistent "+ SONG" tile (re-attached on every rail rebuild).
-        self.add_song_tile = QPushButton("+ SONG")
+        self.add_song_tile = QPushButton(QCoreApplication.translate("StructureTab", "+ SONG"))
         self.add_song_tile.setObjectName("AddSongTile")
         self.add_song_tile.setProperty("role", "add-tile")
         self.add_song_tile.setFont(mono_font(9))
         self.add_song_tile.setFixedHeight(32)
         self.add_song_tile.setCursor(Qt.CursorShape.PointingHandCursor)
         self.add_song_tile.setToolTip(
-            "Add a song and append it to the setlist")
+            QCoreApplication.translate("StructureTab", "Add a song and append it to the setlist"))
 
         rail_scroll = QScrollArea()
         rail_scroll.setWidgetResizable(True)
@@ -1360,8 +1405,8 @@ class StructureTab(BaseTab):
         footer_column.setContentsMargins(14, 10, 14, 10)
         footer_column.setSpacing(0)
         self.rail_footer_hint = QLabel(
-            "Order = setlist. Triggers per song (MIDI PC/NOTE, MTC/SMPTE "
-            "time) · 'Follows automatically' chains without a trigger.")
+            QCoreApplication.translate("StructureTab", "Order = setlist. Triggers per song (MIDI PC/NOTE, MTC/SMPTE "
+            "time) · 'Follows automatically' chains without a trigger."))
         self.rail_footer_hint.setObjectName("SetlistRailFooter")
         self.rail_footer_hint.setFont(mono_font(8))
         self.rail_footer_hint.setProperty("role", "micro")
@@ -1399,7 +1444,7 @@ class StructureTab(BaseTab):
         loaded_from = getattr(self.config, "_loaded_from", None)
         if loaded_from:
             return os.path.splitext(os.path.basename(loaded_from))[0]
-        return "Untitled"
+        return QCoreApplication.translate("StructureTab", "Untitled")
 
     def _song_duration_seconds(self, song_name: str) -> float:
         """A song's duration via the same SongStructure math the master
@@ -1477,14 +1522,19 @@ class StructureTab(BaseTab):
         setlist = self.config.setlist
 
         name = setlist.name or self._config_display_name()
-        self.rail_title.setText(f"Setlist · {name}")
+        self.rail_title.setText(QCoreApplication.translate("StructureTab", "Setlist · {0}").format(name))
 
         entries = setlist.entries
         total = sum(self._song_duration_seconds(e.song) for e in entries)
         minutes = int(round(total / 60.0))
-        noun = "song" if len(entries) == 1 else "songs"
-        self.rail_summary.setText(
-            f"{len(entries)} {noun} · {minutes} min")
+        if len(entries) == 1:
+            summary = QCoreApplication.translate(
+                "StructureTab", "1 song · {0} min").format(minutes)
+        else:
+            summary = QCoreApplication.translate(
+                "StructureTab", "{0} songs · {1} min").format(
+                    len(entries), minutes)
+        self.rail_summary.setText(summary)
 
         for mode, btn in self.sync_buttons.items():
             btn.blockSignals(True)
@@ -1557,7 +1607,7 @@ class StructureTab(BaseTab):
         btn = self.chase_arm_btn
         btn.blockSignals(True)
         btn.setChecked(armed)
-        btn.setText("CHASING" if armed else "ARM CHASE")
+        btn.setText(QCoreApplication.translate("StructureTab", "CHASING") if armed else QCoreApplication.translate("StructureTab", "ARM CHASE"))
         btn.blockSignals(False)
         self._refresh_sync_chase_row()
 
@@ -1619,7 +1669,7 @@ class StructureTab(BaseTab):
         footer = QWidget()
         footer_row = QHBoxLayout(footer)
         footer_row.setContentsMargins(14, 10, 14, 10)
-        self.delete_part_btn = QPushButton("- Delete Part")
+        self.delete_part_btn = QPushButton(QCoreApplication.translate("StructureTab", "- Delete Part"))
         self.delete_part_btn.setProperty("role", "destructive-outline")
         footer_row.addWidget(self.delete_part_btn)
         column.addWidget(footer)
@@ -1660,7 +1710,7 @@ class StructureTab(BaseTab):
         col.setContentsMargins(14, 6, 14, 6)
         col.setSpacing(4)
 
-        self.song_caption = MicroLabel("Song · -", point_size=8,
+        self.song_caption = MicroLabel(QCoreApplication.translate("StructureTab", "Song · -"), point_size=8,
                                        tracking_em=0.12)
         col.addWidget(self.song_caption)
 
@@ -1668,8 +1718,8 @@ class StructureTab(BaseTab):
         # setlist entry): triggers live on entries, so there is nothing
         # to edit here.
         self.song_unlisted_hint = QLabel(
-            "No setlist entry for this song · add it to the setlist to "
-            "give it a start trigger and a pause look.")
+            QCoreApplication.translate("StructureTab", "No setlist entry for this song · add it to the setlist to "
+            "give it a start trigger and a pause look."))
         self.song_unlisted_hint.setObjectName("SongUnlistedHint")
         self.song_unlisted_hint.setFont(mono_font(8))
         self.song_unlisted_hint.setProperty("role", "micro")
@@ -1685,10 +1735,10 @@ class StructureTab(BaseTab):
         # "START TRIGGER" + the disabled LEARN placeholder on one row.
         label_row = QHBoxLayout()
         label_row.setSpacing(8)
-        label_row.addWidget(MicroLabel("Start trigger", point_size=8,
+        label_row.addWidget(MicroLabel(QCoreApplication.translate("StructureTab", "Start trigger"), point_size=8,
                                        tracking_em=0.1))
         label_row.addStretch(1)
-        self.learn_btn = QPushButton("LEARN")
+        self.learn_btn = QPushButton(QCoreApplication.translate("StructureTab", "LEARN"))
         self.learn_btn.setObjectName("TriggerLearnChip")
         self.learn_btn.setProperty("role", "cta-outline")
         self.learn_btn.setProperty("density", "compact")
@@ -1699,7 +1749,7 @@ class StructureTab(BaseTab):
             QFontMetrics(learn_font).horizontalAdvance(
                 self.learn_btn.text()) + 24)
         self.learn_btn.setEnabled(False)   # honest placeholder
-        self.learn_btn.setToolTip("Arrives with the sync engine")
+        self.learn_btn.setToolTip(QCoreApplication.translate("StructureTab", "Arrives with the sync engine"))
         label_row.addWidget(self.learn_btn)
         host_col.addLayout(label_row)
 
@@ -1712,7 +1762,8 @@ class StructureTab(BaseTab):
             host = self._segment_host()
             row = host.layout()
             for i, (mode, label) in enumerate(row_modes):
-                btn = self._segment_button(label)
+                btn = self._segment_button(
+                    QCoreApplication.translate("StructureTab", label))
                 btn.setProperty("divider", "true" if i else "false")
                 btn.toggled.connect(
                     lambda checked, m=mode:
@@ -1729,7 +1780,7 @@ class StructureTab(BaseTab):
         self.trigger_value_spin = QSpinBox()
         self.trigger_value_spin.setRange(0, 127)
         self.trigger_value_spin.setToolTip(
-            "MIDI program / note number (0-127)")
+            QCoreApplication.translate("StructureTab", "MIDI program / note number (0-127)"))
         editor_row.addWidget(self.trigger_value_spin)
         self.trigger_note_label = QLabel("")
         self.trigger_note_label.setObjectName("TriggerNoteName")
@@ -1740,7 +1791,7 @@ class StructureTab(BaseTab):
         editor_row.addWidget(self.trigger_channel_caption)
         self.trigger_channel_spin = QSpinBox()
         self.trigger_channel_spin.setRange(1, 16)
-        self.trigger_channel_spin.setToolTip("MIDI channel (1-16)")
+        self.trigger_channel_spin.setToolTip(QCoreApplication.translate("StructureTab", "MIDI channel (1-16)"))
         editor_row.addWidget(self.trigger_channel_spin)
         self.trigger_timecode_edit = QLineEdit()
         self.trigger_timecode_edit.setObjectName("TriggerTimecodeEdit")
@@ -1758,7 +1809,7 @@ class StructureTab(BaseTab):
 
         # The mock's mono micro line under the trigger block.
         self.trigger_micro_hint = QLabel(
-            "MTC/SMPTE: start time e.g. 00:14:32:00 · devices in Settings")
+            QCoreApplication.translate("StructureTab", "MTC/SMPTE: start time e.g. 00:14:32:00 · devices in Settings"))
         self.trigger_micro_hint.setObjectName("TriggerMicroHint")
         self.trigger_micro_hint.setFont(mono_font(8))
         self.trigger_micro_hint.setProperty("role", "micro")
@@ -1784,13 +1835,13 @@ class StructureTab(BaseTab):
         col.setContentsMargins(14, 6, 14, 6)
         col.setSpacing(4)
 
-        col.addWidget(MicroLabel("After the song", point_size=8,
+        col.addWidget(MicroLabel(QCoreApplication.translate("StructureTab", "After the song"), point_size=8,
                                  tracking_em=0.12))
 
-        self.pause_mode_chip = MenuChip("Hold last look ↓")
+        self.pause_mode_chip = MenuChip(QCoreApplication.translate("StructureTab", "Hold last look ↓"))
         self.pause_mode_chip.setObjectName("PauseModeChip")
         self.pause_mode_chip.setToolTip(
-            "The look on stage after this song ends")
+            QCoreApplication.translate("StructureTab", "The look on stage after this song ends"))
         self.pause_mode_chip.clicked.connect(
             self._on_pause_mode_chip_clicked)
         col.addWidget(self.pause_mode_chip, 0,
@@ -1801,7 +1852,7 @@ class StructureTab(BaseTab):
         level_row = QHBoxLayout(self.pause_level_row)
         level_row.setContentsMargins(0, 0, 0, 0)
         level_row.setSpacing(6)
-        level_row.addWidget(MicroLabel("Level", point_size=8,
+        level_row.addWidget(MicroLabel(QCoreApplication.translate("StructureTab", "Level"), point_size=8,
                                        tracking_em=0.1))
         self.pause_level_spin = QSpinBox()
         self.pause_level_spin.setRange(0, 100)
@@ -1815,15 +1866,15 @@ class StructureTab(BaseTab):
         # Until: trigger / duration pair + the duration spin.
         until_row = QHBoxLayout()
         until_row.setSpacing(6)
-        until_row.addWidget(MicroLabel("Until", point_size=8,
+        until_row.addWidget(MicroLabel(QCoreApplication.translate("StructureTab", "Until"), point_size=8,
                                        tracking_em=0.1))
         host = self._segment_host()
         row = host.layout()
         self.pause_until_buttons = {}
         self._pause_until_group = QButtonGroup(self)
         self._pause_until_group.setExclusive(True)
-        for i, (until, label) in enumerate((("trigger", "TRIGGER"),
-                                            ("duration", "DURATION"))):
+        for i, (until, label) in enumerate((("trigger", QCoreApplication.translate("StructureTab", "TRIGGER")),
+                                            ("duration", QCoreApplication.translate("StructureTab", "DURATION")))):
             btn = self._segment_button(label)
             btn.setProperty("divider", "true" if i else "false")
             btn.toggled.connect(
@@ -1842,8 +1893,8 @@ class StructureTab(BaseTab):
         col.addLayout(until_row)
 
         self.pause_micro_hint = QLabel(
-            "Ambient loop = the screensaver rig behaviour · engine "
-            "arrives in a later release")
+            QCoreApplication.translate("StructureTab", "Ambient loop = the screensaver rig behaviour · engine "
+            "arrives in a later release"))
         self.pause_micro_hint.setObjectName("PauseMicroHint")
         self.pause_micro_hint.setFont(mono_font(8))
         self.pause_micro_hint.setProperty("role", "micro")
@@ -1861,7 +1912,7 @@ class StructureTab(BaseTab):
 
         # The coloured part title is the section caption (mock:
         # "PART · CHORUS 1" carries the part colour).
-        self.inspector_title = DisplayLabel("No part selected",
+        self.inspector_title = DisplayLabel(QCoreApplication.translate("StructureTab", "No part selected"),
                                             point_size=13,
                                             weight=QFont.Weight.Bold,
                                             tracking_em=0.05)
@@ -1873,20 +1924,20 @@ class StructureTab(BaseTab):
         tiles = QGridLayout()
         tiles.setHorizontalSpacing(8)
         tiles.setVerticalSpacing(8)
-        self.stat_bpm = StatTile("BPM")
-        self.stat_signature = StatTile("Time sig")
-        self.stat_bars = StatTile("Bars")
-        self.stat_duration = StatTile("Duration")
+        self.stat_bpm = StatTile(QCoreApplication.translate("StructureTab", "BPM"))
+        self.stat_signature = StatTile(QCoreApplication.translate("StructureTab", "Time sig"))
+        self.stat_bars = StatTile(QCoreApplication.translate("StructureTab", "Bars"))
+        self.stat_duration = StatTile(QCoreApplication.translate("StructureTab", "Duration"))
         tiles.addWidget(self.stat_bpm, 0, 0)
         tiles.addWidget(self.stat_signature, 0, 1)
         tiles.addWidget(self.stat_bars, 1, 0)
         tiles.addWidget(self.stat_duration, 1, 1)
         self._stat_tiles = (self.stat_bpm, self.stat_signature,
                             self.stat_bars, self.stat_duration)
-        self.stat_colour = StatTile("Colour")
+        self.stat_colour = StatTile(QCoreApplication.translate("StructureTab", "Colour"))
         self.stat_colour.value_label.hide()
         self.part_color_btn = ColorButton("#4CAF50")
-        self.part_color_btn.setToolTip("Part colour · click to change")
+        self.part_color_btn.setToolTip(QCoreApplication.translate("StructureTab", "Part colour · click to change"))
         self.part_color_btn.setFixedHeight(22)
         self.stat_colour.layout().addWidget(self.part_color_btn)
         tiles.addWidget(self.stat_colour, 2, 0, 1, 2)
@@ -1895,15 +1946,15 @@ class StructureTab(BaseTab):
         # Editors: the write path. The tiles above are pure read-outs
         # and refresh from these.
         self.part_name_edit = QLineEdit()
-        self.part_name_edit.setPlaceholderText("Part name")
+        self.part_name_edit.setPlaceholderText(QCoreApplication.translate("StructureTab", "Part name"))
         layout.addWidget(self.part_name_edit)
 
         grid = QGridLayout()
         grid.setHorizontalSpacing(8)
         grid.setVerticalSpacing(2)
-        grid.addWidget(MicroLabel("BPM", point_size=8, tracking_em=0.1),
+        grid.addWidget(MicroLabel(QCoreApplication.translate("StructureTab", "BPM"), point_size=8, tracking_em=0.1),
                        0, 0)
-        grid.addWidget(MicroLabel("Time sig", point_size=8,
+        grid.addWidget(MicroLabel(QCoreApplication.translate("StructureTab", "Time sig"), point_size=8,
                                   tracking_em=0.1), 0, 1)
         self.bpm_spin = QDoubleSpinBox()
         self.bpm_spin.setRange(1.0, 999.0)
@@ -1912,9 +1963,9 @@ class StructureTab(BaseTab):
         grid.addWidget(self.bpm_spin, 1, 0)
         self.signature_widget = TimeSignatureWidget("4/4")
         grid.addWidget(self.signature_widget, 1, 1)
-        grid.addWidget(MicroLabel("Bars", point_size=8, tracking_em=0.1),
+        grid.addWidget(MicroLabel(QCoreApplication.translate("StructureTab", "Bars"), point_size=8, tracking_em=0.1),
                        2, 0)
-        grid.addWidget(MicroLabel("Transition out", point_size=8,
+        grid.addWidget(MicroLabel(QCoreApplication.translate("StructureTab", "Transition out"), point_size=8,
                                   tracking_em=0.1), 2, 1)
         self.bars_spin = QSpinBox()
         self.bars_spin.setRange(1, 9999)
@@ -1926,12 +1977,12 @@ class StructureTab(BaseTab):
 
         move_row = QHBoxLayout()
         move_row.setSpacing(6)
-        self.move_left_btn = QPushButton("< Move")
-        self.move_left_btn.setToolTip("Move part earlier")
+        self.move_left_btn = QPushButton(QCoreApplication.translate("StructureTab", "< Move"))
+        self.move_left_btn.setToolTip(QCoreApplication.translate("StructureTab", "Move part earlier"))
         self.move_left_btn.setProperty("density", "compact")
         move_row.addWidget(self.move_left_btn)
-        self.move_right_btn = QPushButton("Move >")
-        self.move_right_btn.setToolTip("Move part later")
+        self.move_right_btn = QPushButton(QCoreApplication.translate("StructureTab", "Move >"))
+        self.move_right_btn.setToolTip(QCoreApplication.translate("StructureTab", "Move part later"))
         self.move_right_btn.setProperty("density", "compact")
         move_row.addWidget(self.move_right_btn)
         layout.addLayout(move_row)
@@ -1945,19 +1996,19 @@ class StructureTab(BaseTab):
         layout.setContentsMargins(14, 6, 14, 6)
         layout.setSpacing(4)
 
-        layout.addWidget(MicroLabel("Audio analysis", point_size=8,
+        layout.addWidget(MicroLabel(QCoreApplication.translate("StructureTab", "Audio analysis"), point_size=8,
                                     tracking_em=0.12))
         self.analysis_empty_hint = QLabel(
-            "No analysis yet · runs with autogen")
+            QCoreApplication.translate("StructureTab", "No analysis yet · runs with autogen"))
         self.analysis_empty_hint.setObjectName("AnalysisEmptyHint")
         self.analysis_empty_hint.setFont(mono_font(8))
         self.analysis_empty_hint.setProperty("role", "micro")
         self.analysis_empty_hint.setWordWrap(True)
         layout.addWidget(self.analysis_empty_hint)
 
-        self.analysis_energy = AnalysisRow("Energy")
-        self.analysis_vocals = AnalysisRow("Vocals")
-        self.analysis_contrast = AnalysisRow("Contrast")
+        self.analysis_energy = AnalysisRow(QCoreApplication.translate("StructureTab", "Energy"))
+        self.analysis_vocals = AnalysisRow(QCoreApplication.translate("StructureTab", "Vocals"))
+        self.analysis_contrast = AnalysisRow(QCoreApplication.translate("StructureTab", "Contrast"))
         self._analysis_rows = (self.analysis_energy, self.analysis_vocals,
                                self.analysis_contrast)
         for analysis_row in self._analysis_rows:
@@ -1992,7 +2043,7 @@ class StructureTab(BaseTab):
         """Load the open song's setlist entry into the SONG and AFTER
         THE SONG sections (signal-blocked: pure model read)."""
         name = self.current_song_name or "-"
-        self.song_caption.setText(f"Song · {name}")
+        self.song_caption.setText(QCoreApplication.translate("StructureTab", "Song · {0}").format(name))
         entry = self._open_entry()
         listed = entry is not None
         self.trigger_host.setVisible(listed)
@@ -2017,7 +2068,7 @@ class StructureTab(BaseTab):
 
         pause = entry.pause_after
         self.pause_mode_chip.setText(
-            f"{PAUSE_MODE_TEXTS.get(pause.mode, pause.mode)} ↓")
+            f"{pause_mode_text(pause.mode)} ↓")
         self.pause_level_row.setVisible(pause.mode == "warm_white")
         self.pause_level_spin.blockSignals(True)
         self.pause_level_spin.setValue(pause.level)
@@ -2045,6 +2096,8 @@ class StructureTab(BaseTab):
         self.trigger_channel_spin.setVisible(midi)
         self.trigger_timecode_edit.setVisible(mode in ("mtc", "smpte"))
         hint = TRIGGER_MODE_HINTS.get(mode, "")
+        if hint:
+            hint = QCoreApplication.translate("StructureTab", hint)
         self.trigger_mode_hint.setVisible(bool(hint))
         self.trigger_mode_hint.setText(hint)
 
@@ -2100,8 +2153,8 @@ class StructureTab(BaseTab):
         edit = self.trigger_timecode_edit
         edit.setProperty("state", "invalid" if invalid else "")
         edit.setToolTip(
-            "Timecode must be HH:MM:SS:FF · kept the previous value"
-            if invalid else "MTC/SMPTE start time (HH:MM:SS:FF)")
+            QCoreApplication.translate("StructureTab", "Timecode must be HH:MM:SS:FF · kept the previous value")
+            if invalid else QCoreApplication.translate("StructureTab", "MTC/SMPTE start time (HH:MM:SS:FF)"))
         edit.style().unpolish(edit)
         edit.style().polish(edit)
 
@@ -2111,8 +2164,8 @@ class StructureTab(BaseTab):
         menu = QMenu(self)
         entry = self._open_entry()
         current = entry.pause_after.mode if entry else ""
-        for mode, text in PAUSE_MODE_TEXTS.items():
-            action = menu.addAction(text.upper())
+        for mode in PAUSE_MODE_TEXTS:
+            action = menu.addAction(pause_mode_text(mode).upper())
             action.setCheckable(True)
             action.setChecked(mode == current)
             action.triggered.connect(
@@ -2172,7 +2225,7 @@ class StructureTab(BaseTab):
         row.setContentsMargins(0, 0, 0, 0)
         row.setSpacing(14)
 
-        self.song_title = DisplayLabel("No song", point_size=19,
+        self.song_title = DisplayLabel(QCoreApplication.translate("StructureTab", "No song"), point_size=19,
                                        weight=QFont.Weight.ExtraBold,
                                        tracking_em=0.04)
         self.song_title.setObjectName("SongTitle")
@@ -2185,23 +2238,23 @@ class StructureTab(BaseTab):
         row.addWidget(self.song_meta)
         row.addStretch(1)
 
-        self.lock_song_btn = QPushButton("LOCK")
+        self.lock_song_btn = QPushButton(QCoreApplication.translate("StructureTab", "LOCK"))
         self.lock_song_btn.setObjectName("LockSongChip")
         self.lock_song_btn.setCheckable(True)
         self.lock_song_btn.setProperty("role", "output-select")
         self.lock_song_btn.setToolTip(
-            "Lock this song against timeline and structure edits · "
-            "playback, export and mute/solo stay live")
+            QCoreApplication.translate("StructureTab", "Lock this song against timeline and structure edits · "
+            "playback, export and mute/solo stay live"))
         self.lock_song_btn.toggled.connect(self._on_lock_toggled)
-        self.rename_show_btn = QPushButton("RENAME SONG")
+        self.rename_show_btn = QPushButton(QCoreApplication.translate("StructureTab", "RENAME SONG"))
         self.rename_show_btn.setObjectName("RenameSongChip")
         self.rename_show_btn.setProperty("role", "cta-outline")
-        self.rename_show_btn.setToolTip("Rename this song")
-        self.delete_show_btn = QPushButton("DELETE")
+        self.rename_show_btn.setToolTip(QCoreApplication.translate("StructureTab", "Rename this song"))
+        self.delete_show_btn = QPushButton(QCoreApplication.translate("StructureTab", "DELETE"))
         self.delete_show_btn.setObjectName("DeleteSongChip")
         self.delete_show_btn.setProperty("role", "destructive-outline")
         self.delete_show_btn.setToolTip(
-            "Delete this song and its setlist entries")
+            QCoreApplication.translate("StructureTab", "Delete this song and its setlist entries"))
         chip_font = display_font(10, QFont.Weight.DemiBold,
                                  tracking_em=0.08)
         metrics = QFontMetrics(chip_font)
@@ -2266,8 +2319,8 @@ class StructureTab(BaseTab):
             if widget is not None:
                 widget.setEnabled(not locked)
         if not has_song:
-            self.song_title.setText("No song")
-            self.song_meta.setText("no song loaded")
+            self.song_title.setText(QCoreApplication.translate("StructureTab", "No song"))
+            self.song_meta.setText(QCoreApplication.translate("StructureTab", "no song loaded"))
             return
         self.song_title.setText(self.current_song_name)
         parts = self.current_show.parts
@@ -2275,10 +2328,9 @@ class StructureTab(BaseTab):
         if parts:
             lead = parts[0]
             self.song_meta.setText(
-                f"{lead.bpm:.1f} BPM · {lead.signature} · "
-                f"{total_bars} BARS · {format_clock(total)}")
+                QCoreApplication.translate("StructureTab", "{0:.1f} BPM · {1} · {2} BARS · {3}").format(lead.bpm, lead.signature, total_bars, format_clock(total)))
         else:
-            self.song_meta.setText("0 BARS · 00:00")
+            self.song_meta.setText(QCoreApplication.translate("StructureTab", "0 BARS · 00:00"))
 
     MASTER_HEADER_WIDTH = 150
 
@@ -2316,14 +2368,14 @@ class StructureTab(BaseTab):
         audio_layout = QVBoxLayout(self._audio_header_cell)
         audio_layout.setContentsMargins(10, 8, 10, 8)
         audio_layout.setSpacing(4)
-        audio_layout.addWidget(MicroLabel("Audio", point_size=8,
+        audio_layout.addWidget(MicroLabel(QCoreApplication.translate("StructureTab", "Audio"), point_size=8,
                                           tracking_em=0.12))
         self.audio_header_file = QLabel("-")
         self.audio_header_file.setObjectName("AudioHeaderFile")
         self.audio_header_file.setFont(mono_font(8))
         self.audio_header_file.setProperty("role", "micro")
         audio_layout.addWidget(self.audio_header_file)
-        self.load_audio_btn = QPushButton("LOAD...")
+        self.load_audio_btn = QPushButton(QCoreApplication.translate("StructureTab", "LOAD..."))
         self.load_audio_btn.setObjectName("LoadAudioChip")
         self.load_audio_btn.setProperty("role", "cta-outline")
         self.load_audio_btn.setProperty("density", "compact")
@@ -2331,7 +2383,7 @@ class StructureTab(BaseTab):
                                  tracking_em=0.08)
         self.load_audio_btn.setFont(load_font)
         self.load_audio_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.load_audio_btn.setToolTip("Load an audio file for this song")
+        self.load_audio_btn.setToolTip(QCoreApplication.translate("StructureTab", "Load an audio file for this song"))
         self.load_audio_btn.setFixedWidth(
             QFontMetrics(load_font).horizontalAdvance(
                 self.load_audio_btn.text()) + 24)
@@ -2376,8 +2428,11 @@ class StructureTab(BaseTab):
             self._flash_locked()
             return
         file_path, _ = QFileDialog.getOpenFileName(
-            self, "Select Audio File", "",
-            "Audio Files (*.wav *.mp3 *.flac *.ogg);;All Files (*)")
+            self, QCoreApplication.translate("StructureTab", "Select Audio File"), "",
+            QCoreApplication.translate("StructureTab", "Audio Files")
+            + " (*.wav *.mp3 *.flac *.ogg);;"
+            + QCoreApplication.translate("StructureTab", "All Files")
+            + " (*)")
         if file_path:
             self.audio_lane.load_audio_file(file_path, force=True)
 
@@ -2390,13 +2445,20 @@ class StructureTab(BaseTab):
         controls.setSpacing(10)
 
         # Playback buttons (transport — colors from active theme via role props).
-        self.play_btn = QPushButton("Play")
-        self.play_btn.setFixedWidth(70)
+        self.play_btn = QPushButton(QCoreApplication.translate("StructureTab", "Play"))
+        # 70px floor (the English layout); a longer translation widens
+        # the button instead of clipping its label (CLAUDE.md glyph rule).
+        self.play_btn.setFixedWidth(_width_for_texts(
+            self.play_btn, 70,
+            (("Play", QCoreApplication.translate("StructureTab", "Play")),
+             ("Pause", QCoreApplication.translate("StructureTab", "Pause")))))
         self.play_btn.setProperty("role", "success")
         controls.addWidget(self.play_btn)
 
-        self.stop_btn = QPushButton("Stop")
-        self.stop_btn.setFixedWidth(70)
+        self.stop_btn = QPushButton(QCoreApplication.translate("StructureTab", "Stop"))
+        self.stop_btn.setFixedWidth(_width_for_texts(
+            self.stop_btn, 70,
+            (("Stop", QCoreApplication.translate("StructureTab", "Stop")),)))
         self.stop_btn.setProperty("role", "destructive")
         controls.addWidget(self.stop_btn)
 
@@ -2577,15 +2639,21 @@ class StructureTab(BaseTab):
         duration lives in the title row's meta line now."""
         count, total_bars, total = self._total_bars_and_duration()
         if not count:
-            self.grid_caption.setText("Master")
+            self.grid_caption.setText(QCoreApplication.translate("StructureTab", "Master"))
             return
-        self.grid_caption.setText(f"Master · {total_bars} bars")
+        self.grid_caption.setText(QCoreApplication.translate("StructureTab", "Master · {0} bars").format(total_bars))
 
     def _update_status_strip(self):
         count, total_bars, total = self._total_bars_and_duration()
-        noun = "part" if count == 1 else "parts"
-        self.status_summary.setText(
-            f"{count} {noun} · {total_bars} bars · {format_clock(total)}")
+        if count == 1:
+            summary = QCoreApplication.translate(
+                "StructureTab", "1 part · {0} bars · {1}").format(
+                    total_bars, format_clock(total))
+        else:
+            summary = QCoreApplication.translate(
+                "StructureTab", "{0} parts · {1} bars · {2}").format(
+                    count, total_bars, format_clock(total))
+        self.status_summary.setText(summary)
 
     # ------------------------------------------------------------------
     # Action strip: audio readout + autogenerate
@@ -2623,7 +2691,8 @@ class StructureTab(BaseTab):
             path = self.current_show.timeline_data.audio_file_path or ""
 
         if not path:
-            self.audio_readout.setText("no audio loaded")
+            self.audio_readout.setText(QCoreApplication.translate("StructureTab", "no audio loaded"))
+            self._audio_readout_has_file = False
             self.audio_status.hide()
             self._set_audio_header_file("-")
             self._style_action_strip()
@@ -2638,6 +2707,7 @@ class StructureTab(BaseTab):
 
         self.audio_readout.setText(
             f"{os.path.basename(path)} · {format_clock(duration)} ·")
+        self._audio_readout_has_file = True
         self.audio_status.setVisible(self._generation_report() is not None)
         self._set_audio_header_file(os.path.basename(path))
         self._style_action_strip()
@@ -2685,8 +2755,8 @@ class StructureTab(BaseTab):
             # let Python destroy a QThread that is still running.
             return
         if not self.current_show:
-            QMessageBox.warning(self, "No Song Selected",
-                                "Please select a song first.")
+            QMessageBox.warning(self, QCoreApplication.translate("StructureTab", "No Song Selected"),
+                                QCoreApplication.translate("StructureTab", "Please select a song first."))
             return
 
         delegate = self._shows_tab_delegate()
@@ -2723,18 +2793,18 @@ class StructureTab(BaseTab):
 
         show = self.current_show
         if not show.parts:
-            QMessageBox.warning(self, "No Song Structure",
-                                "Add song parts before generating the song.")
+            QMessageBox.warning(self, QCoreApplication.translate("StructureTab", "No Song Structure"),
+                                QCoreApplication.translate("StructureTab", "Add song parts before generating the song."))
             return
         if not self.config.groups:
-            QMessageBox.warning(self, "No Fixture Groups",
-                                "Define fixture groups in the Fixtures tab "
-                                "first.")
+            QMessageBox.warning(self, QCoreApplication.translate("StructureTab", "No Fixture Groups"),
+                                QCoreApplication.translate("StructureTab", "Define fixture groups in the Fixtures tab "
+                                "first."))
             return
         audio_path = self._autogen_audio_path()
         if not audio_path:
-            QMessageBox.warning(self, "No Audio File",
-                                "Load an audio file for this song first.")
+            QMessageBox.warning(self, QCoreApplication.translate("StructureTab", "No Audio File"),
+                                QCoreApplication.translate("StructureTab", "Load an audio file for this song first."))
             return
 
         dialog = AutogenDialog(self)
@@ -2745,7 +2815,7 @@ class StructureTab(BaseTab):
         song_structure = self.song_structure or SongStructure()
 
         self.autogen_btn.setEnabled(False)
-        self.autogen_btn.setText("GENERATING...")
+        self.autogen_btn.setText(QCoreApplication.translate("StructureTab", "GENERATING..."))
         # Bound to THIS song, reading a snapshot: the user may switch
         # songs or edit the rig while the worker runs.
         self._autogen_job = AutogenJob(self.config, show)
@@ -2761,7 +2831,7 @@ class StructureTab(BaseTab):
 
     def _reset_autogen_button(self):
         """Back from GENERATING... on every exit path of a run."""
-        self.autogen_btn.setText("AUTOGENERATE SONG...")
+        self.autogen_btn.setText(QCoreApplication.translate("StructureTab", "AUTOGENERATE SONG..."))
         self.autogen_btn.setEnabled(not self._locked())
 
     def _on_autogen_finished(self, lanes, report=None):
@@ -2773,9 +2843,9 @@ class StructureTab(BaseTab):
         song_name = job.song_name(self.config) if job is not None else None
         if song_name is None:
             QMessageBox.information(
-                self, "Auto-Generate",
-                "The song this generation was started for is no longer "
-                "in the project. The result was discarded.")
+                self, QCoreApplication.translate("StructureTab", "Auto-Generate"),
+                QCoreApplication.translate("StructureTab", "The song this generation was started for is no longer "
+                "in the project. The result was discarded."))
             return
         song = job.song
         if getattr(song, "locked", False):
@@ -2787,9 +2857,9 @@ class StructureTab(BaseTab):
         if is_current:
             self._autogen_report = report
         if not lanes:
-            QMessageBox.information(self, "Auto-Generate",
-                                    "No lanes were generated. Check fixture "
-                                    "groups and song structure.")
+            QMessageBox.information(self, QCoreApplication.translate("StructureTab", "Auto-Generate"),
+                                    QCoreApplication.translate("StructureTab", "No lanes were generated. Check fixture "
+                                    "groups and song structure."))
             return
         if song.timeline_data is None:
             song.timeline_data = TimelineData()
@@ -2805,17 +2875,16 @@ class StructureTab(BaseTab):
         if is_current:
             self._refresh_inspector()
             self._update_audio_readout()
-        where = "" if is_current else f" for \"{song_name}\""
+        where = "" if is_current else QCoreApplication.translate("StructureTab", " for \"{0}\"").format(song_name)
         QMessageBox.information(
-            self, "Auto-Generate",
-            f"Generated {len(new_lanes)} lanes{where}. Open the Timeline "
-            "tab to review them.")
+            self, QCoreApplication.translate("StructureTab", "Auto-Generate"),
+            QCoreApplication.translate("StructureTab", "Generated {0} lanes{1}. Open the Timeline tab to review them.").format(len(new_lanes), where))
 
     def _on_autogen_error(self, error_msg):
         self._autogen_job = None
         self._reset_autogen_button()
-        QMessageBox.critical(self, "Auto-Generate Error",
-                             f"Generation failed:\n{error_msg}")
+        QMessageBox.critical(self, QCoreApplication.translate("StructureTab", "Auto-Generate Error"),
+                             QCoreApplication.translate("StructureTab", "Generation failed:\n{0}").format(error_msg))
 
     def _selected_part(self):
         parts = self.current_show.parts if self.current_show else []
@@ -2883,7 +2952,7 @@ class StructureTab(BaseTab):
 
         if part is None:
             self.inspector_title.setStyleSheet("")
-            self.inspector_title.setText("No part selected")
+            self.inspector_title.setText(QCoreApplication.translate("StructureTab", "No part selected"))
             self.part_name_edit.setText("")
             return
 
@@ -2920,7 +2989,7 @@ class StructureTab(BaseTab):
             self._flash_locked()
             return
         if not self.current_show:
-            QMessageBox.warning(self, "No Song", "Please create or select a song first.")
+            QMessageBox.warning(self, QCoreApplication.translate("StructureTab", "No Song"), QCoreApplication.translate("StructureTab", "Please create or select a song first."))
             return
 
         # Create new part with default values
@@ -3190,9 +3259,9 @@ class StructureTab(BaseTab):
         """
         name, ok = QInputDialog.getText(
             self,
-            "Create New Song",
-            "Enter song name:",
-            text="New Song"
+            QCoreApplication.translate("StructureTab", "Create New Song"),
+            QCoreApplication.translate("StructureTab", "Enter song name:"),
+            text=QCoreApplication.translate("StructureTab", "New Song")
         )
 
         if ok and name:
@@ -3200,8 +3269,8 @@ class StructureTab(BaseTab):
             if name in self.config.songs:
                 QMessageBox.warning(
                     self,
-                    "Name Exists",
-                    f"A song named '{name}' already exists. Please choose a different name.",
+                    QCoreApplication.translate("StructureTab", "Name Exists"),
+                    QCoreApplication.translate("StructureTab", "A song named '{0}' already exists. Please choose a different name.").format(name),
                     QMessageBox.StandardButton.Ok
                 )
                 return
@@ -3250,7 +3319,7 @@ class StructureTab(BaseTab):
             self._flash_locked()
             return
         if not self.current_song_name:
-            QMessageBox.warning(self, "No Song Selected", "Please select a song to rename.")
+            QMessageBox.warning(self, QCoreApplication.translate("StructureTab", "No Song Selected"), QCoreApplication.translate("StructureTab", "Please select a song to rename."))
             return
 
         old_name = self.current_song_name
@@ -3258,8 +3327,8 @@ class StructureTab(BaseTab):
         # Get new name from user
         new_name, ok = QInputDialog.getText(
             self,
-            "Rename Song",
-            "Enter new song name:",
+            QCoreApplication.translate("StructureTab", "Rename Song"),
+            QCoreApplication.translate("StructureTab", "Enter new song name:"),
             text=old_name
         )
 
@@ -3268,8 +3337,8 @@ class StructureTab(BaseTab):
             if new_name in self.config.songs:
                 QMessageBox.warning(
                     self,
-                    "Name Exists",
-                    f"A song named '{new_name}' already exists. Please choose a different name."
+                    QCoreApplication.translate("StructureTab", "Name Exists"),
+                    QCoreApplication.translate("StructureTab", "A song named '{0}' already exists. Please choose a different name.").format(new_name)
                 )
                 return
 
@@ -3314,7 +3383,7 @@ class StructureTab(BaseTab):
             if self.parent() and hasattr(self.parent(), 'on_show_selected'):
                 self.parent().on_show_selected(new_name, 'structure')
 
-            QMessageBox.information(self, "Success", f"Song renamed from '{old_name}' to '{new_name}'.")
+            QMessageBox.information(self, QCoreApplication.translate("StructureTab", "Success"), QCoreApplication.translate("StructureTab", "Song renamed from '{0}' to '{1}'.").format(old_name, new_name))
 
     def _delete_show(self):
         """Delete the current song (from config and disk)."""
@@ -3322,17 +3391,13 @@ class StructureTab(BaseTab):
             self._flash_locked()
             return
         if not self.current_song_name:
-            QMessageBox.warning(self, "No Song Selected", "Please select a song to delete.")
+            QMessageBox.warning(self, QCoreApplication.translate("StructureTab", "No Song Selected"), QCoreApplication.translate("StructureTab", "Please select a song to delete."))
             return
 
         reply = QMessageBox.question(
             self,
-            "Confirm Delete",
-            f"Are you sure you want to delete song '{self.current_song_name}'?\n\n"
-            f"This will delete:\n"
-            f"- The song and its setlist entries\n"
-            f"- Associated audio files\n\n"
-            f"This action cannot be undone.",
+            QCoreApplication.translate("StructureTab", "Confirm Delete"),
+            QCoreApplication.translate("StructureTab", "Are you sure you want to delete song '{0}'?\n\nThis will delete:\n- The song and its setlist entries\n- Associated audio files\n\nThis action cannot be undone.").format(self.current_song_name),
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
         )
 
@@ -3383,7 +3448,7 @@ class StructureTab(BaseTab):
         else:
             self._clear_timeline()
 
-        QMessageBox.information(self, "Success", "Song deleted successfully.")
+        QMessageBox.information(self, QCoreApplication.translate("StructureTab", "Success"), QCoreApplication.translate("StructureTab", "Song deleted successfully."))
 
     def _clear_timeline(self):
         """Clear the timeline and the parts strip."""
@@ -3428,7 +3493,7 @@ class StructureTab(BaseTab):
                 if os.path.exists(audio_filename):
                     self.audio_lane.load_audio_file(audio_filename)
                 else:
-                    user_warnings.warn(f"Audio file not found: {audio_filename}; the song plays without audio", category="audio")
+                    user_warnings.warn(QCoreApplication.translate("StructureTab", "Audio file not found: {0}; the song plays without audio").format(audio_filename), category="audio")
                     self.audio_lane.clear_audio()
             else:
                 # New format: filename only. Resolve via Configuration's
@@ -3441,7 +3506,7 @@ class StructureTab(BaseTab):
                 if audio_path and os.path.exists(audio_path):
                     self.audio_lane.load_audio_file(audio_path)
                 else:
-                    user_warnings.warn(f"Audio file not found for '{audio_filename}' (looked in {bundle_dir}); the song plays without audio", category="audio")
+                    user_warnings.warn(QCoreApplication.translate("StructureTab", "Audio file not found for '{0}' (looked in {1}); the song plays without audio").format(audio_filename, bundle_dir), category="audio")
                     self.audio_lane.clear_audio()
         else:
             # No audio for this show, clear it
@@ -3457,13 +3522,13 @@ class StructureTab(BaseTab):
             self._flash_locked()
             return
         if self._selected_part() is None:
-            QMessageBox.warning(self, "No Selection", "Please select a part to delete.")
+            QMessageBox.warning(self, QCoreApplication.translate("StructureTab", "No Selection"), QCoreApplication.translate("StructureTab", "Please select a part to delete."))
             return
 
         reply = QMessageBox.question(
             self,
-            "Confirm Delete",
-            "Are you sure you want to delete this part?",
+            QCoreApplication.translate("StructureTab", "Confirm Delete"),
+            QCoreApplication.translate("StructureTab", "Are you sure you want to delete this part?"),
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
         )
 
@@ -3482,13 +3547,13 @@ class StructureTab(BaseTab):
         menu = QMenu(self)
 
         # Add Part action
-        add_action = QAction("Add Part", self)
+        add_action = QAction(QCoreApplication.translate("StructureTab", "Add Part"), self)
         add_action.triggered.connect(self._add_new_part)
         menu.addAction(add_action)
 
         # Delete Part action (only if a part is selected)
         if self._selected_part() is not None:
-            delete_action = QAction("Delete Selected Part", self)
+            delete_action = QAction(QCoreApplication.translate("StructureTab", "Delete Selected Part"), self)
             delete_action.triggered.connect(self._delete_part)
             menu.addAction(delete_action)
 
@@ -3521,11 +3586,11 @@ class StructureTab(BaseTab):
         if not audiofiles_dir:
             QMessageBox.warning(
                 self,
-                "Audio Not Bundled",
-                "The config has not been saved yet, so the audio file path "
+                QCoreApplication.translate("StructureTab", "Audio Not Bundled"),
+                QCoreApplication.translate("StructureTab", "The config has not been saved yet, so the audio file path "
                 "will be stored as an absolute path.\n\n"
                 "Save the config to bundle audio under "
-                "<config_dir>/audiofiles/ on the next audio load."
+                "<config_dir>/audiofiles/ on the next audio load.")
             )
             if self.current_show.timeline_data is None:
                 self.current_show.timeline_data = TimelineData()
@@ -3552,8 +3617,8 @@ class StructureTab(BaseTab):
         except Exception as e:
             QMessageBox.warning(
                 self,
-                "Audio Copy Error",
-                f"Failed to copy audio file to bundle directory:\n{str(e)}"
+                QCoreApplication.translate("StructureTab", "Audio Copy Error"),
+                QCoreApplication.translate("StructureTab", "Failed to copy audio file to bundle directory:\n{0}").format(str(e))
             )
 
         # Update time display
@@ -3576,7 +3641,7 @@ class StructureTab(BaseTab):
             return
 
         self.is_playing = True
-        self.play_btn.setText("Pause")
+        self.play_btn.setText(QCoreApplication.translate("StructureTab", "Pause"))
 
         audio_path = self.audio_lane.get_audio_file_path()
         if audio_path:
@@ -3598,7 +3663,7 @@ class StructureTab(BaseTab):
     def _pause_playback(self):
         """Pause playback."""
         self.is_playing = False
-        self.play_btn.setText("Play")
+        self.play_btn.setText(QCoreApplication.translate("StructureTab", "Play"))
         self.playback_timer.stop()
 
         if self._owns_audio():
@@ -3607,7 +3672,7 @@ class StructureTab(BaseTab):
     def _stop_playback(self):
         """Stop playback and reset position."""
         self.is_playing = False
-        self.play_btn.setText("Play")
+        self.play_btn.setText(QCoreApplication.translate("StructureTab", "Play"))
         self.playback_timer.stop()
 
         if self._owns_audio():

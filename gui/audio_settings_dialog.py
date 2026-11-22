@@ -9,6 +9,7 @@ Live audio INPUT is chosen on the Auto tab, not here.
 """
 
 from PyQt6 import QtWidgets
+from PyQt6.QtCore import QT_TRANSLATE_NOOP, QCoreApplication
 
 from audio import simple_audio_player as song_audio
 from utils.app_settings import (
@@ -20,7 +21,10 @@ from utils.app_settings import (
 #: Buffer sizes offered (SDL wants powers of two).
 BUFFER_SIZES = (256, 512, 1024, 2048, 4096, 8192)
 
-SYSTEM_DEFAULT_LABEL = "System default"
+#: English source of the default-device entry; translated where it is
+#: shown (the combo's itemData "" is the key, never the text).
+SYSTEM_DEFAULT_LABEL = QT_TRANSLATE_NOOP("AudioSettingsDialog",
+                                         "System default")
 
 
 class AudioSettingsDialog(QtWidgets.QDialog):
@@ -32,7 +36,7 @@ class AudioSettingsDialog(QtWidgets.QDialog):
         tests pass a fake."""
         super().__init__(parent)
         self._list_devices = device_lister or song_audio.list_output_devices
-        self.setWindowTitle("Audio Settings")
+        self.setWindowTitle(QCoreApplication.translate("AudioSettingsDialog", "Audio Settings"))
         self.setModal(True)
         self.setMinimumWidth(500)
 
@@ -41,10 +45,10 @@ class AudioSettingsDialog(QtWidgets.QDialog):
         layout = QtWidgets.QVBoxLayout(self)
         layout.setSpacing(12)
 
-        intro = QtWidgets.QLabel(
+        intro = QtWidgets.QLabel(QCoreApplication.translate("AudioSettingsDialog", 
             "Where song audio plays in the Shows and Structure tabs. "
             "Changes apply immediately, also during playback. Live "
-            "audio input is chosen on the Auto tab.")
+            "audio input is chosen on the Auto tab."))
         intro.setWordWrap(True)
         layout.addWidget(intro)
 
@@ -55,31 +59,31 @@ class AudioSettingsDialog(QtWidgets.QDialog):
         device_row.setSpacing(6)
         self.device_combo = QtWidgets.QComboBox()
         self.device_combo.setMinimumWidth(300)
-        refresh = QtWidgets.QPushButton("Refresh")
+        refresh = QtWidgets.QPushButton(QCoreApplication.translate("AudioSettingsDialog", "Refresh"))
         refresh.clicked.connect(self.refresh_devices)
         device_row.addWidget(self.device_combo, 1)
         device_row.addWidget(refresh)
-        form.addRow("Output device", device_row)
+        form.addRow(QCoreApplication.translate("AudioSettingsDialog", "Output device"), device_row)
 
         self.sample_rate_combo = QtWidgets.QComboBox()
         for rate in AUDIO_SAMPLE_RATES:
-            self.sample_rate_combo.addItem(f"{rate} Hz", rate)
+            self.sample_rate_combo.addItem(QCoreApplication.translate("AudioSettingsDialog", "{0} Hz").format(rate), rate)
         self.sample_rate_combo.setCurrentIndex(
             max(0, self.sample_rate_combo.findData(stored["sample_rate"])))
-        form.addRow("Sample rate", self.sample_rate_combo)
+        form.addRow(QCoreApplication.translate("AudioSettingsDialog", "Sample rate"), self.sample_rate_combo)
 
         self.buffer_combo = QtWidgets.QComboBox()
         sizes = list(BUFFER_SIZES)
         if stored["buffer_size"] not in sizes:
             sizes = sorted(sizes + [stored["buffer_size"]])
         for size in sizes:
-            self.buffer_combo.addItem(f"{size} samples", size)
+            self.buffer_combo.addItem(QCoreApplication.translate("AudioSettingsDialog", "{0} samples").format(size), size)
         self.buffer_combo.setCurrentIndex(
             max(0, self.buffer_combo.findData(stored["buffer_size"])))
-        form.addRow("Buffer size", self.buffer_combo)
+        form.addRow(QCoreApplication.translate("AudioSettingsDialog", "Buffer size"), self.buffer_combo)
 
         self.latency_label = QtWidgets.QLabel()
-        form.addRow("Latency", self.latency_label)
+        form.addRow(QCoreApplication.translate("AudioSettingsDialog", "Latency"), self.latency_label)
         layout.addLayout(form)
 
         self.sample_rate_combo.currentIndexChanged.connect(
@@ -103,13 +107,13 @@ class AudioSettingsDialog(QtWidgets.QDialog):
         device that is not connected right now stays listed (marked) so
         opening the dialog never silently forgets the choice."""
         self.device_combo.clear()
-        self.device_combo.addItem(SYSTEM_DEFAULT_LABEL, "")
+        self.device_combo.addItem(QCoreApplication.translate("AudioSettingsDialog", SYSTEM_DEFAULT_LABEL), "")
         names = self._list_devices()
         for name in names:
             self.device_combo.addItem(name, name)
         if selected and selected not in names:
-            self.device_combo.addItem(f"{selected} (not connected)",
-                                      selected)
+            self.device_combo.addItem(
+                QCoreApplication.translate("AudioSettingsDialog", "{0} (not connected)").format(selected), selected)
         self.device_combo.setCurrentIndex(
             max(0, self.device_combo.findData(selected)))
 
@@ -120,7 +124,8 @@ class AudioSettingsDialog(QtWidgets.QDialog):
         rate = self.sample_rate_combo.currentData()
         size = self.buffer_combo.currentData()
         if rate and size:
-            self.latency_label.setText(f"about {size / rate * 1000:.0f} ms")
+            self.latency_label.setText(
+                QCoreApplication.translate("AudioSettingsDialog", "about {0} ms").format(f"{size / rate * 1000:.0f}"))
 
     # -- persistence ------------------------------------------------------
 
@@ -139,8 +144,8 @@ class AudioSettingsDialog(QtWidgets.QDialog):
         if not song_audio.apply_output_settings(
                 s["sample_rate"], s["buffer_size"], s["output_device"]):
             QtWidgets.QMessageBox.warning(
-                self, "Audio Settings",
-                "The audio output could not be opened with these "
-                "settings. Song playback continues without sound until "
-                "a working device is chosen.")
+                self, QCoreApplication.translate("AudioSettingsDialog", "Audio Settings"),
+                QCoreApplication.translate("AudioSettingsDialog", "The audio output could not be opened with these "
+                  "settings. Song playback continues without sound until "
+                  "a working device is chosen."))
         super().accept()

@@ -6,6 +6,7 @@ from PyQt6.QtWidgets import (
     QLineEdit, QComboBox, QTextEdit,
     QLabel, QMessageBox, QDialogButtonBox
 )
+from PyQt6.QtCore import QCoreApplication
 
 from config.models import (
     LightBlock, Riff, RiffDimmerBlock, RiffColourBlock,
@@ -32,7 +33,8 @@ class SaveRiffDialog(QDialog):
         self.bpm = bpm
         self.riff_library = riff_library
 
-        self.setWindowTitle("Save as Riff")
+        self.setWindowTitle(QCoreApplication.translate(
+            "SaveRiffDialog", "Save as Riff"))
         self.setMinimumWidth(400)
         self.setModal(True)
 
@@ -47,8 +49,10 @@ class SaveRiffDialog(QDialog):
 
         # Riff name
         self.name_edit = QLineEdit()
-        self.name_edit.setPlaceholderText("Enter riff name...")
-        form.addRow("Name:", self.name_edit)
+        self.name_edit.setPlaceholderText(QCoreApplication.translate(
+            "SaveRiffDialog", "Enter riff name..."))
+        form.addRow(QCoreApplication.translate(
+            "SaveRiffDialog", "Name:"), self.name_edit)
 
         # Category selection
         self.category_combo = QComboBox()
@@ -58,25 +62,33 @@ class SaveRiffDialog(QDialog):
             categories = ["custom", "builds", "fills", "loops", "drops", "movement"]
         self.category_combo.addItems(categories)
         self.category_combo.setCurrentText("custom")
-        form.addRow("Category:", self.category_combo)
+        form.addRow(QCoreApplication.translate(
+            "SaveRiffDialog", "Category:"), self.category_combo)
 
         # Description
         self.description_edit = QTextEdit()
-        self.description_edit.setPlaceholderText("Optional description...")
+        self.description_edit.setPlaceholderText(QCoreApplication.translate(
+            "SaveRiffDialog", "Optional description..."))
         self.description_edit.setMaximumHeight(80)
-        form.addRow("Description:", self.description_edit)
+        form.addRow(QCoreApplication.translate(
+            "SaveRiffDialog", "Description:"), self.description_edit)
 
         # Tags (comma-separated)
         self.tags_edit = QLineEdit()
-        self.tags_edit.setPlaceholderText("tag1, tag2, tag3...")
-        form.addRow("Tags:", self.tags_edit)
+        self.tags_edit.setPlaceholderText(QCoreApplication.translate(
+            "SaveRiffDialog", "tag1, tag2, tag3..."))
+        form.addRow(QCoreApplication.translate(
+            "SaveRiffDialog", "Tags:"), self.tags_edit)
 
         layout.addLayout(form)
 
         # Info label
         duration = self.block.end_time - self.block.start_time
         beats = duration * self.bpm / 60.0
-        info_text = f"Duration: {duration:.2f}s ({beats:.1f} beats at {self.bpm:.0f} BPM)"
+        info_text = QCoreApplication.translate(
+            "SaveRiffDialog",
+            "Duration: {0:.2f}s ({1:.1f} beats at {2:.0f} BPM)").format(
+                duration, beats, self.bpm)
         info_label = QLabel(info_text)
         info_label.setProperty("role", "stat-caption")
         layout.addWidget(info_label)
@@ -96,7 +108,9 @@ class SaveRiffDialog(QDialog):
         """Convert the block to a riff and save it."""
         name = self.name_edit.text().strip()
         if not name:
-            QMessageBox.warning(self, "Error", "Please enter a riff name.")
+            QMessageBox.warning(self, QCoreApplication.translate(
+                "SaveRiffDialog", "Error"), QCoreApplication.translate(
+                "SaveRiffDialog", "Please enter a riff name."))
             return
 
         category = self.category_combo.currentText().strip()
@@ -116,14 +130,17 @@ class SaveRiffDialog(QDialog):
         try:
             filepath = self.riff_library.save_riff(riff, category)
             QMessageBox.information(
-                self, "Success",
-                f"Riff saved to:\n{filepath}"
+                self, QCoreApplication.translate("SaveRiffDialog", "Success"),
+                QCoreApplication.translate(
+                    "SaveRiffDialog", "Riff saved to:\n{0}").format(filepath)
             )
             self.accept()
         except Exception as e:
             QMessageBox.critical(
-                self, "Error",
-                f"Failed to save riff:\n{str(e)}"
+                self, QCoreApplication.translate("SaveRiffDialog", "Error"),
+                QCoreApplication.translate(
+                    "SaveRiffDialog", "Failed to save riff:\n{0}").format(
+                        str(e))
             )
 
     def _convert_block_to_riff(self, name: str, category: str,

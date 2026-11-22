@@ -42,7 +42,7 @@ import sys
 import os
 
 from PyQt6 import QtWidgets
-from PyQt6.QtCore import Qt, QTimer, QEvent
+from PyQt6.QtCore import Qt, QTimer, QEvent, QCoreApplication
 
 from utils.app_settings import app_settings
 from config.models import Configuration, primary_group_name
@@ -191,8 +191,11 @@ class _CollapsibleSection(QtWidgets.QWidget):
     def _sync_marker(self, expanded: bool) -> None:
         self.toggle.setIcon(_chevron_icon(expanded, self._color))
         self.toggle.setToolTip(
-            f"Collapse {self.toggle.text()}" if expanded
-            else f"Expand {self.toggle.text()}")
+            QCoreApplication.translate(
+                "StageTab", "Collapse {0}").format(
+                    self.toggle.text()) if expanded
+            else QCoreApplication.translate(
+                "StageTab", "Expand {0}").format(self.toggle.text()))
 
     def _on_toggled(self, checked: bool) -> None:
         self.container.setVisible(checked)
@@ -369,7 +372,8 @@ class StageTab(BaseTab):
         strip_row.addStretch(1)
 
         strip_row.addWidget(
-            MicroLabel("Active layer", point_size=8, tracking_em=0.12))
+            MicroLabel(QCoreApplication.translate(
+                "StageTab", "Active layer"), point_size=8, tracking_em=0.12))
 
         # Bordered segmented chip group. role="card" supplies the panel
         # background + 1px border; each segment is borderless and paints
@@ -385,11 +389,13 @@ class StageTab(BaseTab):
         self._layer_chip_group = QtWidgets.QButtonGroup(self)
         self._layer_chip_group.setExclusive(True)
 
-        self.all_layers_chip = QtWidgets.QPushButton("ALL")
+        self.all_layers_chip = QtWidgets.QPushButton(QCoreApplication.translate(
+            "StageTab", "ALL"))
         self.all_layers_chip.setCheckable(True)
         self.all_layers_chip.setChecked(True)
         self.all_layers_chip.setToolTip(
-            "Edit all layers (no active-layer ghosting)")
+            QCoreApplication.translate(
+                "StageTab", "Edit all layers (no active-layer ghosting)"))
         self._style_segment(self.all_layers_chip)
         self._layer_chip_group.addButton(self.all_layers_chip)
         bar_layout.addWidget(self.all_layers_chip)
@@ -402,14 +408,19 @@ class StageTab(BaseTab):
         bar_layout.addLayout(self._chip_host)
         self.layer_chips = {}
 
-        self.add_layer_chip = QtWidgets.QPushButton("+ LAYER")
-        self.add_layer_chip.setToolTip("Add a stage layer (named Z-plane)")
+        self.add_layer_chip = QtWidgets.QPushButton(QCoreApplication.translate(
+            "StageTab", "+ LAYER"))
+        self.add_layer_chip.setToolTip(QCoreApplication.translate(
+            "StageTab", "Add a stage layer (named Z-plane)"))
         self._style_segment(self.add_layer_chip, divider=True)
         bar_layout.addWidget(self.add_layer_chip)
 
-        self.define_layer_chip = QtWidgets.QPushButton("DEFINE...")
+        self.define_layer_chip = QtWidgets.QPushButton(QCoreApplication.translate(
+            "StageTab", "DEFINE..."))
         self.define_layer_chip.setToolTip(
-            "Rename the active layer or move it to another height")
+            QCoreApplication.translate(
+                "StageTab",
+                "Rename the active layer or move it to another height"))
         self._style_segment(self.define_layer_chip, divider=True)
         bar_layout.addWidget(self.define_layer_chip)
 
@@ -418,7 +429,8 @@ class StageTab(BaseTab):
         # Mirrors the reference's "ANDERE: 25 % · GESPERRT" hint - only
         # shown while a layer is active.
         self.layer_lock_hint = MicroLabel(
-            "Others: 25% · locked", point_size=8, tracking_em=0.12)
+            QCoreApplication.translate(
+                "StageTab", "Others: 25% · locked"), point_size=8, tracking_em=0.12)
         self.layer_lock_hint.setVisible(False)
         strip_row.addWidget(self.layer_lock_hint)
 
@@ -432,31 +444,38 @@ class StageTab(BaseTab):
         # (tests/visual/test_widget_clipping.py); the base :checked rule
         # tints it while the mode is armed, like the Shows INSPECTOR
         # toggle.
-        self.aim_btn = QtWidgets.QPushButton("PLACE MARK")
+        self.aim_btn = QtWidgets.QPushButton(QCoreApplication.translate(
+            "StageTab", "PLACE MARK"))
         self.aim_btn.setProperty("role", "cta-outline")
         self.aim_btn.setFont(strip_font)
         self.aim_btn.setCheckable(True)
         self.aim_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self.aim_btn.setToolTip(
-            "Click-to-aim: click the stage plan to point the movement\n"
-            "block selected in the Show timeline at that spot (floor,\n"
-            "z=0). Hold Shift to keep the target's current height.")
+            QCoreApplication.translate(
+                "StageTab",
+                "Click-to-aim: click the stage plan to point the movement\n"
+                "block selected in the Show timeline at that spot (floor,\n"
+                "z=0). Hold Shift to keep the target's current height."))
         strip_row.addWidget(self.aim_btn)
 
-        self.morph_btn = QtWidgets.QPushButton("MORPH...")
+        self.morph_btn = QtWidgets.QPushButton(QCoreApplication.translate(
+            "StageTab", "MORPH..."))
         self.morph_btn.setIcon(line_icon("morph", tokens["text_disabled"]))
         self.morph_btn.setFont(strip_font)
         self.morph_btn.setEnabled(False)
-        self.morph_btn.setToolTip("Arrives with the morph milestone")
+        self.morph_btn.setToolTip(QCoreApplication.translate(
+            "StageTab", "Arrives with the morph milestone"))
         strip_row.addWidget(self.morph_btn)
 
-        self.export_rider_btn = QtWidgets.QPushButton("EXPORT RIDER PDF")
+        self.export_rider_btn = QtWidgets.QPushButton(QCoreApplication.translate(
+            "StageTab", "EXPORT RIDER PDF"))
         self.export_rider_btn.setIcon(
             line_icon("export", tokens["text_secondary"]))
         self.export_rider_btn.setFont(strip_font)
         self.export_rider_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self.export_rider_btn.setToolTip(
-            "Export the rig as a PDF or PNG stage plot")
+            QCoreApplication.translate(
+                "StageTab", "Export the rig as a PDF or PNG stage plot"))
         strip_row.addWidget(self.export_rider_btn)
         return strip
 
@@ -518,7 +537,8 @@ class StageTab(BaseTab):
 
         # 2. Rig · fixtures.
         fixtures_section = self._make_section(
-            "Rig · fixtures", "fixtures",
+            QCoreApplication.translate(
+                "StageTab", "Rig · fixtures"), "fixtures",
             margins=(0, 0, 0, 0), spacing=0)
 
         self._group_rows_container = QtWidgets.QWidget()
@@ -529,7 +549,8 @@ class StageTab(BaseTab):
         fixtures_section.addWidget(self._group_rows_container)
 
         self.groups_empty_hint = MicroLabel(
-            "No fixture groups yet", point_size=8, tracking_em=0.1)
+            QCoreApplication.translate(
+                "StageTab", "No fixture groups yet"), point_size=8, tracking_em=0.1)
         self.groups_empty_hint.setMinimumWidth(1)
         self.groups_empty_hint.setContentsMargins(16, 8, 16, 8)
         fixtures_section.addWidget(self.groups_empty_hint)
@@ -544,7 +565,8 @@ class StageTab(BaseTab):
         self.element_buttons = {}
 
         elements_section = self._make_section(
-            "Stage elements · drag", "elements",
+            QCoreApplication.translate(
+                "StageTab", "Stage elements · drag"), "elements",
             margins=(0, 0, 0, 0), spacing=0)
         elements_section.addLayout(
             self._element_grid(ordered_element_specs(
@@ -552,13 +574,16 @@ class StageTab(BaseTab):
         control_layout.addWidget(elements_section)
 
         trusses_section = self._make_section(
-            "Trusses · drag", "trusses", margins=(0, 0, 0, 0), spacing=0)
+            QCoreApplication.translate(
+                "StageTab", "Trusses · drag"), "trusses", margins=(0, 0, 0, 0), spacing=0)
         trusses_section.addLayout(
             self._element_grid(specs_for_category(CATEGORY_TRUSS)))
 
         self.truss_hint = QtWidgets.QLabel(
-            "Drag a truss, set height + length; fixtures dock to it. "
-            "Ground support = tower at both ends.")
+            QCoreApplication.translate(
+                "StageTab",
+                "Drag a truss, set height + length; fixtures dock to it. "
+                "Ground support = tower at both ends."))
         self.truss_hint.setProperty("role", "hint-box")
         self.truss_hint.setWordWrap(True)
         hint_font = self.truss_hint.font()
@@ -610,10 +635,11 @@ class StageTab(BaseTab):
             tile.setSizePolicy(QtWidgets.QSizePolicy.Policy.Ignored,
                                QtWidgets.QSizePolicy.Policy.Fixed)
             tile.setCursor(Qt.CursorShape.PointingHandCursor)
-            tile.setToolTip(f"{spec.label} "
-                            f"({spec.width:g} x {spec.depth:g} m)\n"
-                            "Drag onto the plan, or click to place it at "
-                            "stage centre")
+            tile.setToolTip(QCoreApplication.translate(
+                "StageTab",
+                "{0} ({1:g} x {2:g} m)\nDrag onto the plan, or click to "
+                "place it at stage centre").format(
+                    spec.label, spec.width, spec.depth))
             tile.clicked.connect(
                 lambda _=False, k=spec.kind: self._add_stage_element(k))
             grid.addWidget(tile, i // 2, i % 2)
@@ -631,7 +657,8 @@ class StageTab(BaseTab):
         # The outer section keeps the historical settings_toggle /
         # settings_container attribute names; its content is a stack of
         # nested collapsibles rather than one blob.
-        outer = self._make_section("Stage settings", "settings",
+        outer = self._make_section(QCoreApplication.translate(
+            "StageTab", "Stage settings"), "settings",
                                    expanded=True, margins=(0, 0, 0, 6),
                                    spacing=0)
         self.settings_toggle = outer.toggle
@@ -648,7 +675,8 @@ class StageTab(BaseTab):
 
         # -- STAGE: dimensions (set first), then grid, then view, all in
         # one section. The dimensions come first, so this stays open.
-        stage_section = subsection("Stage", "stage_dims")
+        stage_section = subsection(QCoreApplication.translate(
+            "StageTab", "Stage"), "stage_dims")
         dims_row = QtWidgets.QHBoxLayout()
         dims_row.setSpacing(6)
 
@@ -665,8 +693,10 @@ class StageTab(BaseTab):
         # No "Update Stage" button — the spinboxes' valueChanged signal
         # already drives _update_stage live, matching how the grid-size
         # spinbox below works.
-        for label_text, spin in (("Width / m", self.stage_width),
-                                 ("Depth / m", self.stage_height)):
+        for label_text, spin in ((QCoreApplication.translate(
+            "StageTab", "Width / m"), self.stage_width),
+                                 (QCoreApplication.translate(
+                                     "StageTab", "Depth / m"), self.stage_height)):
             col = QtWidgets.QVBoxLayout()
             col.setSpacing(2)
             col.addWidget(MicroLabel(label_text, point_size=8,
@@ -678,7 +708,8 @@ class StageTab(BaseTab):
         # Grid: 0.5 m default, snap on. Kept in the same STAGE section as
         # the dimensions (a "Grid" micro-caption separates it).
         stage_section.addSpacing(4)
-        stage_section.addWidget(self._caption("Grid"))
+        stage_section.addWidget(self._caption(QCoreApplication.translate(
+            "StageTab", "Grid")))
 
         self.grid_size = QtWidgets.QDoubleSpinBox()
         self.grid_size.setRange(0.1, 50)
@@ -688,16 +719,19 @@ class StageTab(BaseTab):
 
         grid_size_row = QtWidgets.QHBoxLayout()
         grid_size_row.setSpacing(6)
-        grid_size_row.addWidget(MicroLabel("Size / m", point_size=8,
+        grid_size_row.addWidget(MicroLabel(QCoreApplication.translate(
+            "StageTab", "Size / m"), point_size=8,
                                            tracking_em=0.1))
         grid_size_row.addWidget(self.grid_size, 1)
         stage_section.addLayout(grid_size_row)
 
-        self.grid_toggle = QtWidgets.QCheckBox("Show grid")
+        self.grid_toggle = QtWidgets.QCheckBox(QCoreApplication.translate(
+            "StageTab", "Show grid"))
         self.grid_toggle.setChecked(True)  # Grid visible by default
         stage_section.addWidget(self.grid_toggle)
 
-        self.snap_to_grid = QtWidgets.QCheckBox("Snap to grid")
+        self.snap_to_grid = QtWidgets.QCheckBox(QCoreApplication.translate(
+            "StageTab", "Snap to grid"))
         self.snap_to_grid.setChecked(True)  # Enable by default
         stage_section.addWidget(self.snap_to_grid)
 
@@ -705,14 +739,17 @@ class StageTab(BaseTab):
         # action footer now (above the exports), so it stays one click away
         # with every section collapsed.
         stage_section.addSpacing(4)
-        stage_section.addWidget(self._caption("View"))
+        stage_section.addWidget(self._caption(QCoreApplication.translate(
+            "StageTab", "View")))
 
         # Single checkbox - when on, every fixture draws its XYZ
         # axes. The previous two-checkbox UX (selected-only by
         # default, with a separate "Show all" toggle) was non-
         # discoverable and read as broken.
-        self.show_axes_checkbox = QtWidgets.QCheckBox("Show orientation axes")
-        self.show_axes_checkbox.setToolTip("Show XYZ axes on every fixture")
+        self.show_axes_checkbox = QtWidgets.QCheckBox(QCoreApplication.translate(
+            "StageTab", "Show orientation axes"))
+        self.show_axes_checkbox.setToolTip(QCoreApplication.translate(
+            "StageTab", "Show XYZ axes on every fixture"))
         stage_section.addWidget(self.show_axes_checkbox)
 
         # -- MARKS: named reference points on the plan, managed like the
@@ -721,13 +758,16 @@ class StageTab(BaseTab):
         from gui.tabs.configuration_tab import TOOLBAR_BTN_WIDTH
         # No inner card or repeated caption: the collapsible section header
         # already says MARKS, so the list and buttons sit straight in it.
-        marks_section = subsection("Marks", "marks", expanded=False)
+        marks_section = subsection(QCoreApplication.translate(
+            "StageTab", "Marks"), "marks", expanded=False)
         self.marks_list = QtWidgets.QListWidget()
         self.marks_list.setMaximumHeight(110)
         self.marks_list.setToolTip(
-            "Named reference points on the stage plan.\n"
-            "Select one and press Delete, or right-click, to remove it.\n"
-            "Double-click (or Rename) to rename it."
+            QCoreApplication.translate(
+                "StageTab",
+                "Named reference points on the stage plan.\n"
+                "Select one and press Delete, or right-click, to remove "
+                "it.\nDouble-click (or Rename) to rename it.")
         )
         self.marks_list.setContextMenuPolicy(
             Qt.ContextMenuPolicy.CustomContextMenu)
@@ -736,12 +776,16 @@ class StageTab(BaseTab):
         marks_btn_row = QtWidgets.QHBoxLayout()
         self.add_spot_btn = QtWidgets.QPushButton("+")
         self.add_spot_btn.setFixedWidth(TOOLBAR_BTN_WIDTH)
-        self.add_spot_btn.setToolTip("Add a mark at stage centre")
+        self.add_spot_btn.setToolTip(QCoreApplication.translate(
+            "StageTab", "Add a mark at stage centre"))
         self.remove_item_btn = QtWidgets.QPushButton("-")
         self.remove_item_btn.setFixedWidth(TOOLBAR_BTN_WIDTH)
-        self.remove_item_btn.setToolTip("Delete the selected mark")
-        self.rename_mark_btn = QtWidgets.QPushButton("Rename")
-        self.rename_mark_btn.setToolTip("Rename the selected mark")
+        self.remove_item_btn.setToolTip(QCoreApplication.translate(
+            "StageTab", "Delete the selected mark"))
+        self.rename_mark_btn = QtWidgets.QPushButton(QCoreApplication.translate(
+            "StageTab", "Rename"))
+        self.rename_mark_btn.setToolTip(QCoreApplication.translate(
+            "StageTab", "Rename the selected mark"))
         marks_btn_row.addWidget(self.add_spot_btn)
         marks_btn_row.addWidget(self.remove_item_btn)
         marks_btn_row.addWidget(self.rename_mark_btn)
@@ -755,38 +799,49 @@ class StageTab(BaseTab):
         # Layer combo.
         # Flat, like MARKS above: no inner card or repeated caption, the
         # section header already says LAYERS.
-        layers_section = subsection("Layers", "layers", expanded=False)
+        layers_section = subsection(QCoreApplication.translate(
+            "StageTab", "Layers"), "layers", expanded=False)
         self.layer_list = QtWidgets.QListWidget()
         self.layer_list.setMaximumHeight(110)
         self.layer_list.setToolTip(
-            "Named Z-planes of the rig. Uncheck a layer to hide its\n"
-            "fixtures on the stage plot and in the 3D previews.\n"
-            "Assign fixtures via right-click on the stage.\n\n"
-            "Double-click a layer (or press L to cycle) to edit only\n"
-            "that layer: its fixtures stay live, everything else ghosts\n"
-            "to a faint locked reference."
+            QCoreApplication.translate(
+                "StageTab",
+                "Named Z-planes of the rig. Uncheck a layer to hide its\n"
+                "fixtures on the stage plot and in the 3D previews.\n"
+                "Assign fixtures via right-click on the stage.\n"
+                "\nDouble-click a layer (or press L to cycle) to edit only\n"
+                "that layer: its fixtures stay live, everything else "
+                "ghosts\nto a faint locked reference.")
         )
         layers_section.addWidget(self.layer_list)
 
-        self.active_layer_label = QtWidgets.QLabel("Editing: all layers")
+        self.active_layer_label = QtWidgets.QLabel(QCoreApplication.translate(
+            "StageTab", "Editing: all layers"))
         self.active_layer_label.setFont(mono_font(8))
         self.active_layer_label.setToolTip(
-            "Active-layer editing. Double-click a layer or press L to cycle;\n"
-            "double-click the active layer again to return to all layers."
+            QCoreApplication.translate(
+                "StageTab",
+                "Active-layer editing. Double-click a layer or press L to "
+                "cycle;\ndouble-click the active layer again to return to "
+                "all layers.")
         )
         layers_section.addWidget(self.active_layer_label)
 
         layer_btn_row = QtWidgets.QHBoxLayout()
         self.add_layer_btn = QtWidgets.QPushButton("+")
         self.add_layer_btn.setFixedWidth(TOOLBAR_BTN_WIDTH)
-        self.add_layer_btn.setToolTip("Add Layer")
+        self.add_layer_btn.setToolTip(QCoreApplication.translate(
+            "StageTab", "Add Layer"))
         self.remove_layer_btn = QtWidgets.QPushButton("-")
         self.remove_layer_btn.setFixedWidth(TOOLBAR_BTN_WIDTH)
         self.remove_layer_btn.setToolTip(
-            "Remove Layer (fixtures keep their height)")
-        self.edit_layer_btn = QtWidgets.QPushButton("Edit")
+            QCoreApplication.translate(
+                "StageTab", "Remove Layer (fixtures keep their height)"))
+        self.edit_layer_btn = QtWidgets.QPushButton(QCoreApplication.translate(
+            "StageTab", "Edit"))
         self.edit_layer_btn.setToolTip(
-            "Rename the layer or move it to another height")
+            QCoreApplication.translate(
+                "StageTab", "Rename the layer or move it to another height"))
         layer_btn_row.addWidget(self.add_layer_btn)
         layer_btn_row.addWidget(self.remove_layer_btn)
         layer_btn_row.addWidget(self.edit_layer_btn)
@@ -822,40 +877,46 @@ class StageTab(BaseTab):
         # Fit View sits at the top of the footer (relocated from the STAGE
         # section) so a zoom/pan reset is always one click away. The 'F'
         # shortcut (wired in connect_signals) duplicates it.
-        self.fit_view_btn = QtWidgets.QPushButton("FIT VIEW (F)")
+        self.fit_view_btn = QtWidgets.QPushButton(QCoreApplication.translate(
+            "StageTab", "FIT VIEW (F)"))
         self.fit_view_btn.setProperty("role", "cta-outline")
         self.fit_view_btn.setFont(footer_font)
         self.fit_view_btn.setToolTip(
-            "Reset zoom and pan to fit the whole stage.\n\n"
-            "Stage controls:\n"
-            "  - Mouse wheel: zoom (around cursor)\n"
-            "  - Space + left-drag: pan\n"
-            "  - F: fit view"
+            QCoreApplication.translate(
+                "StageTab",
+                "Reset zoom and pan to fit the whole stage.\n"
+                "\nStage controls:\n  - Mouse wheel: zoom (around cursor)\n"
+                "  - Space + left-drag: pan\n  - F: fit view")
         )
         self.fit_view_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         footer_layout.addWidget(self.fit_view_btn)
 
-        self.launch_visualizer_btn = QtWidgets.QPushButton("LAUNCH VISUALIZER")
+        self.launch_visualizer_btn = QtWidgets.QPushButton(QCoreApplication.translate(
+            "StageTab", "LAUNCH VISUALIZER"))
         self.launch_visualizer_btn.setProperty("role", "cta-outline")
         self.launch_visualizer_btn.setFont(footer_font)
         self.launch_visualizer_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self.launch_visualizer_btn.setToolTip(
-            "Start the 3D Visualizer application")
+            QCoreApplication.translate(
+                "StageTab", "Start the 3D Visualizer application"))
         footer_layout.addWidget(self.launch_visualizer_btn)
 
-        self.plot_stage_btn = QtWidgets.QPushButton("PLOT STAGE")
+        self.plot_stage_btn = QtWidgets.QPushButton(QCoreApplication.translate(
+            "StageTab", "PLOT STAGE"))
         self.plot_stage_btn.setProperty("role", "cta-accent")
         self.plot_stage_btn.setFont(footer_font)
         self.plot_stage_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self.plot_stage_btn.setToolTip(
-            "Export the rig as a PDF or PNG stage plot")
+            QCoreApplication.translate(
+                "StageTab", "Export the rig as a PDF or PNG stage plot"))
         footer_layout.addWidget(self.plot_stage_btn)
 
         # TCP status indicator
         tcp_status_layout = QtWidgets.QHBoxLayout()
         tcp_status_layout.setSpacing(6)
         tcp_status_layout.addWidget(
-            MicroLabel("TCP server", point_size=8, tracking_em=0.1))
+            MicroLabel(QCoreApplication.translate(
+                "StageTab", "TCP server"), point_size=8, tracking_em=0.1))
         self.tcp_status_label = QtWidgets.QLabel()
         # Weight + per-status colour: QLabel#StageTcpStatus in the theme.
         self.tcp_status_label.setObjectName("StageTcpStatus")
@@ -896,7 +957,8 @@ class StageTab(BaseTab):
             return widget
 
         self.plan_caption = overlay(
-            MicroLabel("Stage plan", point_size=8, tracking_em=0.12))
+            MicroLabel(QCoreApplication.translate(
+                "StageTab", "Stage plan"), point_size=8, tracking_em=0.12))
 
         self.active_layer_badge = overlay(QtWidgets.QLabel(""))
         self.active_layer_badge.setObjectName("StagePlanBadge")
@@ -950,14 +1012,14 @@ class StageTab(BaseTab):
 
         self.legend_active_label = entry(
             self._swatch(f"border-top: 2px solid {line};", 20, 3),
-            "ALL LAYERS")
+            QCoreApplication.translate("StageTab", "ALL LAYERS"))
         entry(self._swatch(f"border-top: 2px dashed {dim};", 20, 3),
-              "OTHER LAYERS")
+              QCoreApplication.translate("StageTab", "OTHER LAYERS"))
         entry(self._swatch(
             f"border: 2px dashed {dim}; border-radius: 6px;", 12, 12),
-            "FIXTURE (OTHER LAYER)")
+            QCoreApplication.translate("StageTab", "FIXTURE (OTHER LAYER)"))
         entry(self._swatch(f"border: 2px solid {line};", 14, 9),
-              "FIXTURE (ACTIVE)")
+              QCoreApplication.translate("StageTab", "FIXTURE (ACTIVE)"))
         return legend
 
     def _build_title_block(self) -> QtWidgets.QWidget:
@@ -1020,26 +1082,33 @@ class StageTab(BaseTab):
             return
         grid_m = getattr(self.stage_view, "grid_size_m", 0.5)
         self.plan_caption.setText(
-            f"Stage plan · top view · 1 square = {grid_m:g} m")
+            QCoreApplication.translate(
+                "StageTab", "Stage plan · top view · 1 square = {0:g} m").format(
+                    grid_m))
 
         active = getattr(self.stage_view, "active_layer", None)
         layer = self.config.get_stage_layer(active) if active else None
         if layer is not None:
             self.active_layer_badge.setText(
-                f"ACTIVE LAYER: {layer.name.upper()} "
-                f"{layer.z_height:g} M · OTHERS DIMMED")
+                QCoreApplication.translate(
+                    "StageTab", "ACTIVE LAYER: {0} {1:g} M · OTHERS DIMMED").format(
+                        layer.name.upper(), layer.z_height))
             self.active_layer_badge.setVisible(True)
             self.legend_active_label.setText(
                 f"{layer.name.upper()} {layer.z_height:g} m")
         else:
             self.active_layer_badge.setVisible(False)
-            self.legend_active_label.setText("ALL LAYERS")
+            self.legend_active_label.setText(QCoreApplication.translate(
+                "StageTab", "ALL LAYERS"))
 
         loaded_from = getattr(self.config, "_loaded_from", None)
         name = (os.path.splitext(os.path.basename(loaded_from))[0]
-                if loaded_from else "") or "UNTITLED"
-        self.title_name.setText(f"STAGE PLAN · {name.upper()}")
-        self.title_sheet.setText("SHEET 1/1")
+                if loaded_from else "") or QCoreApplication.translate(
+                    "StageTab", "UNTITLED")
+        self.title_name.setText(QCoreApplication.translate(
+            "StageTab", "STAGE PLAN · {0}").format(name.upper()))
+        self.title_sheet.setText(QCoreApplication.translate(
+            "StageTab", "SHEET 1/1"))
         self.title_dims.setText(
             f"{self.config.stage_width:g}x{self.config.stage_height:g} m")
         self.title_date.setText(datetime.date.today().isoformat())
@@ -1069,15 +1138,18 @@ class StageTab(BaseTab):
         header_row = QtWidgets.QHBoxLayout(header)
         header_row.setContentsMargins(14, 0, 10, 0)
         header_row.setSpacing(10)
-        header_row.addWidget(MicroLabel("3D preview", point_size=8,
+        header_row.addWidget(MicroLabel(QCoreApplication.translate(
+            "StageTab", "3D preview"), point_size=8,
                                         tracking_em=0.12))
         header_row.addStretch()
 
-        self.popout_btn = QtWidgets.QPushButton("POP-OUT")
+        self.popout_btn = QtWidgets.QPushButton(QCoreApplication.translate(
+            "StageTab", "POP-OUT"))
         self.popout_btn.setProperty("role", "nav")
         self.popout_btn.setFont(mono_font(8, tracking_em=0.1))
         self.popout_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.popout_btn.setToolTip("Pop the 3D preview out to a second screen")
+        self.popout_btn.setToolTip(QCoreApplication.translate(
+            "StageTab", "Pop the 3D preview out to a second screen"))
         header_row.addWidget(self.popout_btn)
 
         self.preview_collapse_btn = QtWidgets.QToolButton()
@@ -1088,7 +1160,8 @@ class StageTab(BaseTab):
         self.preview_collapse_btn.setFixedSize(24, 24)
         self.preview_collapse_btn.setProperty("role", "topbar-icon")
         self.preview_collapse_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.preview_collapse_btn.setToolTip("Collapse the 3D preview")
+        self.preview_collapse_btn.setToolTip(QCoreApplication.translate(
+            "StageTab", "Collapse the 3D preview"))
         header_row.addWidget(self.preview_collapse_btn)
         column_layout.addWidget(header)
 
@@ -1166,7 +1239,8 @@ class StageTab(BaseTab):
         # -- SELECTION --------------------------------------------------
         header_row = QtWidgets.QHBoxLayout()
         header_row.setSpacing(8)
-        self.selection_label = DisplayLabel("No fixture selected",
+        self.selection_label = DisplayLabel(QCoreApplication.translate(
+            "StageTab", "No fixture selected"),
                                             point_size=13,
                                             weight=QFont.Weight.Bold)
         self.selection_label.setWordWrap(True)
@@ -1178,9 +1252,12 @@ class StageTab(BaseTab):
 
         stats_row = QtWidgets.QHBoxLayout()
         stats_row.setSpacing(8)
-        tile_x, self.stat_x = self._stat_tile("X / m")
-        tile_y, self.stat_y = self._stat_tile("Y / m")
-        tile_z, self.stat_z = self._stat_tile("Z / m")
+        tile_x, self.stat_x = self._stat_tile(QCoreApplication.translate(
+            "StageTab", "X / m"))
+        tile_y, self.stat_y = self._stat_tile(QCoreApplication.translate(
+            "StageTab", "Y / m"))
+        tile_z, self.stat_z = self._stat_tile(QCoreApplication.translate(
+            "StageTab", "Z / m"))
         for tile in (tile_x, tile_y, tile_z):
             stats_row.addWidget(tile, 1)
         inspector_layout.addLayout(stats_row)
@@ -1188,7 +1265,8 @@ class StageTab(BaseTab):
         layer_combo_row = QtWidgets.QHBoxLayout()
         layer_combo_row.setSpacing(8)
         layer_combo_row.addWidget(
-            MicroLabel("Layer", point_size=8, tracking_em=0.12))
+            MicroLabel(QCoreApplication.translate(
+                "StageTab", "Layer"), point_size=8, tracking_em=0.12))
         self.layer_combo = QtWidgets.QComboBox()
         self.layer_combo.setFont(mono_font(9))
         self.layer_combo.setEnabled(False)
@@ -1196,17 +1274,21 @@ class StageTab(BaseTab):
         # QComboBox[role="accent-field"].
         self.layer_combo.setProperty("role", "accent-field")
         self.layer_combo.setToolTip(
-            "Assign the selected fixtures to a stage layer.\n"
-            "Assignment snaps the fixtures' Z to the layer height\n"
-            "(same as right-click > Assign to Layer)."
+            QCoreApplication.translate(
+                "StageTab",
+                "Assign the selected fixtures to a stage layer.\n"
+                "Assignment snaps the fixtures' Z to the layer height\n"
+                "(same as right-click > Assign to Layer).")
         )
         layer_combo_row.addWidget(self.layer_combo, 1)
         inspector_layout.addLayout(layer_combo_row)
 
         self.selection_hint = QtWidgets.QLabel(
-            "Only elements on the active layer are selectable and movable. "
-            "To move fixtures on other layers, switch layer or reassign "
-            "the fixture.")
+            QCoreApplication.translate(
+                "StageTab",
+                "Only elements on the active layer are selectable and "
+                "movable. To move fixtures on other layers, switch layer or "
+                "reassign the fixture."))
         self.selection_hint.setObjectName("StageSelectionHint")
         self.selection_hint.setWordWrap(True)
         hint_font = self.selection_hint.font()
@@ -1237,7 +1319,8 @@ class StageTab(BaseTab):
         # controls below remain reachable; the outer inspector scroll
         # absorbs any overflow on short windows.
         self.orientation_panel.preview_group.setMaximumHeight(190)
-        inspector_layout.addWidget(self._caption("Orientation"))
+        inspector_layout.addWidget(self._caption(QCoreApplication.translate(
+            "StageTab", "Orientation")))
         # Added directly, no inner scroll: the editor (preview + the two
         # control panels + apply row) now fits the 448px column widthwise,
         # and the whole inspector already lives in an outer vertical scroll
@@ -1247,7 +1330,8 @@ class StageTab(BaseTab):
         inspector_layout.addWidget(self.orientation_panel)
 
         # -- LAYERS -----------------------------------------------------
-        inspector_layout.addWidget(self._caption("Layers"))
+        inspector_layout.addWidget(self._caption(QCoreApplication.translate(
+            "StageTab", "Layers")))
         self._layer_rows_container = QtWidgets.QWidget()
         self._layer_rows_layout = QtWidgets.QVBoxLayout(
             self._layer_rows_container)
@@ -1256,7 +1340,9 @@ class StageTab(BaseTab):
         inspector_layout.addWidget(self._layer_rows_container)
 
         self.rider_hint = QtWidgets.QLabel(
-            "Rider export: top view + legend + title block as PDF.")
+            QCoreApplication.translate(
+                "StageTab",
+                "Rider export: top view + legend + title block as PDF."))
         self.rider_hint.setProperty("role", "hint-box")
         self.rider_hint.setWordWrap(True)
         rider_font = self.rider_hint.font()
@@ -1393,8 +1479,10 @@ class StageTab(BaseTab):
         self.stage_view.set_aim_mode(checked)
         if checked:
             self._show_status(
-                "PLACE MARK: click the stage plan to drop ONE mark "
-                "there · Shift-click to keep placing")
+                QCoreApplication.translate(
+                    "StageTab",
+                    "PLACE MARK: click the stage plan to drop ONE mark "
+                    "there · Shift-click to keep placing"))
 
     def _mark_near(self, x_m: float, y_m: float):
         """Name of an existing mark within MARK_SNAP_M of a point, else
@@ -1436,7 +1524,10 @@ class StageTab(BaseTab):
         if name is not None:
             self._select_mark_in_list(name)
             self._show_status(
-                f"PLACE MARK: '{name}' is already here - selected it")
+                QCoreApplication.translate(
+                    "StageTab",
+                    "PLACE MARK: '{0}' is already here - selected it").format(
+                        name))
             return
         spot = self.stage_view.add_spot(round(x_m, 3), round(y_m, 3), 0.0)
         self._select_mark_in_list(spot.name)
@@ -1447,9 +1538,12 @@ class StageTab(BaseTab):
         if not keep_going:
             self.aim_btn.setChecked(False)      # disarms via toggled
         self._show_status(
-            f"PLACE MARK: '{spot.name}' at "
-            f"({x_m:.2f}, {y_m:.2f}) m - rename it in the MARKS list"
-            + ("" if keep_going else " · Shift-click to place several"))
+            QCoreApplication.translate(
+                "StageTab",
+                "PLACE MARK: '{0}' at ({1:.2f}, {2:.2f}) m - rename it in "
+                "the MARKS list").format(spot.name, x_m, y_m)
+            + ("" if keep_going else QCoreApplication.translate(
+                "StageTab", " · Shift-click to place several")))
 
     def _on_preview_collapsed(self, collapsed: bool) -> None:
         """Chevron in the 3D preview header: hide/show the GL pane."""
@@ -1459,8 +1553,10 @@ class StageTab(BaseTab):
             "chevron-left" if collapsed else "chevron-right",
             self._tokens["text_secondary"]))
         self.preview_collapse_btn.setToolTip(
-            "Expand the 3D preview" if collapsed
-            else "Collapse the 3D preview")
+            QCoreApplication.translate(
+                "StageTab", "Expand the 3D preview") if collapsed
+            else QCoreApplication.translate(
+                "StageTab", "Collapse the 3D preview"))
 
     def _add_stage_element(self, kind: str):
         """Palette click: place a static element at stage center. Drops
@@ -1573,8 +1669,10 @@ class StageTab(BaseTab):
                 # Process is still running
                 QtWidgets.QMessageBox.information(
                     self,
-                    "Visualizer Running",
-                    "The Visualizer is already running."
+                    QCoreApplication.translate(
+                        "StageTab", "Visualizer Running"),
+                    QCoreApplication.translate(
+                        "StageTab", "The Visualizer is already running.")
                 )
                 return
 
@@ -1589,8 +1687,10 @@ class StageTab(BaseTab):
         if not os.path.exists(visualizer_path):
             QtWidgets.QMessageBox.warning(
                 self,
-                "Visualizer Not Found",
-                f"Could not find visualizer at:\n{visualizer_path}"
+                QCoreApplication.translate("StageTab", "Visualizer Not Found"),
+                QCoreApplication.translate(
+                    "StageTab", "Could not find visualizer at:\n{0}").format(
+                        visualizer_path)
             )
             return
 
@@ -1604,8 +1704,10 @@ class StageTab(BaseTab):
         except Exception as e:
             QtWidgets.QMessageBox.critical(
                 self,
-                "Launch Error",
-                f"Failed to launch Visualizer:\n{str(e)}"
+                QCoreApplication.translate("StageTab", "Launch Error"),
+                QCoreApplication.translate(
+                    "StageTab", "Failed to launch Visualizer:\n{0}").format(
+                        str(e))
             )
 
     def _ensure_tcp_server_running(self) -> bool:
@@ -1633,10 +1735,12 @@ class StageTab(BaseTab):
             # Server not running - ask user if they want to start it
             reply = QtWidgets.QMessageBox.question(
                 self,
-                "Start TCP Server?",
-                "The TCP server is not running.\n\n"
-                "The Visualizer needs the TCP server to receive stage configuration.\n\n"
-                "Start the TCP server now?",
+                QCoreApplication.translate("StageTab", "Start TCP Server?"),
+                QCoreApplication.translate(
+                    "StageTab",
+                    "The TCP server is not running.\n"
+                    "\nThe Visualizer needs the TCP server to receive stage "
+                    "configuration.\n\nStart the TCP server now?"),
                 QtWidgets.QMessageBox.StandardButton.Yes | QtWidgets.QMessageBox.StandardButton.No,
                 QtWidgets.QMessageBox.StandardButton.Yes
             )
@@ -1657,9 +1761,13 @@ class StageTab(BaseTab):
                     else:
                         QtWidgets.QMessageBox.warning(
                             self,
-                            "Cannot Start Server",
-                            "TCP server initialization not available.\n"
-                            "Please enable 'Visualizer Server' in the Shows tab."
+                            QCoreApplication.translate(
+                                "StageTab", "Cannot Start Server"),
+                            QCoreApplication.translate(
+                                "StageTab",
+                                "TCP server initialization not available.\n"
+                                "Please enable 'Visualizer Server' in the "
+                                "Shows tab.")
                         )
                         return False
 
@@ -1672,17 +1780,23 @@ class StageTab(BaseTab):
                     else:
                         QtWidgets.QMessageBox.warning(
                             self,
-                            "Server Start Failed",
-                            "Failed to start TCP server.\n"
-                            "Please check the Shows tab for errors."
+                            QCoreApplication.translate(
+                                "StageTab", "Server Start Failed"),
+                            QCoreApplication.translate(
+                                "StageTab",
+                                "Failed to start TCP server.\n"
+                                "Please check the Shows tab for errors.")
                         )
                         return False
 
                 except Exception as e:
                     QtWidgets.QMessageBox.warning(
                         self,
-                        "Server Start Failed",
-                        f"Failed to start TCP server:\n{str(e)}"
+                        QCoreApplication.translate(
+                            "StageTab", "Server Start Failed"),
+                        QCoreApplication.translate(
+                            "StageTab", "Failed to start TCP server:\n{0}").format(
+                                str(e))
                     )
                     return False
             else:
@@ -1708,18 +1822,22 @@ class StageTab(BaseTab):
             pass
 
         if tcp_server is None:
-            self.tcp_status_label.setText("Not initialized")
+            self.tcp_status_label.setText(QCoreApplication.translate(
+                "StageTab", "Not initialized"))
             status = "idle"
         elif not tcp_server.is_running():
-            self.tcp_status_label.setText("Stopped")
+            self.tcp_status_label.setText(QCoreApplication.translate(
+                "StageTab", "Stopped"))
             status = "stopped"
         else:
             client_count = tcp_server.get_client_count()
             if client_count == 0:
-                self.tcp_status_label.setText("Running (no clients)")
+                self.tcp_status_label.setText(QCoreApplication.translate(
+                    "StageTab", "Running (no clients)"))
                 status = "running"
             else:
-                self.tcp_status_label.setText(f"Connected ({client_count})")
+                self.tcp_status_label.setText(QCoreApplication.translate(
+                    "StageTab", "Connected ({0})").format(client_count))
                 status = "connected"
         if self.tcp_status_label.property("status") != status:
             self.tcp_status_label.setProperty("status", status)
@@ -1814,24 +1932,29 @@ class StageTab(BaseTab):
 
         if not self.config.fixtures:
             QtWidgets.QMessageBox.warning(
-                self, "No Fixtures",
-                "Add fixtures before exporting a stage plot."
+                self, QCoreApplication.translate("StageTab", "No Fixtures"),
+                QCoreApplication.translate(
+                    "StageTab", "Add fixtures before exporting a stage plot.")
             )
             return
 
         dialog = QtWidgets.QDialog(self)
-        dialog.setWindowTitle("Export Stage Plot")
+        dialog.setWindowTitle(QCoreApplication.translate(
+            "StageTab", "Export Stage Plot"))
         layout = QtWidgets.QFormLayout(dialog)
 
         paper_combo = QtWidgets.QComboBox()
         paper_combo.addItems(list(PAPER_PRESETS.keys()))
-        layout.addRow("Paper size (landscape):", paper_combo)
+        layout.addRow(QCoreApplication.translate(
+            "StageTab", "Paper size (landscape):"), paper_combo)
 
         dpi_combo = QtWidgets.QComboBox()
         dpi_combo.addItems(["150", "300"])
         dpi_combo.setCurrentText("300")
-        dpi_combo.setToolTip("Only used for PNG output; PDF is vector.")
-        layout.addRow("PNG resolution (dpi):", dpi_combo)
+        dpi_combo.setToolTip(QCoreApplication.translate(
+            "StageTab", "Only used for PNG output; PDF is vector."))
+        layout.addRow(QCoreApplication.translate(
+            "StageTab", "PNG resolution (dpi):"), dpi_combo)
 
         buttons = QtWidgets.QDialogButtonBox(
             QtWidgets.QDialogButtonBox.StandardButton.Ok |
@@ -1851,8 +1974,9 @@ class StageTab(BaseTab):
         default_path = os.path.join(default_dir, default_name) if default_dir else default_name
 
         file_path, _ = QtWidgets.QFileDialog.getSaveFileName(
-            self, "Export Stage Plot", default_path,
-            "PDF (*.pdf);;PNG (*.png)"
+            self, QCoreApplication.translate(
+                "StageTab", "Export Stage Plot"), default_path,
+            QCoreApplication.translate("StageTab", "PDF (*.pdf);;PNG (*.png)")
         )
         if not file_path:
             return
@@ -1867,14 +1991,18 @@ class StageTab(BaseTab):
             )
         except Exception as e:
             QtWidgets.QMessageBox.critical(
-                self, "Export Failed",
-                f"Could not export the stage plot:\n{e}"
+                self, QCoreApplication.translate("StageTab", "Export Failed"),
+                QCoreApplication.translate(
+                    "StageTab", "Could not export the stage plot:\n{0}").format(
+                        e)
             )
             return
 
         QtWidgets.QMessageBox.information(
-            self, "Exported",
-            f"Stage plot exported as {fmt.upper()}:\n{file_path}"
+            self, QCoreApplication.translate("StageTab", "Exported"),
+            QCoreApplication.translate(
+                "StageTab", "Stage plot exported as {0}:\n{1}").format(
+                    fmt.upper(), file_path)
         )
 
     # ── Plan overlay chrome ───────────────────────────────────────────
@@ -1936,7 +2064,9 @@ class StageTab(BaseTab):
         # Only the DATA color is widget-local; the hairline comes from
         # the theme's #GroupRow rule.
         row.setStyleSheet(f"#GroupRow {{ border-left: 3px solid {color}; }}")
-        row.setToolTip(f"Select the fixtures of '{name}' on the plan")
+        row.setToolTip(QCoreApplication.translate(
+            "StageTab", "Select the fixtures of '{0}' on the plan").format(
+                name))
 
         layout = QtWidgets.QHBoxLayout(row)
         layout.setContentsMargins(13, 8, 16, 8)
@@ -2006,7 +2136,9 @@ class StageTab(BaseTab):
         if not name:
             return
         new_name, ok = QtWidgets.QInputDialog.getText(
-            self, "Rename Mark", "Name:", text=name)
+            self, QCoreApplication.translate(
+                "StageTab", "Rename Mark"), QCoreApplication.translate(
+                "StageTab", "Name:"), text=name)
         if not ok:
             return
         new_name = new_name.strip()
@@ -2021,8 +2153,10 @@ class StageTab(BaseTab):
             return
         self.marks_list.setCurrentItem(item)
         menu = QtWidgets.QMenu(self.marks_list)
-        rename_action = menu.addAction("Rename...")
-        delete_action = menu.addAction("Delete")
+        rename_action = menu.addAction(QCoreApplication.translate(
+            "StageTab", "Rename..."))
+        delete_action = menu.addAction(QCoreApplication.translate(
+            "StageTab", "Delete"))
         chosen = menu.exec(self.marks_list.viewport().mapToGlobal(pos))
         if chosen == rename_action:
             self._rename_selected_mark()
@@ -2098,8 +2232,11 @@ class StageTab(BaseTab):
             chip.setCheckable(True)
             self._style_segment(chip)
             chip.setToolTip(
-                f"Edit only '{layer.name}' (others ghost to a locked "
-                "reference).\nRight-click for visibility / edit / remove."
+                QCoreApplication.translate(
+                    "StageTab",
+                    "Edit only '{0}' (others ghost to a locked reference).\n"
+                    "Right-click for visibility / edit / remove.").format(
+                        layer.name)
             )
             chip.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
             chip.clicked.connect(
@@ -2118,9 +2255,13 @@ class StageTab(BaseTab):
             return
         menu = QtWidgets.QMenu(self)
         vis_action = menu.addAction(
-            "Hide layer" if layer.visible else "Show layer")
-        edit_action = menu.addAction("Edit...")
-        remove_action = menu.addAction("Remove")
+            QCoreApplication.translate(
+                "StageTab", "Hide layer") if layer.visible else QCoreApplication.translate(
+                    "StageTab", "Show layer"))
+        edit_action = menu.addAction(QCoreApplication.translate(
+            "StageTab", "Edit..."))
+        remove_action = menu.addAction(QCoreApplication.translate(
+            "StageTab", "Remove"))
         action = menu.exec(chip.mapToGlobal(pos))
         if action is vis_action:
             self._set_layer_visible(name, not layer.visible)
@@ -2201,7 +2342,10 @@ class StageTab(BaseTab):
         status label, the lock hint and the plan overlays."""
         active = self.stage_view.active_layer if hasattr(self, "stage_view") else None
         self.active_layer_label.setText(
-            f"Editing: {active} only" if active else "Editing: all layers"
+            QCoreApplication.translate(
+                "StageTab", "Editing: {0} only").format(
+                    active) if active else QCoreApplication.translate(
+                    "StageTab", "Editing: all layers")
         )
         # setFont emits itemChanged; these are not check-state edits.
         self.layer_list.blockSignals(True)
@@ -2244,14 +2388,17 @@ class StageTab(BaseTab):
         layout = QtWidgets.QFormLayout(dialog)
 
         name_edit = QtWidgets.QLineEdit(name)
-        name_edit.setPlaceholderText("e.g. Top truss")
-        layout.addRow("Name:", name_edit)
+        name_edit.setPlaceholderText(QCoreApplication.translate(
+            "StageTab", "e.g. Top truss"))
+        layout.addRow(QCoreApplication.translate(
+            "StageTab", "Name:"), name_edit)
 
         z_spin = QtWidgets.QDoubleSpinBox()
         z_spin.setRange(0.0, 100.0)
         z_spin.setSingleStep(0.5)
         z_spin.setValue(z_height)
-        layout.addRow("Height (m):", z_spin)
+        layout.addRow(QCoreApplication.translate(
+            "StageTab", "Height (m):"), z_spin)
 
         buttons = QtWidgets.QDialogButtonBox(
             QtWidgets.QDialogButtonBox.StandardButton.Ok |
@@ -2270,13 +2417,17 @@ class StageTab(BaseTab):
 
     def _add_layer(self):
         from config.models import StageLayer
-        result = self._layer_dialog("Add Stage Layer")
+        result = self._layer_dialog(QCoreApplication.translate(
+            "StageTab", "Add Stage Layer"))
         if result is None:
             return
         name, z_height = result
         if self.config.get_stage_layer(name) is not None:
             QtWidgets.QMessageBox.warning(
-                self, "Layer Exists", f"A layer named '{name}' already exists."
+                self, QCoreApplication.translate(
+                    "StageTab", "Layer Exists"), QCoreApplication.translate(
+                        "StageTab", "A layer named '{0}' already exists.").format(
+                            name)
             )
             return
         self.config.stage_layers.append(StageLayer(name=name, z_height=z_height))
@@ -2297,13 +2448,17 @@ class StageTab(BaseTab):
         layer = self._selected_layer()
         if layer is None:
             return
-        result = self._layer_dialog("Edit Stage Layer", layer.name, layer.z_height)
+        result = self._layer_dialog(QCoreApplication.translate(
+            "StageTab", "Edit Stage Layer"), layer.name, layer.z_height)
         if result is None:
             return
         new_name, new_z = result
         if new_name != layer.name and self.config.get_stage_layer(new_name) is not None:
             QtWidgets.QMessageBox.warning(
-                self, "Layer Exists", f"A layer named '{new_name}' already exists."
+                self, QCoreApplication.translate(
+                    "StageTab", "Layer Exists"), QCoreApplication.translate(
+                        "StageTab", "A layer named '{0}' already exists.").format(
+                            new_name)
             )
             return
 
@@ -2335,10 +2490,12 @@ class StageTab(BaseTab):
         assigned = sum(1 for f in self.config.fixtures if f.layer == layer.name)
         if assigned:
             reply = QtWidgets.QMessageBox.question(
-                self, "Remove Layer?",
-                f"'{layer.name}' has {assigned} fixture(s) assigned.\n\n"
-                "Remove the layer? The fixtures keep their height but lose "
-                "the layer assignment.",
+                self, QCoreApplication.translate("StageTab", "Remove Layer?"),
+                QCoreApplication.translate(
+                    "StageTab",
+                    "'{0}' has {1} fixture(s) assigned.\n"
+                    "\nRemove the layer? The fixtures keep their height but "
+                    "lose the layer assignment.").format(layer.name, assigned),
                 QtWidgets.QMessageBox.StandardButton.Yes |
                 QtWidgets.QMessageBox.StandardButton.No
             )
@@ -2415,7 +2572,8 @@ class StageTab(BaseTab):
         Item data carries the layer name ('' = no layer)."""
         self.layer_combo.blockSignals(True)
         self.layer_combo.clear()
-        self.layer_combo.addItem("No layer", "")
+        self.layer_combo.addItem(QCoreApplication.translate(
+            "StageTab", "No layer"), "")
         if self.config:
             for layer in self.config.stage_layers:
                 self.layer_combo.addItem(
@@ -2434,11 +2592,13 @@ class StageTab(BaseTab):
     def _update_selection_inspector(self, selected):
         """Selection name, group color, X/Y/Z stat tiles, combo enable."""
         if not selected:
-            self.selection_label.setText("No fixture selected")
+            self.selection_label.setText(QCoreApplication.translate(
+                "StageTab", "No fixture selected"))
         elif len(selected) == 1:
             self.selection_label.setText(selected[0].fixture_name)
         else:
-            self.selection_label.setText(f"{len(selected)} fixtures")
+            self.selection_label.setText(QCoreApplication.translate(
+                "StageTab", "{0} fixtures").format(len(selected)))
 
         group_names = {getattr(item, "group", "") or "" for item in selected}
         if len(group_names) == 1 and next(iter(group_names)):

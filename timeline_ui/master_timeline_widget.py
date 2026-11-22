@@ -5,7 +5,7 @@
 import logging
 from PyQt6.QtWidgets import (QWidget, QHBoxLayout, QVBoxLayout, QLabel,
                              QScrollArea, QStyle, QStyleOption)
-from PyQt6.QtCore import Qt, pyqtSignal, QPoint, QRectF
+from PyQt6.QtCore import QCoreApplication, Qt, pyqtSignal, QPoint, QRectF
 from PyQt6.QtGui import QPainter, QPen, QColor, QPolygon, QBrush
 from .timeline_widget import TimelineWidget, iter_grid_steps, HEADER_COLUMN_WIDTH
 
@@ -429,7 +429,7 @@ class MasterTimelineContainer(QWidget):
         timeline_label = QWidget()
         timeline_label.setFixedWidth(HEADER_COLUMN_WIDTH)
         label_layout = QHBoxLayout(timeline_label)
-        master_label = QLabel("Master Timeline")
+        master_label = QLabel(QCoreApplication.translate("MasterTimelineWidget", "Master Timeline"))
         master_label.setStyleSheet("font-weight: bold; font-size: 13px;")
         label_layout.addWidget(master_label)
         label_layout.addStretch()
@@ -440,7 +440,7 @@ class MasterTimelineContainer(QWidget):
         # and per-lane snap lives on each lane's own checkbox.
         self.info_widget = QLabel()
         self.info_widget.setStyleSheet(self._info_style(10))
-        self.info_widget.setText("Time: 0.00s | BPM: 120.0 | Zoom: 1.0x")
+        self.info_widget.setText(QCoreApplication.translate("MasterTimelineWidget", "Time: 0.00s | BPM: 120.0 | Zoom: 1.0x"))
 
         # NOTE: this top_row_layout is what shows BEFORE detach_pieces() runs
         # (e.g., if MasterTimelineContainer is used standalone). Once embedded
@@ -489,9 +489,9 @@ class MasterTimelineContainer(QWidget):
         if self.timeline_widget.song_structure:
             current_part = self.timeline_widget.song_structure.get_part_at_time(position)
             if current_part:
-                part_info = f" | Part: {current_part.name}"
+                part_info = QCoreApplication.translate("MasterTimelineWidget", " | Part: {0}").format(current_part.name)
 
-        info_text = f"Time: {position:.2f}s | BPM: {current_bpm:.1f} | Zoom: {zoom_factor:.1f}x{part_info}"
+        info_text = QCoreApplication.translate("MasterTimelineWidget", "Time: {0:.2f}s | BPM: {1:.1f} | Zoom: {2:.1f}x{3}").format(position, current_bpm, zoom_factor, part_info)
         self.info_widget.setText(info_text)
 
     def set_bpm(self, bpm: float):
@@ -562,7 +562,7 @@ class MasterTimelineContainer(QWidget):
             row = QHBoxLayout(header)
             row.setContentsMargins(12, 0, 8, 0)
             row.setSpacing(6)
-            row.addWidget(MicroLabel("Parts", point_size=8))
+            row.addWidget(MicroLabel(QCoreApplication.translate("MasterTimelineWidget", "Parts"), point_size=8))
             row.addStretch()
             if hasattr(self, "info_widget") and self.info_widget is not None:
                 self.info_widget.hide()
@@ -581,7 +581,7 @@ class MasterTimelineContainer(QWidget):
         controls_row = QHBoxLayout()
         controls_row.setContentsMargins(0, 0, 0, 0)
         controls_row.setSpacing(6)
-        master_label = QLabel("Master")
+        master_label = QLabel(QCoreApplication.translate("MasterTimelineWidget", "Master"))
         master_label.setStyleSheet("font-weight: bold; font-size: 12px;")
         controls_row.addWidget(master_label)
         controls_row.addStretch()

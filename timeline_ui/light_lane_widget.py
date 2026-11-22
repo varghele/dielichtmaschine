@@ -6,7 +6,7 @@ import logging
 from PyQt6.QtWidgets import (QWidget, QHBoxLayout, QVBoxLayout,
                              QPushButton, QCheckBox, QLineEdit, QFrame,
                              QScrollArea, QMessageBox)
-from PyQt6.QtCore import Qt, pyqtSignal
+from PyQt6.QtCore import QCoreApplication, Qt, pyqtSignal
 from PyQt6.QtGui import QUndoStack
 from .timeline_widget import (TimelineWidget, HEADER_COLUMN_WIDTH,
                               sublane_band_geometry)
@@ -229,7 +229,7 @@ class LightLaneWidget(QFrame):
         # tooltip carries the resolved target list. The mock's ▾ triangle
         # is not in the brand fonts (tofu on the offscreen platform), so
         # the drop indicator is U+2193, which IBM Plex Mono does carry.
-        self.targets_chip = QPushButton("TARGETS ↓")
+        self.targets_chip = QPushButton(QCoreApplication.translate("LightLaneWidget", "TARGETS ↓"))
         self.targets_chip.setFixedHeight(20)
         self.targets_chip.setFont(mono_font(8, tracking_em=0.08))
         self.targets_chip.setProperty("density", "compact")
@@ -242,7 +242,7 @@ class LightLaneWidget(QFrame):
         # + BLOCK chip: the existing add-block action. As the lane's
         # primary action it carries the accent chip role (accent border
         # + accent ink, same metrics as lane-chip).
-        self.add_block_button = QPushButton("+ BLOCK")
+        self.add_block_button = QPushButton(QCoreApplication.translate("LightLaneWidget", "+ BLOCK"))
         self.add_block_button.setFixedHeight(20)
         self.add_block_button.setFont(mono_font(8, tracking_em=0.08))
         self.add_block_button.setProperty("density", "compact")
@@ -256,7 +256,7 @@ class LightLaneWidget(QFrame):
         # Per-lane snap state keeps working (TimelineGrid syncs it from
         # the toolbar SNAP chip), but the checkbox no longer shows in the
         # 260px header - the global chip is the single visible control.
-        self.snap_checkbox = QCheckBox("Snap", widget)
+        self.snap_checkbox = QCheckBox(QCoreApplication.translate("LightLaneWidget", "Snap"), widget)
         self.snap_checkbox.setChecked(True)
         self.snap_checkbox.toggled.connect(self.on_snap_toggled)
         self.snap_checkbox.hide()
@@ -297,7 +297,7 @@ class LightLaneWidget(QFrame):
 
     def _fixture_count_text(self) -> str:
         """`N FIX` label text for the lane header."""
-        return f"{self._fixture_count()} FIX"
+        return QCoreApplication.translate("LightLaneWidget", "{0} FIX").format(self._fixture_count())
 
     def _refresh_fixture_count(self):
         """Update the N FIX micro-label after targets/groups change."""
@@ -387,13 +387,13 @@ class LightLaneWidget(QFrame):
         # drives RGB intensity for no-dimmer fixtures) - mirrors
         # _count_sublanes / get_sublane_index exactly.
         if self.capabilities.has_dimmer or self.capabilities.has_colour:
-            rows.append(("dimmer", "DIM"))
+            rows.append(("dimmer", QCoreApplication.translate("LightLaneWidget", "DIM")))
         if self.capabilities.has_colour:
-            rows.append(("colour", "COL"))
+            rows.append(("colour", QCoreApplication.translate("LightLaneWidget", "COL")))
         if self.capabilities.has_movement:
-            rows.append(("movement", "MOV"))
+            rows.append(("movement", QCoreApplication.translate("LightLaneWidget", "MOV")))
         if self.capabilities.has_special:
-            rows.append(("special", "SPC"))
+            rows.append(("special", QCoreApplication.translate("LightLaneWidget", "SPC")))
         return rows
 
     # Height of one DIM/COL/MOV/SPC micro-label row in the header.
@@ -552,7 +552,7 @@ class LightLaneWidget(QFrame):
         # removes it, redo re-adds it.
         undo_stack = self._get_undo_stack()
         if undo_stack is not None:
-            undo_stack.push(AddBlockCommand(self, block, "Add Block"))
+            undo_stack.push(AddBlockCommand(self, block, QCoreApplication.translate("LightLaneWidget", "Add Block")))
         self.block_edited.emit()
 
     def remove_light_block_widget(self, block_widget, use_undo=True):
@@ -570,7 +570,7 @@ class LightLaneWidget(QFrame):
 
         if undo_stack:
             # Use undo command
-            cmd = DeleteBlockCommand(self, block, "Delete Block")
+            cmd = DeleteBlockCommand(self, block, QCoreApplication.translate("LightLaneWidget", "Delete Block"))
             undo_stack.push(cmd)
         else:
             # Direct removal
@@ -672,7 +672,7 @@ class LightLaneWidget(QFrame):
             return
         targets = self.lane.fixture_targets
         if not targets:
-            chip.setToolTip("No targets")
+            chip.setToolTip(QCoreApplication.translate("LightLaneWidget", "No targets"))
             return
 
         from utils.target_resolver import get_target_display_name
@@ -785,9 +785,14 @@ class LightLaneWidget(QFrame):
                 undo_stack = self._get_undo_stack()
                 if undo_stack is not None and results:
                     # One macro so a single Ctrl+Z removes the whole paste.
-                    undo_stack.beginMacro(
-                        f"Paste {len(results)} Effect"
-                        f"{'s' if len(results) != 1 else ''}")
+                    if len(results) == 1:
+                        macro = QCoreApplication.translate(
+                            "LightLaneWidget", "Paste 1 Effect")
+                    else:
+                        macro = QCoreApplication.translate(
+                            "LightLaneWidget", "Paste {0} Effects").format(
+                                len(results))
+                    undo_stack.beginMacro(macro)
                 for lane_widget, new_block in results:
                     # Add to lane data
                     lane_widget.lane.light_blocks.append(new_block)
@@ -795,7 +800,7 @@ class LightLaneWidget(QFrame):
                     lane_widget.create_light_block_widget(new_block)
                     if undo_stack is not None:
                         undo_stack.push(AddBlockCommand(
-                            lane_widget, new_block, "Paste Effect"))
+                            lane_widget, new_block, QCoreApplication.translate("LightLaneWidget", "Paste Effect")))
                 if undo_stack is not None and results:
                     undo_stack.endMacro()
                 if results:
@@ -816,7 +821,7 @@ class LightLaneWidget(QFrame):
         # Already applied, so the push-time redo is a guarded no-op.
         undo_stack = self._get_undo_stack()
         if undo_stack is not None:
-            undo_stack.push(AddBlockCommand(self, new_block, "Paste Effect"))
+            undo_stack.push(AddBlockCommand(self, new_block, QCoreApplication.translate("LightLaneWidget", "Paste Effect")))
         self.block_edited.emit()
 
     def _locked(self) -> bool:
@@ -903,8 +908,8 @@ class LightLaneWidget(QFrame):
             if not is_compatible:
                 QMessageBox.warning(
                     self,
-                    "Incompatible Riff",
-                    f"Cannot drop riff '{riff.name}' on this lane.\n{reason}"
+                    QCoreApplication.translate("LightLaneWidget", "Incompatible Riff"),
+                    QCoreApplication.translate("LightLaneWidget", "Cannot drop riff '{0}' on this lane.\n{1}").format(riff.name, reason)
                 )
                 return
 
@@ -932,7 +937,7 @@ class LightLaneWidget(QFrame):
             # Use undo command
             cmd = InsertRiffCommand(
                 self, new_block, removed_blocks,
-                f"Insert Riff: {riff.name}"
+                QCoreApplication.translate("LightLaneWidget", "Insert Riff: {0}").format(riff.name)
             )
             undo_stack.push(cmd)
         else:

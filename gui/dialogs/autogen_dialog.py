@@ -30,7 +30,7 @@ from PyQt6.QtWidgets import (
     QDoubleSpinBox, QSpinBox, QLabel, QComboBox, QPushButton, QCheckBox,
     QColorDialog, QButtonGroup, QSizePolicy,
 )
-from PyQt6.QtCore import Qt, QThread, pyqtSignal
+from PyQt6.QtCore import QT_TRANSLATE_NOOP, QCoreApplication, Qt, QThread, pyqtSignal
 from PyQt6.QtGui import QColor, QFont
 
 from autogen.matcher import AutogenConfig
@@ -51,7 +51,9 @@ MODE_AUDIO = "audio"
 MODE_PRESET = "preset"
 MODE_CUSTOM = "custom"
 
-AUTO_KEY = "(Auto-detect)"
+# Marked for translation; the combo shows the translation and carries
+# None as its data, so nothing reads the displayed text back.
+AUTO_KEY = QT_TRANSLATE_NOOP("AutogenDialog", "(Auto-detect)")
 
 KEY_SIGNATURES = [
     AUTO_KEY, "C major", "C minor",
@@ -106,7 +108,7 @@ class AutogenWorker(QThread):
     def run(self):
         try:
             from autogen.generator import generate_show
-            self.progress.emit("Analyzing audio...")
+            self.progress.emit(QCoreApplication.translate("AutogenDialog", "Analyzing audio..."))
             lanes, report = generate_show(
                 self.audio_path,
                 self.song_structure,
@@ -115,7 +117,7 @@ class AutogenWorker(QThread):
                 self.key_signature,
                 self.song_palette,
             )
-            self.progress.emit("Done!")
+            self.progress.emit(QCoreApplication.translate("AutogenDialog", "Done!"))
             self.generated.emit(lanes, report)
         except Exception as e:
             self.error.emit(str(e))
@@ -211,22 +213,21 @@ def section_picks(section, max_groups: int = 3) -> str:
     active group, truncated with a count when there are more."""
     active = _active_groups(section)
     if not active:
-        return "no groups active"
+        return QCoreApplication.translate("AutogenDialog", "no groups active")
     shown = active[:max_groups]
     text = " · ".join(f"{name.upper()} {gr.groove_rudiment}"
                       for name, gr in shown)
     extra = len(active) - len(shown)
     if extra:
-        text += f" · +{extra} more"
+        text += QCoreApplication.translate("AutogenDialog", " · +{0} more").format(extra)
     return text
 
 
 def section_why(section) -> str:
     """The reference's WHY column, built only from recorded audio
     features (autogen/report.py SectionReport)."""
-    vocals = "vocals" if section.vocal_presence >= 0.5 else "no vocals"
-    return (f"energy {section.relative_energy:.2f}, "
-            f"flux {section.spectral_flux:.2f}, {vocals}")
+    vocals = QCoreApplication.translate("AutogenDialog", "vocals") if section.vocal_presence >= 0.5 else QCoreApplication.translate("AutogenDialog", "no vocals")
+    return (QCoreApplication.translate("AutogenDialog", "energy {0:.2f}, flux {1:.2f}, {2}").format(section.relative_energy, section.spectral_flux, vocals))
 
 
 def peak_section_index(report) -> int:
@@ -287,7 +288,7 @@ class _ColorButton(QPushButton):
 
     def _pick_color(self):
         r, g, b = self.color
-        color = QColorDialog.getColor(QColor(r, g, b), self, "Pick Color")
+        color = QColorDialog.getColor(QColor(r, g, b), self, QCoreApplication.translate("AutogenDialog", "Pick Color"))
         if color.isValid():
             self.color = (color.red(), color.green(), color.blue())
             self._update_style()
@@ -363,7 +364,7 @@ class _InspectorRow(QWidget):
         row.setContentsMargins(14, 10, 14, 10)
         row.setSpacing(10)
 
-        self.name_label = DisplayLabel(section.name or "SECTION",
+        self.name_label = DisplayLabel(section.name or QCoreApplication.translate("AutogenDialog", "SECTION"),
                                        point_size=11)
         self.name_label.setFixedWidth(INSPECTOR_SECTION_WIDTH)
         row.addWidget(self.name_label)
@@ -403,7 +404,7 @@ class AutogenDialog(QDialog):
     def __init__(self, parent=None, *, audio_path=None, show=None,
                  report=None):
         super().__init__(parent)
-        self.setWindowTitle("Autogenerate Song")
+        self.setWindowTitle(QCoreApplication.translate("AutogenDialog", "Autogenerate Song"))
         self.setMinimumSize(1180, 680)
 
         self._audio_path = audio_path if audio_path is not None \
@@ -471,9 +472,9 @@ class AutogenDialog(QDialog):
         row = QHBoxLayout(header)
         row.setContentsMargins(18, 0, 18, 0)
 
-        title = "Autogenerate song"
+        title = QCoreApplication.translate("AutogenDialog", "Autogenerate song")
         if self._show is not None and getattr(self._show, "name", ""):
-            title = f"Autogenerate song · {self._show.name}"
+            title = QCoreApplication.translate("AutogenDialog", "Autogenerate song · {0}").format(self._show.name)
         self.title_label = DisplayLabel(title, point_size=12,
                                         weight=QFont.Weight.Bold,
                                         tracking_em=0.08)
@@ -495,23 +496,31 @@ class AutogenDialog(QDialog):
         layout.setContentsMargins(20, 20, 20, 20)
         layout.setSpacing(14)
 
-        layout.addWidget(_caption("Audio"))
+        layout.addWidget(_caption(QCoreApplication.translate("AutogenDialog", "Audio")))
         layout.addWidget(self._build_audio_tile())
 
-        layout.addWidget(_caption("Structure"))
+        layout.addWidget(_caption(QCoreApplication.translate("AutogenDialog", "Structure")))
         layout.addWidget(self._build_structure_tile())
 
-        layout.addWidget(_caption("Song key"))
+        layout.addWidget(_caption(QCoreApplication.translate("AutogenDialog", "Song key")))
         self.key_combo = QComboBox()
-        self.key_combo.addItems(KEY_SIGNATURES)
+        # Key names are generator identifiers and stay as they are; the
+        # result reads currentData(), never the displayed text.
+        for key in KEY_SIGNATURES:
+            if key == AUTO_KEY:
+                self.key_combo.addItem(
+                    QCoreApplication.translate("AutogenDialog", AUTO_KEY),
+                    None)
+            else:
+                self.key_combo.addItem(key, key)
         layout.addWidget(self.key_combo)
 
-        layout.addWidget(_caption("Colour palette"))
+        layout.addWidget(_caption(QCoreApplication.translate("AutogenDialog", "Colour palette")))
         layout.addWidget(self._build_palette_block())
 
         layout.addStretch(1)
 
-        self.generate_btn = QPushButton("GENERATE")
+        self.generate_btn = QPushButton(QCoreApplication.translate("AutogenDialog", "GENERATE"))
         self.generate_btn.setObjectName("AutogenGenerateButton")
         self.generate_btn.setProperty("role", "cta-accent")
         self.generate_btn.setFixedHeight(44)
@@ -519,14 +528,14 @@ class AutogenDialog(QDialog):
         self.generate_btn.clicked.connect(self._on_accepted)
         layout.addWidget(self.generate_btn)
 
-        self.cancel_btn = QPushButton("CANCEL")
+        self.cancel_btn = QPushButton(QCoreApplication.translate("AutogenDialog", "CANCEL"))
         self.cancel_btn.setObjectName("AutogenCancelButton")
         self.cancel_btn.setProperty("role", "cta-outline")
         self.cancel_btn.clicked.connect(self.reject)
         layout.addWidget(self.cancel_btn)
 
         self.footer_hint = QLabel(
-            "Output is ordinary timeline blocks · edit anything afterwards.")
+            QCoreApplication.translate("AutogenDialog", "Output is ordinary timeline blocks · edit anything afterwards."))
         self.footer_hint.setObjectName("AutogenFooterHint")
         self.footer_hint.setProperty("role", "stat-caption")
         self.footer_hint.setAlignment(Qt.AlignmentFlag.AlignHCenter)
@@ -540,7 +549,7 @@ class AutogenDialog(QDialog):
 
         self.audio_label = QLabel(
             os.path.basename(self._audio_path) if self._audio_path
-            else "no audio file loaded")
+            else QCoreApplication.translate("AutogenDialog", "no audio file loaded"))
         self.audio_label.setObjectName("AutogenAudioName")
         self.audio_label.setFont(mono_font(9))
         tile.row.addWidget(self.audio_label)
@@ -565,12 +574,21 @@ class AutogenDialog(QDialog):
         parts = list(getattr(self._show, "parts", []) or []) \
             if self._show is not None else []
         if not parts:
-            return "no song parts defined"
+            return QCoreApplication.translate("AutogenDialog", "no song parts defined")
         bars = sum(int(getattr(p, "num_bars", 0) or 0) for p in parts)
-        part_word = "part" if len(parts) == 1 else "parts"
-        bar_word = "bar" if bars == 1 else "bars"
-        return (f"From song · Structure · {len(parts)} {part_word}, "
-                f"{bars} {bar_word}")
+        if len(parts) == 1:
+            part_text = QCoreApplication.translate("AutogenDialog", "1 part")
+        else:
+            part_text = QCoreApplication.translate(
+                "AutogenDialog", "{0} parts").format(len(parts))
+        if bars == 1:
+            bar_text = QCoreApplication.translate("AutogenDialog", "1 bar")
+        else:
+            bar_text = QCoreApplication.translate(
+                "AutogenDialog", "{0} bars").format(bars)
+        return QCoreApplication.translate(
+            "AutogenDialog", "From song · Structure · {0}, {1}").format(
+                part_text, bar_text)
 
     def _build_palette_block(self) -> QWidget:
         block = QWidget()
@@ -587,9 +605,9 @@ class AutogenDialog(QDialog):
         self.palette_mode_group = QButtonGroup(self)
         self.palette_mode_group.setExclusive(True)
         self._mode_buttons = {}
-        for mode, text in ((MODE_AUDIO, "FROM AUDIO"),
-                           (MODE_PRESET, "PRESET"),
-                           (MODE_CUSTOM, "CUSTOM")):
+        for mode, text in ((MODE_AUDIO, QCoreApplication.translate("AutogenDialog", "FROM AUDIO")),
+                           (MODE_PRESET, QCoreApplication.translate("AutogenDialog", "PRESET")),
+                           (MODE_CUSTOM, QCoreApplication.translate("AutogenDialog", "CUSTOM"))):
             btn = QPushButton(text)
             btn.setCheckable(True)
             btn.setProperty("role", "mode-chip")
@@ -612,7 +630,7 @@ class AutogenDialog(QDialog):
         # after the worker analyzed the file. Say so rather than paint
         # colors the generator will not use.
         self.palette_hint = QLabel(
-            "Colours are derived from the audio analysis.")
+            QCoreApplication.translate("AutogenDialog", "Colours are derived from the audio analysis."))
         self.palette_hint.setObjectName("AutogenPaletteHint")
         self.palette_hint.setProperty("role", "hint-box")
         self.palette_hint.setWordWrap(True)
@@ -644,7 +662,7 @@ class AutogenDialog(QDialog):
         count_layout = QHBoxLayout(count_row)
         count_layout.setContentsMargins(0, 0, 0, 0)
         count_layout.setSpacing(6)
-        count_layout.addWidget(_caption("Colours"))
+        count_layout.addWidget(_caption(QCoreApplication.translate("AutogenDialog", "Colours")))
         self.num_colors_group = QButtonGroup(self)
         self.num_colors_group.setExclusive(True)
         self._count_buttons = []
@@ -663,7 +681,7 @@ class AutogenDialog(QDialog):
         count_layout.addStretch()
         layout.addWidget(count_row)
 
-        self.include_white_check = QCheckBox("Include white")
+        self.include_white_check = QCheckBox(QCoreApplication.translate("AutogenDialog", "Include white"))
         self.include_white_check.setChecked(True)
         self.include_white_check.toggled.connect(
             self.white_swatch.setVisible)
@@ -679,20 +697,20 @@ class AutogenDialog(QDialog):
         layout.setContentsMargins(20, 20, 20, 20)
         layout.setSpacing(12)
 
-        layout.addWidget(self._section_caption("Generation parameters"))
+        layout.addWidget(self._section_caption(QCoreApplication.translate("AutogenDialog", "Generation parameters")))
         layout.addWidget(self._build_params_grid())
         layout.addSpacing(4)
 
         head = QHBoxLayout()
         head.setContentsMargins(0, 0, 0, 0)
         self.inspector_caption = MicroLabel(
-            "Generation inspector · last run", point_size=7, tracking_em=0.12)
+            QCoreApplication.translate("AutogenDialog", "Generation inspector · last run"), point_size=7, tracking_em=0.12)
         self.inspector_caption.setProperty("role", "stat-caption")
         head.addWidget(self.inspector_caption)
         head.addStretch()
         sections = getattr(self._report, "sections", None) or []
         self.inspector_status = MicroLabel(
-            f"{len(sections)} sections" if sections else "no run yet",
+            QCoreApplication.translate("AutogenDialog", "{0} sections").format(len(sections)) if sections else QCoreApplication.translate("AutogenDialog", "no run yet"),
             point_size=7, tracking_em=0.1)
         head.addWidget(self.inspector_status)
         layout.addLayout(head)
@@ -701,8 +719,8 @@ class AutogenDialog(QDialog):
         layout.addStretch(1)
 
         self.inspector_hint = QLabel(
-            "Rows describe the previous run in this session. "
-            "Generating again replaces them.")
+            QCoreApplication.translate("AutogenDialog", "Rows describe the previous run in this session. "
+            "Generating again replaces them."))
         self.inspector_hint.setObjectName("AutogenInspectorHint")
         self.inspector_hint.setProperty("role", "stat-caption")
         layout.addWidget(self.inspector_hint)
@@ -728,11 +746,11 @@ class AutogenDialog(QDialog):
         self.phrase_length_spin = QSpinBox()
         self.phrase_length_spin.setRange(2, 8)
         self.phrase_length_spin.setValue(4)
-        self.phrase_length_spin.setSuffix(" bars")
+        self.phrase_length_spin.setSuffix(QCoreApplication.translate("AutogenDialog", " bars"))
 
         self.groove_fill_spin = self._ratio_spin(0.5, 0.9, 0.75)
         self.groove_fill_spin.setToolTip(
-            "Proportion of a phrase spent on groove (the rest is fill)")
+            QCoreApplication.translate("AutogenDialog", "Proportion of a phrase spent on groove (the rest is fill)"))
         self.fidelity_spin = self._ratio_spin(0.0, 1.0, 0.6)
         self.coherence_spin = self._ratio_spin(0.0, 1.0, 0.4)
         self.tolerance_spin = self._ratio_spin(0.05, 0.5, 0.2)
@@ -740,13 +758,13 @@ class AutogenDialog(QDialog):
         self.prism_threshold_spin = self._ratio_spin(0.0, 1.0, 0.8)
 
         fields = [
-            ("Phrase length", self.phrase_length_spin),
-            ("Groove / fill ratio", self.groove_fill_spin),
-            ("Fidelity weight", self.fidelity_spin),
-            ("Coherence weight", self.coherence_spin),
-            ("Tolerance band", self.tolerance_spin),
-            ("Gobo threshold", self.gobo_threshold_spin),
-            ("Prism threshold", self.prism_threshold_spin),
+            (QCoreApplication.translate("AutogenDialog", "Phrase length"), self.phrase_length_spin),
+            (QCoreApplication.translate("AutogenDialog", "Groove / fill ratio"), self.groove_fill_spin),
+            (QCoreApplication.translate("AutogenDialog", "Fidelity weight"), self.fidelity_spin),
+            (QCoreApplication.translate("AutogenDialog", "Coherence weight"), self.coherence_spin),
+            (QCoreApplication.translate("AutogenDialog", "Tolerance band"), self.tolerance_spin),
+            (QCoreApplication.translate("AutogenDialog", "Gobo threshold"), self.gobo_threshold_spin),
+            (QCoreApplication.translate("AutogenDialog", "Prism threshold"), self.prism_threshold_spin),
         ]
         for index, (caption, editor) in enumerate(fields):
             grid.addWidget(_ParamField(caption, editor), index // 4,
@@ -778,10 +796,10 @@ class AutogenDialog(QDialog):
         header_row = QHBoxLayout(header)
         header_row.setContentsMargins(14, 8, 14, 8)
         header_row.setSpacing(10)
-        for text, width in (("Section", INSPECTOR_SECTION_WIDTH),
-                            ("Envelope", INSPECTOR_ENVELOPE_WIDTH),
-                            ("Picks (per group)", None),
-                            ("Why", INSPECTOR_WHY_WIDTH)):
+        for text, width in ((QCoreApplication.translate("AutogenDialog", "Section"), INSPECTOR_SECTION_WIDTH),
+                            (QCoreApplication.translate("AutogenDialog", "Envelope"), INSPECTOR_ENVELOPE_WIDTH),
+                            (QCoreApplication.translate("AutogenDialog", "Picks (per group)"), None),
+                            (QCoreApplication.translate("AutogenDialog", "Why"), INSPECTOR_WHY_WIDTH)):
             label = _caption(text)
             if width is not None:
                 label.setFixedWidth(width)
@@ -792,8 +810,8 @@ class AutogenDialog(QDialog):
         sections = getattr(self._report, "sections", None) or []
         if not sections:
             empty = QLabel(
-                "No generation run yet. Choose the palette and parameters, "
-                "then GENERATE - every decision shows up here.")
+                QCoreApplication.translate("AutogenDialog", "No generation run yet. Choose the palette and parameters, "
+                "then GENERATE - every decision shows up here."))
             empty.setObjectName("AutogenInspectorEmpty")
             empty.setProperty("role", "hint-box")
             empty.setWordWrap(True)
@@ -835,7 +853,7 @@ class AutogenDialog(QDialog):
         for btn in (self.color_btn_1, self.color_btn_2, self.color_btn_3):
             btn.setEnabled(editable)
             btn.setToolTip("" if editable else
-                           "Colours come from the selected preset")
+                           QCoreApplication.translate("AutogenDialog", "Colours come from the selected preset"))
         for btn in self._count_buttons:
             btn.setEnabled(editable)
         self.include_white_check.setEnabled(editable)
@@ -907,8 +925,7 @@ class AutogenDialog(QDialog):
             spectral_richness_prism_threshold=self.prism_threshold_spin.value(),
         )
 
-        key_text = self.key_combo.currentText()
-        self.result_key_signature = None if key_text == AUTO_KEY else key_text
+        self.result_key_signature = self.key_combo.currentData()
         self.result_palette = self._build_palette()
 
         self.accept()

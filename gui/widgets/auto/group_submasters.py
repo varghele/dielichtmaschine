@@ -7,7 +7,7 @@ from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QSlider, QLabel,
     QScrollArea, QFrame, QSizePolicy,
 )
-from PyQt6.QtCore import Qt, pyqtSignal
+from PyQt6.QtCore import QCoreApplication, Qt, pyqtSignal
 from typing import List
 
 
@@ -30,7 +30,7 @@ class GroupSubmasterPanel(QWidget):
         layout.setContentsMargins(4, 4, 4, 4)
         layout.setSpacing(2)
 
-        title = QLabel("Group Submasters")
+        title = QLabel(QCoreApplication.translate("GroupSubmasterPanel", "Group Submasters"))
         title.setStyleSheet("font-weight: bold; font-size: 11px;")
         layout.addWidget(title)
 

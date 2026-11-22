@@ -50,7 +50,7 @@ import shutil
 import tempfile
 
 from PyQt6 import QtCore, QtGui, QtWidgets
-from PyQt6.QtCore import Qt, pyqtSignal
+from PyQt6.QtCore import Qt, pyqtSignal, QCoreApplication, QT_TRANSLATE_NOOP
 
 from utils import app_identity
 from utils.morph import preview as morph_preview
@@ -64,14 +64,22 @@ from gui.theme_style import bind_style
 from gui.typography import DisplayLabel
 from gui.widgets.modern_table import apply_modern_table_style
 
-PLAN_FILTER = "Morph plans (*.morphplan.yaml);;All files (*)"
+# Module-level UI strings are only MARKED here (QT_TRANSLATE_NOOP) and
+# translated where shown: a translate() at import time would run before
+# the translator is installed.
+PLAN_FILTER = QT_TRANSLATE_NOOP(
+    "MorphScreen", "Morph plans (*.morphplan.yaml);;All files (*)")
 
 PAGE_TARGET, PAGE_PATCHBAY, PAGE_REVIEW, PAGE_COMMIT = range(4)
 
-STEP_TITLES = ("1 · TARGET", "2 · PATCH", "3 · REVIEW", "4 · COMMIT")
+STEP_TITLES = (QT_TRANSLATE_NOOP("MorphScreen", "1 · TARGET"),
+               QT_TRANSLATE_NOOP("MorphScreen", "2 · PATCH"),
+               QT_TRANSLATE_NOOP("MorphScreen", "3 · REVIEW"),
+               QT_TRANSLATE_NOOP("MorphScreen", "4 · COMMIT"))
 
 #: shown on a preview side whose render came back None
-PREVIEW_UNAVAILABLE = "PREVIEW UNAVAILABLE (no GL / empty song)"
+PREVIEW_UNAVAILABLE = QT_TRANSLATE_NOOP(
+    "MorphScreen", "PREVIEW UNAVAILABLE (no GL / empty song)")
 
 #: slider resolution: one tick = 0.1 s of show time
 PREVIEW_TICKS_PER_SECOND = 10
@@ -97,15 +105,19 @@ class _PreviewWorker(QtCore.QThread):
         try:
             self.ok.emit(self._fn())
         except Exception as exc:   # a failed render must never kill the flow
-            self.fail.emit(f"Preview render failed: {exc}")
+            self.fail.emit(QCoreApplication.translate(
+                "MorphScreen", "Preview render failed: {0}").format(exc))
 
 
 def _config_summary(config, path: str = "") -> str:
     songs = len(getattr(config, "songs", {}) or {})
-    parts = [f"{len(config.fixtures)} fixtures",
-             f"{len(config.groups)} groups"]
+    parts = [QCoreApplication.translate(
+        "MorphScreen", "{0} fixtures").format(len(config.fixtures)),
+             QCoreApplication.translate(
+                 "MorphScreen", "{0} groups").format(len(config.groups))]
     if songs:
-        parts.append(f"{songs} song(s)")
+        parts.append(QCoreApplication.translate(
+            "MorphScreen", "{0} song(s)").format(songs))
     if path:
         parts.insert(0, os.path.basename(path))
     return " · ".join(parts)
@@ -152,18 +164,23 @@ class MorphScreen(QtWidgets.QWidget):
         # window chrome + Cancel button).
         header = QtWidgets.QHBoxLayout()
         header.setSpacing(16)
-        header.addWidget(DisplayLabel("MORPH TO VENUE", point_size=14))
+        header.addWidget(DisplayLabel(QCoreApplication.translate(
+            "MorphScreen", "MORPH TO VENUE"), point_size=14))
         self._step_labels = []
         for title in STEP_TITLES:
-            label = QtWidgets.QLabel(title)
+            label = QtWidgets.QLabel(
+                QCoreApplication.translate("MorphScreen", title))
             label.setStyleSheet("QLabel { padding: 2px 8px; }")
             self._step_labels.append(label)
             header.addWidget(label)
         header.addStretch(1)
-        self.exit_btn = QtWidgets.QPushButton("Exit")
+        self.exit_btn = QtWidgets.QPushButton(QCoreApplication.translate(
+            "MorphScreen", "Exit"))
         self.exit_btn.setToolTip(
-            "Leave the morph screen. A wired, uncommitted plan asks "
-            "whether to keep it for later or discard it.")
+            QCoreApplication.translate(
+                "MorphScreen",
+                "Leave the morph screen. A wired, uncommitted plan asks "
+                "whether to keep it for later or discard it."))
         self.exit_btn.clicked.connect(self.request_exit)
         header.addWidget(self.exit_btn)
         layout.addLayout(header)
@@ -186,11 +203,13 @@ class MorphScreen(QtWidgets.QWidget):
         layout.addWidget(self._stack, 1)
 
         row = QtWidgets.QHBoxLayout()
-        self.back_btn = QtWidgets.QPushButton("Back")
+        self.back_btn = QtWidgets.QPushButton(QCoreApplication.translate(
+            "MorphScreen", "Back"))
         self.back_btn.clicked.connect(self._go_back)
         row.addWidget(self.back_btn)
         row.addStretch(1)
-        self.next_btn = QtWidgets.QPushButton("Next")
+        self.next_btn = QtWidgets.QPushButton(QCoreApplication.translate(
+            "MorphScreen", "Next"))
         self.next_btn.setDefault(True)
         self.next_btn.clicked.connect(self._go_next)
         row.addWidget(self.next_btn)
@@ -206,15 +225,18 @@ class MorphScreen(QtWidgets.QWidget):
         layout.setSpacing(8)
 
         intro = QtWidgets.QLabel(
-            "Morph the open show onto another rig. Pick the venue "
-            "config; the patchbay wires each source lane stream onto "
-            "the target groups. Nothing is written until you commit "
-            "and save.")
+            QCoreApplication.translate(
+                "MorphScreen",
+                "Morph the open show onto another rig. Pick the venue "
+                "config; the patchbay wires each source lane stream onto "
+                "the target groups. Nothing is written until you commit and "
+                "save."))
         intro.setWordWrap(True)
         layout.addWidget(intro)
 
         cards = QtWidgets.QHBoxLayout()
-        source_box = QtWidgets.QGroupBox("Source · the open project")
+        source_box = QtWidgets.QGroupBox(QCoreApplication.translate(
+            "MorphScreen", "Source · the open project"))
         source_layout = QtWidgets.QVBoxLayout(source_box)
         self.source_label = QtWidgets.QLabel(
             _config_summary(self.source_config, self.source_path))
@@ -222,30 +244,38 @@ class MorphScreen(QtWidgets.QWidget):
         source_layout.addWidget(self.source_label)
         cards.addWidget(source_box, 1)
 
-        target_box = QtWidgets.QGroupBox("Target · the venue rig")
+        target_box = QtWidgets.QGroupBox(QCoreApplication.translate(
+            "MorphScreen", "Target · the venue rig"))
         target_layout = QtWidgets.QVBoxLayout(target_box)
         pick_row = QtWidgets.QHBoxLayout()
         self.target_edit = QtWidgets.QLineEdit()
         self.target_edit.setReadOnly(True)
-        self.target_edit.setPlaceholderText("Choose a project file...")
-        browse = QtWidgets.QPushButton("Browse...")
+        self.target_edit.setPlaceholderText(QCoreApplication.translate(
+            "MorphScreen", "Choose a project file..."))
+        browse = QtWidgets.QPushButton(QCoreApplication.translate(
+            "MorphScreen", "Browse..."))
         browse.clicked.connect(self._browse_target)
         pick_row.addWidget(self.target_edit, 1)
         pick_row.addWidget(browse)
         target_layout.addLayout(pick_row)
-        self.target_label = QtWidgets.QLabel("No target loaded.")
+        self.target_label = QtWidgets.QLabel(QCoreApplication.translate(
+            "MorphScreen", "No target loaded."))
         self.target_label.setWordWrap(True)
         target_layout.addWidget(self.target_label)
         cards.addWidget(target_box, 1)
         layout.addLayout(cards)
 
         plan_row = QtWidgets.QHBoxLayout()
-        load_plan = QtWidgets.QPushButton("Load Plan...")
+        load_plan = QtWidgets.QPushButton(QCoreApplication.translate(
+            "MorphScreen", "Load Plan..."))
         load_plan.setToolTip(
-            "Adopt an existing *.morphplan.yaml - the re-morph workflow")
+            QCoreApplication.translate(
+                "MorphScreen",
+                "Adopt an existing *.morphplan.yaml - the re-morph workflow"))
         load_plan.clicked.connect(self._browse_plan)
         plan_row.addWidget(load_plan)
-        self.plan_label = QtWidgets.QLabel("Plan: new (empty)")
+        self.plan_label = QtWidgets.QLabel(QCoreApplication.translate(
+            "MorphScreen", "Plan: new (empty)"))
         plan_row.addWidget(self.plan_label, 1)
         layout.addLayout(plan_row)
         layout.addStretch(1)
@@ -253,7 +283,8 @@ class MorphScreen(QtWidgets.QWidget):
 
     def _browse_target(self) -> None:
         path, _ = QtWidgets.QFileDialog.getOpenFileName(
-            self, "Choose Target Rig", "",
+            self, QCoreApplication.translate(
+                "MorphScreen", "Choose Target Rig"), "",
             app_identity.project_open_filter())
         if not path:
             return
@@ -262,8 +293,11 @@ class MorphScreen(QtWidgets.QWidget):
             config = Configuration.load(path)
         except Exception as exc:
             QtWidgets.QMessageBox.warning(
-                self, "Morph to Venue",
-                f"Could not load {os.path.basename(path)}:\n{exc}")
+                self, QCoreApplication.translate(
+                    "MorphScreen", "Morph to Venue"),
+                QCoreApplication.translate(
+                    "MorphScreen", "Could not load {0}:\n{1}").format(
+                        os.path.basename(path), exc))
             return
         self.set_target_config(config, path)
 
@@ -293,13 +327,16 @@ class MorphScreen(QtWidgets.QWidget):
 
     def _browse_plan(self) -> None:
         path, _ = QtWidgets.QFileDialog.getOpenFileName(
-            self, "Load Morph Plan", "", PLAN_FILTER)
+            self, QCoreApplication.translate(
+                "MorphScreen", "Load Morph Plan"), "",
+            QCoreApplication.translate("MorphScreen", PLAN_FILTER))
         if not path:
             return
         try:
             self.load_plan_file(path)
         except PlanError as exc:
-            QtWidgets.QMessageBox.warning(self, "Morph to Venue", str(exc))
+            QtWidgets.QMessageBox.warning(self, QCoreApplication.translate(
+                "MorphScreen", "Morph to Venue"), str(exc))
 
     def load_plan_file(self, path: str) -> None:
         """Adopt an existing plan file; hash mismatches warn, never
@@ -311,11 +348,15 @@ class MorphScreen(QtWidgets.QWidget):
         migrated = ""
         if plan.needs_migration() and self.source_config is not None:
             dropped = plan.migrate_legacy_edges(self.source_config)
-            migrated = f", migrated: {dropped} per-song duplicate(s) collapsed"
+            migrated = QCoreApplication.translate(
+                "MorphScreen",
+                ", migrated: {0} per-song duplicate(s) collapsed").format(
+                    dropped)
         self.set_plan(plan)
         self.plan_label.setText(
-            f"Plan: {os.path.basename(path)} "
-            f"({len(plan.edges)} edge(s){migrated})")
+            QCoreApplication.translate(
+                "MorphScreen", "Plan: {0} ({1} edge(s){2})").format(
+                    os.path.basename(path), len(plan.edges), migrated))
 
     def set_plan(self, plan: MorphPlan) -> None:
         """ONE plan object is shared by screen and patchbay - both
@@ -343,10 +384,21 @@ class MorphScreen(QtWidgets.QWidget):
         if self.target_config is not None and self.plan.target_hash and \
                 self.plan.target_hash != self._hash_of_target():
             stale.append("target")
-        if stale:
-            self.banner.setText(
-                "The " + " and ".join(stale) + " rig changed since this "
-                "plan was authored - review the wiring before committing.")
+        if stale == ["source", "target"]:
+            self.banner.setText(QCoreApplication.translate(
+                "MorphScreen",
+                "The source and target rig changed since this plan was "
+                "authored - review the wiring before committing."))
+        elif stale == ["source"]:
+            self.banner.setText(QCoreApplication.translate(
+                "MorphScreen",
+                "The source rig changed since this plan was authored - "
+                "review the wiring before committing."))
+        elif stale:
+            self.banner.setText(QCoreApplication.translate(
+                "MorphScreen",
+                "The target rig changed since this plan was authored - "
+                "review the wiring before committing."))
         self.banner.setVisible(bool(stale))
 
     # ── page 2: patchbay ──────────────────────────────────────────────────
@@ -368,8 +420,10 @@ class MorphScreen(QtWidgets.QWidget):
         layout.addWidget(self.review_summary)
 
         layout.addWidget(QtWidgets.QLabel(
-            "Coverage per song, target group and capability "
-            "(0% on a capability the group has = blocking warning):"))
+            QCoreApplication.translate(
+                "MorphScreen",
+                "Coverage per song, target group and capability (0% on a "
+                "capability the group has = blocking warning):")))
         self.coverage_table = QtWidgets.QTableWidget()
         self.coverage_table.setEditTriggers(
             QtWidgets.QAbstractItemView.EditTrigger.NoEditTriggers)
@@ -394,7 +448,8 @@ class MorphScreen(QtWidgets.QWidget):
         self.destroyed_label.setVisible(False)
         layout.addWidget(self.destroyed_label)
 
-        layout.addWidget(QtWidgets.QLabel("Morph report (dry run):"))
+        layout.addWidget(QtWidgets.QLabel(QCoreApplication.translate(
+            "MorphScreen", "Morph report (dry run):")))
         self.report_view = QtWidgets.QPlainTextEdit()
         self.report_view.setReadOnly(True)
         layout.addWidget(self.report_view, 3)
@@ -408,7 +463,8 @@ class MorphScreen(QtWidgets.QWidget):
         Renders ON CLICK ONLY - every render is a full GL pass, so the
         slider never triggers one, and constructing the screen never
         renders (the whole flow stays headless-safe)."""
-        group = QtWidgets.QGroupBox("Side-by-side preview")
+        group = QtWidgets.QGroupBox(QCoreApplication.translate(
+            "MorphScreen", "Side-by-side preview"))
         layout = QtWidgets.QVBoxLayout(group)
         layout.setSpacing(6)
 
@@ -424,22 +480,29 @@ class MorphScreen(QtWidgets.QWidget):
         controls.addWidget(self.preview_slider, 1)
         self.preview_time_label = QtWidgets.QLabel("0.0 s")
         controls.addWidget(self.preview_time_label)
-        self.preview_btn = QtWidgets.QPushButton("RENDER SCRUB")
+        self.preview_btn = QtWidgets.QPushButton(QCoreApplication.translate(
+            "MorphScreen", "RENDER SCRUB"))
         self.preview_btn.setToolTip(
-            "Render the whole song as a strip of frames, then scrub it "
-            "with the slider")
+            QCoreApplication.translate(
+                "MorphScreen",
+                "Render the whole song as a strip of frames, then scrub it "
+                "with the slider"))
         self.preview_btn.setEnabled(False)
         self.preview_btn.clicked.connect(self._render_preview)
         controls.addWidget(self.preview_btn)
         layout.addLayout(controls)
 
         stills = QtWidgets.QHBoxLayout()
-        self.preview_src_caption = QtWidgets.QLabel("SOURCE")
-        self.preview_dst_caption = QtWidgets.QLabel("MORPHED")
+        self.preview_src_caption = QtWidgets.QLabel(QCoreApplication.translate(
+            "MorphScreen", "SOURCE"))
+        self.preview_dst_caption = QtWidgets.QLabel(QCoreApplication.translate(
+            "MorphScreen", "MORPHED"))
         self.preview_src_image = QtWidgets.QLabel(
-            "No preview rendered yet.")
+            QCoreApplication.translate(
+                "MorphScreen", "No preview rendered yet."))
         self.preview_dst_image = QtWidgets.QLabel(
-            "No preview rendered yet.")
+            QCoreApplication.translate(
+                "MorphScreen", "No preview rendered yet."))
         for caption, image in ((self.preview_src_caption,
                                 self.preview_src_image),
                                (self.preview_dst_caption,
@@ -477,8 +540,12 @@ class MorphScreen(QtWidgets.QWidget):
         gaps = {(g.song, g.target_group, g.sublane)
                 for g in result.gaps(caps)}
 
-        headers = ["Song", "Target group", "Capability", "Coverage",
-                   "Edges"]
+        headers = [QCoreApplication.translate(
+            "MorphScreen", "Song"), QCoreApplication.translate(
+            "MorphScreen", "Target group"), QCoreApplication.translate(
+            "MorphScreen", "Capability"), QCoreApplication.translate(
+            "MorphScreen", "Coverage"),
+                   QCoreApplication.translate("MorphScreen", "Edges")]
         self.coverage_table.clear()
         self.coverage_table.setColumnCount(len(headers))
         self.coverage_table.setHorizontalHeaderLabels(headers)
@@ -486,8 +553,10 @@ class MorphScreen(QtWidgets.QWidget):
         for r, row in enumerate(result.coverage):
             is_gap = (row.song, row.target_group, row.sublane) in gaps
             values = [row.song, row.target_group,
-                      SUBLANE_LABELS[row.sublane],
-                      f"{row.percent}%" + (" GAP" if is_gap else ""),
+                      QCoreApplication.translate(
+                          "MorphPatchbay", SUBLANE_LABELS[row.sublane]),
+                      f"{row.percent}%" + (QCoreApplication.translate(
+                          "MorphScreen", " GAP") if is_gap else ""),
                       str(row.routed_edges)]
             for c, value in enumerate(values):
                 item = QtWidgets.QTableWidgetItem(value)
@@ -506,21 +575,33 @@ class MorphScreen(QtWidgets.QWidget):
             0, QtWidgets.QHeaderView.ResizeMode.Stretch)   # Song
 
         errors = len(report.of_kind("error"))
-        pieces = [f"{len(self._dry_result.songs)} song(s) compiled",
-                  f"{len(self.plan.edges)} edge(s)",
-                  f"{len(gaps)} capability gap(s)"]
+        pieces = [QCoreApplication.translate(
+            "MorphScreen", "{0} song(s) compiled").format(
+                len(self._dry_result.songs)),
+                  QCoreApplication.translate(
+                      "MorphScreen", "{0} edge(s)").format(
+                          len(self.plan.edges)),
+                  QCoreApplication.translate(
+                      "MorphScreen", "{0} capability gap(s)").format(
+                          len(gaps))]
         if errors:
-            pieces.append(f"{errors} error(s) - commit stays disabled")
+            pieces.append(QCoreApplication.translate(
+                "MorphScreen", "{0} error(s) - commit stays disabled").format(
+                    errors))
         if result.unrouted_sources:
-            pieces.append(f"{len(result.unrouted_sources)} unrouted "
-                          f"source stream(s) (deliberate drops)")
+            pieces.append(QCoreApplication.translate(
+                "MorphScreen",
+                "{0} unrouted source stream(s) (deliberate drops)").format(
+                    len(result.unrouted_sources)))
         self.review_summary.setText(" · ".join(pieces) + ".")
 
         manifest = pending_destruction(self._dry_result,
                                        self.target_config, self.plan)
         if manifest:
             self.destroyed_label.setText(
-                "Re-morph will destroy these hand-edited blocks:\n"
+                QCoreApplication.translate(
+                    "MorphScreen",
+                    "Re-morph will destroy these hand-edited blocks:\n")
                 + "\n".join(manifest))
         self.destroyed_label.setVisible(bool(manifest))
 
@@ -542,11 +623,17 @@ class MorphScreen(QtWidgets.QWidget):
             self.preview_song_combo.addItem(name, name)
         self.preview_song_combo.blockSignals(False)
         self.preview_src_caption.setText(
-            "SOURCE - " + self._rig_name(self.source_path, "source rig"))
+            QCoreApplication.translate("MorphScreen", "SOURCE - {0}").format(
+                self._rig_name(self.source_path, QCoreApplication.translate(
+                    "MorphScreen", "source rig"))))
         self.preview_dst_caption.setText(
-            "MORPHED - " + self._rig_name(self.target_path, "target rig"))
-        self.preview_src_image.setText("No preview rendered yet.")
-        self.preview_dst_image.setText("No preview rendered yet.")
+            QCoreApplication.translate("MorphScreen", "MORPHED - {0}").format(
+                self._rig_name(self.target_path, QCoreApplication.translate(
+                    "MorphScreen", "target rig"))))
+        self.preview_src_image.setText(QCoreApplication.translate(
+            "MorphScreen", "No preview rendered yet."))
+        self.preview_dst_image.setText(QCoreApplication.translate(
+            "MorphScreen", "No preview rendered yet."))
         self.preview_status.setText("")
         self.preview_btn.setEnabled(bool(songs))
         self._on_preview_song_changed()
@@ -569,13 +656,17 @@ class MorphScreen(QtWidgets.QWidget):
             self._preview_pixmaps.clear()
             self.preview_src_image.setPixmap(QtGui.QPixmap())
             self.preview_dst_image.setPixmap(QtGui.QPixmap())
-            self.preview_src_image.setText("No preview rendered yet.")
-            self.preview_dst_image.setText("No preview rendered yet.")
+            self.preview_src_image.setText(QCoreApplication.translate(
+                "MorphScreen", "No preview rendered yet."))
+            self.preview_dst_image.setText(QCoreApplication.translate(
+                "MorphScreen", "No preview rendered yet."))
         self._on_preview_time_changed(0)
 
     def _on_preview_time_changed(self, value: int) -> None:
         self.preview_time_label.setText(
-            f"{value / PREVIEW_TICKS_PER_SECOND:.1f} s")
+            QCoreApplication.translate(
+                "MorphScreen", "{0:.1f} s").format(
+                    value / PREVIEW_TICKS_PER_SECOND))
         # Scrubbing shows an ALREADY RENDERED frame; it never starts a
         # render. Rendering stays on the button.
         self._show_strip_frame(value / PREVIEW_TICKS_PER_SECOND)
@@ -616,8 +707,9 @@ class MorphScreen(QtWidgets.QWidget):
             self._set_preview_pixmap(
                 label, (self._preview_strip.get(key) or {}).get(nearest))
         self.preview_status.setText(
-            f"Frame at {nearest:.1f} s "
-            f"({len(self._preview_strip.get('times') or [])} rendered).")
+            QCoreApplication.translate(
+                "MorphScreen", "Frame at {0:.1f} s ({1} rendered).").format(
+                    nearest, len(self._preview_strip.get('times') or [])))
 
     def _set_preview_pixmap(self, label, path) -> None:
         pixmap = self._preview_pixmaps.get(path) if path else None
@@ -626,7 +718,8 @@ class MorphScreen(QtWidgets.QWidget):
             self._preview_pixmaps[path] = pixmap
         if pixmap is None or pixmap.isNull():
             label.setPixmap(QtGui.QPixmap())
-            label.setText(PREVIEW_UNAVAILABLE)
+            label.setText(QCoreApplication.translate(
+            "MorphScreen", PREVIEW_UNAVAILABLE))
             return
         label.setPixmap(pixmap.scaled(
             label.size(), Qt.AspectRatioMode.KeepAspectRatio,
@@ -675,8 +768,10 @@ class MorphScreen(QtWidgets.QWidget):
         self._pending_strip = {"song": name, "times": times}
         self.preview_btn.setEnabled(False)
         self.preview_status.setText(
-            f"Rendering {len(times)} frames per rig across "
-            f"{duration:.0f} s (one pass each)...")
+            QCoreApplication.translate(
+                "MorphScreen",
+                "Rendering {0} frames per rig across {1:.0f} s (one pass "
+                "each)...").format(len(times), duration))
         worker.start()
 
     def _on_preview_rendered(self, strip) -> None:
@@ -691,13 +786,16 @@ class MorphScreen(QtWidgets.QWidget):
         }
         self._preview_pixmaps.clear()
         if not rendered:
-            self._on_preview_failed(PREVIEW_UNAVAILABLE)
+            self._on_preview_failed(QCoreApplication.translate(
+                "MorphScreen", PREVIEW_UNAVAILABLE))
             return
         self._show_strip_frame(self.preview_time_s())
 
     def _on_preview_failed(self, message: str) -> None:
-        self.preview_src_image.setText(PREVIEW_UNAVAILABLE)
-        self.preview_dst_image.setText(PREVIEW_UNAVAILABLE)
+        self.preview_src_image.setText(QCoreApplication.translate(
+            "MorphScreen", PREVIEW_UNAVAILABLE))
+        self.preview_dst_image.setText(QCoreApplication.translate(
+            "MorphScreen", PREVIEW_UNAVAILABLE))
         self.preview_status.setText(message)
 
     def _on_preview_finished(self) -> None:
@@ -726,11 +824,15 @@ class MorphScreen(QtWidgets.QWidget):
         """'keep' | 'discard' | 'cancel'. Split out so tests drive
         request_exit without a modal dialog."""
         box = QtWidgets.QMessageBox(self)
-        box.setWindowTitle("Leave morph?")
-        box.setText("The morph plan is wired but not committed.")
-        keep = box.addButton("Keep for Later",
+        box.setWindowTitle(QCoreApplication.translate(
+            "MorphScreen", "Leave morph?"))
+        box.setText(QCoreApplication.translate(
+            "MorphScreen", "The morph plan is wired but not committed."))
+        keep = box.addButton(QCoreApplication.translate(
+            "MorphScreen", "Keep for Later"),
                              QtWidgets.QMessageBox.ButtonRole.AcceptRole)
-        discard = box.addButton("Discard Morph",
+        discard = box.addButton(QCoreApplication.translate(
+            "MorphScreen", "Discard Morph"),
                                 QtWidgets.QMessageBox.ButtonRole
                                 .DestructiveRole)
         box.addButton(QtWidgets.QMessageBox.StandardButton.Cancel)
@@ -763,7 +865,8 @@ class MorphScreen(QtWidgets.QWidget):
         self.commit_summary.setWordWrap(True)
         layout.addWidget(self.commit_summary)
 
-        self.commit_btn = QtWidgets.QPushButton("Commit Morph")
+        self.commit_btn = QtWidgets.QPushButton(QCoreApplication.translate(
+            "MorphScreen", "Commit Morph"))
         self.commit_btn.clicked.connect(self.commit)
         layout.addWidget(self.commit_btn)
 
@@ -772,11 +875,13 @@ class MorphScreen(QtWidgets.QWidget):
         layout.addWidget(self.commit_status)
 
         save_row = QtWidgets.QHBoxLayout()
-        self.save_target_btn = QtWidgets.QPushButton("Save Target As...")
+        self.save_target_btn = QtWidgets.QPushButton(QCoreApplication.translate(
+            "MorphScreen", "Save Target As..."))
         self.save_target_btn.setEnabled(False)
         self.save_target_btn.clicked.connect(self._save_target_as)
         save_row.addWidget(self.save_target_btn)
-        self.save_plan_btn = QtWidgets.QPushButton("Save Plan As...")
+        self.save_plan_btn = QtWidgets.QPushButton(QCoreApplication.translate(
+            "MorphScreen", "Save Plan As..."))
         self.save_plan_btn.clicked.connect(self._save_plan_as)
         save_row.addWidget(self.save_plan_btn)
         save_row.addStretch(1)
@@ -786,7 +891,8 @@ class MorphScreen(QtWidgets.QWidget):
         # the morphed target, generated from THIS plan. Enabled once
         # the morph is committed - before that there is nothing to
         # verify on the venue rig.
-        self.preflight_btn = QtWidgets.QPushButton("Run Pre-Flight Now...")
+        self.preflight_btn = QtWidgets.QPushButton(QCoreApplication.translate(
+            "MorphScreen", "Run Pre-Flight Now..."))
         self.preflight_btn.setEnabled(False)
         self.preflight_btn.clicked.connect(self.open_preflight)
         layout.addWidget(self.preflight_btn)
@@ -795,22 +901,28 @@ class MorphScreen(QtWidgets.QWidget):
         return page
 
     def _enter_commit(self) -> None:
-        target = os.path.basename(self.target_path) or "the target config"
+        target = os.path.basename(self.target_path) or QCoreApplication.translate(
+            "MorphScreen", "the target config")
         count = len(self._dry_result.songs) if self._dry_result else 0
         self.commit_summary.setText(
-            f"Commit writes {count} morphed song(s) into {target}. "
-            f"The plan can be saved either way; the target only changes "
-            f"on disk via Save Target As.")
+            QCoreApplication.translate(
+                "MorphScreen",
+                "Commit writes {0} morphed song(s) into {1}. The plan can "
+                "be saved either way; the target only changes on disk via "
+                "Save Target As.").format(count, target))
         self.commit_btn.setEnabled(not self.committed and count > 0)
 
     def _confirm_destruction(self, manifest) -> bool:
         """The apply_morph force gate: show the manifest, ask. Split out
         so tests can drive commit() without a modal dialog."""
-        text = ("Re-morphing replaces the target songs and will destroy "
-                "these hand-edited blocks:\n\n" + "\n".join(manifest)
-                + "\n\nReplace anyway?")
+        text = QCoreApplication.translate(
+            "MorphScreen",
+            "Re-morphing replaces the target songs and will destroy "
+            "these hand-edited blocks:\n\n{0}\n\nReplace anyway?").format(
+                "\n".join(manifest))
         answer = QtWidgets.QMessageBox.question(
-            self, "Destroy hand edits?", text,
+            self, QCoreApplication.translate(
+                "MorphScreen", "Destroy hand edits?"), text,
             QtWidgets.QMessageBox.StandardButton.Yes
             | QtWidgets.QMessageBox.StandardButton.No)
         return answer == QtWidgets.QMessageBox.StandardButton.Yes
@@ -828,8 +940,12 @@ class MorphScreen(QtWidgets.QWidget):
             errors = "\n".join(
                 e.format() for e in result.report.of_kind("error"))
             QtWidgets.QMessageBox.warning(
-                self, "Morph to Venue",
-                "The compile reported errors; nothing was applied:\n\n"
+                self, QCoreApplication.translate(
+                    "MorphScreen", "Morph to Venue"),
+                QCoreApplication.translate(
+                    "MorphScreen",
+                    "The compile reported errors; nothing was applied:\n"
+                    "\n")
                 + errors)
             return False
         manifest = pending_destruction(result, self.target_config,
@@ -842,8 +958,10 @@ class MorphScreen(QtWidgets.QWidget):
         self.save_target_btn.setEnabled(True)
         self.preflight_btn.setEnabled(True)
         self.commit_status.setText(
-            f"Morph applied: {len(result.songs)} song(s) written. "
-            f"Save the target and the plan to keep them.")
+            QCoreApplication.translate(
+                "MorphScreen",
+                "Morph applied: {0} song(s) written. Save the target and "
+                "the plan to keep them.").format(len(result.songs)))
         self._sync_buttons()
         return True
 
@@ -874,7 +992,8 @@ class MorphScreen(QtWidgets.QWidget):
     def _save_target_as(self) -> None:
         start = self.target_path or ""
         path, _ = QtWidgets.QFileDialog.getSaveFileName(
-            self, "Save Morphed Target As", start,
+            self, QCoreApplication.translate(
+                "MorphScreen", "Save Morphed Target As"), start,
             app_identity.project_save_filter())
         if not path:
             return
@@ -882,7 +1001,9 @@ class MorphScreen(QtWidgets.QWidget):
 
     def _save_plan_as(self) -> None:
         path, _ = QtWidgets.QFileDialog.getSaveFileName(
-            self, "Save Morph Plan As", "", PLAN_FILTER)
+            self, QCoreApplication.translate(
+                "MorphScreen", "Save Morph Plan As"), "",
+            QCoreApplication.translate("MorphScreen", PLAN_FILTER))
         if not path:
             return
         if not path.endswith(".morphplan.yaml"):
@@ -929,10 +1050,13 @@ class MorphScreen(QtWidgets.QWidget):
         index = self._stack.currentIndex()
         self.back_btn.setEnabled(index > 0 and not self.committed)
         if index == PAGE_COMMIT:
-            self.next_btn.setText("Close" if self.committed else "Done")
+            self.next_btn.setText(QCoreApplication.translate(
+                "MorphScreen", "Close") if self.committed else QCoreApplication.translate(
+                    "MorphScreen", "Done"))
             self.next_btn.setEnabled(True)
         else:
-            self.next_btn.setText("Next")
+            self.next_btn.setText(QCoreApplication.translate(
+                "MorphScreen", "Next"))
             self.next_btn.setEnabled(self.target_config is not None)
         for i, label in enumerate(self._step_labels):
             if i == index:

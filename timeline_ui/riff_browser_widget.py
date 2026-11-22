@@ -18,7 +18,7 @@ from PyQt6.QtWidgets import (
     QLineEdit, QTreeWidget, QTreeWidgetItem, QPushButton,
     QLabel, QFrame, QStackedWidget, QApplication
 )
-from PyQt6.QtCore import Qt, pyqtSignal, QMimeData
+from PyQt6.QtCore import QT_TRANSLATE_NOOP, QCoreApplication, Qt, pyqtSignal, QMimeData
 from PyQt6.QtGui import QDrag, QPixmap, QPainter, QColor, QFont
 
 from config.models import Riff, FixtureGroup
@@ -34,7 +34,9 @@ logger = logging.getLogger(__name__)
 SCENE_MIME_TYPE = "application/x-lm-scene"
 
 # Empty-library marker, same copy as the Live tab's scene rail.
-SCENES_EMPTY_TEXT = "No scenes yet · predefined looks arrive later"
+# Marked for translation here, translated where it is shown.
+SCENES_EMPTY_TEXT = QT_TRANSLATE_NOOP(
+    "RiffBrowserWidget", "No scenes yet · predefined looks arrive later")
 
 
 def _active_tokens() -> dict:
@@ -99,14 +101,21 @@ class RiffItemWidget(QFrame):
         beats = int(self.riff.length_beats)
         bars = beats // 4
         if bars > 0:
-            info_parts.append(f"{bars} bar{'s' if bars > 1 else ''}")
+            info_parts.append(
+                QCoreApplication.translate("RiffBrowserWidget", "{0} bars")
+                .format(bars) if bars > 1 else
+                QCoreApplication.translate("RiffBrowserWidget", "1 bar"))
         else:
-            info_parts.append(f"{beats} beat{'s' if beats > 1 else ''}")
+            info_parts.append(
+                QCoreApplication.translate("RiffBrowserWidget", "{0} beats")
+                .format(beats) if beats > 1 else
+                QCoreApplication.translate("RiffBrowserWidget", "{0} beat")
+                .format(beats))
 
         if self.riff.fixture_types:
             info_parts.append(" | ".join(self.riff.fixture_types))
         else:
-            info_parts.append("Universal")
+            info_parts.append(QCoreApplication.translate("RiffBrowserWidget", "Universal"))
 
         info_label = QLabel(" | ".join(info_parts))
         info_label.setProperty("role", "micro")
@@ -242,7 +251,11 @@ class SceneItemWidget(QFrame):
         layout.addStretch()
 
         group_count = len(self.scene.groups)
-        tag = f"{group_count} GROUP{'S' if group_count != 1 else ''}"
+        if group_count == 1:
+            tag = QCoreApplication.translate("RiffBrowserWidget", "1 GROUP")
+        else:
+            tag = QCoreApplication.translate(
+                "RiffBrowserWidget", "{0} GROUPS").format(group_count)
         self.tag_label = QLabel(tag)
         self.tag_label.setProperty("role", "micro")
         layout.addWidget(self.tag_label)
@@ -323,7 +336,7 @@ class CollapsedRiffBar(QWidget):
         # Expand chevron - flat pane-icon treatment (accent-tint hover).
         self.expand_btn = QPushButton("◀")
         self.expand_btn.setFixedSize(24, 24)
-        self.expand_btn.setToolTip("Expand Riff Library")
+        self.expand_btn.setToolTip(QCoreApplication.translate("RiffBrowserWidget", "Expand Riff Library"))
         self.expand_btn.setProperty("role", "pane-icon")
         self.expand_btn.clicked.connect(self.expand_clicked.emit)
         layout.addWidget(self.expand_btn)
@@ -421,7 +434,7 @@ class RiffBrowserPanel(QWidget):
             # Flat collapse chevron (pane-icon role).
             self._collapse_btn = QPushButton("▶")
             self._collapse_btn.setFixedSize(24, 24)
-            self._collapse_btn.setToolTip("Collapse Riff Library")
+            self._collapse_btn.setToolTip(QCoreApplication.translate("RiffBrowserWidget", "Collapse Riff Library"))
             self._collapse_btn.setProperty("role", "pane-icon")
             self._collapse_btn.clicked.connect(self._on_collapse_clicked)
             header_layout.addWidget(self._collapse_btn)
@@ -429,14 +442,14 @@ class RiffBrowserPanel(QWidget):
         # Search bar - app-wide QLineEdit styling (raised surface, brand
         # border, accent focus + accent selection) covers this fully.
         self.search_input = QLineEdit()
-        self.search_input.setPlaceholderText("Search riffs...")
+        self.search_input.setPlaceholderText(QCoreApplication.translate("RiffBrowserWidget", "Search riffs..."))
         self.search_input.textChanged.connect(self._on_search_changed)
         header_layout.addWidget(self.search_input, 1)
 
         # Refresh button - bordered icon action (output-select role).
         refresh_btn = QPushButton("↻")
         refresh_btn.setFixedSize(28, 28)
-        refresh_btn.setToolTip("Refresh riff library")
+        refresh_btn.setToolTip(QCoreApplication.translate("RiffBrowserWidget", "Refresh riff library"))
         refresh_btn.setProperty("role", "output-select")
         refresh_btn.clicked.connect(self._on_refresh)
         header_layout.addWidget(refresh_btn)
@@ -534,7 +547,7 @@ class RiffBrowserPanel(QWidget):
         # No icon prefix: the riff-category emojis lean on the system
         # emoji font, and every scene-ish candidate (🎬, ◆) renders as
         # tofu in the brand fonts - the plain label is the marker.
-        section = QTreeWidgetItem([f"Scenes ({len(scenes)})"])
+        section = QTreeWidgetItem([QCoreApplication.translate("RiffBrowserWidget", "Scenes ({0})").format(len(scenes))])
         section.setData(0, Qt.ItemDataRole.UserRole,
                         {"type": "scene_category", "name": "scenes"})
         self._scenes_item = section
@@ -546,7 +559,8 @@ class RiffBrowserPanel(QWidget):
             empty_item.setData(0, Qt.ItemDataRole.UserRole,
                                {"type": "scene_empty"})
             section.addChild(empty_item)
-            marker = QLabel(SCENES_EMPTY_TEXT)
+            marker = QLabel(QCoreApplication.translate(
+                "RiffBrowserWidget", SCENES_EMPTY_TEXT))
             marker.setProperty("role", "micro")
             marker.setContentsMargins(6, 2, 6, 2)
             # The copy is longer than a narrow rail: wrap instead of
@@ -585,7 +599,7 @@ class RiffBrowserPanel(QWidget):
         results = self.riff_library.search(search_lower, self._fixture_filter)
 
         if not results:
-            self.status_label.setText("No riffs found")
+            self.status_label.setText(QCoreApplication.translate("RiffBrowserWidget", "No riffs found"))
             return
 
         # Group results by category
@@ -622,7 +636,7 @@ class RiffBrowserPanel(QWidget):
                 self.tree.setItemWidget(riff_item, 0, widget)
 
         self.tree.expandAll()
-        self._update_status(f"Found {len(results)} riff(s)")
+        self._update_status(QCoreApplication.translate("RiffBrowserWidget", "Found {0} riff(s)").format(len(results)))
 
     def _on_refresh(self):
         """Reload riffs from disk."""
@@ -641,7 +655,7 @@ class RiffBrowserPanel(QWidget):
             return
         riff = data["riff"]
         menu = QMenu(self)
-        menu.addAction("Edit Tags...", lambda: self._edit_riff_tags(riff))
+        menu.addAction(QCoreApplication.translate("RiffBrowserWidget", "Edit Tags..."), lambda: self._edit_riff_tags(riff))
         menu.exec(self.tree.viewport().mapToGlobal(pos))
 
     def _edit_riff_tags(self, riff):
@@ -651,8 +665,8 @@ class RiffBrowserPanel(QWidget):
         from PyQt6.QtWidgets import QInputDialog
 
         text, ok = QInputDialog.getText(
-            self, "Edit Tags",
-            f"Tags for '{riff.name}' (comma-separated):",
+            self, QCoreApplication.translate("RiffBrowserWidget", "Edit Tags"),
+            QCoreApplication.translate("RiffBrowserWidget", "Tags for '{0}' (comma-separated):").format(riff.name),
             text=", ".join(riff.tags))
         if not ok:
             return
@@ -676,7 +690,13 @@ class RiffBrowserPanel(QWidget):
             self.status_label.setText(message)
         else:
             count = len(self.riff_library)
-            self.status_label.setText(f"{count} riff{'s' if count != 1 else ''} available")
+            if count == 1:
+                text = QCoreApplication.translate(
+                    "RiffBrowserWidget", "1 riff available")
+            else:
+                text = QCoreApplication.translate(
+                    "RiffBrowserWidget", "{0} riffs available").format(count)
+            self.status_label.setText(text)
 
     def set_fixture_filter(self, fixture_group: FixtureGroup):
         """Filter to show only compatible riffs.
@@ -688,7 +708,7 @@ class RiffBrowserPanel(QWidget):
         self._populate_tree()
 
         if fixture_group:
-            self._update_status(f"Showing riffs for: {fixture_group.name}")
+            self._update_status(QCoreApplication.translate("RiffBrowserWidget", "Showing riffs for: {0}").format(fixture_group.name))
         else:
             self._update_status()
 
@@ -714,7 +734,7 @@ class RiffBrowserWidget(QDockWidget):
     riff_drag_started = pyqtSignal(object)
 
     def __init__(self, riff_library: RiffLibrary = None, parent=None):
-        super().__init__("Riff Library", parent)
+        super().__init__(QCoreApplication.translate("RiffBrowserWidget", "Riff Library"), parent)
         self.riff_library = riff_library or RiffLibrary()
         self._is_collapsed = False
 

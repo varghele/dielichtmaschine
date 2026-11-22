@@ -11,7 +11,7 @@ when a QApplication exists and never raises itself.
 import datetime
 import traceback
 
-from PyQt6.QtCore import QUrl
+from PyQt6.QtCore import QCoreApplication, QUrl
 from PyQt6.QtGui import QDesktopServices, QFont, QFontDatabase
 from PyQt6.QtWidgets import (QApplication, QDialog, QFileDialog, QHBoxLayout,
                              QLabel, QPlainTextEdit, QPushButton, QVBoxLayout)
@@ -25,7 +25,7 @@ class CrashDialog(QDialog):
 
     def __init__(self, exc_type, exc, tb, parent=None):
         super().__init__(parent)
-        self.setWindowTitle("Unexpected error")
+        self.setWindowTitle(QCoreApplication.translate("CrashDialog", "Unexpected error"))
         self.setMinimumSize(640, 420)
 
         self._traceback_text = "".join(
@@ -33,10 +33,11 @@ class CrashDialog(QDialog):
 
         layout = QVBoxLayout(self)
 
-        self.header_label = QLabel(
-            f"{app_identity.version_string()} ran into an unexpected "
+        self.header_label = QLabel(QCoreApplication.translate("CrashDialog", 
+            "{0} ran into an unexpected "
             "error. The application may be in an inconsistent state; "
-            "please save your work and restart.")
+            "please save your work and restart.").format(
+                app_identity.version_string()))
         self.header_label.setWordWrap(True)
         layout.addWidget(self.header_label)
 
@@ -47,29 +48,29 @@ class CrashDialog(QDialog):
         self.traceback_view.setFont(QFont(mono))
         layout.addWidget(self.traceback_view, stretch=1)
 
-        note = QLabel(
+        note = QLabel(QCoreApplication.translate("CrashDialog", 
             "If this keeps happening, please attach this to a GitHub "
             "issue. The log folder contains details about what led up "
-            "to the error.")
+            "to the error."))
         note.setWordWrap(True)
         layout.addWidget(note)
 
         buttons = QHBoxLayout()
-        self.copy_button = QPushButton("Copy to clipboard")
+        self.copy_button = QPushButton(QCoreApplication.translate("CrashDialog", "Copy to clipboard"))
         self.copy_button.clicked.connect(self.copy_to_clipboard)
         buttons.addWidget(self.copy_button)
 
-        self.save_button = QPushButton("Save as file...")
+        self.save_button = QPushButton(QCoreApplication.translate("CrashDialog", "Save as file..."))
         self.save_button.clicked.connect(self.save_as_file)
         buttons.addWidget(self.save_button)
 
-        self.open_logs_button = QPushButton("Open log folder")
+        self.open_logs_button = QPushButton(QCoreApplication.translate("CrashDialog", "Open log folder"))
         self.open_logs_button.clicked.connect(self.open_log_folder)
         buttons.addWidget(self.open_logs_button)
 
         buttons.addStretch(1)
 
-        self.close_button = QPushButton("Close")
+        self.close_button = QPushButton(QCoreApplication.translate("CrashDialog", "Close"))
         self.close_button.setDefault(True)
         self.close_button.clicked.connect(self.accept)
         buttons.addWidget(self.close_button)
@@ -92,8 +93,9 @@ class CrashDialog(QDialog):
         date = datetime.date.today().isoformat()
         default_name = f"lichtmaschine-crash-{date}.txt"
         path, _ = QFileDialog.getSaveFileName(
-            self, "Save crash report", default_name,
-            "Text files (*.txt);;All files (*)")
+            self, QCoreApplication.translate("CrashDialog", "Save crash report"), default_name,
+            QCoreApplication.translate("CrashDialog", "Text files") + " (*.txt);;"
+            + QCoreApplication.translate("CrashDialog", "All files") + " (*)")
         if path:
             with open(path, "w", encoding="utf-8") as handle:
                 handle.write(self.report_text())

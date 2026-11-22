@@ -35,7 +35,10 @@ from a time value so tests and goldens can pin an exact frame, and
 import math
 import time
 
-from PyQt6.QtCore import QDateTime, QPointF, QRectF, Qt, QTimer, pyqtSignal
+from PyQt6.QtCore import (
+    QT_TRANSLATE_NOOP, QCoreApplication, QDateTime, QPointF, QRectF, Qt, QTimer,
+    pyqtSignal,
+)
 from PyQt6.QtGui import QColor, QFont, QPainter, QPen
 from PyQt6.QtWidgets import (
     QGridLayout, QHBoxLayout, QLabel, QStyle, QStyleOption, QVBoxLayout,
@@ -97,11 +100,14 @@ SLOGAN_GAP_PX = 8
 
 # The state kicker above the clock. "PAUSE" is what the screensaver
 # itself means; anything richer is the caller's to inject.
-DEFAULT_STATE_TEXT = "PAUSE"
+DEFAULT_STATE_TEXT = QT_TRANSLATE_NOOP("ScreensaverWindow", "PAUSE")
 
 # The two status segments the widget can state truthfully on its own.
-KEY_HINT = "PRESS ANY KEY TO EXIT"
-ACTIVATION_HINT = "ACTIVATE: VIEW MENU > SCREENSAVER"
+# Marked with QT_TRANSLATE_NOOP (the constants stay English for tests)
+# and translated where they are shown.
+KEY_HINT = QT_TRANSLATE_NOOP("ScreensaverWindow", "PRESS ANY KEY TO EXIT")
+ACTIVATION_HINT = QT_TRANSLATE_NOOP("ScreensaverWindow",
+                                    "ACTIVATE: VIEW MENU > SCREENSAVER")
 
 
 class RotorGlyph(QWidget):
@@ -279,7 +285,11 @@ class ScreensaverWindow(QWidget):
         clock_box = QVBoxLayout(clock_block)
         clock_box.setContentsMargins(0, 0, 0, 0)
         clock_box.setSpacing(0)
-        self.state_label = MicroLabel(state_text, tracking_em=0.2,
+        # Callers' own kicker texts pass through translate() unchanged
+        # unless the catalog knows them (the default "PAUSE" it does).
+        self.state_label = MicroLabel(
+            QCoreApplication.translate("ScreensaverWindow", state_text),
+            tracking_em=0.2,
                                       parent=clock_block)
         self._pin_label_style(self.state_label, FONT_MONO,
                               STATE_PX, 500, MUTED_INK)
@@ -345,8 +355,11 @@ class ScreensaverWindow(QWidget):
         """
         if self._explicit_segments is not None:
             return list(self._explicit_segments)
-        return [s for s in (self._rig_text, self._artnet_text,
-                            KEY_HINT, ACTIVATION_HINT) if s]
+        return [s for s in (
+            self._rig_text, self._artnet_text,
+            QCoreApplication.translate("ScreensaverWindow", KEY_HINT),
+            QCoreApplication.translate("ScreensaverWindow", ACTIVATION_HINT),
+        ) if s]
 
     def status_text(self) -> str:
         """The status bar read as one line (tests, logs)."""

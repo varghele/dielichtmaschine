@@ -15,6 +15,7 @@ utils/gdtf_share. The ShareAccountForm rows are reused by the Settings
 account dialog (gui/dialogs/gdtf_share_account_dialog.py).
 """
 
+from PyQt6.QtCore import QCoreApplication
 from PyQt6 import QtCore, QtWidgets
 
 from utils import gdtf_share
@@ -36,7 +37,7 @@ class _ShareWorker(QtCore.QThread):
         except GDTFShareError as exc:
             self.fail.emit(str(exc))
         except Exception as exc:  # network stacks throw broadly
-            self.fail.emit(f"GDTF Share error: {exc}")
+            self.fail.emit(QCoreApplication.translate("GDTFSharePane", "GDTF Share error: {0}").format(exc))
 
 
 class ShareAccountForm(QtWidgets.QWidget):
@@ -50,20 +51,20 @@ class ShareAccountForm(QtWidgets.QWidget):
         form.setSpacing(8)
 
         self.user_edit = QtWidgets.QLineEdit()
-        self.user_edit.setPlaceholderText("GDTF Share username")
+        self.user_edit.setPlaceholderText(QCoreApplication.translate("GDTFSharePane", "GDTF Share username"))
         self.password_edit = QtWidgets.QLineEdit()
         self.password_edit.setEchoMode(
             QtWidgets.QLineEdit.EchoMode.Password)
         self.remember_check = QtWidgets.QCheckBox(
-            "Remember password (OS credential store)")
+            QCoreApplication.translate("GDTFSharePane", "Remember password (OS credential store)"))
         if not gdtf_share.keyring_available():
             self.remember_check.setEnabled(False)
             self.remember_check.setToolTip(
-                "No OS credential store available (keyring). The password "
+                QCoreApplication.translate("GDTFSharePane", "No OS credential store available (keyring). The password "
                 "is kept for this session only - it is never written to "
-                "disk in plaintext.")
-        form.addRow("Username", self.user_edit)
-        form.addRow("Password", self.password_edit)
+                "disk in plaintext."))
+        form.addRow(QCoreApplication.translate("GDTFSharePane", "Username"), self.user_edit)
+        form.addRow(QCoreApplication.translate("GDTFSharePane", "Password"), self.password_edit)
         form.addRow("", self.remember_check)
 
         user = gdtf_share.stored_username()
@@ -110,23 +111,23 @@ class GDTFSharePane(QtWidgets.QWidget):
         layout.addWidget(self.account)
 
         connect_row = QtWidgets.QHBoxLayout()
-        self.connect_btn = QtWidgets.QPushButton("CONNECT")
+        self.connect_btn = QtWidgets.QPushButton(QCoreApplication.translate("GDTFSharePane", "CONNECT"))
         self.connect_btn.clicked.connect(self._connect)
         connect_row.addWidget(self.connect_btn)
-        self.account_status = QtWidgets.QLabel("Not connected.")
+        self.account_status = QtWidgets.QLabel(QCoreApplication.translate("GDTFSharePane", "Not connected."))
         connect_row.addWidget(self.account_status, 1)
         layout.addLayout(connect_row)
 
         self.search_box = QtWidgets.QLineEdit()
         self.search_box.setPlaceholderText(
-            "Search GDTF Share... (manufacturer or fixture)")
+            QCoreApplication.translate("GDTFSharePane", "Search GDTF Share... (manufacturer or fixture)"))
         self.search_box.setEnabled(False)
         self.search_box.textChanged.connect(self._refresh_results)
         layout.addWidget(self.search_box)
 
         self.table = QtWidgets.QTableWidget(0, 5)
         self.table.setHorizontalHeaderLabels(
-            ["Manufacturer", "Fixture", "Uploader", "Rating", "Modes"])
+            [QCoreApplication.translate("GDTFSharePane", "Manufacturer"), QCoreApplication.translate("GDTFSharePane", "Fixture"), QCoreApplication.translate("GDTFSharePane", "Uploader"), QCoreApplication.translate("GDTFSharePane", "Rating"), QCoreApplication.translate("GDTFSharePane", "Modes")])
         self.table.setSelectionBehavior(
             QtWidgets.QAbstractItemView.SelectionBehavior.SelectRows)
         self.table.setSelectionMode(
@@ -142,7 +143,7 @@ class GDTFSharePane(QtWidgets.QWidget):
         layout.addWidget(self.table, 1)
 
         bottom = QtWidgets.QHBoxLayout()
-        self.download_btn = QtWidgets.QPushButton("DOWNLOAD")
+        self.download_btn = QtWidgets.QPushButton(QCoreApplication.translate("GDTFSharePane", "DOWNLOAD"))
         self.download_btn.setEnabled(False)
         self.download_btn.clicked.connect(self._download)
         bottom.addWidget(self.download_btn)
@@ -155,7 +156,7 @@ class GDTFSharePane(QtWidgets.QWidget):
         if self._client.load_cached_catalog() is not None:
             self.search_box.setEnabled(True)
             self.account_status.setText(
-                "Not connected · showing the cached catalog.")
+                QCoreApplication.translate("GDTFSharePane", "Not connected · showing the cached catalog."))
             self._refresh_results()
 
     # -- async plumbing ---------------------------------------------------
@@ -182,7 +183,7 @@ class GDTFSharePane(QtWidgets.QWidget):
     def _connect(self):
         user, password = self.account.credentials()
         client = self._client
-        self.account_status.setText("Connecting...")
+        self.account_status.setText(QCoreApplication.translate("GDTFSharePane", "Connecting..."))
 
         def work():
             client.login(user, password)
@@ -193,7 +194,7 @@ class GDTFSharePane(QtWidgets.QWidget):
     def _on_connected(self, catalog):
         self.account.persist()
         self.account_status.setText(
-            f"Connected · catalog: {len(catalog)} revisions.")
+            QCoreApplication.translate("GDTFSharePane", "Connected · catalog: {0} revisions.").format(len(catalog)))
         self.search_box.setEnabled(True)
         self._refresh_results()
 
@@ -246,7 +247,7 @@ class GDTFSharePane(QtWidgets.QWidget):
         dest_dir = user_gdtf_dir()
         client = self._client
         self.status_label.setText(
-            f"Downloading {len(entries)} file(s)...")
+            QCoreApplication.translate("GDTFSharePane", "Downloading {0} file(s)...").format(len(entries)))
 
         def work():
             return [client.download(entry, dest_dir) for entry in entries]
@@ -258,7 +259,7 @@ class GDTFSharePane(QtWidgets.QWidget):
         invalidate_fixture_caches()
         from utils.app_settings import user_gdtf_dir
         self.status_label.setText(
-            f"Saved {len(paths)} file(s) to {user_gdtf_dir()}")
+            QCoreApplication.translate("GDTFSharePane", "Saved {0} file(s) to {1}").format(len(paths), user_gdtf_dir()))
         self.fixtures_downloaded.emit(paths)
 
     def _on_download_failed(self, message: str):

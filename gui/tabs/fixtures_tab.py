@@ -44,7 +44,7 @@ from PyQt6.QtWidgets import (
     QComboBox, QDialog, QDialogButtonBox, QFormLayout, QLineEdit,
 )
 from PyQt6.QtGui import QFont
-from PyQt6.QtCore import Qt
+from PyQt6.QtCore import QT_TRANSLATE_NOOP, QCoreApplication, Qt
 from config.models import (
     Configuration, Fixture, FixtureMode, FixtureGroup, primary_group,
     primary_group_name,
@@ -65,7 +65,14 @@ logger = logging.getLogger(__name__)
 # Table columns, reference order.
 COL_NUM, COL_FIXTURE, COL_TYPE, COL_MODE, COL_UNI, COL_ADDRESS, COL_GROUP = \
     range(7)
-TABLE_HEADERS = ("#", "FIXTURE", "TYPE", "MODE", "UNI", "ADDRESS", "GROUP")
+# Marked with QT_TRANSLATE_NOOP, translated where the header is set.
+TABLE_HEADERS = ("#",
+                 QT_TRANSLATE_NOOP("FixturesTab", "FIXTURE"),
+                 QT_TRANSLATE_NOOP("FixturesTab", "TYPE"),
+                 QT_TRANSLATE_NOOP("FixturesTab", "MODE"),
+                 QT_TRANSLATE_NOOP("FixturesTab", "UNI"),
+                 QT_TRANSLATE_NOOP("FixturesTab", "ADDRESS"),
+                 QT_TRANSLATE_NOOP("FixturesTab", "GROUP"))
 
 # Row tint: the group color at the reference's rgba(...,0.17).
 GROUP_TINT_ALPHA = 43
@@ -164,7 +171,7 @@ def group_role_line(group) -> str:
     parts = []
     role = (getattr(group, "lighting_role", "") or "").strip()
     if role:
-        parts.append(f"Role: {role}")
+        parts.append(QCoreApplication.translate("FixturesTab", "Role: {0}").format(role))
     counts = {}
     for fixture in getattr(group, "fixtures", None) or []:
         token = (getattr(fixture, "type", "") or "PAR").strip().upper() or "PAR"
@@ -296,7 +303,9 @@ def group_column_tooltip(fixture) -> str:
         return ""
     if len(names) == 1:
         return names[0]
-    return " · ".join([f"{names[0]} (primary)"] + names[1:])
+    primary = QCoreApplication.translate(
+        "FixturesTab", "{0} (primary)").format(names[0])
+    return " · ".join([primary] + names[1:])
 
 
 def group_tint_color(group_color: QtGui.QColor,
@@ -506,11 +515,11 @@ class FixturesTab(BaseTab):
         # Accent primary CTA (reference: "+ IMPORT .QXF" in the subnav
         # row); opens the fixture browser dialog. The display family is
         # pinned by the theme's QPushButton[role="cta-accent"] rule.
-        self.add_btn = QtWidgets.QPushButton("+ ADD FIXTURE")
+        self.add_btn = QtWidgets.QPushButton(QCoreApplication.translate("FixturesTab", "+ ADD FIXTURE"))
         self.add_btn.setProperty("role", "cta-accent")
         self.add_btn.setFont(display_font(11, QFont.Weight.Bold,
                                           tracking_em=0.08))
-        self.add_btn.setToolTip("Add Fixture")
+        self.add_btn.setToolTip(QCoreApplication.translate("FixturesTab", "Add Fixture"))
         self.add_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         # Pin the width from the button's own font metrics (plus the
         # theme's 28px padding + border and some slack) so the
@@ -572,12 +581,12 @@ class FixturesTab(BaseTab):
         header_row = QtWidgets.QHBoxLayout(header)
         header_row.setContentsMargins(16, 8, 8, 8)
         header_row.setSpacing(8)
-        header_row.addWidget(MicroLabel("Groups", point_size=8,
+        header_row.addWidget(MicroLabel(QCoreApplication.translate("FixturesTab", "Groups"), point_size=8,
                                         tracking_em=0.12))
         header_row.addStretch()
         self.group_add_btn = QtWidgets.QPushButton("+")
         self.group_add_btn.setFixedWidth(TOOLBAR_BTN_WIDTH)
-        self.group_add_btn.setToolTip("Add Group")
+        self.group_add_btn.setToolTip(QCoreApplication.translate("FixturesTab", "Add Group"))
         header_row.addWidget(self.group_add_btn)
         layout.addWidget(header)
 
@@ -593,8 +602,8 @@ class FixturesTab(BaseTab):
         # role yet (see NEEDED-QSS in the report); colors come from the
         # active theme's tokens.
         self.groups_hint = QtWidgets.QLabel(
-            "Groups are the unit the timeline, Autogen and Live Controls "
-            "address. Keep them role-based.")
+            QCoreApplication.translate("FixturesTab", "Groups are the unit the timeline, Autogen and Live Controls "
+            "address. Keep them role-based."))
         self.groups_hint.setObjectName("GroupsHint")
         self.groups_hint.setWordWrap(True)
         hint_font = self.groups_hint.font()
@@ -634,7 +643,9 @@ class FixturesTab(BaseTab):
         from gui.widgets.group_row_delegate import GroupRowDelegate
 
         self.table.setColumnCount(len(TABLE_HEADERS))
-        self.table.setHorizontalHeaderLabels(list(TABLE_HEADERS))
+        self.table.setHorizontalHeaderLabels(
+            [QCoreApplication.translate("FixturesTab", h)
+             for h in TABLE_HEADERS])
         self.table.horizontalHeader().setFont(mono_font(8, tracking_em=0.1))
         self.table.setSizePolicy(
             QtWidgets.QSizePolicy.Policy.Expanding,
@@ -709,7 +720,7 @@ class FixturesTab(BaseTab):
         layout.setSpacing(8)
 
         # Header: "MHX-50 MOVING HEAD · L" / "mhx-50.qxf · QLC+ LIBRARY".
-        self.inspector_title = DisplayLabel("No fixture", point_size=13,
+        self.inspector_title = DisplayLabel(QCoreApplication.translate("FixturesTab", "No fixture"), point_size=13,
                                             weight=QFont.Weight.Bold)
         self.inspector_title.setWordWrap(True)
         layout.addWidget(self.inspector_title)
@@ -722,12 +733,12 @@ class FixturesTab(BaseTab):
         layout.addSpacing(6)
 
         # CAPABILITIES chip row (from the fixture definition cache).
-        layout.addWidget(MicroLabel("Capabilities", point_size=8,
+        layout.addWidget(MicroLabel(QCoreApplication.translate("FixturesTab", "Capabilities"), point_size=8,
                                     tracking_em=0.12))
         self._caps_container = QtWidgets.QWidget()
         self._caps_flow = _FlowLayout(self._caps_container)
         layout.addWidget(self._caps_container)
-        self.caps_placeholder = MicroLabel("No definition found",
+        self.caps_placeholder = MicroLabel(QCoreApplication.translate("FixturesTab", "No definition found"),
                                            point_size=8, tracking_em=0.1)
         self.caps_placeholder.hide()
         layout.addWidget(self.caps_placeholder)
@@ -735,7 +746,7 @@ class FixturesTab(BaseTab):
         layout.addSpacing(6)
 
         # CHANNEL MAP · MODE <N> CH (scrollable for big fixtures).
-        self.channel_map_header = MicroLabel("Channel map", point_size=8,
+        self.channel_map_header = MicroLabel(QCoreApplication.translate("FixturesTab", "Channel map"), point_size=8,
                                              tracking_em=0.12)
         layout.addWidget(self.channel_map_header)
         self.channel_map_area = QtWidgets.QScrollArea()
@@ -757,7 +768,7 @@ class FixturesTab(BaseTab):
         layout.addSpacing(4)
 
         # Editors: the single write path into the config.
-        layout.addWidget(MicroLabel("Name", point_size=8, tracking_em=0.1))
+        layout.addWidget(MicroLabel(QCoreApplication.translate("FixturesTab", "Name"), point_size=8, tracking_em=0.1))
         self.insp_name = QtWidgets.QLineEdit()
         self.insp_name.textEdited.connect(self._on_inspector_name)
         layout.addWidget(self.insp_name)
@@ -766,7 +777,7 @@ class FixturesTab(BaseTab):
         patch_row.setSpacing(8)
         uni_col = QtWidgets.QVBoxLayout()
         uni_col.setSpacing(4)
-        uni_col.addWidget(MicroLabel("Universe", point_size=8,
+        uni_col.addWidget(MicroLabel(QCoreApplication.translate("FixturesTab", "Universe"), point_size=8,
                                      tracking_em=0.1))
         self.insp_universe = QtWidgets.QSpinBox()
         self.insp_universe.setRange(0, 16)
@@ -775,7 +786,7 @@ class FixturesTab(BaseTab):
         patch_row.addLayout(uni_col)
         addr_col = QtWidgets.QVBoxLayout()
         addr_col.setSpacing(4)
-        addr_col.addWidget(MicroLabel("Address", point_size=8,
+        addr_col.addWidget(MicroLabel(QCoreApplication.translate("FixturesTab", "Address"), point_size=8,
                                       tracking_em=0.1))
         self.insp_address = QtWidgets.QSpinBox()
         self.insp_address.setRange(1, 512)
@@ -784,7 +795,7 @@ class FixturesTab(BaseTab):
         patch_row.addLayout(addr_col)
         layout.addLayout(patch_row)
 
-        layout.addWidget(MicroLabel("Mode", point_size=8, tracking_em=0.1))
+        layout.addWidget(MicroLabel(QCoreApplication.translate("FixturesTab", "Mode"), point_size=8, tracking_em=0.1))
         self.insp_mode = QtWidgets.QComboBox()
         self.insp_mode.currentIndexChanged.connect(self._on_inspector_mode)
         layout.addWidget(self.insp_mode)
@@ -796,7 +807,7 @@ class FixturesTab(BaseTab):
         # Edits the PRIMARY group slot only (labelled so): secondary
         # memberships are untouched; membership add/remove lives in the
         # table's right-click menu.
-        group_col.addWidget(MicroLabel("Primary group", point_size=8,
+        group_col.addWidget(MicroLabel(QCoreApplication.translate("FixturesTab", "Primary group"), point_size=8,
                                        tracking_em=0.1))
         self.insp_group = QtWidgets.QComboBox()
         self.insp_group.currentTextChanged.connect(self._on_inspector_group)
@@ -804,7 +815,7 @@ class FixturesTab(BaseTab):
         group_role_row.addLayout(group_col, 1)
         role_col = QtWidgets.QVBoxLayout()
         role_col.setSpacing(4)
-        role_col.addWidget(MicroLabel("Role", point_size=8,
+        role_col.addWidget(MicroLabel(QCoreApplication.translate("FixturesTab", "Role"), point_size=8,
                                       tracking_em=0.1))
         self.insp_role = QtWidgets.QComboBox()
         self.insp_role.addItems(list(LIGHTING_ROLES))
@@ -814,7 +825,7 @@ class FixturesTab(BaseTab):
         layout.addLayout(group_role_row)
 
         layout.addSpacing(4)
-        layout.addWidget(MicroLabel("Position", point_size=8,
+        layout.addWidget(MicroLabel(QCoreApplication.translate("FixturesTab", "Position"), point_size=8,
                                     tracking_em=0.1))
         self.insp_position = QtWidgets.QLabel("")
         self.insp_position.setFont(mono_font(9))
@@ -824,12 +835,12 @@ class FixturesTab(BaseTab):
         # row's icon buttons).
         footer = QtWidgets.QHBoxLayout()
         footer.setSpacing(8)
-        self.duplicate_btn = QtWidgets.QPushButton("Duplicate")
-        self.duplicate_btn.setToolTip("Duplicate Fixture")
+        self.duplicate_btn = QtWidgets.QPushButton(QCoreApplication.translate("FixturesTab", "Duplicate"))
+        self.duplicate_btn.setToolTip(QCoreApplication.translate("FixturesTab", "Duplicate Fixture"))
         footer.addWidget(self.duplicate_btn, 1)
-        self.remove_btn = QtWidgets.QPushButton("Remove")
+        self.remove_btn = QtWidgets.QPushButton(QCoreApplication.translate("FixturesTab", "Remove"))
         self.remove_btn.setProperty("role", "destructive")
-        self.remove_btn.setToolTip("Remove Fixture")
+        self.remove_btn.setToolTip(QCoreApplication.translate("FixturesTab", "Remove Fixture"))
         footer.addWidget(self.remove_btn, 1)
         layout.addLayout(footer)
 
@@ -1066,12 +1077,10 @@ class FixturesTab(BaseTab):
             other_idx = finding.index_b if finding.index_a == row else finding.index_a
             other = fixtures[other_idx]
             return (
-                f"Overlaps '{other.name}' on universe {finding.universe}, "
-                f"channels {finding.overlap_start}-{finding.overlap_end}"
+                QCoreApplication.translate("FixturesTab", "Overlaps '{0}' on universe {1}, channels {2}-{3}").format(other.name, finding.universe, finding.overlap_start, finding.overlap_end)
             )
         return (
-            f"Runs past the end of universe {finding.universe} "
-            f"(ends at channel {finding.end_address}, max {DMX_MAX_ADDRESS})"
+            QCoreApplication.translate("FixturesTab", "Runs past the end of universe {0} (ends at channel {1}, max {2})").format(finding.universe, finding.end_address, DMX_MAX_ADDRESS)
         )
 
     def _update_conflict_indicators(self):
@@ -1106,10 +1115,16 @@ class FixturesTab(BaseTab):
 
         issue_count = len(lint.conflicts) + len(lint.overflows)
         if issue_count:
-            noun = "issue" if issue_count == 1 else "issues"
             # No warning glyph: the chip's warning variant carries the
             # signal, and the character is missing from Barlow.
-            self.conflict_label.setText(f"{issue_count} DMX addressing {noun}")
+            if issue_count == 1:
+                text = QCoreApplication.translate(
+                    "FixturesTab", "1 DMX addressing issue")
+            else:
+                text = QCoreApplication.translate(
+                    "FixturesTab", "{0} DMX addressing issues").format(
+                        issue_count)
+            self.conflict_label.setText(text)
             self.conflict_label.show()
         else:
             self.conflict_label.hide()
@@ -1155,7 +1170,7 @@ class FixturesTab(BaseTab):
         top.addWidget(name_label)
         top.addStretch()
         count = len(getattr(group, "fixtures", None) or [])
-        top.addWidget(MicroLabel(f"{count} FIX", point_size=8,
+        top.addWidget(MicroLabel(QCoreApplication.translate("FixturesTab", "{0} FIX").format(count), point_size=8,
                                  tracking_em=0.08))
         layout.addLayout(top)
 
@@ -1195,14 +1210,14 @@ class FixturesTab(BaseTab):
     def _add_group(self):
         """The groups panel '+' flow: name + lighting role dialog."""
         dialog = QDialog(self)
-        dialog.setWindowTitle("Add New Group")
+        dialog.setWindowTitle(QCoreApplication.translate("FixturesTab", "Add New Group"))
         layout = QFormLayout()
         new_group_input = QLineEdit()
-        layout.addRow("Group Name:", new_group_input)
+        layout.addRow(QCoreApplication.translate("FixturesTab", "Group Name:"), new_group_input)
 
         role_combo = QComboBox()
         role_combo.addItems(list(LIGHTING_ROLES))
-        layout.addRow("Lighting Role:", role_combo)
+        layout.addRow(QCoreApplication.translate("FixturesTab", "Lighting Role:"), role_combo)
 
         button_box = QDialogButtonBox(
             QDialogButtonBox.StandardButton.Ok |
@@ -1337,7 +1352,7 @@ class FixturesTab(BaseTab):
         self.remove_btn.setEnabled(enabled)
 
         if fixture is None:
-            self.inspector_title.setText("No fixture")
+            self.inspector_title.setText(QCoreApplication.translate("FixturesTab", "No fixture"))
             self.inspector_source.setText("")
             self.insp_position.setText("")
             for editor in self._inspector_editors:
@@ -1447,13 +1462,13 @@ class FixturesTab(BaseTab):
         self._clear_layout_widgets(self._map_layout, keep_stretch=True)
 
         if fixture is None:
-            self.channel_map_header.setText("Channel map")
+            self.channel_map_header.setText(QCoreApplication.translate("FixturesTab", "Channel map"))
             self.caps_placeholder.hide()
             return
 
         channels_count = fixture_channel_count(fixture)
         self.channel_map_header.setText(
-            f"Channel map · mode {channels_count} CH")
+            QCoreApplication.translate("FixturesTab", "Channel map · mode {0} CH").format(channels_count))
 
         definition = self._resolve_definition(fixture)
         mode_channels = mode_channel_dicts(definition, fixture.current_mode,
@@ -1612,10 +1627,17 @@ class FixturesTab(BaseTab):
 
         n_fixtures = len(self.config.fixtures)
         n_groups = len(self.config.groups)
-        fixture_noun = "fixture" if n_fixtures == 1 else "fixtures"
-        group_noun = "group" if n_groups == 1 else "groups"
-        self.summary_label.setText(
-            f"{n_fixtures} {fixture_noun} · {n_groups} {group_noun}")
+        if n_fixtures == 1:
+            fixture_text = QCoreApplication.translate("FixturesTab", "1 fixture")
+        else:
+            fixture_text = QCoreApplication.translate(
+                "FixturesTab", "{0} fixtures").format(n_fixtures)
+        if n_groups == 1:
+            group_text = QCoreApplication.translate("FixturesTab", "1 group")
+        else:
+            group_text = QCoreApplication.translate(
+                "FixturesTab", "{0} groups").format(n_groups)
+        self.summary_label.setText(f"{fixture_text} · {group_text}")
 
         universe_ids = sorted(
             {f.universe for f in self.config.fixtures}
@@ -1646,24 +1668,24 @@ class FixturesTab(BaseTab):
         so the wiring is testable without popping the (blocking) menu.
         """
         menu = QtWidgets.QMenu(self.table)
-        add_action = menu.addAction("Add fixture...")
+        add_action = menu.addAction(QCoreApplication.translate("FixturesTab", "Add fixture..."))
         add_action.triggered.connect(self._add_fixture)
 
         # Addressing actions are table-wide, so they ride along whether
         # or not a row is under the cursor. Untangle only lights up
         # when the lint actually flags something.
         menu.addSeparator()
-        untangle_action = menu.addAction("Untangle addresses")
+        untangle_action = menu.addAction(QCoreApplication.translate("FixturesTab", "Untangle addresses"))
         untangle_action.setToolTip(
-            "Move only the conflicting fixtures to the nearest free "
-            "addresses; everything else stays put.")
+            QCoreApplication.translate("FixturesTab", "Move only the conflicting fixtures to the nearest free "
+            "addresses; everything else stays put."))
         untangle_action.setEnabled(
             not lint_dmx_addresses(self.config.fixtures).is_clean)
         untangle_action.triggered.connect(self._untangle_addresses)
-        compact_action = menu.addAction("Compact addresses")
+        compact_action = menu.addAction(QCoreApplication.translate("FixturesTab", "Compact addresses"))
         compact_action.setToolTip(
-            "Repack each universe to consecutive addresses with no "
-            "gaps, keeping the current order.")
+            QCoreApplication.translate("FixturesTab", "Repack each universe to consecutive addresses with no "
+            "gaps, keeping the current order."))
         compact_action.setEnabled(bool(self.config.fixtures))
         compact_action.triggered.connect(self._compact_addresses)
 
@@ -1671,9 +1693,9 @@ class FixturesTab(BaseTab):
             return menu
         menu.addSeparator()
 
-        duplicate_action = menu.addAction("Duplicate")
+        duplicate_action = menu.addAction(QCoreApplication.translate("FixturesTab", "Duplicate"))
         duplicate_action.triggered.connect(self._duplicate_fixture)
-        remove_action = menu.addAction("Remove")
+        remove_action = menu.addAction(QCoreApplication.translate("FixturesTab", "Remove"))
         remove_action.triggered.connect(self._remove_fixture)
 
         # Assign to group: MEMBERSHIP editing over every selected row.
@@ -1684,9 +1706,9 @@ class FixturesTab(BaseTab):
         # checked one REMOVES that membership from the whole selection.
         rows = self._selected_fixture_rows()
         selected = [self.config.fixtures[r] for r in rows]
-        assign_menu = menu.addMenu("Assign to group")
+        assign_menu = menu.addMenu(QCoreApplication.translate("FixturesTab", "Assign to group"))
         if len(rows) > 1:
-            assign_menu.setTitle(f"Assign {len(rows)} to group")
+            assign_menu.setTitle(QCoreApplication.translate("FixturesTab", "Assign {0} to group").format(len(rows)))
         for name in self.config.groups:
             act = assign_menu.addAction(name)
             act.setCheckable(True)
@@ -1696,11 +1718,11 @@ class FixturesTab(BaseTab):
                 lambda _checked, g=name: self._assign_selected_to_group(g))
         if self.config.groups:
             assign_menu.addSeparator()
-        new_group_action = assign_menu.addAction("New group...")
+        new_group_action = assign_menu.addAction(QCoreApplication.translate("FixturesTab", "New group..."))
         new_group_action.triggered.connect(self._assign_selected_to_new_group)
         # Ungroup clears the selection's whole membership list.
         assign_menu.addSeparator()
-        clear_action = assign_menu.addAction("Ungroup")
+        clear_action = assign_menu.addAction(QCoreApplication.translate("FixturesTab", "Ungroup"))
         clear_action.triggered.connect(
             lambda: self._assign_selected_to_group(""))
 
@@ -1710,7 +1732,7 @@ class FixturesTab(BaseTab):
         # meaningful for one multi-group fixture.
         if len(selected) == 1 and len(selected[0].groups) > 1:
             assign_menu.addSeparator()
-            primary_menu = assign_menu.addMenu("Make primary")
+            primary_menu = assign_menu.addMenu(QCoreApplication.translate("FixturesTab", "Make primary"))
             for name in selected[0].groups:
                 act = primary_menu.addAction(name)
                 act.setCheckable(True)
@@ -1743,9 +1765,8 @@ class FixturesTab(BaseTab):
                 self.config.fixtures[i].name for i in unresolved
                 if 0 <= i < len(self.config.fixtures))
             QtWidgets.QMessageBox.warning(
-                self, "Addresses",
-                "No free address range fits these fixtures in their "
-                f"universe; they were left unchanged:\n{names}")
+                self, QCoreApplication.translate("FixturesTab", "Addresses"),
+                QCoreApplication.translate("FixturesTab", "No free address range fits these fixtures in their universe; they were left unchanged:\n{0}").format(names))
 
     def _assign_selected_to_group(self, group_name: str):
         """Toggle ``group_name`` membership on every selected fixture.
@@ -1796,7 +1817,7 @@ class FixturesTab(BaseTab):
         if not rows:
             return
         name, ok = QtWidgets.QInputDialog.getText(
-            self, "New Group", "Group name:")
+            self, QCoreApplication.translate("FixturesTab", "New Group"), QCoreApplication.translate("FixturesTab", "Group name:"))
         name = name.strip() if ok else ""
         if not name:
             return
@@ -1867,19 +1888,19 @@ class FixturesTab(BaseTab):
 
     def _show_group_context_menu(self, name: str, global_pos):
         menu = QtWidgets.QMenu(self)
-        add_action = menu.addAction("Add group...")
+        add_action = menu.addAction(QCoreApplication.translate("FixturesTab", "Add group..."))
         add_action.triggered.connect(self._add_group)
-        duplicate_action = menu.addAction("Duplicate group")
+        duplicate_action = menu.addAction(QCoreApplication.translate("FixturesTab", "Duplicate group"))
         duplicate_action.triggered.connect(
             lambda: self._duplicate_group(name))
-        delete_action = menu.addAction("Delete group")
+        delete_action = menu.addAction(QCoreApplication.translate("FixturesTab", "Delete group"))
         delete_action.triggered.connect(
             lambda: self._delete_group(name))
         menu.addSeparator()
         # Deterministic topology (v1.5): the group's fixture order is
         # what Group:N targets and chases run along.
         group = self.config.groups.get(name)
-        spatial_action = menu.addAction("Order spatially (stage X, Y)")
+        spatial_action = menu.addAction(QCoreApplication.translate("FixturesTab", "Order spatially (stage X, Y)"))
         spatial_action.setCheckable(True)
         spatial_action.setChecked(
             getattr(group, "order_mode", "manual") == "spatial")
@@ -1903,7 +1924,7 @@ class FixturesTab(BaseTab):
     def _show_groups_panel_menu(self, panel, pos):
         """Right-click on empty groups-panel space: offer Add group."""
         menu = QtWidgets.QMenu(self)
-        add_action = menu.addAction("Add group...")
+        add_action = menu.addAction(QCoreApplication.translate("FixturesTab", "Add group..."))
         add_action.triggered.connect(self._add_group)
         menu.exec(panel.mapToGlobal(pos))
 
@@ -1945,7 +1966,7 @@ class FixturesTab(BaseTab):
                     self._add_fixtures_from_qxf(path, quantity)
 
         except Exception as e:
-            user_warnings.warn(f"Adding the fixture failed: {e}", category="fixture-library")
+            user_warnings.warn(QCoreApplication.translate("FixturesTab", "Adding the fixture failed: {0}").format(e), category="fixture-library")
             logger.exception("Adding the fixture failed")
 
     def _find_next_available_address(self, channel_count: int) -> tuple:
@@ -2057,7 +2078,7 @@ class FixturesTab(BaseTab):
             # Show loading dialog with animated progress bar
             # Run the slow operation in a thread so animation keeps moving
             loading_dialog = QtWidgets.QDialog(self)
-            loading_dialog.setWindowTitle("Loading Fixture")
+            loading_dialog.setWindowTitle(QCoreApplication.translate("FixturesTab", "Loading Fixture"))
             loading_dialog.setWindowModality(QtCore.Qt.WindowModality.WindowModal)
             loading_dialog.setFixedSize(320, 100)
             loading_dialog.setWindowFlags(
@@ -2067,7 +2088,7 @@ class FixturesTab(BaseTab):
             layout = QtWidgets.QVBoxLayout(loading_dialog)
             layout.setContentsMargins(20, 15, 20, 15)
 
-            label = QtWidgets.QLabel(f"Loading {manufacturer} {model}...")
+            label = QtWidgets.QLabel(QCoreApplication.translate("FixturesTab", "Loading {0} {1}...").format(manufacturer, model))
             label.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
             layout.addWidget(label)
 
@@ -2097,8 +2118,7 @@ class FixturesTab(BaseTab):
             worker.wait()  # Ensure thread is fully done
             if worker.error is not None:
                 user_warnings.warn(
-                    f"Loading the definition of {manufacturer} {model} "
-                    f"failed: {worker.error}", category="fixture-library")
+                    QCoreApplication.translate("FixturesTab", "Loading the definition of {0} {1} failed: {2}").format(manufacturer, model, worker.error), category="fixture-library")
         else:
             # Already cached, no need for loading dialog
             get_cached_fixture_definitions({(manufacturer, model)})
@@ -2195,8 +2215,8 @@ class FixturesTab(BaseTab):
         if row < 0:
             QtWidgets.QMessageBox.warning(
                 self,
-                "No Selection",
-                "Please select a fixture to duplicate.",
+                QCoreApplication.translate("FixturesTab", "No Selection"),
+                QCoreApplication.translate("FixturesTab", "Please select a fixture to duplicate."),
                 QtWidgets.QMessageBox.StandardButton.Ok
             )
             return

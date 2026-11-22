@@ -16,7 +16,7 @@ update_from_config()/save_to_config().
 import logging
 from PyQt6 import QtWidgets, QtCore
 from PyQt6.QtGui import QBrush, QColor, QFont, QPainter
-from PyQt6.QtCore import Qt, pyqtSignal
+from PyQt6.QtCore import Qt, pyqtSignal, QCoreApplication
 
 from config.models import Configuration, Universe
 from gui.theme_style import active_tokens
@@ -73,17 +73,24 @@ def destination_summary(universe: Universe) -> str:
     protocol = universe.output.get("plugin", "E1.31")
     params = universe.output.get("parameters", {}) or {}
     if protocol == "ArtNet":
-        ip = params.get("ip", "") or "no ip"
-        return (f"{ip} · subnet {params.get('subnet', '0')} · "
-                f"uni {params.get('universe', '0')} (0-based)")
+        ip = params.get("ip", "") or QCoreApplication.translate(
+            "ConfigurationTab", "no ip")
+        return (QCoreApplication.translate(
+            "ConfigurationTab", "{0} · subnet {1} · uni {2} (0-based)").format(
+                ip, params.get('subnet', '0'), params.get('universe', '0')))
     if protocol == "E1.31":
         uni = params.get("universe", "1")
         if (params.get("multicast", "true") or "true").lower() == "true":
-            return f"multicast · uni {uni}"
-        ip = params.get("ip", "") or "no ip"
-        return f"{ip}:{params.get('port', '5568')} · uni {uni}"
+            return QCoreApplication.translate(
+                "ConfigurationTab", "multicast · uni {0}").format(uni)
+        ip = params.get("ip", "") or QCoreApplication.translate(
+            "ConfigurationTab", "no ip")
+        return QCoreApplication.translate(
+            "ConfigurationTab", "{0}:{1} · uni {2}").format(
+                ip, params.get('port', '5568'), uni)
     device = params.get("device", "")
-    return device if device else "no device selected"
+    return device if device else QCoreApplication.translate(
+        "ConfigurationTab", "no device selected")
 
 
 def is_ready(universe: Universe) -> bool:
@@ -227,7 +234,8 @@ class UniverseRowCard(QtWidgets.QWidget):
 
     def update_data(self, universe: Universe, used: int,
                     selected: bool) -> None:
-        self.name_label.setText(universe.name or f"Universe {universe.id}")
+        self.name_label.setText(universe.name or QCoreApplication.translate(
+            "ConfigurationTab", "Universe {0}").format(universe.id))
         protocol = universe.output.get("plugin", "E1.31")
         self.output_chip.setText(protocol.upper())
         self.destination_label.setText(destination_summary(universe))
@@ -235,7 +243,9 @@ class UniverseRowCard(QtWidgets.QWidget):
         self.channel_bar.set_state(used / 512.0, selected)
         ready = is_ready(universe)
         self.status_dot.set_ok(ready)
-        self.status_label.setText("READY" if ready else "UNSET")
+        self.status_label.setText(QCoreApplication.translate(
+            "ConfigurationTab", "READY") if ready else QCoreApplication.translate(
+                "ConfigurationTab", "UNSET"))
         self.set_selected(selected)
 
     def set_selected(self, selected: bool) -> None:
@@ -294,11 +304,13 @@ class ConfigurationTab(BaseTab):
         # No manual "UPDATE CONFIG" button: inspector edits write through
         # live, and unsaved changes are autosaved for crash recovery, so
         # there is nothing to push by hand. Ctrl+S writes the project file.
-        self.add_universe_btn = QtWidgets.QPushButton("+ ADD UNIVERSE")
+        self.add_universe_btn = QtWidgets.QPushButton(QCoreApplication.translate(
+            "ConfigurationTab", "+ ADD UNIVERSE"))
         self.add_universe_btn.setProperty("role", "cta-accent")
         self.add_universe_btn.setFont(display_font(11, QFont.Weight.Bold,
                                                    tracking_em=0.08))
-        self.add_universe_btn.setToolTip("Add Universe")
+        self.add_universe_btn.setToolTip(QCoreApplication.translate(
+            "ConfigurationTab", "Add Universe"))
         self.add_universe_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         strip_row.addWidget(self.add_universe_btn)
         main_layout.addWidget(strip)
@@ -320,10 +332,14 @@ class ConfigurationTab(BaseTab):
         header_row.setContentsMargins(16, 0, 16, 8)
         header_row.setSpacing(12)
         widths = UniverseRowCard.COLUMN_WIDTHS
-        for text, width in (("UNI", widths[0]), ("NAME", widths[1]),
-                            ("OUTPUT", widths[2]), ("DESTINATION", -1),
-                            ("CHANNELS USED", widths[4]),
-                            ("STATUS", widths[5])):
+        for text, width in (
+                (QCoreApplication.translate("ConfigurationTab", "UNI"), widths[0]),
+                (QCoreApplication.translate("ConfigurationTab", "NAME"), widths[1]),
+                (QCoreApplication.translate("ConfigurationTab", "OUTPUT"), widths[2]),
+                (QCoreApplication.translate("ConfigurationTab", "DESTINATION"), -1),
+                (QCoreApplication.translate("ConfigurationTab", "CHANNELS USED"), widths[4]),
+                (QCoreApplication.translate("ConfigurationTab", "STATUS"), widths[5]),
+        ):
             label = MicroLabel(text, point_size=8, tracking_em=0.1)
             if width > 0:
                 label.setFixedWidth(width)
@@ -377,17 +393,20 @@ class ConfigurationTab(BaseTab):
         layout.setSpacing(10)
 
         # Reference: display-caps "U1 · MAIN RIG" heading.
-        self.inspector_title = DisplayLabel("Universe", point_size=13,
+        self.inspector_title = DisplayLabel(QCoreApplication.translate(
+            "ConfigurationTab", "Universe"), point_size=13,
                                             weight=QFont.Weight.Bold,
                                             tracking_em=0.05)
         layout.addWidget(self.inspector_title)
 
-        layout.addWidget(MicroLabel("Name", point_size=8, tracking_em=0.1))
+        layout.addWidget(MicroLabel(QCoreApplication.translate(
+            "ConfigurationTab", "Name"), point_size=8, tracking_em=0.1))
         self.name_edit = QtWidgets.QLineEdit()
         self.name_edit.textEdited.connect(self._on_name_edited)
         layout.addWidget(self.name_edit)
 
-        layout.addWidget(MicroLabel("Output type", point_size=8,
+        layout.addWidget(MicroLabel(QCoreApplication.translate(
+            "ConfigurationTab", "Output type"), point_size=8,
                                     tracking_em=0.1))
         chips_row = QtWidgets.QHBoxLayout()
         chips_row.setSpacing(4)
@@ -417,9 +436,12 @@ class ConfigurationTab(BaseTab):
         self.artnet_ip = QtWidgets.QLineEdit()
         self.artnet_subnet = QtWidgets.QLineEdit()
         self.artnet_universe = QtWidgets.QLineEdit()
-        artnet_form.addRow("Target IP", self.artnet_ip)
-        artnet_form.addRow("Net", self.artnet_subnet)
-        artnet_form.addRow("Universe (0-based)", self.artnet_universe)
+        artnet_form.addRow(QCoreApplication.translate(
+            "ConfigurationTab", "Target IP"), self.artnet_ip)
+        artnet_form.addRow(QCoreApplication.translate(
+            "ConfigurationTab", "Net"), self.artnet_subnet)
+        artnet_form.addRow(QCoreApplication.translate(
+            "ConfigurationTab", "Universe (0-based)"), self.artnet_universe)
         # Output rate is a real constant of the ArtNet sender, not a
         # setting: show it as a read-only readout (reference RATE cell).
         from utils.artnet.sender import ArtNetSender
@@ -427,15 +449,21 @@ class ConfigurationTab(BaseTab):
             f"{ArtNetSender.MAX_SEND_RATE_HZ} Hz")
         self.artnet_rate.setFont(mono_font(9))
         self.artnet_rate.setToolTip(
-            "ArtNet output is rate limited to "
-            f"{ArtNetSender.MAX_SEND_RATE_HZ} Hz (fixed).")
-        artnet_form.addRow("Rate", self.artnet_rate)
+            QCoreApplication.translate(
+                "ConfigurationTab",
+                "ArtNet output is rate limited to {0} Hz (fixed).").format(
+                    ArtNetSender.MAX_SEND_RATE_HZ))
+        artnet_form.addRow(QCoreApplication.translate(
+            "ConfigurationTab", "Rate"), self.artnet_rate)
         # "Broadcast" is the 255.255.255.255 target convention, not a
         # separate model field: the toggle just drives the IP.
-        self.artnet_broadcast = QtWidgets.QCheckBox("Broadcast")
+        self.artnet_broadcast = QtWidgets.QCheckBox(QCoreApplication.translate(
+            "ConfigurationTab", "Broadcast"))
         self.artnet_broadcast.setToolTip(
-            "Send to 255.255.255.255 so every node on the subnet "
-            "receives the universe.")
+            QCoreApplication.translate(
+                "ConfigurationTab",
+                "Send to 255.255.255.255 so every node on the subnet "
+                "receives the universe."))
         self.artnet_broadcast.toggled.connect(self._on_broadcast_toggled)
         artnet_form.addRow("", self.artnet_broadcast)
         for edit, key in ((self.artnet_ip, "ip"),
@@ -451,19 +479,25 @@ class ConfigurationTab(BaseTab):
         e131_page = QtWidgets.QWidget()
         e131_form = QtWidgets.QFormLayout(e131_page)
         e131_form.setContentsMargins(0, 4, 0, 0)
-        self.e131_multicast = QtWidgets.QCheckBox("Multicast")
+        self.e131_multicast = QtWidgets.QCheckBox(QCoreApplication.translate(
+            "ConfigurationTab", "Multicast"))
         self.e131_multicast.setToolTip(
-            "E1.31 Multicast mode\n"
-            "Checked: uses multicast IP (auto-calculated from universe)\n"
-            "Unchecked: uses unicast IP (manual entry)")
+            QCoreApplication.translate(
+                "ConfigurationTab",
+                "E1.31 Multicast mode\nChecked: uses multicast IP "
+                "(auto-calculated from universe)\n"
+                "Unchecked: uses unicast IP (manual entry)"))
         self.e131_multicast.toggled.connect(self._on_multicast_toggled)
         e131_form.addRow("", self.e131_multicast)
         self.e131_ip = QtWidgets.QLineEdit()
         self.e131_port = QtWidgets.QLineEdit()
         self.e131_universe = QtWidgets.QLineEdit()
-        e131_form.addRow("IP address", self.e131_ip)
-        e131_form.addRow("Port", self.e131_port)
-        e131_form.addRow("Universe", self.e131_universe)
+        e131_form.addRow(QCoreApplication.translate(
+            "ConfigurationTab", "IP address"), self.e131_ip)
+        e131_form.addRow(QCoreApplication.translate(
+            "ConfigurationTab", "Port"), self.e131_port)
+        e131_form.addRow(QCoreApplication.translate(
+            "ConfigurationTab", "Universe"), self.e131_universe)
         self.e131_ip.textEdited.connect(
             lambda text: self._on_param_edited("ip", text))
         self.e131_port.textEdited.connect(
@@ -479,8 +513,10 @@ class ConfigurationTab(BaseTab):
         self.device_combo.addItems(get_device_display_names())
         self.device_combo.currentTextChanged.connect(self._on_device_changed)
         usb_form.addWidget(self.device_combo)
-        self.refresh_devices_btn = QtWidgets.QPushButton("Refresh Devices")
-        self.refresh_devices_btn.setToolTip("Refresh USB DMX device list")
+        self.refresh_devices_btn = QtWidgets.QPushButton(QCoreApplication.translate(
+            "ConfigurationTab", "Refresh Devices"))
+        self.refresh_devices_btn.setToolTip(QCoreApplication.translate(
+            "ConfigurationTab", "Refresh USB DMX device list"))
         usb_form.addWidget(self.refresh_devices_btn)
         usb_form.addStretch(1)
         self.param_stack.addWidget(usb_page)
@@ -490,8 +526,10 @@ class ConfigurationTab(BaseTab):
         # Info explainer (reference: info-blue left bar). Only meaningful
         # for ArtNet's 0-based numbering, so it hides on other protocols.
         self.numbering_hint = QtWidgets.QLabel(
-            "ArtNet universe numbering is 0-based to match the wire "
-            "protocol. QLC+ shows this universe as \"1\".")
+            QCoreApplication.translate(
+                "ConfigurationTab",
+                "ArtNet universe numbering is 0-based to match the wire "
+                "protocol. QLC+ shows this universe as \"1\"."))
         self.numbering_hint.setProperty("role", "hint-info")
         self.numbering_hint.setWordWrap(True)
         hint_font = self.numbering_hint.font()
@@ -501,7 +539,8 @@ class ConfigurationTab(BaseTab):
 
         layout.addStretch(1)
 
-        self.remove_universe_btn = QtWidgets.QPushButton("Remove Universe")
+        self.remove_universe_btn = QtWidgets.QPushButton(QCoreApplication.translate(
+            "ConfigurationTab", "Remove Universe"))
         self.remove_universe_btn.setProperty("role", "destructive")
         layout.addWidget(self.remove_universe_btn)
 
@@ -524,8 +563,12 @@ class ConfigurationTab(BaseTab):
         universes = getattr(self.config, "universes", {}) or {}
         ready = sum(1 for u in universes.values() if is_ready(u))
         total = len(universes)
-        noun = "UNIVERSE" if total == 1 else "UNIVERSES"
-        self.status_line.setText(f"{total} {noun} · {ready} CONFIGURED")
+        noun = QCoreApplication.translate(
+            "ConfigurationTab", "UNIVERSE") if total == 1 else QCoreApplication.translate(
+                "ConfigurationTab", "UNIVERSES")
+        self.status_line.setText(QCoreApplication.translate(
+            "ConfigurationTab", "{0} {1} · {2} CONFIGURED").format(
+                total, noun, ready))
 
     def connect_signals(self):
         self.add_universe_btn.clicked.connect(self._add_universe)
@@ -583,19 +626,22 @@ class ConfigurationTab(BaseTab):
         for button in self.protocol_buttons.values():
             button.setEnabled(enabled)
         if universe is None:
-            self.inspector_title.setText("No universe")
+            self.inspector_title.setText(QCoreApplication.translate(
+                "ConfigurationTab", "No universe"))
             self.name_edit.setText("")
             self.numbering_hint.setVisible(False)
             return
 
         # Reference heading: "U1 · MAIN RIG".
-        name = universe.name or f"Universe {universe.id}"
+        name = universe.name or QCoreApplication.translate(
+            "ConfigurationTab", "Universe {0}").format(universe.id)
         self.inspector_title.setText(f"U{universe.id} · {name}")
         protocol = universe.output.get("plugin", "E1.31")
         params = universe.output.get("parameters", {}) or {}
 
         self.name_edit.blockSignals(True)
-        self.name_edit.setText(universe.name or f"Universe {universe.id}")
+        self.name_edit.setText(universe.name or QCoreApplication.translate(
+            "ConfigurationTab", "Universe {0}").format(universe.id))
         self.name_edit.blockSignals(False)
 
         for name, button in self.protocol_buttons.items():
@@ -793,12 +839,17 @@ class ConfigurationTab(BaseTab):
                                       count: int) -> bool:
         """Ask before removing a universe that still has fixtures on it.
         Returns True to proceed. Defaults to No (the safe choice)."""
-        noun = "fixture" if count == 1 else "fixtures"
+        noun = QCoreApplication.translate(
+            "ConfigurationTab", "fixture") if count == 1 else QCoreApplication.translate(
+                "ConfigurationTab", "fixtures")
         resp = QtWidgets.QMessageBox.question(
-            self, "Remove universe",
-            f"Universe {universe_id} still has {count} {noun} patched to "
-            f"it. Removing the universe leaves them with no output.\n\n"
-            f"Remove it anyway?",
+            self, QCoreApplication.translate(
+                "ConfigurationTab", "Remove universe"),
+            QCoreApplication.translate(
+                "ConfigurationTab",
+                "Universe {0} still has {1} {2} patched to it. Removing the "
+                "universe leaves them with no output.\n"
+                "\nRemove it anyway?").format(universe_id, count, noun),
             QtWidgets.QMessageBox.StandardButton.Yes
             | QtWidgets.QMessageBox.StandardButton.No,
             QtWidgets.QMessageBox.StandardButton.No)
@@ -821,10 +872,12 @@ class ConfigurationTab(BaseTab):
 
     def _exec_universe_menu(self, global_pos: QtCore.QPoint, universe_id):
         menu = QtWidgets.QMenu(self)
-        menu.addAction("Add Universe", self._add_universe)
+        menu.addAction(QCoreApplication.translate(
+            "ConfigurationTab", "Add Universe"), self._add_universe)
         if universe_id is not None:
             menu.addAction(
-                "Remove Universe",
+                QCoreApplication.translate(
+                    "ConfigurationTab", "Remove Universe"),
                 lambda: self._remove_universe_by_id(universe_id))
         menu.exec(global_pos)
 

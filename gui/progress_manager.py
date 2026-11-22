@@ -4,7 +4,7 @@
 import sys
 from PyQt6.QtWidgets import (QProgressDialog, QApplication, QProgressBar,
                               QLabel, QWidget, QHBoxLayout, QVBoxLayout, QDialog, QTextEdit)
-from PyQt6.QtCore import Qt
+from PyQt6.QtCore import QCoreApplication, Qt
 from PyQt6.QtGui import QFont
 
 from gui.theme_style import active_tokens, bind_style
@@ -174,7 +174,7 @@ class ProgressManager:
         """
         parent = parent or self.main_window
 
-        self.modal_dialog = QProgressDialog(message, "Cancel" if cancelable else None, 0, maximum, parent)
+        self.modal_dialog = QProgressDialog(message, QCoreApplication.translate("ProgressManager", "Cancel") if cancelable else None, 0, maximum, parent)
         self.modal_dialog.setWindowTitle(title)
         self.modal_dialog.setWindowModality(Qt.WindowModality.WindowModal)
         self.modal_dialog.setAutoClose(True)

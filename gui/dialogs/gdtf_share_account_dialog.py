@@ -9,6 +9,7 @@ rules). TEST LOGIN exercises the real API on a worker thread.
 """
 
 from PyQt6 import QtWidgets
+from PyQt6.QtCore import QCoreApplication
 
 from gui.dialogs.gdtf_share_pane import ShareAccountForm, _ShareWorker
 from utils.gdtf_share import GDTFShareClient
@@ -19,7 +20,7 @@ class GDTFShareAccountDialog(QtWidgets.QDialog):
 
     def __init__(self, client: GDTFShareClient = None, parent=None):
         super().__init__(parent)
-        self.setWindowTitle("GDTF Share Account")
+        self.setWindowTitle(QCoreApplication.translate("GDTFShareAccountDialog", "GDTF Share Account"))
         self.setModal(True)
         self.setMinimumWidth(480)
         self._client = client or GDTFShareClient()
@@ -28,11 +29,11 @@ class GDTFShareAccountDialog(QtWidgets.QDialog):
         layout = QtWidgets.QVBoxLayout(self)
         layout.setSpacing(12)
 
-        intro = QtWidgets.QLabel(
+        intro = QtWidgets.QLabel(QCoreApplication.translate("GDTFShareAccountDialog", 
             "Your own gdtf-share.com account, used by the fixture "
             "browser's GDTF SHARE tab. Downloads land in your GDTF "
             "directory (Settings > Fixture Libraries) and are fetched "
-            "per user - the Share terms do not allow bundling them.")
+            "per user - the Share terms do not allow bundling them."))
         intro.setWordWrap(True)
         layout.addWidget(intro)
 
@@ -40,7 +41,7 @@ class GDTFShareAccountDialog(QtWidgets.QDialog):
         layout.addWidget(self.account)
 
         test_row = QtWidgets.QHBoxLayout()
-        self.test_btn = QtWidgets.QPushButton("TEST LOGIN")
+        self.test_btn = QtWidgets.QPushButton(QCoreApplication.translate("GDTFShareAccountDialog", "TEST LOGIN"))
         self.test_btn.clicked.connect(self._test_login)
         test_row.addWidget(self.test_btn)
         self.status_label = QtWidgets.QLabel("")
@@ -57,12 +58,12 @@ class GDTFShareAccountDialog(QtWidgets.QDialog):
     def _test_login(self):
         user, password = self.account.credentials()
         client = self._client
-        self.status_label.setText("Connecting...")
+        self.status_label.setText(QCoreApplication.translate("GDTFShareAccountDialog", "Connecting..."))
         self.test_btn.setEnabled(False)
         worker = _ShareWorker(
             lambda: client.login(user, password), parent=self)
         worker.ok.connect(
-            lambda _res: self.status_label.setText("Login OK."))
+            lambda _res: self.status_label.setText(QCoreApplication.translate("GDTFShareAccountDialog", "Login OK.")))
         worker.fail.connect(self.status_label.setText)
         worker.finished.connect(lambda: self.test_btn.setEnabled(True))
         self._worker = worker

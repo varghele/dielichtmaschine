@@ -6,7 +6,7 @@ from PyQt6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QFormLayout,
                              QGroupBox, QSlider, QDoubleSpinBox, QSpinBox,
                              QLabel, QDialogButtonBox, QCheckBox, QFrame,
                              QPushButton, QComboBox, QWidget, QScrollArea)
-from PyQt6.QtCore import Qt, pyqtSignal
+from PyQt6.QtCore import QCoreApplication, Qt, pyqtSignal
 from PyQt6.QtGui import QPainter, QColor, QPen, QBrush, QPainterPath
 from config.models import MovementBlock
 
@@ -401,7 +401,9 @@ class MovementBlockDialog(QDialog):
         self.block = block
         self.config = config
 
-        self.setWindowTitle("Edit Movement Block")
+        self.setWindowTitle(QCoreApplication.translate(
+            "MovementBlockDialog",
+            "Edit Movement Block"))
         self.setMinimumWidth(650)
         self.setMinimumHeight(700)
 
@@ -421,21 +423,21 @@ class MovementBlockDialog(QDialog):
         layout = QVBoxLayout(scroll_widget)
 
         # Timing info (read-only display)
-        timing_group = QGroupBox("Timing")
+        timing_group = QGroupBox(QCoreApplication.translate("MovementBlockDialog", "Timing"))
         timing_layout = QFormLayout()
 
         self.start_label = QLabel()
         self.end_label = QLabel()
         self.duration_label = QLabel()
-        timing_layout.addRow("Start:", self.start_label)
-        timing_layout.addRow("End:", self.end_label)
-        timing_layout.addRow("Duration:", self.duration_label)
+        timing_layout.addRow(QCoreApplication.translate("MovementBlockDialog", "Start:"), self.start_label)
+        timing_layout.addRow(QCoreApplication.translate("MovementBlockDialog", "End:"), self.end_label)
+        timing_layout.addRow(QCoreApplication.translate("MovementBlockDialog", "Duration:"), self.duration_label)
 
         timing_group.setLayout(timing_layout)
         layout.addWidget(timing_group)
 
         # Effect Type group
-        effect_group = QGroupBox("Effect")
+        effect_group = QGroupBox(QCoreApplication.translate("MovementBlockDialog", "Effect"))
         effect_layout = QFormLayout()
 
         # Effect type selector
@@ -444,18 +446,20 @@ class MovementBlockDialog(QDialog):
             "static", "circle", "diamond", "lissajous", "figure_8",
             "square", "triangle", "random", "bounce", "linear_sweep", "fan"
         ])
-        effect_layout.addRow("Effect Type:", self.effect_type_combo)
+        effect_layout.addRow(QCoreApplication.translate("MovementBlockDialog", "Effect Type:"), self.effect_type_combo)
 
         # Effect speed selector
         self.effect_speed_combo = QComboBox()
         self.effect_speed_combo.addItems(["1/16", "1/8", "1/4", "1/2", "1", "2", "4", "8", "16"])
         self.effect_speed_combo.setCurrentText("1")
-        effect_layout.addRow("Speed:", self.effect_speed_combo)
+        effect_layout.addRow(QCoreApplication.translate("MovementBlockDialog", "Speed:"), self.effect_speed_combo)
 
         # Lissajous ratio selector (only visible when lissajous selected)
         self.lissajous_ratio_combo = QComboBox()
         self.lissajous_ratio_combo.addItems(["1:2", "2:3", "3:4", "3:2", "4:3", "1:3", "2:1", "3:1"])
-        self.lissajous_ratio_label = QLabel("Lissajous Ratio:")
+        self.lissajous_ratio_label = QLabel(QCoreApplication.translate(
+            "MovementBlockDialog",
+            "Lissajous Ratio:"))
         effect_layout.addRow(self.lissajous_ratio_label, self.lissajous_ratio_combo)
 
         effect_group.setLayout(effect_layout)
@@ -466,19 +470,23 @@ class MovementBlockDialog(QDialog):
         # spot / each stage bounding plane. Item data carries a
         # (kind, name) tuple; resolution priority is plane > spot >
         # point > manual pan/tilt (utils/to_xml + dmx_manager).
-        target_group = QGroupBox("Target (Auto-Point)")
+        target_group = QGroupBox(QCoreApplication.translate(
+            "MovementBlockDialog",
+            "Target (Auto-Point)"))
         target_layout = QFormLayout()
 
         self.target_combo = QComboBox()
         self.target_combo.addItem(
-            "MANUAL (pan/tilt below)", ("manual", None))
+            QCoreApplication.translate("MovementBlockDialog", "MANUAL (pan/tilt below)"), ("manual", None))
 
         # Ad-hoc world point - only offered while the block carries one
         # (click-to-aim writes it); selecting MANUAL clears it.
         if getattr(self.block, 'target_point', None):
             x, y, z = self.block.target_point
             self.target_combo.addItem(
-                f"POINT ({x:.2f}, {y:.2f}, {z:.2f}) m", ("point", None))
+                QCoreApplication.translate("MovementBlockDialog", "POINT ({0}, {1}, {2}) m").format(
+                    f"{x:.2f}", f"{y:.2f}", f"{z:.2f}"),
+                ("point", None))
 
         # Named spots from the config
         if self.config and hasattr(self.config, 'spots'):
@@ -495,24 +503,27 @@ class MovementBlockDialog(QDialog):
                 from autogen.spatial import compute_stage_planes
                 for plane in compute_stage_planes(self.config):
                     self.target_combo.addItem(
-                        f"PLANE · {plane.name}", ("plane", plane.name))
+                        QCoreApplication.translate("MovementBlockDialog", "PLANE · {0}").format(plane.name),
+                        ("plane", plane.name))
             except Exception:
                 pass  # a partial config offers no planes
 
         self.target_combo.setToolTip(
-            "Where the fixtures point.\n"
-            "MANUAL: the pan/tilt sliders below.\n"
-            "POINT: the world coordinate set by the Stage tab's AIM click.\n"
-            "Spot: aim every fixture at the named stage mark.\n"
-            "PLANE: run the movement shape on that stage face in world "
-            "space."
+            QCoreApplication.translate("MovementBlockDialog", "Where the fixtures point.\n"
+                                                              "MANUAL: the pan/tilt sliders below.\n"
+                                                              "POINT: the world coordinate set by the Stage tab's AIM click.\n"
+                                                              "Spot: aim every fixture at the named stage mark.\n"
+                                                              "PLANE: run the movement shape on that stage face in world "
+                                                              "space.")
         )
-        target_layout.addRow("Target:", self.target_combo)
+        target_layout.addRow(QCoreApplication.translate("MovementBlockDialog", "Target:"), self.target_combo)
 
         # Info label
         self.target_info_label = QLabel(
-            "When a target is selected, pan/tilt values are calculated\n"
-            "automatically for each fixture based on its position and orientation."
+            QCoreApplication.translate(
+                "MovementBlockDialog",
+                "When a target is selected, pan/tilt values are calculated\n"
+                "automatically for each fixture based on its position and orientation.")
         )
         self.target_info_label.setProperty("role", "stat-caption")
         target_layout.addRow(self.target_info_label)
@@ -521,7 +532,9 @@ class MovementBlockDialog(QDialog):
         layout.addWidget(target_group)
 
         # Position/Preview group with 2D widget
-        position_group = QGroupBox("Position & Preview")
+        position_group = QGroupBox(QCoreApplication.translate(
+            "MovementBlockDialog",
+            "Position & Preview"))
         position_layout = QHBoxLayout()
 
         # 2D control widget
@@ -532,7 +545,9 @@ class MovementBlockDialog(QDialog):
         numeric_layout = QVBoxLayout()
 
         # Center position controls
-        center_group = QGroupBox("Center Position")
+        center_group = QGroupBox(QCoreApplication.translate(
+            "MovementBlockDialog",
+            "Center Position"))
         center_layout = QFormLayout()
 
         # Pan center
@@ -544,7 +559,7 @@ class MovementBlockDialog(QDialog):
         self.pan_spinbox.setDecimals(1)
         pan_row.addWidget(self.pan_slider, 1)
         pan_row.addWidget(self.pan_spinbox)
-        center_layout.addRow("Pan:", pan_row)
+        center_layout.addRow(QCoreApplication.translate("MovementBlockDialog", "Pan:"), pan_row)
 
         # Tilt center
         tilt_row = QHBoxLayout()
@@ -555,10 +570,12 @@ class MovementBlockDialog(QDialog):
         self.tilt_spinbox.setDecimals(1)
         tilt_row.addWidget(self.tilt_slider, 1)
         tilt_row.addWidget(self.tilt_spinbox)
-        center_layout.addRow("Tilt:", tilt_row)
+        center_layout.addRow(QCoreApplication.translate("MovementBlockDialog", "Tilt:"), tilt_row)
 
         # Center button
-        center_btn = QPushButton("Center Position")
+        center_btn = QPushButton(QCoreApplication.translate(
+            "MovementBlockDialog",
+            "Center Position"))
         center_btn.clicked.connect(self._center_position)
         center_layout.addRow(center_btn)
 
@@ -566,18 +583,18 @@ class MovementBlockDialog(QDialog):
         numeric_layout.addWidget(center_group)
 
         # Fine adjustment controls
-        fine_group = QGroupBox("Fine Adjustment")
+        fine_group = QGroupBox(QCoreApplication.translate("MovementBlockDialog", "Fine Adjustment"))
         fine_layout = QFormLayout()
 
         self.pan_fine_spinbox = QDoubleSpinBox()
         self.pan_fine_spinbox.setRange(0, 255)
         self.pan_fine_spinbox.setDecimals(1)
-        fine_layout.addRow("Pan Fine:", self.pan_fine_spinbox)
+        fine_layout.addRow(QCoreApplication.translate("MovementBlockDialog", "Pan Fine:"), self.pan_fine_spinbox)
 
         self.tilt_fine_spinbox = QDoubleSpinBox()
         self.tilt_fine_spinbox.setRange(0, 255)
         self.tilt_fine_spinbox.setDecimals(1)
-        fine_layout.addRow("Tilt Fine:", self.tilt_fine_spinbox)
+        fine_layout.addRow(QCoreApplication.translate("MovementBlockDialog", "Tilt Fine:"), self.tilt_fine_spinbox)
 
         fine_group.setLayout(fine_layout)
         numeric_layout.addWidget(fine_group)
@@ -587,39 +604,43 @@ class MovementBlockDialog(QDialog):
         layout.addWidget(position_group)
 
         # Boundaries group (only for non-static effects)
-        self.bounds_group = QGroupBox("Boundaries (Hard Limits)")
+        self.bounds_group = QGroupBox(QCoreApplication.translate(
+            "MovementBlockDialog",
+            "Boundaries (Hard Limits)"))
         bounds_layout = QFormLayout()
 
         # Pan bounds
         pan_bounds_row = QHBoxLayout()
-        pan_bounds_row.addWidget(QLabel("Min:"))
+        pan_bounds_row.addWidget(QLabel(QCoreApplication.translate("MovementBlockDialog", "Min:")))
         self.pan_min_spinbox = QDoubleSpinBox()
         self.pan_min_spinbox.setRange(0, 255)
         self.pan_min_spinbox.setDecimals(1)
         pan_bounds_row.addWidget(self.pan_min_spinbox)
-        pan_bounds_row.addWidget(QLabel("Max:"))
+        pan_bounds_row.addWidget(QLabel(QCoreApplication.translate("MovementBlockDialog", "Max:")))
         self.pan_max_spinbox = QDoubleSpinBox()
         self.pan_max_spinbox.setRange(0, 255)
         self.pan_max_spinbox.setDecimals(1)
         pan_bounds_row.addWidget(self.pan_max_spinbox)
-        bounds_layout.addRow("Pan Bounds:", pan_bounds_row)
+        bounds_layout.addRow(QCoreApplication.translate("MovementBlockDialog", "Pan Bounds:"), pan_bounds_row)
 
         # Tilt bounds
         tilt_bounds_row = QHBoxLayout()
-        tilt_bounds_row.addWidget(QLabel("Min:"))
+        tilt_bounds_row.addWidget(QLabel(QCoreApplication.translate("MovementBlockDialog", "Min:")))
         self.tilt_min_spinbox = QDoubleSpinBox()
         self.tilt_min_spinbox.setRange(0, 255)
         self.tilt_min_spinbox.setDecimals(1)
         tilt_bounds_row.addWidget(self.tilt_min_spinbox)
-        tilt_bounds_row.addWidget(QLabel("Max:"))
+        tilt_bounds_row.addWidget(QLabel(QCoreApplication.translate("MovementBlockDialog", "Max:")))
         self.tilt_max_spinbox = QDoubleSpinBox()
         self.tilt_max_spinbox.setRange(0, 255)
         self.tilt_max_spinbox.setDecimals(1)
         tilt_bounds_row.addWidget(self.tilt_max_spinbox)
-        bounds_layout.addRow("Tilt Bounds:", tilt_bounds_row)
+        bounds_layout.addRow(QCoreApplication.translate("MovementBlockDialog", "Tilt Bounds:"), tilt_bounds_row)
 
         # Reset bounds button
-        reset_bounds_btn = QPushButton("Reset to Full Range")
+        reset_bounds_btn = QPushButton(QCoreApplication.translate(
+            "MovementBlockDialog",
+            "Reset to Full Range"))
         reset_bounds_btn.clicked.connect(self._reset_bounds)
         bounds_layout.addRow(reset_bounds_btn)
 
@@ -627,7 +648,9 @@ class MovementBlockDialog(QDialog):
         layout.addWidget(self.bounds_group)
 
         # Amplitude group (only for non-static effects)
-        self.amplitude_group = QGroupBox("Amplitude (Effect Size)")
+        self.amplitude_group = QGroupBox(QCoreApplication.translate(
+            "MovementBlockDialog",
+            "Amplitude (Effect Size)"))
         amplitude_layout = QFormLayout()
 
         # Pan amplitude
@@ -639,7 +662,7 @@ class MovementBlockDialog(QDialog):
         self.pan_amplitude_spinbox.setDecimals(1)
         pan_amp_row.addWidget(self.pan_amplitude_slider, 1)
         pan_amp_row.addWidget(self.pan_amplitude_spinbox)
-        amplitude_layout.addRow("Pan Amplitude:", pan_amp_row)
+        amplitude_layout.addRow(QCoreApplication.translate("MovementBlockDialog", "Pan Amplitude:"), pan_amp_row)
 
         # Tilt amplitude
         tilt_amp_row = QHBoxLayout()
@@ -650,16 +673,22 @@ class MovementBlockDialog(QDialog):
         self.tilt_amplitude_spinbox.setDecimals(1)
         tilt_amp_row.addWidget(self.tilt_amplitude_slider, 1)
         tilt_amp_row.addWidget(self.tilt_amplitude_spinbox)
-        amplitude_layout.addRow("Tilt Amplitude:", tilt_amp_row)
+        amplitude_layout.addRow(QCoreApplication.translate(
+            "MovementBlockDialog",
+            "Tilt Amplitude:"), tilt_amp_row)
 
         self.amplitude_group.setLayout(amplitude_layout)
         layout.addWidget(self.amplitude_group)
 
         # Phase offset group (only for non-static effects)
-        self.phase_group = QGroupBox("Phase Offset")
+        self.phase_group = QGroupBox(QCoreApplication.translate(
+            "MovementBlockDialog",
+            "Phase Offset"))
         phase_layout = QFormLayout()
 
-        self.phase_enabled_checkbox = QCheckBox("Enable phase offset between fixtures")
+        self.phase_enabled_checkbox = QCheckBox(QCoreApplication.translate(
+            "MovementBlockDialog",
+            "Enable phase offset between fixtures"))
         phase_layout.addRow(self.phase_enabled_checkbox)
 
         phase_row = QHBoxLayout()
@@ -671,14 +700,16 @@ class MovementBlockDialog(QDialog):
         self.phase_spinbox.setSuffix("°")
         phase_row.addWidget(self.phase_slider, 1)
         phase_row.addWidget(self.phase_spinbox)
-        self.phase_label = QLabel("Offset:")
+        self.phase_label = QLabel(QCoreApplication.translate("MovementBlockDialog", "Offset:"))
         phase_layout.addRow(self.phase_label, phase_row)
 
         self.phase_group.setLayout(phase_layout)
         layout.addWidget(self.phase_group)
 
         # Speed and interpolation group
-        options_group = QGroupBox("Movement Options")
+        options_group = QGroupBox(QCoreApplication.translate(
+            "MovementBlockDialog",
+            "Movement Options"))
         options_layout = QFormLayout()
 
         # Speed
@@ -689,13 +720,17 @@ class MovementBlockDialog(QDialog):
         self.speed_spinbox.setRange(0, 255)
         speed_row.addWidget(self.speed_slider, 1)
         speed_row.addWidget(self.speed_spinbox)
-        options_layout.addRow("Speed (DMX):", speed_row)
+        options_layout.addRow(QCoreApplication.translate("MovementBlockDialog", "Speed (DMX):"), speed_row)
 
         # Interpolation checkbox
-        self.interpolate_checkbox = QCheckBox("Interpolate from previous position")
+        self.interpolate_checkbox = QCheckBox(QCoreApplication.translate(
+            "MovementBlockDialog",
+            "Interpolate from previous position"))
         self.interpolate_checkbox.setToolTip(
-            "When enabled, the fixture will gradually move from its previous\n"
-            "position to this block's position during any gap before this block."
+            QCoreApplication.translate(
+                "MovementBlockDialog",
+                "When enabled, the fixture will gradually move from its previous\n"
+                "position to this block's position during any gap before this block.")
         )
         options_layout.addRow(self.interpolate_checkbox)
 
@@ -773,23 +808,29 @@ class MovementBlockDialog(QDialog):
         kind, name = self._selected_target()
         if kind == "spot":
             self.target_info_label.setText(
-                f"Fixtures will automatically point at '{name}'.\n"
-                "Manual pan/tilt values serve as offsets for effects."
+                QCoreApplication.translate("MovementBlockDialog", "Fixtures will automatically point at '{0}'.\n"
+                  "Manual pan/tilt values serve as offsets for effects."
+                  ).format(name)
             )
         elif kind == "plane":
             self.target_info_label.setText(
-                f"The movement shape runs on the stage's {name} face\n"
-                "in world space; amplitude maps to metres on the plane."
+                QCoreApplication.translate("MovementBlockDialog", "The movement shape runs on the stage's {0} face\n"
+                  "in world space; amplitude maps to metres on the plane."
+                  ).format(name)
             )
         elif kind == "point":
             self.target_info_label.setText(
-                "Fixtures aim at the stored world point (set via the\n"
-                "Stage tab's AIM click). Pan/tilt values stay as fallback."
+                QCoreApplication.translate(
+                    "MovementBlockDialog",
+                    "Fixtures aim at the stored world point (set via the\n"
+                    "Stage tab's AIM click). Pan/tilt values stay as fallback.")
             )
         else:
             self.target_info_label.setText(
-                "When a target is selected, pan/tilt values are calculated\n"
-                "automatically for each fixture based on its position and orientation."
+                QCoreApplication.translate(
+                    "MovementBlockDialog",
+                    "When a target is selected, pan/tilt values are calculated\n"
+                    "automatically for each fixture based on its position and orientation.")
             )
 
     def _on_effect_type_changed(self, effect_type):

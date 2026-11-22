@@ -6,6 +6,8 @@ from PyQt6.QtWidgets import (
     QDialogButtonBox, QLabel, QSpinBox, QGridLayout, QComboBox
 )
 
+from PyQt6.QtCore import QT_TRANSLATE_NOOP, QCoreApplication
+
 from gui.theme_style import active_tokens
 
 # QLC+ target versions for the cosmetic <Creator><Version> stamp.
@@ -14,8 +16,10 @@ from gui.theme_style import active_tokens
 # and QLC+_5.2.1), so this only changes the version field on import to
 # silence QLC+'s built-in version-mismatch banner. See ROADMAP v1.0.
 QLC_TARGET_VERSIONS = [
-    ("QLC+ 4.x (latest stable, 4.14.4)", "4.14.4"),
-    ("QLC+ 5.x (latest stable, 5.2.1)", "5.2.1"),
+    (QT_TRANSLATE_NOOP("WorkspaceOptionsDialog",
+                       "QLC+ 4.x (latest stable, 4.14.4)"), "4.14.4"),
+    (QT_TRANSLATE_NOOP("WorkspaceOptionsDialog",
+                       "QLC+ 5.x (latest stable, 5.2.1)"), "5.2.1"),
 ]
 DEFAULT_QLC_TARGET_VERSION = "4.14.4"
 
@@ -25,7 +29,9 @@ class WorkspaceOptionsDialog(QDialog):
 
     def __init__(self, parent=None, config=None):
         super().__init__(parent)
-        self.setWindowTitle("Workspace Export Options")
+        self.setWindowTitle(QCoreApplication.translate(
+            "WorkspaceOptionsDialog",
+            "Workspace Export Options"))
         self.setMinimumWidth(400)
         self._config = config
         self._group_spinboxes = {}  # group_name -> QSpinBox
@@ -40,8 +46,10 @@ class WorkspaceOptionsDialog(QDialog):
 
         # Description
         desc_label = QLabel(
-            "Configure what to include in the exported QLC+ workspace.\n"
-            "The Virtual Console provides live control of your fixtures."
+            QCoreApplication.translate(
+                "WorkspaceOptionsDialog",
+                "Configure what to include in the exported QLC+ workspace.\n"
+                "The Virtual Console provides live control of your fixtures.")
         )
         desc_label.setWordWrap(True)
         desc_label.setStyleSheet(
@@ -49,15 +57,21 @@ class WorkspaceOptionsDialog(QDialog):
         layout.addWidget(desc_label)
 
         # Virtual Console group
-        vc_group = QGroupBox("Virtual Console")
+        vc_group = QGroupBox(QCoreApplication.translate(
+            "WorkspaceOptionsDialog",
+            "Virtual Console"))
         vc_layout = QVBoxLayout(vc_group)
 
         # Main toggle
-        self.generate_vc_checkbox = QCheckBox("Generate Virtual Console controls")
+        self.generate_vc_checkbox = QCheckBox(QCoreApplication.translate(
+            "WorkspaceOptionsDialog",
+            "Generate Virtual Console controls"))
         self.generate_vc_checkbox.setChecked(True)
         self.generate_vc_checkbox.setToolTip(
-            "Creates sliders, XY pads, and buttons for each fixture group\n"
-            "based on their capabilities (dimmer, color, movement, special)"
+            QCoreApplication.translate(
+                "WorkspaceOptionsDialog",
+                "Creates sliders, XY pads, and buttons for each fixture group\n"
+                "based on their capabilities (dimmer, color, movement, special)")
         )
         self.generate_vc_checkbox.toggled.connect(self._on_vc_toggled)
         vc_layout.addWidget(self.generate_vc_checkbox)
@@ -70,64 +84,88 @@ class WorkspaceOptionsDialog(QDialog):
         sub_layout.setContentsMargins(20, 5, 0, 5)
 
         # Group controls
-        self.group_controls_checkbox = QCheckBox("Fixture group controls (sliders, XY pads)")
+        self.group_controls_checkbox = QCheckBox(QCoreApplication.translate(
+            "WorkspaceOptionsDialog",
+            "Fixture group controls (sliders, XY pads)"))
         self.group_controls_checkbox.setChecked(True)
         self.group_controls_checkbox.setToolTip(
-            "Creates control widgets for each fixture group:\n"
-            "- Master dimmer slider\n"
-            "- RGB/Color sliders (if group has color capability)\n"
-            "- XY Pad for pan/tilt (if group has movement capability)\n"
-            "- Focus/Zoom sliders (if group has special capability)"
+            QCoreApplication.translate(
+                "WorkspaceOptionsDialog",
+                "Creates control widgets for each fixture group:\n"
+                "- Master dimmer slider\n"
+                "- RGB/Color sliders (if group has color capability)\n"
+                "- XY Pad for pan/tilt (if group has movement capability)\n"
+                "- Focus/Zoom sliders (if group has special capability)")
         )
         sub_layout.addWidget(self.group_controls_checkbox)
 
         # Scene presets
-        self.scene_presets_checkbox = QCheckBox("Color and intensity preset scenes")
+        self.scene_presets_checkbox = QCheckBox(QCoreApplication.translate(
+            "WorkspaceOptionsDialog",
+            "Color and intensity preset scenes"))
         self.scene_presets_checkbox.setChecked(True)
         self.scene_presets_checkbox.setToolTip(
-            "Creates preset scenes for each fixture group:\n"
-            "- Colors: Red, Green, Blue, White, Amber, Blackout\n"
-            "- Intensities: 25%, 50%, 75%, 100%"
+            QCoreApplication.translate(
+                "WorkspaceOptionsDialog",
+                "Creates preset scenes for each fixture group:\n"
+                "- Colors: Red, Green, Blue, White, Amber, Blackout\n"
+                "- Intensities: 25%, 50%, 75%, 100%")
         )
         sub_layout.addWidget(self.scene_presets_checkbox)
 
         # Movement presets
-        self.movement_presets_checkbox = QCheckBox("Movement preset patterns (for moving heads)")
+        self.movement_presets_checkbox = QCheckBox(QCoreApplication.translate(
+            "WorkspaceOptionsDialog",
+            "Movement preset patterns (for moving heads)"))
         self.movement_presets_checkbox.setChecked(True)
         self.movement_presets_checkbox.setToolTip(
-            "Creates movement EFX functions for moving head groups:\n"
-            "- Center position\n"
-            "- Circle pattern\n"
-            "- Sweep pattern"
+            QCoreApplication.translate(
+                "WorkspaceOptionsDialog",
+                "Creates movement EFX functions for moving head groups:\n"
+                "- Center position\n"
+                "- Circle pattern\n"
+                "- Sweep pattern")
         )
         sub_layout.addWidget(self.movement_presets_checkbox)
 
         # Show buttons
-        self.show_buttons_checkbox = QCheckBox("Show trigger buttons (in SoloFrame)")
+        self.show_buttons_checkbox = QCheckBox(QCoreApplication.translate(
+            "WorkspaceOptionsDialog",
+            "Show trigger buttons (in SoloFrame)"))
         self.show_buttons_checkbox.setChecked(True)
         self.show_buttons_checkbox.setToolTip(
-            "Creates a SoloFrame with buttons to trigger each show.\n"
-            "Only one show can play at a time (solo/exclusive mode)."
+            QCoreApplication.translate(
+                "WorkspaceOptionsDialog",
+                "Creates a SoloFrame with buttons to trigger each show.\n"
+                "Only one show can play at a time (solo/exclusive mode).")
         )
         sub_layout.addWidget(self.show_buttons_checkbox)
 
         # Speed dial
-        self.speed_dial_checkbox = QCheckBox("Tap BPM SpeedDial")
+        self.speed_dial_checkbox = QCheckBox(QCoreApplication.translate(
+            "WorkspaceOptionsDialog",
+            "Tap BPM SpeedDial"))
         self.speed_dial_checkbox.setChecked(True)
         self.speed_dial_checkbox.setToolTip(
-            "Creates a SpeedDial widget for tap tempo BPM control."
+            QCoreApplication.translate(
+                "WorkspaceOptionsDialog",
+                "Creates a SpeedDial widget for tap tempo BPM control.")
         )
         sub_layout.addWidget(self.speed_dial_checkbox)
 
         # Master presets
-        self.master_presets_checkbox = QCheckBox("Master presets (scenes/chasers for all fixtures)")
+        self.master_presets_checkbox = QCheckBox(QCoreApplication.translate(
+            "WorkspaceOptionsDialog",
+            "Master presets (scenes/chasers for all fixtures)"))
         self.master_presets_checkbox.setChecked(True)
         self.master_presets_checkbox.setToolTip(
-            "Creates master preset functions that control all fixtures:\n"
-            "- Scenes: All Warm White, Red Wash, Blue Wash, Purple Wash, Rainbow\n"
-            "- Chasers: Party (16 beats), Pulse (4 beats), Sparkle (1 beat)\n"
-            "- Movement: Sweep All (8 beats), Circle All (8 beats)\n"
-            "All synced to Tap BPM SpeedDial."
+            QCoreApplication.translate(
+                "WorkspaceOptionsDialog",
+                "Creates master preset functions that control all fixtures:\n"
+                "- Scenes: All Warm White, Red Wash, Blue Wash, Purple Wash, Rainbow\n"
+                "- Chasers: Party (16 beats), Pulse (4 beats), Sparkle (1 beat)\n"
+                "- Movement: Sweep All (8 beats), Circle All (8 beats)\n"
+                "All synced to Tap BPM SpeedDial.")
         )
         sub_layout.addWidget(self.master_presets_checkbox)
 
@@ -135,12 +173,16 @@ class WorkspaceOptionsDialog(QDialog):
         layout.addWidget(vc_group)
 
         # Export overrides group — per-group intensity scaling
-        overrides_group = QGroupBox("Export Intensity per Group")
+        overrides_group = QGroupBox(QCoreApplication.translate(
+            "WorkspaceOptionsDialog",
+            "Export Intensity per Group"))
         overrides_layout = QVBoxLayout(overrides_group)
 
         overrides_desc = QLabel(
-            "Set the max DMX intensity (0-255) for each fixture group.\n"
-            "All dimmer values are scaled proportionally to balance brightness."
+            QCoreApplication.translate(
+                "WorkspaceOptionsDialog",
+                "Set the max DMX intensity (0-255) for each fixture group.\n"
+                "All dimmer values are scaled proportionally to balance brightness.")
         )
         overrides_desc.setWordWrap(True)
         overrides_desc.setStyleSheet(
@@ -155,16 +197,18 @@ class WorkspaceOptionsDialog(QDialog):
                 spinbox = QSpinBox()
                 spinbox.setRange(0, 255)
                 spinbox.setValue(group.export_intensity)
-                spinbox.setToolTip(
-                    f"Max export intensity for {group_name}.\n"
-                    "255 = no scaling, lower values dim this group proportionally."
-                )
+                spinbox.setToolTip(QCoreApplication.translate("WorkspaceOptionsDialog", 
+                    "Max export intensity for {0}.\n"
+                    "255 = no scaling, lower values dim this group "
+                    "proportionally.").format(group_name))
                 grid.addWidget(label, row, 0)
                 grid.addWidget(spinbox, row, 1)
                 self._group_spinboxes[group_name] = spinbox
             overrides_layout.addLayout(grid)
         else:
-            no_groups_label = QLabel("No fixture groups configured.")
+            no_groups_label = QLabel(QCoreApplication.translate(
+                "WorkspaceOptionsDialog",
+                "No fixture groups configured."))
             no_groups_label.setStyleSheet(
                 f"color: {self._tokens['hint_text_dim']}; font-style: italic;")
             overrides_layout.addWidget(no_groups_label)
@@ -172,12 +216,16 @@ class WorkspaceOptionsDialog(QDialog):
         layout.addWidget(overrides_group)
 
         # QLC+ target version (cosmetic stamp; schema is identical 4.x/5.x)
-        version_group = QGroupBox("QLC+ Target Version")
+        version_group = QGroupBox(QCoreApplication.translate(
+            "WorkspaceOptionsDialog",
+            "QLC+ Target Version"))
         version_layout = QVBoxLayout(version_group)
         version_desc = QLabel(
-            "Target QLC+ version stamped into the workspace file. The XML\n"
-            "schema is identical across 4.x and 5.x, so this only affects the\n"
-            "version banner QLC+ shows on import."
+            QCoreApplication.translate(
+                "WorkspaceOptionsDialog",
+                "Target QLC+ version stamped into the workspace file. The XML\n"
+                "schema is identical across 4.x and 5.x, so this only affects the\n"
+                "version banner QLC+ shows on import.")
         )
         version_desc.setWordWrap(True)
         version_desc.setStyleSheet(
@@ -186,7 +234,7 @@ class WorkspaceOptionsDialog(QDialog):
 
         self.qlc_version_combo = QComboBox()
         for label, value in QLC_TARGET_VERSIONS:
-            self.qlc_version_combo.addItem(label, userData=value)
+            self.qlc_version_combo.addItem(QCoreApplication.translate("WorkspaceOptionsDialog", label), userData=value)
         # Default to latest stable 4.x.
         default_idx = next(
             (i for i, (_, v) in enumerate(QLC_TARGET_VERSIONS)
@@ -198,14 +246,20 @@ class WorkspaceOptionsDialog(QDialog):
         layout.addWidget(version_group)
 
         # Dark mode option
-        appearance_group = QGroupBox("Appearance")
+        appearance_group = QGroupBox(QCoreApplication.translate(
+            "WorkspaceOptionsDialog",
+            "Appearance"))
         appearance_layout = QVBoxLayout(appearance_group)
 
-        self.dark_mode_checkbox = QCheckBox("Dark mode (black background)")
+        self.dark_mode_checkbox = QCheckBox(QCoreApplication.translate(
+            "WorkspaceOptionsDialog",
+            "Dark mode (black background)"))
         self.dark_mode_checkbox.setChecked(True)
         self.dark_mode_checkbox.setToolTip(
-            "Sets the Virtual Console background to black.\n"
-            "Recommended for live performance to reduce distraction."
+            QCoreApplication.translate(
+                "WorkspaceOptionsDialog",
+                "Sets the Virtual Console background to black.\n"
+                "Recommended for live performance to reduce distraction.")
         )
         appearance_layout.addWidget(self.dark_mode_checkbox)
 

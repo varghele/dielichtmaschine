@@ -1,6 +1,7 @@
 # timeline_ui/undo_commands.py
 """Undo/redo commands for timeline operations."""
 
+from PyQt6.QtCore import QCoreApplication
 from PyQt6.QtGui import QUndoCommand
 from config.models import LightBlock
 from utils.timeline_edit_lock import TIMELINE_EDIT_LOCK
@@ -23,7 +24,8 @@ class InsertRiffCommand(QUndoCommand):
             removed_blocks: List of blocks that were removed due to overlap
             description: Optional description for undo stack
         """
-        super().__init__(description or f"Insert Riff")
+        super().__init__(description or QCoreApplication.translate(
+            "UndoCommands", "Insert Riff"))
         self.lane_widget = lane_widget
         self.new_block = new_block
         self.removed_blocks = removed_blocks
@@ -84,7 +86,8 @@ class DeleteBlockCommand(QUndoCommand):
             block: The block to delete
             description: Optional description for undo stack
         """
-        super().__init__(description or "Delete Block")
+        super().__init__(description or QCoreApplication.translate(
+            "UndoCommands", "Delete Block"))
         self.lane_widget = lane_widget
         self.block = block
 
@@ -138,7 +141,8 @@ class MoveBlockCommand(QUndoCommand):
             description: Optional description
             already_applied: The first redo() is a no-op (see class doc)
         """
-        super().__init__(description or "Move Block")
+        super().__init__(description or QCoreApplication.translate(
+            "UndoCommands", "Move Block"))
         self.lane_widget = lane_widget
         self.block = block
         self.old_start = old_start
@@ -202,7 +206,8 @@ class EnvelopeEditCommand(QUndoCommand):
 
     def __init__(self, lane_widget: 'LightLaneWidget', block: LightBlock,
                  before, after, description: str = None):
-        super().__init__(description or "Trim Block")
+        super().__init__(description or QCoreApplication.translate(
+            "UndoCommands", "Trim Block"))
         self.lane_widget = lane_widget
         self.block = block
         self.before = before
@@ -248,7 +253,8 @@ class ResizeBlockCommand(QUndoCommand):
             new_end: New end time
             description: Optional description
         """
-        super().__init__(description or "Resize Block")
+        super().__init__(description or QCoreApplication.translate(
+            "UndoCommands", "Resize Block"))
         self.lane_widget = lane_widget
         self.block = block
         self.old_start = old_start
@@ -288,7 +294,8 @@ class AddLaneCommand(QUndoCommand):
     """
 
     def __init__(self, shows_tab, lane, description: str = None):
-        super().__init__(description or "Add Lane")
+        super().__init__(description or QCoreApplication.translate(
+            "UndoCommands", "Add Lane"))
         self.shows_tab = shows_tab
         self.lane = lane
         self._skip_first_redo = True
@@ -317,7 +324,8 @@ class RemoveLaneCommand(QUndoCommand):
     """
 
     def __init__(self, shows_tab, lane_widget, description: str = None):
-        super().__init__(description or "Remove Lane")
+        super().__init__(description or QCoreApplication.translate(
+            "UndoCommands", "Remove Lane"))
         self.shows_tab = shows_tab
         self.lane = lane_widget.lane
 
@@ -343,7 +351,8 @@ class AddBlockCommand(QUndoCommand):
             block: The new block
             description: Optional description
         """
-        super().__init__(description or "Add Block")
+        super().__init__(description or QCoreApplication.translate(
+            "UndoCommands", "Add Block"))
         self.lane_widget = lane_widget
         self.block = block
 

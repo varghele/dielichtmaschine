@@ -6,7 +6,7 @@ import os
 from PyQt6.QtWidgets import (QWidget, QHBoxLayout, QVBoxLayout, QLabel,
                              QPushButton, QSlider, QFrame, QScrollArea,
                              QFileDialog, QLineEdit)
-from PyQt6.QtCore import Qt, pyqtSignal
+from PyQt6.QtCore import QCoreApplication, Qt, pyqtSignal
 from .timeline_widget import TimelineWidget, HEADER_COLUMN_WIDTH
 
 logger = logging.getLogger(__name__)
@@ -235,7 +235,7 @@ class AudioLaneWidget(QFrame):
         # Row 1: Audio label — Barlow Condensed display caps (North Star)
         from gui.typography import DisplayLabel
         title_layout = QHBoxLayout()
-        title_label = DisplayLabel("Audio Track", point_size=13)
+        title_label = DisplayLabel(QCoreApplication.translate("AudioLaneWidget", "Audio Track"), point_size=13)
         title_layout.addWidget(title_label)
         title_layout.addStretch()
         layout.addLayout(title_layout)
@@ -244,11 +244,11 @@ class AudioLaneWidget(QFrame):
         file_layout = QHBoxLayout()
 
         self.file_path_edit = QLineEdit()
-        self.file_path_edit.setPlaceholderText("No audio file loaded")
+        self.file_path_edit.setPlaceholderText(QCoreApplication.translate("AudioLaneWidget", "No audio file loaded"))
         self.file_path_edit.setReadOnly(True)
         file_layout.addWidget(self.file_path_edit, 1)
 
-        self.load_button = QPushButton("LOAD")
+        self.load_button = QPushButton(QCoreApplication.translate("AudioLaneWidget", "LOAD"))
         self.load_button.setFixedWidth(56)
         # cta-outline is the shared bordered display-caps role for text
         # actions across the timeline (Save, Inspector, POP OUT); "LOAD"
@@ -278,7 +278,7 @@ class AudioLaneWidget(QFrame):
         controls_layout.addWidget(self.mute_button)
 
         from gui.typography import MicroLabel
-        vol_label = MicroLabel("Vol")
+        vol_label = MicroLabel(QCoreApplication.translate("AudioLaneWidget", "Vol"))
         controls_layout.addWidget(vol_label)
 
         self.volume_slider = QSlider(Qt.Orientation.Horizontal)
@@ -318,12 +318,12 @@ class AudioLaneWidget(QFrame):
         # Row 1: AUDIO caption + middle-elided filename.
         file_row = QHBoxLayout()
         file_row.setSpacing(8)
-        file_row.addWidget(MicroLabel("Audio", point_size=8))
+        file_row.addWidget(MicroLabel(QCoreApplication.translate("AudioLaneWidget", "Audio"), point_size=8))
 
         self.file_path_edit = _ElidedFileLabel()
         self.file_path_edit.setFont(mono_font(8))
         self.file_path_edit.setProperty("role", "micro")
-        self.file_path_edit.setPlaceholderText("No audio file loaded")
+        self.file_path_edit.setPlaceholderText(QCoreApplication.translate("AudioLaneWidget", "No audio file loaded"))
         self.file_path_edit.setReadOnly(True)
         file_row.addWidget(self.file_path_edit, 1)
         layout.addLayout(file_row)
@@ -338,7 +338,7 @@ class AudioLaneWidget(QFrame):
         self.mute_button.setFont(mono_font(8))
         self.mute_button.setProperty("density", "compact")
         self.mute_button.setProperty("role", "output-select")
-        self.mute_button.setToolTip("Mute audio")
+        self.mute_button.setToolTip(QCoreApplication.translate("AudioLaneWidget", "Mute audio"))
         self.mute_button.toggled.connect(self._on_mute_toggled)
         controls_row.addWidget(self.mute_button)
 
@@ -347,7 +347,7 @@ class AudioLaneWidget(QFrame):
         self.volume_slider.setValue(100)
         self.volume_slider.setFixedWidth(70)
         self.volume_slider.setFixedHeight(16)
-        self.volume_slider.setToolTip("Audio volume")
+        self.volume_slider.setToolTip(QCoreApplication.translate("AudioLaneWidget", "Audio volume"))
         self.volume_slider.valueChanged.connect(self._on_volume_changed)
         controls_row.addWidget(self.volume_slider)
 
@@ -358,7 +358,7 @@ class AudioLaneWidget(QFrame):
 
         controls_row.addStretch()
 
-        self.load_button = QPushButton("LOAD")
+        self.load_button = QPushButton(QCoreApplication.translate("AudioLaneWidget", "LOAD"))
         self.load_button.setFixedWidth(56)
         self.load_button.setFixedHeight(18)
         self.load_button.setProperty("density", "compact")
@@ -374,9 +374,12 @@ class AudioLaneWidget(QFrame):
         """Handle load button click - open file dialog."""
         file_path, _ = QFileDialog.getOpenFileName(
             self,
-            "Select Audio File",
+            QCoreApplication.translate("AudioLaneWidget", "Select Audio File"),
             "",
-            "Audio Files (*.wav *.mp3 *.flac *.ogg);;All Files (*)"
+            QCoreApplication.translate("AudioLaneWidget", "Audio Files")
+            + " (*.wav *.mp3 *.flac *.ogg);;"
+            + QCoreApplication.translate("AudioLaneWidget", "All Files")
+            + " (*)"
         )
         if file_path:
             self.load_audio_file(file_path, force=True)
@@ -396,11 +399,11 @@ class AudioLaneWidget(QFrame):
                 row mid-load whenever the visit was brief.
         """
         if not AUDIO_AVAILABLE:
-            self.file_path_edit.setText("Audio support not available")
+            self.file_path_edit.setText(QCoreApplication.translate("AudioLaneWidget", "Audio support not available"))
             return
 
         if not os.path.exists(file_path):
-            self.file_path_edit.setText(f"File not found: {file_path}")
+            self.file_path_edit.setText(QCoreApplication.translate("AudioLaneWidget", "File not found: {0}").format(file_path))
             return
 
         if not force and file_path == self.audio_file_path and (
@@ -416,7 +419,7 @@ class AudioLaneWidget(QFrame):
         self._is_loading_audio = True
 
         # Show loading indicator
-        self.file_path_edit.setText(f"Loading {os.path.basename(file_path)}...")
+        self.file_path_edit.setText(QCoreApplication.translate("AudioLaneWidget", "Loading {0}...").format(os.path.basename(file_path)))
         self.file_path_edit.setToolTip(file_path)
         self.load_button.setEnabled(False)
 
@@ -456,7 +459,7 @@ class AudioLaneWidget(QFrame):
         """Handle audio loading error"""
         self._is_loading_audio = False
         self.audio_file = None
-        self.file_path_edit.setText(f"Error loading file")
+        self.file_path_edit.setText(QCoreApplication.translate("AudioLaneWidget", "Error loading file").format())
         self.file_path_edit.setToolTip(error_message)
         self.load_button.setEnabled(True)
         logger.warning(f"Audio load error: {error_message}")
@@ -471,7 +474,7 @@ class AudioLaneWidget(QFrame):
         self.audio_file = None
         self.audio_file_path = ""
         self.file_path_edit.setText("")
-        self.file_path_edit.setPlaceholderText("No audio file loaded")
+        self.file_path_edit.setPlaceholderText(QCoreApplication.translate("AudioLaneWidget", "No audio file loaded"))
         self.file_path_edit.setToolTip("")
         # Clear waveform from timeline
         if hasattr(self.timeline_widget, 'load_audio'):

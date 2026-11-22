@@ -6,7 +6,7 @@ from PyQt6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QLabel,
                               QComboBox, QPushButton, QFileDialog, QLineEdit,
                               QCheckBox, QGroupBox, QScrollArea, QWidget,
                               QProgressBar, QTextEdit)
-from PyQt6.QtCore import QThread, pyqtSignal
+from PyQt6.QtCore import QThread, pyqtSignal, QCoreApplication
 from PyQt6.QtGui import QFont
 
 from config.models import Configuration
@@ -53,7 +53,8 @@ class RenderWorker(QThread):
                 self._renderer.cancel()
             success = bool(self._renderer.render())
         except Exception as e:
-            self.progress.emit(0, 0, f"Render error: {e}")
+            self.progress.emit(0, 0, QCoreApplication.translate(
+                "RenderDialog", "Render error: {0}").format(e))
         self.render_done.emit(self.show.name, success)
 
     def cancel(self):
@@ -75,7 +76,8 @@ class RenderDialog(QDialog):
         self._render_queue = []
         self._current_render_idx = 0
 
-        self.setWindowTitle("Render Show to Video")
+        self.setWindowTitle(QCoreApplication.translate(
+            "RenderDialog", "Render Show to Video"))
         self.setMinimumWidth(550)
         self.setMinimumHeight(500)
         self._setup_ui()
@@ -84,14 +86,17 @@ class RenderDialog(QDialog):
         layout = QVBoxLayout(self)
 
         # Show selection
-        show_group = QGroupBox("Shows to Render")
+        show_group = QGroupBox(QCoreApplication.translate(
+            "RenderDialog", "Shows to Render"))
         show_layout = QVBoxLayout(show_group)
 
         # Select all / none buttons
         btn_row = QHBoxLayout()
-        select_all_btn = QPushButton("Select All")
+        select_all_btn = QPushButton(QCoreApplication.translate(
+            "RenderDialog", "Select All"))
         select_all_btn.clicked.connect(lambda: self._set_all_checked(True))
-        select_none_btn = QPushButton("Select None")
+        select_none_btn = QPushButton(QCoreApplication.translate(
+            "RenderDialog", "Select None"))
         select_none_btn.clicked.connect(lambda: self._set_all_checked(False))
         btn_row.addWidget(select_all_btn)
         btn_row.addWidget(select_none_btn)
@@ -123,7 +128,8 @@ class RenderDialog(QDialog):
 
         # Camera preset
         cam_row = QHBoxLayout()
-        cam_row.addWidget(QLabel("Camera:"))
+        cam_row.addWidget(QLabel(QCoreApplication.translate(
+            "RenderDialog", "Camera:")))
         self._camera_combo = QComboBox()
         for name, preset in CAMERA_PRESETS.items():
             self._camera_combo.addItem(f"{name} - {preset['description']}", name)
@@ -133,21 +139,25 @@ class RenderDialog(QDialog):
 
         # Output directory
         dir_row = QHBoxLayout()
-        dir_row.addWidget(QLabel("Output:"))
+        dir_row.addWidget(QLabel(QCoreApplication.translate(
+            "RenderDialog", "Output:")))
         self._output_dir_edit = QLineEdit()
-        self._output_dir_edit.setPlaceholderText("Select output directory...")
+        self._output_dir_edit.setPlaceholderText(QCoreApplication.translate(
+            "RenderDialog", "Select output directory..."))
         # Default to shows directory
         if self.config.shows_directory:
             default_dir = os.path.join(self.config.shows_directory, "renders")
             self._output_dir_edit.setText(default_dir)
         dir_row.addWidget(self._output_dir_edit, stretch=1)
-        browse_btn = QPushButton("Browse...")
+        browse_btn = QPushButton(QCoreApplication.translate(
+            "RenderDialog", "Browse..."))
         browse_btn.clicked.connect(self._browse_output)
         dir_row.addWidget(browse_btn)
         layout.addLayout(dir_row)
 
         # Render / Cancel buttons
-        self._render_btn = QPushButton("Render")
+        self._render_btn = QPushButton(QCoreApplication.translate(
+            "RenderDialog", "Render"))
         tokens = active_tokens()
         self._render_btn.setStyleSheet(f"""
             QPushButton {{
@@ -159,7 +169,8 @@ class RenderDialog(QDialog):
         """)
         self._render_btn.clicked.connect(self._start_render)
 
-        self._cancel_btn = QPushButton("Cancel")
+        self._cancel_btn = QPushButton(QCoreApplication.translate(
+            "RenderDialog", "Cancel"))
         self._cancel_btn.setStyleSheet(f"""
             QPushButton {{
                 background-color: {tokens['destructive']}; color: {tokens['on_function']}; font-weight: bold;
@@ -216,7 +227,8 @@ class RenderDialog(QDialog):
             cb.setChecked(checked)
 
     def _browse_output(self):
-        directory = QFileDialog.getExistingDirectory(self, "Select Output Directory")
+        directory = QFileDialog.getExistingDirectory(self, QCoreApplication.translate(
+            "RenderDialog", "Select Output Directory"))
         if directory:
             self._output_dir_edit.setText(directory)
 
@@ -253,30 +265,38 @@ class RenderDialog(QDialog):
         self._log.setVisible(True)
         self._log.clear()
 
-        self._log.append(f"Rendering {len(self._render_queue)} show(s)...")
+        self._log.append(QCoreApplication.translate(
+            "RenderDialog", "Rendering {0} show(s)...").format(
+                len(self._render_queue)))
 
         # Start first render
         self._render_next(camera_preset)
 
     def _render_next(self, camera_preset: str):
         if self._cancelled:
-            self._log.append("\nRender cancelled.")
-            self._progress_label.setText("Cancelled")
+            self._log.append(QCoreApplication.translate(
+                "RenderDialog", "\nRender cancelled."))
+            self._progress_label.setText(QCoreApplication.translate(
+                "RenderDialog", "Cancelled"))
             self._render_btn.setEnabled(True)
             self._cancel_btn.setVisible(False)
             return
         if self._current_render_idx >= len(self._render_queue):
             # All done
-            self._log.append("\nAll renders complete!")
+            self._log.append(QCoreApplication.translate(
+                "RenderDialog", "\nAll renders complete!"))
             self._render_btn.setEnabled(True)
             self._cancel_btn.setVisible(False)
-            self._progress_label.setText("Done!")
+            self._progress_label.setText(QCoreApplication.translate(
+                "RenderDialog", "Done!"))
             return
 
         show, output_path = self._render_queue[self._current_render_idx]
         total = len(self._render_queue)
         self._progress_label.setText(
-            f"Rendering {self._current_render_idx + 1}/{total}: {show.name}"
+            QCoreApplication.translate(
+                "RenderDialog", "Rendering {0}/{1}: {2}").format(
+                    self._current_render_idx + 1, total, show.name)
         )
         self._log.append(f"\n--- {show.name} ---")
 
@@ -310,9 +330,11 @@ class RenderDialog(QDialog):
 
     def _on_render_finished(self, show_name: str, success: bool, camera_preset: str):
         if success:
-            self._log.append(f"{show_name}: Render complete!")
+            self._log.append(QCoreApplication.translate(
+                "RenderDialog", "{0}: Render complete!").format(show_name))
         else:
-            self._log.append(f"{show_name}: Render FAILED")
+            self._log.append(QCoreApplication.translate(
+                "RenderDialog", "{0}: Render FAILED").format(show_name))
 
         self._current_render_idx += 1
         self._render_next(camera_preset)
@@ -321,7 +343,8 @@ class RenderDialog(QDialog):
         if self._worker:
             self._cancelled = True
             self._worker.cancel()
-            self._log.append("Cancelling...")
+            self._log.append(QCoreApplication.translate(
+                "RenderDialog", "Cancelling..."))
             # Render re-enables once the running worker has reported
             # back (_render_next), so a second render cannot start on
             # top of the one still winding down.

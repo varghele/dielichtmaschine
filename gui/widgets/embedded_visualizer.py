@@ -18,7 +18,7 @@ Two preview modes:
 
 from typing import Callable, Optional
 
-from PyQt6.QtCore import Qt, QTimer, pyqtSignal
+from PyQt6.QtCore import QCoreApplication, Qt, QTimer, pyqtSignal
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QLabel,
 )
@@ -63,17 +63,17 @@ class EmbeddedVisualizer(QWidget):
         toolbar.setContentsMargins(4, 2, 4, 2)
         toolbar.setSpacing(6)
 
-        self._reset_btn = QPushButton("Reset Camera")
-        self._reset_btn.setToolTip("Recenter the orbit camera")
+        self._reset_btn = QPushButton(QCoreApplication.translate("EmbeddedVisualizer", "Reset Camera"))
+        self._reset_btn.setToolTip(QCoreApplication.translate("EmbeddedVisualizer", "Recenter the orbit camera"))
         toolbar.addWidget(self._reset_btn)
 
-        self._popout_btn = QPushButton("Pop Out")
-        self._popout_btn.setToolTip("Launch the standalone visualizer subprocess")
+        self._popout_btn = QPushButton(QCoreApplication.translate("EmbeddedVisualizer", "Pop Out"))
+        self._popout_btn.setToolTip(QCoreApplication.translate("EmbeddedVisualizer", "Launch the standalone visualizer subprocess"))
         toolbar.addWidget(self._popout_btn)
 
         toolbar.addStretch()
 
-        self._fps_label = QLabel("FPS: --")
+        self._fps_label = QLabel(QCoreApplication.translate("EmbeddedVisualizer", "FPS: --"))
         self._fps_label.setStyleSheet("font-family: monospace; font-size: 10px;")
         toolbar.addWidget(self._fps_label)
 
@@ -214,7 +214,7 @@ class EmbeddedVisualizer(QWidget):
             fps = self._engine.get_fps()
         except Exception:
             return
-        self._fps_label.setText(f"FPS: {fps:.0f}")
+        self._fps_label.setText(QCoreApplication.translate("EmbeddedVisualizer", "FPS: {0:.0f}").format(fps))
 
     def _push_build_mode_dmx(self) -> None:
         """Synthesise per-universe DMX buffers using sane defaults per

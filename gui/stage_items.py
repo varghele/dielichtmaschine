@@ -1,5 +1,5 @@
 from PyQt6.QtWidgets import QGraphicsItem
-from PyQt6.QtCore import Qt, QRectF, QPointF
+from PyQt6.QtCore import QCoreApplication, Qt, QRectF, QPointF
 from PyQt6.QtGui import QPen, QBrush, QColor, QPainter, QFontMetrics
 from math import sin, cos, radians, atan2, sqrt
 
@@ -783,17 +783,25 @@ class StageElementItem(QGraphicsItem):
         from utils.stage_element_catalog import is_truss
 
         straight = self.element.kind == "truss-straight"
+        if is_truss(self.element.kind):
+            title = QCoreApplication.translate("StageItems", "Truss Length")
+        else:
+            title = QCoreApplication.translate("StageItems", "Element Size")
+        if straight:
+            prompt = QCoreApplication.translate("StageItems", "Length (m):")
+        else:
+            prompt = QCoreApplication.translate("StageItems", "Width (m):")
         length, ok = QInputDialog.getDouble(
-            None,
-            "Truss Length" if is_truss(self.element.kind) else "Element Size",
-            "Length (m):" if straight else "Width (m):",
+            None, title, prompt,
             self.element.width, 0.1, 100.0, 2)
         if not ok:
             return False
         depth = self.element.depth
         if not straight:
             depth, ok = QInputDialog.getDouble(
-                None, "Element Size", "Depth (m):",
+                None,
+                QCoreApplication.translate("StageItems", "Element Size"),
+                QCoreApplication.translate("StageItems", "Depth (m):"),
                 self.element.depth, 0.1, 100.0, 2)
             if not ok:
                 return False
@@ -808,23 +816,26 @@ class StageElementItem(QGraphicsItem):
         from utils.stage_element_catalog import is_truss
         view = self.scene().views()[0]
         menu = QMenu()
-        rotate_left = menu.addAction("Rotate -45°")
-        rotate_right = menu.addAction("Rotate +45°")
-        rename = menu.addAction("Set Label...")
+        rotate_left = menu.addAction(QCoreApplication.translate("StageItems", "Rotate -45°"))
+        rotate_right = menu.addAction(QCoreApplication.translate("StageItems", "Rotate +45°"))
+        rename = menu.addAction(QCoreApplication.translate("StageItems", "Set Label..."))
         size_action = menu.addAction(
-            "Truss Length..." if is_truss(self.element.kind)
-            else "Element Size...")
+            QCoreApplication.translate("StageItems", "Truss Length...")
+            if is_truss(self.element.kind)
+            else QCoreApplication.translate("StageItems", "Element Size..."))
         height_action = None
         if is_truss(self.element.kind):
-            height_action = menu.addAction("Truss Height...")
-        layer_menu = menu.addMenu("Assign to Layer")
+            height_action = menu.addAction(QCoreApplication.translate(
+                "StageItems",
+                "Truss Height..."))
+        layer_menu = menu.addMenu(QCoreApplication.translate("StageItems", "Assign to Layer"))
         layer_actions = {}
-        clear_action = layer_menu.addAction("(none)")
+        clear_action = layer_menu.addAction(QCoreApplication.translate("StageItems", "(none)"))
         config = getattr(view, "config", None)
         for layer in getattr(config, "stage_layers", []) or []:
             layer_actions[layer_menu.addAction(layer.name)] = layer.name
         menu.addSeparator()
-        remove = menu.addAction("Remove Element")
+        remove = menu.addAction(QCoreApplication.translate("StageItems", "Remove Element"))
 
         chosen = menu.exec(event.screenPos())
         if chosen is rotate_left:
@@ -841,16 +852,21 @@ class StageElementItem(QGraphicsItem):
                      if config and self.element.layer else None)
             current = layer.z_height if layer is not None else 4.0
             value, ok = QInputDialog.getDouble(
-                None, "Truss Height",
-                "Hang height (m) - moves every fixture on this truss's layer:",
+                None, QCoreApplication.translate("StageItems", "Truss Height"),
+                QCoreApplication.translate(
+                    "StageItems",
+                    "Hang height (m) - moves every fixture on this truss's layer:"),
                 current, 0.0, 30.0, 1)
             if ok and hasattr(view, "set_truss_height"):
                 view.set_truss_height(self.element, value)
             event.accept()
             return
         elif chosen is rename:
-            text, ok = QInputDialog.getText(None, "Element Label",
-                                            "Label:", text=self.element.label)
+            text, ok = QInputDialog.getText(
+                None,
+                QCoreApplication.translate("StageItems", "Element Label"),
+                QCoreApplication.translate("StageItems", "Label:"),
+                text=self.element.label)
             if ok:
                 self.element.label = text
         elif chosen is clear_action:

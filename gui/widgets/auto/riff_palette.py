@@ -10,7 +10,7 @@ from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QMenu, QWidgetAction, QCheckBox, QScrollArea, QFrame,
 )
-from PyQt6.QtCore import Qt, pyqtSignal
+from PyQt6.QtCore import QCoreApplication, Qt, pyqtSignal
 from typing import Dict, List, Optional, Set
 
 from gui.theme_style import bind_style
@@ -45,9 +45,9 @@ class _RiffChecklistMenu(QMenu):
 
         self.addSeparator()
 
-        select_all = self.addAction("Select All")
+        select_all = self.addAction(QCoreApplication.translate("RiffPalette", "Select All"))
         select_all.triggered.connect(self._select_all)
-        clear_all = self.addAction("Clear All")
+        clear_all = self.addAction(QCoreApplication.translate("RiffPalette", "Clear All"))
         clear_all.triggered.connect(self._clear_all)
 
     def get_selected(self) -> Set[str]:
@@ -87,7 +87,7 @@ class GroupRiffConstraintPanel(QWidget):
         layout.setContentsMargins(4, 4, 4, 4)
         layout.setSpacing(2)
 
-        title = QLabel("Riff Constraints")
+        title = QLabel(QCoreApplication.translate("RiffPalette", "Riff Constraints"))
         title.setStyleSheet("font-weight: bold; font-size: 11px;")
         layout.addWidget(title)
 
@@ -128,13 +128,13 @@ class GroupRiffConstraintPanel(QWidget):
         active_label = QLabel("▶ —")
         active_label.setFixedWidth(90)
         active_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        active_label.setToolTip("Currently active riff (engine-driven)")
+        active_label.setToolTip(QCoreApplication.translate("RiffPalette", "Currently active riff (engine-driven)"))
         active_label.setStyleSheet("font-size: 10px; font-weight: bold;")
         self._active_labels[group_name] = active_label
         row.addWidget(active_label)
 
         # Select button (opens checklist popup)
-        select_btn = QPushButton("All")
+        select_btn = QPushButton(QCoreApplication.translate("RiffPalette", "All"))
         select_btn.setFixedWidth(80)
         select_btn.setFixedHeight(24)
         select_btn.setStyleSheet("font-size: 10px;")
@@ -143,7 +143,7 @@ class GroupRiffConstraintPanel(QWidget):
         row.addWidget(select_btn)
 
         # Mode badge
-        mode_label = QLabel("AUTO")
+        mode_label = QLabel(QCoreApplication.translate("RiffPalette", "AUTO"))
         mode_label.setFixedWidth(70)
         mode_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         _set_mode_badge(mode_label, "success")
@@ -173,21 +173,21 @@ class GroupRiffConstraintPanel(QWidget):
 
         if count == 0 or count == total:
             # All or none selected = fully automatic
-            btn.setText("All")
-            mode_label.setText("AUTO")
+            btn.setText(QCoreApplication.translate("RiffPalette", "All"))
+            mode_label.setText(QCoreApplication.translate("RiffPalette", "AUTO"))
             _set_mode_badge(mode_label, "success")
             self.constraints_changed.emit(group_name, None)
         elif count == 1:
             # Locked to one riff
             name = next(iter(selected))
             btn.setText(name)
-            mode_label.setText("LOCKED")
+            mode_label.setText(QCoreApplication.translate("RiffPalette", "LOCKED"))
             _set_mode_badge(mode_label, "warning")
             self.constraints_changed.emit(group_name, selected)
         else:
             # Curated subset
-            btn.setText(f"{count} sel.")
-            mode_label.setText(f"CURATED")
+            btn.setText(QCoreApplication.translate("RiffPalette", "{0} sel.").format(count))
+            mode_label.setText(QCoreApplication.translate("RiffPalette", "CURATED"))
             _set_mode_badge(mode_label, "info")
             self.constraints_changed.emit(group_name, selected)
 

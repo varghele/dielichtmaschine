@@ -60,7 +60,8 @@ marked "arrives next".
 import logging
 from typing import Dict, List, Optional, Tuple
 
-from PyQt6.QtCore import Qt, QObject, QTimer, pyqtSignal
+from PyQt6.QtCore import (Qt, QObject, QTimer, pyqtSignal, QCoreApplication,
+                          QT_TRANSLATE_NOOP)
 from PyQt6.QtGui import QColor, QFont, QPainter, QPolygon
 from PyQt6.QtCore import QPoint
 from PyQt6.QtWidgets import (
@@ -104,16 +105,29 @@ DEFAULT_GROUP_COLOR = "#808080"
 # None for a solid swatch and an rgb for a two-colour diagonal split. The
 # id is stored per selected group in LiveState.colours; the label is the
 # swatch caption. Colours are copied verbatim from the reference screen.
+# The labels here (and in FADE_OPTIONS / COMPOSITE_CATEGORIES /
+# _RECORD_TAGS) are only marked for translation; they are translated
+# where shown, because a module-level translate() would run before the
+# translator is installed.
 COLOUR_SWATCHES: Tuple[Tuple[str, str, str, Optional[str]], ...] = (
-    ("white", "White", "#FFFFFF", None),
-    ("amber", "Amber", "#FFB43C", None),
-    ("red", "Red", "#FF2850", None),
-    ("magenta", "Magenta", "#C95FD0", None),
-    ("cyan", "Cyan", "#4ECBD4", None),
-    ("blue", "Blue", "#4060FF", None),
-    ("green", "Green", "#40FF70", None),
-    ("red_cyan", "Red / Cyan", "#FF2850", "#4ECBD4"),
-    ("mag_amber", "Mag / Amber", "#C95FD0", "#FFB43C"),
+    ("white", QT_TRANSLATE_NOOP("LiveTab", "White"),
+     "#FFFFFF", None),
+    ("amber", QT_TRANSLATE_NOOP("LiveTab", "Amber"),
+     "#FFB43C", None),
+    ("red", QT_TRANSLATE_NOOP("LiveTab", "Red"),
+     "#FF2850", None),
+    ("magenta", QT_TRANSLATE_NOOP("LiveTab", "Magenta"),
+     "#C95FD0", None),
+    ("cyan", QT_TRANSLATE_NOOP("LiveTab", "Cyan"),
+     "#4ECBD4", None),
+    ("blue", QT_TRANSLATE_NOOP("LiveTab", "Blue"),
+     "#4060FF", None),
+    ("green", QT_TRANSLATE_NOOP("LiveTab", "Green"),
+     "#40FF70", None),
+    ("red_cyan", QT_TRANSLATE_NOOP("LiveTab", "Red / Cyan"),
+     "#FF2850", "#4ECBD4"),
+    ("mag_amber", QT_TRANSLATE_NOOP("LiveTab", "Mag / Amber"),
+     "#C95FD0", "#FFB43C"),
 )
 
 # COLOUR FX (2026-07-24): procedural colour looks that override the
@@ -131,12 +145,12 @@ COLOUR_FX_IDS = frozenset(fx_id for fx_id, _label in COLOUR_FX)
 # second count without a clock, so their seconds is None - the key still
 # selects the chip and drives future bar-locked resolves.
 FADE_OPTIONS: Tuple[Tuple[str, str, Optional[float]], ...] = (
-    ("snap", "SNAP", 0.0),
-    ("0.5s", "0.5 s", 0.5),
-    ("2s", "2 s", 2.0),
-    ("4s", "4 s", 4.0),
-    ("1bar", "1 BAR", None),
-    ("4bars", "4 BARS", None),
+    ("snap", QT_TRANSLATE_NOOP("LiveTab", "SNAP"), 0.0),
+    ("0.5s", QT_TRANSLATE_NOOP("LiveTab", "0.5 s"), 0.5),
+    ("2s", QT_TRANSLATE_NOOP("LiveTab", "2 s"), 2.0),
+    ("4s", QT_TRANSLATE_NOOP("LiveTab", "4 s"), 4.0),
+    ("1bar", QT_TRANSLATE_NOOP("LiveTab", "1 BAR"), None),
+    ("4bars", QT_TRANSLATE_NOOP("LiveTab", "4 BARS"), None),
 )
 DEFAULT_FADE_KEY = "2s"
 DEFAULT_FADE_SECONDS = 2.0
@@ -186,7 +200,8 @@ COMPOSITE_EFFECTS: Tuple[Tuple[str, str, str, str, str], ...] = (
 )
 COMPOSITE_BY_ID = {c[0]: c for c in COMPOSITE_EFFECTS}
 #: Category display order + labels for the EFFECTS pool headers.
-COMPOSITE_CATEGORIES = (("loops", "Loops"), ("hits", "Hits"))
+COMPOSITE_CATEGORIES = (("loops", QT_TRANSLATE_NOOP("LiveTab", "Loops")),
+                        ("hits", QT_TRANSLATE_NOOP("LiveTab", "Hits")))
 # INTENSITY FX: the riff-library category the pool lists (bundled
 # dimmer-only riffs in riffs/intensity/). Staged on the engine's own
 # "intensity" slot, concurrent with a colour riff from EFFECTS.
@@ -974,7 +989,9 @@ class _SelectTile(QWidget):
                                        tracking_em=0.05)
         self.name_label.setMinimumWidth(1)
         layout.addWidget(self.name_label)
-        count_text = "1 fixture" if count == 1 else f"{count} fixtures"
+        count_text = QCoreApplication.translate(
+            "LiveTab", "1 fixture") if count == 1 else QCoreApplication.translate(
+                "LiveTab", "{0} fixtures").format(count)
         self.count_label = MicroLabel(count_text, point_size=7,
                                       tracking_em=0.1)
         self.count_label.setMinimumWidth(1)
@@ -1038,7 +1055,9 @@ class _ColourSwatch(QWidget):
         self._active = False
         self.setFixedSize(SWATCH_SIZE, SWATCH_SIZE)
         self.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.setToolTip(f"{label} - touch to fade the selection to it")
+        self.setToolTip(QCoreApplication.translate(
+            "LiveTab", "{0} - touch to fade the selection to it").format(
+                label))
 
     def is_active(self) -> bool:
         return self._active
@@ -1077,7 +1096,8 @@ class _ColourSwatch(QWidget):
         text_hex = _contrast_text(self._secondary or self._primary)
         painter.setPen(QColor(text_hex))
         painter.setFont(mono_font(7, QFont.Weight.Medium))
-        suffix = " OK" if self._active else ""
+        suffix = QCoreApplication.translate(
+            "LiveTab", " OK") if self._active else ""
         painter.drawText(6, h - 6, (self.label + suffix).upper())
         painter.end()
 
@@ -1370,46 +1390,61 @@ class LiveTab(BaseTab):
         # SHOW / LIVE busk-on-top toggle (top-left, by SELECT). Exclusive
         # segment; the surface is always live, the mode only says whether a
         # predefined show also runs underneath. Default LIVE.
-        hbox.addWidget(MicroLabel("Mode", point_size=8, tracking_em=0.12))
+        hbox.addWidget(MicroLabel(QCoreApplication.translate(
+            "LiveTab", "Mode"), point_size=8, tracking_em=0.12))
         self._mode_group = QButtonGroup(self)
         self._mode_group.setExclusive(True)
-        self._show_mode_btn = self._mode_chip("SHOW", "show",
-            "Run a predefined show underneath the live surface · the "
-            "busk rides on top (busk-on-top merge)")
-        self._live_mode_btn = self._mode_chip("LIVE", "live",
-            "Free-busk: nothing else runs underneath the live surface")
+        self._show_mode_btn = self._mode_chip(QCoreApplication.translate(
+            "LiveTab", "SHOW"), "show",
+            QCoreApplication.translate(
+                "LiveTab",
+                "Run a predefined show underneath the live surface · the "
+                "busk rides on top (busk-on-top merge)"))
+        self._live_mode_btn = self._mode_chip(QCoreApplication.translate(
+            "LiveTab", "LIVE"), "live",
+            QCoreApplication.translate(
+                "LiveTab",
+                "Free-busk: nothing else runs underneath the live surface"))
         hbox.addWidget(self._show_mode_btn)
         hbox.addWidget(self._live_mode_btn)
         hbox.addSpacing(8)
 
-        hbox.addWidget(MicroLabel("Select", point_size=8, tracking_em=0.12))
+        hbox.addWidget(MicroLabel(QCoreApplication.translate(
+            "LiveTab", "Select"), point_size=8, tracking_em=0.12))
 
         # The group tiles are rebuilt from the config here.
         self._tiles_host = QHBoxLayout()
         self._tiles_host.setSpacing(6)
         hbox.addLayout(self._tiles_host)
 
-        self._groups_empty_hint = MicroLabel("No fixture groups yet",
+        self._groups_empty_hint = MicroLabel(QCoreApplication.translate(
+            "LiveTab", "No fixture groups yet"),
                                              point_size=8, tracking_em=0.1)
         self._groups_empty_hint.setMinimumWidth(1)
         hbox.addWidget(self._groups_empty_hint)
 
-        self._all_btn = self._quick_chip("ALL", "Select every group")
+        self._all_btn = self._quick_chip(QCoreApplication.translate(
+            "LiveTab", "ALL"), QCoreApplication.translate(
+            "LiveTab", "Select every group"))
         self._all_btn.clicked.connect(self._on_select_all)
         hbox.addWidget(self._all_btn)
 
         # ODD/EVEN is a fixture-level selection tool; without a fixture
         # programmer it is an honest placeholder this pass.
         self._oddeven_btn = self._quick_chip(
-            "ODD/EVEN", "Odd/even fixture split arrives with the "
-            "fixture programmer")
+            QCoreApplication.translate(
+                "LiveTab", "ODD/EVEN"), QCoreApplication.translate(
+                "LiveTab",
+                "Odd/even fixture split arrives with the fixture programmer"))
         self._oddeven_btn.setEnabled(False)
         hbox.addWidget(self._oddeven_btn)
 
         hbox.addStretch(1)
 
         self._clear_sel_btn = self._quick_chip(
-            "CLEAR SEL", "Clear the current group selection")
+            QCoreApplication.translate(
+                "LiveTab", "CLEAR SEL"), QCoreApplication.translate(
+                "LiveTab", "Clear the current group selection"))
         self._clear_sel_btn.clicked.connect(self.state.clear_selection)
         hbox.addWidget(self._clear_sel_btn)
         return row
@@ -1448,33 +1483,41 @@ class LiveTab(BaseTab):
         hbox.setContentsMargins(16, 6, 16, 6)
         hbox.setSpacing(6)
 
-        hbox.addWidget(MicroLabel("Show", point_size=8, tracking_em=0.12))
+        hbox.addWidget(MicroLabel(QCoreApplication.translate(
+            "LiveTab", "Show"), point_size=8, tracking_em=0.12))
         self._show_combo = QComboBox()
         self._show_combo.setMinimumWidth(180)
         self._show_combo.setProperty("role", "lane-chip")
         self._show_combo.setToolTip(
-            "The song the busk rides over (setlist order, then extras)")
+            QCoreApplication.translate(
+                "LiveTab",
+                "The song the busk rides over (setlist order, then extras)"))
         self._show_combo.activated.connect(self._on_show_song_activated)
         hbox.addWidget(self._show_combo)
 
-        self._show_play_btn = QPushButton("PLAY")
+        self._show_play_btn = QPushButton(QCoreApplication.translate(
+            "LiveTab", "PLAY"))
         self._show_play_btn.setCheckable(True)
         self._show_play_btn.setProperty("role", "output-select")
         self._show_play_btn.setFont(mono_font(8, QFont.Weight.DemiBold))
         self._show_play_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self._show_play_btn.setToolTip(
-            "Start / stop the selected show under the busk surface")
+            QCoreApplication.translate(
+                "LiveTab",
+                "Start / stop the selected show under the busk surface"))
         self._show_play_btn.clicked.connect(self._on_show_play_clicked)
         hbox.addWidget(self._show_play_btn)
 
         # Same LED-readout voice as the BPM: what is playing, where.
         self._show_time = QLabel("--:-- / --:--")
         self._show_time.setObjectName("TimeReadout")
-        self._show_time.setToolTip("Show position / total")
+        self._show_time.setToolTip(QCoreApplication.translate(
+            "LiveTab", "Show position / total"))
         hbox.addWidget(self._show_time)
 
         self._show_hint = MicroLabel(
-            "No show transport - open a project with songs",
+            QCoreApplication.translate(
+                "LiveTab", "No show transport - open a project with songs"),
             point_size=7, tracking_em=0.08)
         self._show_hint.setMinimumWidth(1)
         hbox.addSpacing(6)
@@ -1553,9 +1596,12 @@ class LiveTab(BaseTab):
         combo.setEnabled(bool(songs))
         self._show_play_btn.setEnabled(bool(songs))
         self._show_play_btn.setChecked(playing)
-        self._show_play_btn.setText("STOP" if playing else "PLAY")
+        self._show_play_btn.setText(QCoreApplication.translate(
+            "LiveTab", "STOP") if playing else QCoreApplication.translate(
+            "LiveTab", "PLAY"))
         self._show_hint.setVisible(not songs)
-        self._show_hint.setText("No songs in this project"
+        self._show_hint.setText(QCoreApplication.translate(
+            "LiveTab", "No songs in this project")
                                 if songs == [] else self._show_hint.text())
         if songs:
             self._show_time.setText(
@@ -1571,9 +1617,10 @@ class LiveTab(BaseTab):
         hbox = QHBoxLayout(row)
         hbox.setContentsMargins(16, 6, 16, 6)
         hbox.setSpacing(6)
-        hbox.addWidget(MicroLabel("Fade", point_size=8, tracking_em=0.12))
+        hbox.addWidget(MicroLabel(QCoreApplication.translate(
+            "LiveTab", "Fade"), point_size=8, tracking_em=0.12))
         for key, label, seconds in FADE_OPTIONS:
-            btn = QPushButton(label)
+            btn = QPushButton(QCoreApplication.translate("LiveTab", label))
             btn.setCheckable(True)
             btn.setProperty("role", "output-select")
             btn.setFont(mono_font(8, QFont.Weight.Medium))
@@ -1584,7 +1631,9 @@ class LiveTab(BaseTab):
             hbox.addWidget(btn)
             self._fade_buttons.append((btn, key, seconds))
         hint = MicroLabel(
-            "Touch a palette · selection fades to it over this time",
+            QCoreApplication.translate(
+                "LiveTab",
+                "Touch a palette · selection fades to it over this time"),
             point_size=7, tracking_em=0.08)
         hint.setMinimumWidth(1)
         hbox.addSpacing(6)
@@ -1599,20 +1648,24 @@ class LiveTab(BaseTab):
         self._out_chip = QLabel()
         self._out_chip.setObjectName("OutputReadout")
         hbox.addWidget(self._out_chip)
-        self._sync_chip = QLabel("SYNC INT")
+        self._sync_chip = QLabel(QCoreApplication.translate(
+            "LiveTab", "SYNC INT"))
         self._sync_chip.setObjectName("OutputReadout")
         self._sync_chip.setProperty("state", "on")
         self._sync_chip.setToolTip(
-            "Tempo reference: internal (TAP). External sync - MIDI "
-            "clock, MTC, LTC - arrives with the sync engine and will "
-            "slave the clock shown here")
+            QCoreApplication.translate(
+                "LiveTab",
+                "Tempo reference: internal (TAP). External sync - MIDI "
+                "clock, MTC, LTC - arrives with the sync engine and will "
+                "slave the clock shown here"))
         hbox.addWidget(self._sync_chip)
         # Incoming SMPTE readout (2026-07-22): the received timecode,
         # inline instead of tooltip-only - the operator glance line.
         # Empty (hidden) while the sync is internal.
         self._sync_tc_label = QLabel("")
         self._sync_tc_label.setObjectName("TimeReadout")
-        self._sync_tc_label.setToolTip("Last received SMPTE timecode")
+        self._sync_tc_label.setToolTip(QCoreApplication.translate(
+            "LiveTab", "Last received SMPTE timecode"))
         self._sync_tc_label.hide()
         hbox.addWidget(self._sync_tc_label)
         # Sync input DEVICE (2026-07-22, moved here from the Structure
@@ -1627,20 +1680,24 @@ class LiveTab(BaseTab):
         self._sync_device_combo.setFont(mono_font(8))
         self._sync_device_combo.setMaximumWidth(180)
         self._sync_device_combo.setToolTip(
-            "Audio input carrying the LTC/SMPTE signal")
+            QCoreApplication.translate(
+                "LiveTab", "Audio input carrying the LTC/SMPTE signal"))
         self._sync_device_combo.currentIndexChanged.connect(
             self._on_sync_device_selected)
         hbox.addWidget(self._sync_device_combo)
         # ARM CHASE from the busk surface (the same shell arm/disarm
         # the Structure tab drives).
-        self._arm_chase_btn = QPushButton("ARM")
+        self._arm_chase_btn = QPushButton(QCoreApplication.translate(
+            "LiveTab", "ARM"))
         self._arm_chase_btn.setCheckable(True)
         self._arm_chase_btn.setProperty("role", "output-select")
         self._arm_chase_btn.setFont(mono_font(8, QFont.Weight.Medium))
         self._arm_chase_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self._arm_chase_btn.setToolTip(
-            "Follow incoming SMPTE timecode (songs with an SMPTE "
-            "trigger fire at their start time)")
+            QCoreApplication.translate(
+                "LiveTab",
+                "Follow incoming SMPTE timecode (songs with an SMPTE "
+                "trigger fire at their start time)"))
         self._arm_chase_btn.toggled.connect(self._on_arm_chase_toggled)
         hbox.addWidget(self._arm_chase_btn)
         hbox.addSpacing(8)
@@ -1650,31 +1707,38 @@ class LiveTab(BaseTab):
         # Tempo cluster (right end): a BPM readout + TAP + RESET. This is
         # the reference tempo for the rate-based controls (strobe rate, the
         # rudiment "1/4"); this pass only surfaces and stores it.
-        hbox.addWidget(MicroLabel("Tempo", point_size=8, tracking_em=0.12))
+        hbox.addWidget(MicroLabel(QCoreApplication.translate(
+            "LiveTab", "Tempo"), point_size=8, tracking_em=0.12))
         # The BPM is the live reference number: it wears the LED-readout
         # treatment (#TimeReadout - bold mono, readout green on its dark
         # well), same voice as the transport timecodes.
         self._bpm_display = QLabel(f"{self.state.bpm:.1f} BPM")
         self._bpm_display.setObjectName("TimeReadout")
-        self._bpm_display.setToolTip("Tempo reference for rate controls "
-                                     "(strobe rate, rudiments)")
+        self._bpm_display.setToolTip(QCoreApplication.translate(
+            "LiveTab",
+            "Tempo reference for rate controls (strobe rate, rudiments)"))
         hbox.addWidget(self._bpm_display)
 
-        self._tap_btn = QPushButton("TAP")
+        self._tap_btn = QPushButton(QCoreApplication.translate(
+            "LiveTab", "TAP"))
         self._tap_btn.setProperty("role", "output-select")
         self._tap_btn.setFont(mono_font(8, QFont.Weight.DemiBold))
         self._tap_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        self._tap_btn.setToolTip("Tap in time to set the tempo")
+        self._tap_btn.setToolTip(QCoreApplication.translate(
+            "LiveTab", "Tap in time to set the tempo"))
         self._tap_btn.clicked.connect(self._on_tap_tempo)
         hbox.addWidget(self._tap_btn)
 
-        self._tap_reset_btn = QPushButton("RESET")
+        self._tap_reset_btn = QPushButton(QCoreApplication.translate(
+            "LiveTab", "RESET"))
         self._tap_reset_btn.setProperty("role", "output-select")
         self._tap_reset_btn.setFont(mono_font(8, QFont.Weight.Medium))
         self._tap_reset_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self._tap_reset_btn.setToolTip(
-            f"Reset the tempo to {DEFAULT_LIVE_BPM:.0f} BPM and clear "
-            "the tap history")
+            QCoreApplication.translate(
+                "LiveTab",
+                "Reset the tempo to {0:.0f} BPM and clear the tap history").format(
+                    DEFAULT_LIVE_BPM))
         self._tap_reset_btn.clicked.connect(self._on_reset_tempo)
         hbox.addWidget(self._tap_reset_btn)
         return row
@@ -1730,12 +1794,14 @@ class LiveTab(BaseTab):
 
         if status is None or not status["running"]:
             self._last_frames_sent = None
-            chip.setText("OUT OFF")
+            chip.setText(QCoreApplication.translate("LiveTab", "OUT OFF"))
             self._set_chip_state(chip, False)
             chip.setToolTip(
-                "No DMX is being sent · enable ArtNet output (topbar "
-                "chip) to stream the merged look to the rig and the "
-                "visualizer")
+                QCoreApplication.translate(
+                    "LiveTab",
+                    "No DMX is being sent · enable ArtNet output (topbar "
+                    "chip) to stream the merged look to the rig and the "
+                    "visualizer"))
             return
 
         frames = status["frames_sent"]
@@ -1748,15 +1814,19 @@ class LiveTab(BaseTab):
         dot = "●" if active else "○"
         chip.setText(f"{dot} ARTNET · {len(mapping)}U"
                      + ("*" if mixed else ""))
-        lines = [f"U{uid} -> ArtNet universe {wire}"
-                 + (f" · configured {plugins[uid]}"
+        lines = [QCoreApplication.translate(
+            "LiveTab", "U{0} -> ArtNet universe {1}").format(uid, wire)
+                 + (QCoreApplication.translate(
+                     "LiveTab", " · configured {0}").format(plugins[uid])
                     if plugins.get(uid, "ArtNet") != "ArtNet" else "")
                  for uid, wire in sorted(mapping.items())]
         if mixed:
             lines.append(
-                "* some universes are configured for E1.31 / DMX USB - "
-                "native output is ArtNet-only for now; those settings "
-                "are honoured in the QLC+ export")
+                QCoreApplication.translate(
+                    "LiveTab",
+                    "* some universes are configured for E1.31 / DMX USB - "
+                    "native output is ArtNet-only for now; those settings "
+                    "are honoured in the QLC+ export"))
         chip.setToolTip("\n".join(lines))
         self._set_chip_state(chip, True)
 
@@ -1770,28 +1840,37 @@ class LiveTab(BaseTab):
         this from the LTC service's signals."""
         chip = self._sync_chip
         if source == "ltc":
-            text = {"locked": "SYNC LTC",
-                    "freewheel": "SYNC LTC · FW",
-                    "no_signal": "SYNC LTC · NO SIG"}.get(
-                        state, "SYNC LTC")
+            text = {"locked": QCoreApplication.translate(
+                "LiveTab", "SYNC LTC"),
+                    "freewheel": QCoreApplication.translate(
+                        "LiveTab", "SYNC LTC · FW"),
+                    "no_signal": QCoreApplication.translate(
+                        "LiveTab", "SYNC LTC · NO SIG")}.get(
+                        state, QCoreApplication.translate(
+                            "LiveTab", "SYNC LTC"))
             chip.setText(text)
-            tip = "Chasing incoming SMPTE timecode"
+            tip = QCoreApplication.translate(
+                "LiveTab", "Chasing incoming SMPTE timecode")
             if label:
-                tip += f" · last {label}"
+                tip += QCoreApplication.translate(
+                    "LiveTab", " · last {0}").format(label)
             if state == "freewheel":
-                tip += " · signal lost, freewheeling"
+                tip += QCoreApplication.translate(
+                    "LiveTab", " · signal lost, freewheeling")
             elif state == "no_signal":
-                tip += " · no signal"
+                tip += QCoreApplication.translate("LiveTab", " · no signal")
             chip.setToolTip(tip)
             self._set_chip_state(chip, state == "locked")
             self._sync_tc_label.setText(label or "--:--:--:--")
             self._sync_tc_label.show()
         else:
-            chip.setText("SYNC INT")
+            chip.setText(QCoreApplication.translate("LiveTab", "SYNC INT"))
             chip.setToolTip(
-                "Tempo reference: internal (TAP). External sync - MIDI "
-                "clock, MTC, LTC - arrives with the sync engine and "
-                "will slave the clock shown here")
+                QCoreApplication.translate(
+                    "LiveTab",
+                    "Tempo reference: internal (TAP). External sync - MIDI "
+                    "clock, MTC, LTC - arrives with the sync engine and "
+                    "will slave the clock shown here"))
             self._set_chip_state(chip, True)
             self._sync_tc_label.clear()
             self._sync_tc_label.hide()
@@ -1806,7 +1885,9 @@ class LiveTab(BaseTab):
         btn = self._arm_chase_btn
         btn.blockSignals(True)
         btn.setChecked(armed)
-        btn.setText("CHASING" if armed else "ARM")
+        btn.setText(QCoreApplication.translate(
+            "LiveTab", "CHASING") if armed else QCoreApplication.translate(
+            "LiveTab", "ARM"))
         btn.blockSignals(False)
 
     def _seed_sync_device_combo(self) -> None:
@@ -1816,7 +1897,8 @@ class LiveTab(BaseTab):
         combo = self._sync_device_combo
         combo.blockSignals(True)
         combo.clear()
-        combo.addItem("Default input", "")
+        combo.addItem(QCoreApplication.translate(
+            "LiveTab", "Default input"), "")
         persisted = getattr(getattr(self.config, "setlist", None),
                             "sync_device", "") or ""
         if persisted:
@@ -1836,7 +1918,8 @@ class LiveTab(BaseTab):
         combo = self._sync_device_combo
         combo.blockSignals(True)
         combo.clear()
-        combo.addItem("Default input", "")
+        combo.addItem(QCoreApplication.translate(
+            "LiveTab", "Default input"), "")
         try:
             from audio.device_manager import DeviceManager
             for dev in DeviceManager().enumerate_input_devices():
@@ -1996,7 +2079,8 @@ class LiveTab(BaseTab):
 
     def _build_colour_pool(self) -> QWidget:
         pool, layout = self._pool_shell()
-        layout.addWidget(self._pool_header("Colour palettes"))
+        layout.addWidget(self._pool_header(QCoreApplication.translate(
+            "LiveTab", "Colour palettes")))
 
         grid_host = QWidget()
         grid = QGridLayout(grid_host)
@@ -2007,17 +2091,25 @@ class LiveTab(BaseTab):
         columns = 3
         cells: List[QWidget] = []
         for colour_id, label, primary, secondary in COLOUR_SWATCHES:
-            swatch = _ColourSwatch(colour_id, label, primary, secondary)
+            swatch = _ColourSwatch(
+                colour_id, QCoreApplication.translate("LiveTab", label),
+                primary, secondary)
             swatch.clicked.connect(self._on_colour_touched)
             self._colour_swatches[colour_id] = swatch
             cells.append(swatch)
         # Placeholders (stage 7): song palette link, colour picker, + REC.
-        song = _PlaceholderCell("Song Palette")
-        song.setToolTip("Song palettes arrive with the show-link pass")
-        picker = _PlaceholderCell("Picker")
-        picker.setToolTip("Colour picker wheel arrives with the picker pass")
-        rec = _PlaceholderCell("+ REC", dashed=True)
-        rec.setToolTip("Capture the current look as a palette (stage 7)")
+        song = _PlaceholderCell(QCoreApplication.translate(
+            "LiveTab", "Song Palette"))
+        song.setToolTip(QCoreApplication.translate(
+            "LiveTab", "Song palettes arrive with the show-link pass"))
+        picker = _PlaceholderCell(QCoreApplication.translate(
+            "LiveTab", "Picker"))
+        picker.setToolTip(QCoreApplication.translate(
+            "LiveTab", "Colour picker wheel arrives with the picker pass"))
+        rec = _PlaceholderCell(QCoreApplication.translate(
+            "LiveTab", "+ REC"), dashed=True)
+        rec.setToolTip(QCoreApplication.translate(
+            "LiveTab", "Capture the current look as a palette (stage 7)"))
         self._colour_placeholders = {
             "song_palette": song, "picker": picker, "rec": rec}
         cells.extend((song, picker, rec))
@@ -2031,8 +2123,9 @@ class LiveTab(BaseTab):
         # COLOUR FX subsection: procedural colour looks (Rainbow) that
         # override the swatch on the selected groups. Same selection gate
         # as the swatches (staging targets the selection).
-        layout.addWidget(self._pool_header("Colour FX", "Applies to: "
-                                           "selection"))
+        layout.addWidget(self._pool_header(QCoreApplication.translate(
+            "LiveTab", "Colour FX"), QCoreApplication.translate(
+            "LiveTab", "Applies to: selection")))
         fx_host = QWidget()
         fx_grid = QGridLayout(fx_host)
         fx_grid.setContentsMargins(14, 0, 14, 12)
@@ -2041,8 +2134,11 @@ class LiveTab(BaseTab):
         for i, (fx_id, label) in enumerate(COLOUR_FX):
             cell = _LibraryCell(fx_id, label)
             cell.setToolTip(
-                f"{label} · cycles the colour on the selected groups · "
-                "overrides the swatch · touch again to release")
+                QCoreApplication.translate(
+                    "LiveTab",
+                    "{0} · cycles the colour on the selected groups · "
+                    "overrides the swatch · touch again to release").format(
+                        label))
             cell.clicked.connect(self._on_colour_fx_touched)
             self._colour_fx_cells[fx_id] = cell
             fx_grid.addWidget(cell, i // columns, i % columns)
@@ -2067,15 +2163,19 @@ class LiveTab(BaseTab):
         # Tag kept short ("Movers only", not "Applies to: movers") - the
         # narrow five-column header truncates longer tags silently.
         section_layout.addWidget(self._pool_header(
-            "Position palettes", "Movers only", tag_accent=True))
-        section_layout.addWidget(self._pool_header("Presets"))
+            QCoreApplication.translate(
+                "LiveTab", "Position palettes"), QCoreApplication.translate(
+                "LiveTab", "Movers only"), tag_accent=True))
+        section_layout.addWidget(self._pool_header(QCoreApplication.translate(
+            "LiveTab", "Presets")))
         preset_host = QWidget()
         preset_grid = QGridLayout(preset_host)
         preset_grid.setContentsMargins(14, 0, 14, 6)
         preset_grid.setSpacing(6)
         self._preset_grid = preset_grid
         section_layout.addWidget(preset_host)
-        section_layout.addWidget(self._pool_header("Marks"))
+        section_layout.addWidget(self._pool_header(QCoreApplication.translate(
+            "LiveTab", "Marks")))
         marks_host = QWidget()
         marks_grid = QGridLayout(marks_host)
         marks_grid.setContentsMargins(14, 0, 14, 10)
@@ -2095,7 +2195,9 @@ class LiveTab(BaseTab):
         shapes_section_layout.setContentsMargins(0, 0, 0, 0)
         shapes_section_layout.setSpacing(0)
         shapes_section_layout.addWidget(
-            self._pool_header("Movement shapes", "Movers only",
+            self._pool_header(QCoreApplication.translate(
+                "LiveTab", "Movement shapes"), QCoreApplication.translate(
+                "LiveTab", "Movers only"),
                               tag_accent=True))
         # Orbit SIZE chips (S/M/L, meters): physical radius around the
         # anchor - a running shape restages to the new size live.
@@ -2103,7 +2205,8 @@ class LiveTab(BaseTab):
         size_box = QHBoxLayout(size_row)
         size_box.setContentsMargins(14, 0, 14, 6)
         size_box.setSpacing(6)
-        size_box.addWidget(MicroLabel("Size", point_size=7,
+        size_box.addWidget(MicroLabel(QCoreApplication.translate(
+            "LiveTab", "Size"), point_size=7,
                                       tracking_em=0.12))
         self._shape_size_buttons = []
         for label, meters in SHAPE_SIZES:
@@ -2112,8 +2215,9 @@ class LiveTab(BaseTab):
             btn.setProperty("role", "output-select")
             btn.setFont(mono_font(8, QFont.Weight.Medium))
             btn.setCursor(Qt.CursorShape.PointingHandCursor)
-            btn.setToolTip(f"Orbit radius {meters:g} m around the "
-                           "held position")
+            btn.setToolTip(QCoreApplication.translate(
+                "LiveTab", "Orbit radius {0:g} m around the held position").format(
+                    meters))
             btn.clicked.connect(
                 lambda _checked=False, m=meters:
                 self.state.set_shape_size(m))
@@ -2128,12 +2232,15 @@ class LiveTab(BaseTab):
         stagger_box = QHBoxLayout(stagger_row)
         stagger_box.setContentsMargins(14, 0, 14, 6)
         stagger_box.setSpacing(6)
-        stagger_box.addWidget(MicroLabel("Stagger", point_size=7,
+        stagger_box.addWidget(MicroLabel(QCoreApplication.translate(
+            "LiveTab", "Stagger"), point_size=7,
                                          tracking_em=0.12))
         self._stagger_slider = _RateSlider()
         self._stagger_slider.setToolTip(
-            "Spread the heads around the shape's cycle · 0 moves them "
-            "in unison, 100 fans them evenly")
+            QCoreApplication.translate(
+                "LiveTab",
+                "Spread the heads around the shape's cycle · 0 moves them "
+                "in unison, 100 fans them evenly"))
         self._stagger_slider.value_changed.connect(
             self.state.set_shape_stagger)
         stagger_box.addWidget(self._stagger_slider, 1)
@@ -2146,9 +2253,11 @@ class LiveTab(BaseTab):
         for i, (shape_id, label) in enumerate(MOVEMENT_SHAPES):
             cell = _LibraryCell(shape_id, label)
             cell.setToolTip(
-                f"{label} · loops on the selected mover groups, "
-                "anchored at each group's held position (CENTRE when "
-                "none is held) · touch again to release")
+                QCoreApplication.translate(
+                    "LiveTab",
+                    "{0} · loops on the selected mover groups, anchored at "
+                    "each group's held position (CENTRE when none is held) "
+                    "· touch again to release").format(label))
             cell.clicked.connect(self._on_shape_touched)
             self._movement_cells[shape_id] = cell
             shape_grid.addWidget(cell, i // shape_columns,
@@ -2167,7 +2276,9 @@ class LiveTab(BaseTab):
         mover groups among them). Fire-only - no QUEUE latch."""
         if not self.state.stage_shape(shape_id):
             self._flash_programmer_warning(
-                "NO MOVER GROUP SELECTED · SHAPES RUN ON SELECTED MOVERS")
+                QCoreApplication.translate(
+                    "LiveTab",
+                    "NO MOVER GROUP SELECTED · SHAPES RUN ON SELECTED MOVERS"))
         else:
             self._clear_programmer_warning()
 
@@ -2196,31 +2307,40 @@ class LiveTab(BaseTab):
         for i, preset in enumerate(compute_presets(self.config)):
             if preset.kind == KIND_POINT:
                 x, y, z = preset.point
-                where = f"target {x:.1f} / {y:.1f} / {z:.1f} m"
+                where = QCoreApplication.translate(
+                    "LiveTab", "target {0:.1f} / {1:.1f} / {2:.1f} m").format(
+                        x, y, z)
             else:
-                where = "each mover derives its own target"
+                where = QCoreApplication.translate(
+                    "LiveTab", "each mover derives its own target")
             self._add_position_cell(
                 self._preset_grid, i, preset.preset_id, preset.label,
                 preset.tag,
-                f"{preset.label} · computed from the stage setup · "
-                f"{where} · touch to point the selected movers at it")
+                QCoreApplication.translate(
+                    "LiveTab",
+                    "{0} · computed from the stage setup · {1} · touch to "
+                    "point the selected movers at it").format(
+                        preset.label, where))
         for col in range(2):
             self._preset_grid.setColumnStretch(col, 1)
 
         spots = getattr(self.config, "spots", {}) or {}
         if not spots:
             self._marks_grid.addWidget(
-                self._marker("No marks yet · add spike marks on the "
-                             "Stage tab"),
+                self._marker(QCoreApplication.translate(
+                    "LiveTab",
+                    "No marks yet · add spike marks on the Stage tab")),
                 0, 0, 1, 2)
             return
         for i, (name, spot) in enumerate(spots.items()):
             self._add_position_cell(
                 self._marks_grid, i, mark_id(name), name,
                 f"{spot.x:.1f} · {spot.y:.1f}",
-                f"{name} · stage {spot.x:.1f} / {spot.y:.1f} / "
-                f"{spot.z:.1f} m · touch to point the selected movers "
-                "at it")
+                QCoreApplication.translate(
+                    "LiveTab",
+                    "{0} · stage {1:.1f} / {2:.1f} / {3:.1f} m · touch to "
+                    "point the selected movers at it").format(
+                        name, spot.x, spot.y, spot.z))
         for col in range(2):
             self._marks_grid.setColumnStretch(col, 1)
 
@@ -2261,8 +2381,10 @@ class LiveTab(BaseTab):
         # category (riffs/intensity/, bundled) on the engine's own
         # concurrent slot: a dimmer pattern under a colour riff.
         # Selection-scoped like the EFFECTS pool.
-        layout.addWidget(self._pool_header("Intensity FX",
-                                           "Selection", tag_accent=True))
+        layout.addWidget(self._pool_header(QCoreApplication.translate(
+            "LiveTab", "Intensity FX"),
+                                           QCoreApplication.translate(
+                                               "LiveTab", "Selection"), tag_accent=True))
         grid_host = QWidget()
         grid = QGridLayout(grid_host)
         grid.setContentsMargins(14, 0, 14, 8)
@@ -2282,17 +2404,19 @@ class LiveTab(BaseTab):
                  if r.category == INTENSITY_CATEGORY]
         if not riffs:
             self._intensity_grid.addWidget(
-                self._marker("No intensity FX · bundled riffs missing"),
+                self._marker(QCoreApplication.translate(
+                    "LiveTab", "No intensity FX · bundled riffs missing")),
                 0, 0, 1, 2)
             return
         columns = 2
         for i, riff in enumerate(riffs):
             key = f"{riff.category}/{riff.name}"
             cell = _LibraryCell(key, _display_name(riff.name))
-            cell.setToolTip(f"{_display_name(riff.name)} · "
-                            f"{riff.description} · "
-                            "dimmer-only, loops on the selected groups "
-                            "· touch again to release")
+            cell.setToolTip(QCoreApplication.translate(
+                "LiveTab",
+                "{0} · {1} · dimmer-only, loops on the selected groups · "
+                "touch again to release").format(
+                    _display_name(riff.name), riff.description))
             cell.clicked.connect(self._on_intensity_touched)
             self._intensity_cells[key] = cell
             self._intensity_grid.addWidget(cell, i // columns,
@@ -2306,7 +2430,9 @@ class LiveTab(BaseTab):
         runs under its colour riff). Fire-only like shapes."""
         if not self.state.stage_intensity(key):
             self._flash_programmer_warning(
-                "NO GROUP SELECTED · INTENSITY FX RUN ON SELECTED GROUPS")
+                QCoreApplication.translate(
+                    "LiveTab",
+                    "NO GROUP SELECTED · INTENSITY FX RUN ON SELECTED GROUPS"))
         else:
             self._clear_programmer_warning()
 
@@ -2318,7 +2444,9 @@ class LiveTab(BaseTab):
         groups; the pool greys out with no selection."""
         pool, layout = self._pool_shell()
         layout.addWidget(self._pool_header(
-            "Effects", "Applies to: selection", tag_accent=True))
+            QCoreApplication.translate(
+                "LiveTab", "Effects"), QCoreApplication.translate(
+                "LiveTab", "Applies to: selection"), tag_accent=True))
         grid_host = QWidget()
         grid = QGridLayout(grid_host)
         grid.setContentsMargins(14, 0, 14, 10)
@@ -2334,7 +2462,9 @@ class LiveTab(BaseTab):
         enabled - a scene spans multiple groups, independent of the
         current selection."""
         pool, layout = self._pool_shell()
-        layout.addWidget(self._pool_header("Scenes", "Whole rig"))
+        layout.addWidget(self._pool_header(QCoreApplication.translate(
+            "LiveTab", "Scenes"), QCoreApplication.translate(
+            "LiveTab", "Whole rig")))
         grid_host = QWidget()
         grid = QGridLayout(grid_host)
         grid.setContentsMargins(14, 0, 14, 10)
@@ -2404,16 +2534,20 @@ class LiveTab(BaseTab):
             entries = [c for c in COMPOSITE_EFFECTS if c[2] == category]
             if not entries:
                 continue
-            header = MicroLabel(label, point_size=7, tracking_em=0.12)
+            header = MicroLabel(QCoreApplication.translate("LiveTab", label),
+                                point_size=7, tracking_em=0.12)
             self._effects_grid.addWidget(header, grid_row, 0, 1, columns)
             grid_row += 1
             for i, (cid, clabel, _cat, ikey, shape) in enumerate(entries):
                 cell = _LibraryCell(cid, clabel)
                 shape_label = dict(MOVEMENT_SHAPES).get(shape, shape)
                 cell.setToolTip(
-                    f"{clabel} · {self._key_name(ikey)} + "
-                    f"{shape_label} · sets the intensity FX and movement "
-                    "shape on the selected groups · touch again to release")
+                    QCoreApplication.translate(
+                        "LiveTab",
+                        "{0} · {1} + {2} · sets the intensity FX and "
+                        "movement shape on the selected groups · touch "
+                        "again to release").format(
+                            clabel, self._key_name(ikey), shape_label))
                 cell.clicked.connect(self._on_composite_touched)
                 self._effect_cells[cid] = cell
                 self._effects_grid.addWidget(cell,
@@ -2430,7 +2564,8 @@ class LiveTab(BaseTab):
         scenes = library.get_all_scenes() if library is not None else []
         if not scenes:
             self._scenes_grid.addWidget(
-                self._marker("No scenes yet · predefined looks arrive later"),
+                self._marker(QCoreApplication.translate(
+                    "LiveTab", "No scenes yet · predefined looks arrive later")),
                 0, 0, 1, 2)
             return
         columns = 2
@@ -2486,7 +2621,9 @@ class LiveTab(BaseTab):
         # later once a queued colour has a defined target selection).
         if not self.state.stage_colour(colour_id):
             self._flash_programmer_warning(
-                "NO GROUP SELECTED · PICK GROUPS, THEN TOUCH A COLOUR")
+                QCoreApplication.translate(
+                    "LiveTab",
+                    "NO GROUP SELECTED · PICK GROUPS, THEN TOUCH A COLOUR"))
         else:
             self._clear_programmer_warning()
 
@@ -2495,7 +2632,9 @@ class LiveTab(BaseTab):
         # selected groups and overrides their swatch with a cycling look.
         if not self.state.stage_colour_fx(fx_id):
             self._flash_programmer_warning(
-                "NO GROUP SELECTED · PICK GROUPS, THEN TOUCH A COLOUR FX")
+                QCoreApplication.translate(
+                    "LiveTab",
+                    "NO GROUP SELECTED · PICK GROUPS, THEN TOUCH A COLOUR FX"))
         else:
             self._clear_programmer_warning()
 
@@ -2511,7 +2650,9 @@ class LiveTab(BaseTab):
             return
         if not self.state.stage_composite(composite_id):
             self._flash_programmer_warning(
-                "NO GROUP SELECTED · PICK GROUPS, THEN TOUCH AN EFFECT")
+                QCoreApplication.translate(
+                    "LiveTab",
+                    "NO GROUP SELECTED · PICK GROUPS, THEN TOUCH AN EFFECT"))
         else:
             self._clear_programmer_warning()
 
@@ -2530,7 +2671,9 @@ class LiveTab(BaseTab):
         if not self.state.stage_position(
                 position_id, self._position_labels.get(position_id)):
             self._flash_programmer_warning(
-                "NO GROUP SELECTED · PICK GROUPS, THEN TOUCH A POSITION")
+                QCoreApplication.translate(
+                    "LiveTab",
+                    "NO GROUP SELECTED · PICK GROUPS, THEN TOUCH A POSITION"))
         else:
             self._clear_programmer_warning()
 
@@ -2590,7 +2733,8 @@ class LiveTab(BaseTab):
         # non-killable show row sits on top (honestly marked - there is
         # no output engine yet); then one row per running record with
         # PAUSE/RESUME + KILL. Rows are rebuilt in _refresh_playback_rows.
-        layout.addWidget(MicroLabel("Active playbacks", point_size=8,
+        layout.addWidget(MicroLabel(QCoreApplication.translate(
+            "LiveTab", "Active playbacks"), point_size=8,
                                     tracking_em=0.14))
         self._playbacks_host = QWidget()
         self._playbacks_box = QVBoxLayout(self._playbacks_host)
@@ -2598,14 +2742,17 @@ class LiveTab(BaseTab):
         self._playbacks_box.setSpacing(6)
         layout.addWidget(self._playbacks_host)
 
-        self._active_playbacks_label = QLabel("NOTHING ELSE RUNNING")
+        self._active_playbacks_label = QLabel(QCoreApplication.translate(
+            "LiveTab", "NOTHING ELSE RUNNING"))
         self._active_playbacks_label.setProperty("role", "hint-box")
         self._active_playbacks_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._active_playbacks_label.setFont(mono_font(8, tracking_em=0.1))
         self._active_playbacks_label.setWordWrap(True)
         self._active_playbacks_label.setToolTip(
-            "Fired effects and scenes stack here; actual output arrives "
-            "with the engine pass")
+            QCoreApplication.translate(
+                "LiveTab",
+                "Fired effects and scenes stack here; actual output arrives "
+                "with the engine pass"))
         layout.addWidget(self._active_playbacks_label)
 
         # NEXT UP: the preloaded queue + the QUEUE arm latch beside the
@@ -2613,18 +2760,22 @@ class LiveTab(BaseTab):
         # here instead of firing it; GO pops the head and fires it live.
         next_caption = QHBoxLayout()
         next_caption.setSpacing(8)
-        next_caption.addWidget(MicroLabel("Next up", point_size=8,
+        next_caption.addWidget(MicroLabel(QCoreApplication.translate(
+            "LiveTab", "Next up"), point_size=8,
                                           tracking_em=0.14))
         next_caption.addStretch(1)
-        self._queue_latch_btn = QPushButton("QUEUE")
+        self._queue_latch_btn = QPushButton(QCoreApplication.translate(
+            "LiveTab", "QUEUE"))
         self._queue_latch_btn.setCheckable(True)
         self._queue_latch_btn.setProperty("role", "output-select")
         self._queue_latch_btn.setFont(mono_font(8, QFont.Weight.DemiBold))
         self._queue_latch_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self._queue_latch_btn.setToolTip(
-            "Latch, then touch an EFFECTS or SCENES cell to stage it in "
-            "NEXT UP instead of firing it live · unlatch to fire live "
-            "again (colour swatches always fire live)")
+            QCoreApplication.translate(
+                "LiveTab",
+                "Latch, then touch an EFFECTS or SCENES cell to stage it in "
+                "NEXT UP instead of firing it live · unlatch to fire live "
+                "again (colour swatches always fire live)"))
         next_caption.addWidget(self._queue_latch_btn)
         layout.addLayout(next_caption)
 
@@ -2635,36 +2786,41 @@ class LiveTab(BaseTab):
         layout.addWidget(self._next_up_host)
 
         self._queue_empty_hint = QLabel(
-            "QUEUE EMPTY · LATCH QUEUE THEN TOUCH A PALETTE")
+            QCoreApplication.translate(
+                "LiveTab", "QUEUE EMPTY · LATCH QUEUE THEN TOUCH A PALETTE"))
         self._queue_empty_hint.setProperty("role", "hint-box")
         self._queue_empty_hint.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._queue_empty_hint.setFont(mono_font(8, tracking_em=0.1))
         self._queue_empty_hint.setWordWrap(True)
         layout.addWidget(self._queue_empty_hint)
 
-        self._go_btn = QPushButton("GO")
+        self._go_btn = QPushButton(QCoreApplication.translate("LiveTab", "GO"))
         self._go_btn.setProperty("role", "cta-accent")
         self._go_btn.setFont(display_font(14, QFont.Weight.Bold,
                                           tracking_em=0.08))
         self._go_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        self._go_btn.setToolTip("Fire the first NEXT UP item live")
+        self._go_btn.setToolTip(QCoreApplication.translate(
+            "LiveTab", "Fire the first NEXT UP item live"))
         self._go_btn.setEnabled(False)
         self._go_btn.clicked.connect(self.state.fire_next)
         layout.addWidget(self._go_btn)
 
         # STROBE.
-        layout.addWidget(MicroLabel("Strobe", point_size=8, tracking_em=0.14))
+        layout.addWidget(MicroLabel(QCoreApplication.translate(
+            "LiveTab", "Strobe"), point_size=8, tracking_em=0.14))
         strobe_row = QHBoxLayout()
         strobe_row.setSpacing(8)
         self._strobe_slider = _RateSlider()
         self._strobe_slider.value_changed.connect(self.state.set_strobe_rate)
         strobe_row.addWidget(self._strobe_slider, 1)
-        self._strobe_btn = QPushButton("STROBE")
+        self._strobe_btn = QPushButton(QCoreApplication.translate(
+            "LiveTab", "STROBE"))
         self._strobe_btn.setCheckable(True)
         self._strobe_btn.setProperty("role", "output-select")
         self._strobe_btn.setFont(mono_font(8, QFont.Weight.DemiBold))
         self._strobe_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        self._strobe_btn.setToolTip("Toggle the strobe effect on the rig")
+        self._strobe_btn.setToolTip(QCoreApplication.translate(
+            "LiveTab", "Toggle the strobe effect on the rig"))
         self._strobe_btn.toggled.connect(self.state.set_strobe_on)
         strobe_row.addWidget(self._strobe_btn)
         layout.addLayout(strobe_row)
@@ -2672,32 +2828,39 @@ class LiveTab(BaseTab):
         # STROBE KILL / HOLD LOOK / RELEASE ALL.
         kills_row = QHBoxLayout()
         kills_row.setSpacing(6)
-        self._strobe_kill_btn = QPushButton("STROBE KILL")
+        self._strobe_kill_btn = QPushButton(QCoreApplication.translate(
+            "LiveTab", "STROBE KILL"))
         self._strobe_kill_btn.setProperty("role", "output-select")
         self._strobe_kill_btn.setFont(mono_font(8, QFont.Weight.Medium))
         self._strobe_kill_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        self._strobe_kill_btn.setToolTip("Force the strobe off")
+        self._strobe_kill_btn.setToolTip(QCoreApplication.translate(
+            "LiveTab", "Force the strobe off"))
         self._strobe_kill_btn.clicked.connect(self.state.strobe_kill)
         kills_row.addWidget(self._strobe_kill_btn, 1)
 
-        self._hold_look_btn = QPushButton("HOLD LOOK")
+        self._hold_look_btn = QPushButton(QCoreApplication.translate(
+            "LiveTab", "HOLD LOOK"))
         self._hold_look_btn.setCheckable(True)
         self._hold_look_btn.setProperty("role", "output-select")
         self._hold_look_btn.setFont(mono_font(8, QFont.Weight.Medium))
         self._hold_look_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        self._hold_look_btn.setToolTip("Latch the current look (block the "
-                                       "show from taking it back)")
+        self._hold_look_btn.setToolTip(QCoreApplication.translate(
+            "LiveTab",
+            "Latch the current look (block the show from taking it back)"))
         self._hold_look_btn.toggled.connect(self.state.set_hold_look)
         kills_row.addWidget(self._hold_look_btn, 1)
 
-        self._release_all_btn = QPushButton("RELEASE ALL")
+        self._release_all_btn = QPushButton(QCoreApplication.translate(
+            "LiveTab", "RELEASE ALL"))
         self._release_all_btn.setProperty("role", "cta-outline")
         self._release_all_btn.setFont(display_font(12, QFont.Weight.DemiBold,
                                                    tracking_em=0.06))
         self._release_all_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self._release_all_btn.setToolTip(
-            "Panic release: clear the programmer and the running "
-            "playbacks (the NEXT UP queue is kept)")
+            QCoreApplication.translate(
+                "LiveTab",
+                "Panic release: clear the programmer and the running "
+                "playbacks (the NEXT UP queue is kept)"))
         self._release_all_btn.clicked.connect(self.state.release_all)
         kills_row.addWidget(self._release_all_btn, 1)
         layout.addLayout(kills_row)
@@ -2723,11 +2886,13 @@ class LiveTab(BaseTab):
         header = QWidget()
         header_row = QHBoxLayout(header)
         header_row.setContentsMargins(16, 8, 16, 6)
-        header_row.addWidget(MicroLabel("Playbacks · submasters",
+        header_row.addWidget(MicroLabel(QCoreApplication.translate(
+            "LiveTab", "Playbacks · submasters"),
                                         point_size=8, tracking_em=0.12))
         header_row.addStretch(1)
         header_row.addWidget(MicroLabel(
-            "GRAND + one fader per group · FLASH is momentary",
+            QCoreApplication.translate(
+                "LiveTab", "GRAND + one fader per group · FLASH is momentary"),
             point_size=7, tracking_em=0.08))
         layout.addWidget(header)
 
@@ -2736,7 +2901,8 @@ class LiveTab(BaseTab):
         self._bank_layout.setContentsMargins(12, 4, 12, 12)
         self._bank_layout.setSpacing(8)
 
-        self._bank_empty_hint = MicroLabel("No fixture groups yet",
+        self._bank_empty_hint = MicroLabel(QCoreApplication.translate(
+            "LiveTab", "No fixture groups yet"),
                                            point_size=8, tracking_em=0.1)
         self._bank_empty_hint.setMinimumWidth(1)
         self._bank_layout.addWidget(self._bank_empty_hint)
@@ -2758,7 +2924,8 @@ class LiveTab(BaseTab):
         col_layout.setContentsMargins(6, 6, 6, 6)
         col_layout.setSpacing(4)
 
-        name_label = MicroLabel("GRAND", point_size=8, tracking_em=0.06)
+        name_label = MicroLabel(QCoreApplication.translate(
+            "LiveTab", "GRAND"), point_size=8, tracking_em=0.06)
         name_label.setMinimumWidth(1)
         name_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         col_layout.addWidget(name_label)
@@ -2772,12 +2939,13 @@ class LiveTab(BaseTab):
         # armed (destructive-outline:checked) - a kill switch must show
         # its state, and the always-filled "destructive" role reads
         # identical checked and unchecked.
-        dbo = QPushButton("DBO")
+        dbo = QPushButton(QCoreApplication.translate("LiveTab", "DBO"))
         dbo.setCheckable(True)
         dbo.setProperty("role", "destructive-outline")
         dbo.setFont(mono_font(8, QFont.Weight.DemiBold))
         dbo.setCursor(Qt.CursorShape.PointingHandCursor)
-        dbo.setToolTip("Dead blackout - zero all output")
+        dbo.setToolTip(QCoreApplication.translate(
+            "LiveTab", "Dead blackout - zero all output"))
         dbo.toggled.connect(self.state.set_dbo)
         col_layout.addWidget(dbo)
         self._dbo_btn = dbo
@@ -2830,11 +2998,12 @@ class LiveTab(BaseTab):
         col_layout.addWidget(fader, 1, Qt.AlignmentFlag.AlignHCenter)
         self._submaster_faders[name] = fader
 
-        flash = QPushButton("FLASH")
+        flash = QPushButton(QCoreApplication.translate("LiveTab", "FLASH"))
         flash.setProperty("role", "output-select")
         flash.setFont(mono_font(8, QFont.Weight.Medium))
         flash.setCursor(Qt.CursorShape.PointingHandCursor)
-        flash.setToolTip(f"Flash {name} to full while held")
+        flash.setToolTip(QCoreApplication.translate(
+            "LiveTab", "Flash {0} to full while held").format(name))
         flash.pressed.connect(lambda g=name: self.state.set_flash(g, True))
         flash.released.connect(lambda g=name: self.state.set_flash(g, False))
         col_layout.addWidget(flash)
@@ -3060,33 +3229,45 @@ class LiveTab(BaseTab):
         name = next(iter(songs), None)
         row, hbox = self._row_shell()
         self._pinned_show_label, self._pinned_show_marker = self._row_text(
-            hbox, name if name else "SHOW",
-            "Show mode · pinned · no engine yet")
+            hbox, name if name else QCoreApplication.translate(
+                "LiveTab", "SHOW"),
+            QCoreApplication.translate(
+                "LiveTab", "Show mode · pinned · no engine yet"))
         return row
 
     #: Running/queued row kind -> tag caption.
-    _RECORD_TAGS = {"intensity": "DIM", "shape": "SHAPE",
-                    "scene": "SCENE", "composite": "FX"}
+    _RECORD_TAGS = {"intensity": QT_TRANSLATE_NOOP("LiveTab", "DIM"),
+                    "shape": QT_TRANSLATE_NOOP("LiveTab", "SHAPE"),
+                    "scene": QT_TRANSLATE_NOOP("LiveTab", "SCENE"),
+                    "composite": QT_TRANSLATE_NOOP("LiveTab", "FX")}
 
     def _make_running_row(self, index: int, record: dict) -> QWidget:
         row, hbox = self._row_shell()
-        tag = self._RECORD_TAGS.get(record["kind"], "FX")
+        tag = QCoreApplication.translate(
+            "LiveTab", self._RECORD_TAGS.get(record["kind"], "FX"))
         groups = record.get("groups") or ()
         if groups:
             tag += " · " + " + ".join(groups)
         self._row_text(hbox, record["label"],
-                       f"{tag} · PAUSED" if record["paused"] else tag)
+                       QCoreApplication.translate(
+                           "LiveTab", "{0} · PAUSED").format(
+                               tag) if record["paused"] else tag)
         pause = self._row_button(
-            "RESUME" if record["paused"] else "PAUSE", "output-select",
-            "Pause flag only - actual output pause arrives with the "
-            "engine pass")
+            QCoreApplication.translate(
+                "LiveTab", "RESUME") if record["paused"] else QCoreApplication.translate(
+                    "LiveTab", "PAUSE"), "output-select",
+            QCoreApplication.translate(
+                "LiveTab",
+                "Pause flag only - actual output pause arrives with the "
+                "engine pass"))
         pause.clicked.connect(
             lambda _checked=False, i=index: self.state.toggle_pause(i))
         hbox.addWidget(pause)
         self._pause_buttons.append(pause)
         kill = self._row_button(
-            "KILL", "destructive",
-            "Remove this playback and clear its staged state")
+            QCoreApplication.translate("LiveTab", "KILL"), "destructive",
+            QCoreApplication.translate(
+                "LiveTab", "Remove this playback and clear its staged state"))
         kill.clicked.connect(
             lambda _checked=False, i=index: self.state.kill_playback(i))
         hbox.addWidget(kill)
@@ -3095,10 +3276,13 @@ class LiveTab(BaseTab):
 
     def _make_queued_row(self, index: int, record: dict) -> QWidget:
         row, hbox = self._row_shell()
-        tag = self._RECORD_TAGS.get(record["kind"], "FX")
+        tag = QCoreApplication.translate(
+            "LiveTab", self._RECORD_TAGS.get(record["kind"], "FX"))
         self._row_text(hbox, record["label"], tag)
         remove = self._row_button("X", "output-select",
-                                  "Remove this item from the queue")
+                                  QCoreApplication.translate(
+                                      "LiveTab",
+                                      "Remove this item from the queue"))
         remove.clicked.connect(
             lambda _checked=False, i=index: self.state.remove_queued(i))
         hbox.addWidget(remove)
@@ -3151,31 +3335,43 @@ class LiveTab(BaseTab):
             if colour_ids:
                 colours_txt = " · ".join(
                     sorted(self._colour_label(c) for c in colour_ids))
-                text = f"PROGRAMMER: {groups_txt} · {colours_txt}"
+                text = QCoreApplication.translate(
+                    "LiveTab", "PROGRAMMER: {0} · {1}").format(
+                        groups_txt, colours_txt)
             else:
-                text = f"PROGRAMMER: {groups_txt} · NO COLOUR"
+                text = QCoreApplication.translate(
+                    "LiveTab", "PROGRAMMER: {0} · NO COLOUR").format(
+                        groups_txt)
         elif state.colours:
             groups_txt = " + ".join(sorted(state.colours))
-            text = f"PROGRAMMER: {groups_txt} (HELD) · RELEASE TO SHOW"
+            text = QCoreApplication.translate(
+                "LiveTab", "PROGRAMMER: {0} (HELD) · RELEASE TO SHOW").format(
+                    groups_txt)
         else:
-            text = "PROGRAMMER: EMPTY · SELECT A GROUP · TOUCH A PALETTE"
+            text = QCoreApplication.translate(
+                "LiveTab",
+                "PROGRAMMER: EMPTY · SELECT A GROUP · TOUCH A PALETTE")
         # Composites decompose into DIM (intensity) + SHAPE, both shown
         # below - no separate FX line.
         if state.scene:
-            text += f" · SCENE: {self._key_name(state.scene).upper()}"
+            text += QCoreApplication.translate(
+                "LiveTab", " · SCENE: {0}").format(
+                    self._key_name(state.scene).upper())
         shape_ids = state.active_shape_keys() if state.selected \
             else set(state.shapes.values())
         if shape_ids:
             shape_labels = sorted(
                 dict(MOVEMENT_SHAPES).get(s, s).upper()
                 for s in shape_ids)
-            text += f" · SHAPE: {' · '.join(shape_labels)}"
+            text += QCoreApplication.translate(
+                "LiveTab", " · SHAPE: {0}").format(' · '.join(shape_labels))
         intensity_keys = state.active_intensity_keys() if state.selected \
             else set(state.intensities.values())
         if intensity_keys:
             dim_labels = sorted(self._key_name(k).upper()
                                 for k in intensity_keys)
-            text += f" · DIM: {' · '.join(dim_labels)}"
+            text += QCoreApplication.translate(
+                "LiveTab", " · DIM: {0}").format(' · '.join(dim_labels))
         # POS shows the selection's applied targets; with no selection,
         # everything held (mirrors the colour HELD branch). Display
         # labels ("CROSS", "DS CENTRE"), not raw namespaced ids; fall
@@ -3187,7 +3383,8 @@ class LiveTab(BaseTab):
             labels = sorted(
                 (state.position_labels.get(p) or p.split(":")[-1]).upper()
                 for p in position_ids)
-            text += f" · POS: {' · '.join(labels)}"
+            text += QCoreApplication.translate(
+                "LiveTab", " · POS: {0}").format(' · '.join(labels))
         self._programmer_label.setText(text)
 
     @staticmethod
@@ -3202,7 +3399,7 @@ class LiveTab(BaseTab):
     def _colour_label(colour_id: Optional[str]) -> str:
         for cid, label, _p, _s in COLOUR_SWATCHES:
             if cid == colour_id:
-                return label
+                return QCoreApplication.translate("LiveTab", label)
         return colour_id or "-"
 
     # -- theme switches --------------------------------------------------

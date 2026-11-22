@@ -8,7 +8,7 @@ runs on the in-memory config - the user saves manually, so a reload
 discards an unwanted conversion.
 """
 
-from PyQt6.QtCore import Qt
+from PyQt6.QtCore import QCoreApplication, Qt
 from PyQt6.QtWidgets import (QDialog, QDialogButtonBox, QHeaderView,
                              QLabel, QTableWidget, QTableWidgetItem,
                              QVBoxLayout)
@@ -22,7 +22,7 @@ class MovementMigrationDialog(QDialog):
     def __init__(self, entries, parent=None):
         super().__init__(parent)
         self.entries = entries
-        self.setWindowTitle("Convert Movement to World Targets")
+        self.setWindowTitle(QCoreApplication.translate("MovementMigrationDialog", "Convert Movement to World Targets"))
         self.setMinimumSize(720, 420)
 
         layout = QVBoxLayout(self)
@@ -30,27 +30,26 @@ class MovementMigrationDialog(QDialog):
         converted = sum(1 for e in entries if e.status == "converted")
         skipped = len(entries) - converted
         if entries:
-            summary = (f"{converted} movement block(s) get a world target"
-                       f" · {skipped} skipped")
+            summary = (QCoreApplication.translate("MovementMigrationDialog", "{0} movement block(s) get a world target · {1} skipped").format(converted, skipped))
         else:
-            summary = ("No movement blocks to convert - every block "
+            summary = (QCoreApplication.translate("MovementMigrationDialog", "No movement blocks to convert - every block "
                        "already has a world target (or no song carries "
-                       "movement).")
+                       "movement)."))
         self.summary_label = QLabel(summary)
         layout.addWidget(self.summary_label)
 
         hint = QLabel(
-            "The centre beam of each block is traced onto the stage; the "
+            QCoreApplication.translate("MovementMigrationDialog", "The centre beam of each block is traced onto the stage; the "
             "landing point becomes the block's world target. Pan/tilt "
             "values stay as fallback. Nothing changes until CONVERT; "
-            "save the config to persist.")
+            "save the config to persist."))
         hint.setWordWrap(True)
         hint.setProperty("role", "stat-caption")
         layout.addWidget(hint)
 
         self.report_table = QTableWidget(len(entries), 4)
         self.report_table.setHorizontalHeaderLabels(
-            ["SONG", "LANE", "RANGE", "RESULT"])
+            [QCoreApplication.translate("MovementMigrationDialog", "SONG"), QCoreApplication.translate("MovementMigrationDialog", "LANE"), QCoreApplication.translate("MovementMigrationDialog", "RANGE"), QCoreApplication.translate("MovementMigrationDialog", "RESULT")])
         self.report_table.setEditTriggers(
             QTableWidget.EditTrigger.NoEditTriggers)
         self.report_table.setSelectionMode(
@@ -73,7 +72,7 @@ class MovementMigrationDialog(QDialog):
             QDialogButtonBox.StandardButton.Ok
             | QDialogButtonBox.StandardButton.Cancel)
         self.ok_button = buttons.button(QDialogButtonBox.StandardButton.Ok)
-        self.ok_button.setText("CONVERT")
+        self.ok_button.setText(QCoreApplication.translate("MovementMigrationDialog", "CONVERT"))
         self.ok_button.setProperty("role", "primary")
         self.ok_button.setEnabled(converted > 0)
         buttons.accepted.connect(self.accept)

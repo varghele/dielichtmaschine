@@ -12,6 +12,7 @@ for bug reports.
 import time
 
 from PyQt6 import QtWidgets
+from PyQt6.QtCore import QCoreApplication
 
 from gui.fonts import FONT_MONO
 from utils import user_warnings
@@ -29,18 +30,22 @@ def render_report(log=None) -> str:
     op_name, op_entries = log.last_operation()
     lines = []
     if op_name:
-        lines.append(f"LAST OPERATION · {op_name}")
+        lines.append(QCoreApplication.translate(
+            "WarningsDialog", "LAST OPERATION · {0}").format(op_name))
         if op_entries:
             lines += [_format_entry(e) for e in reversed(op_entries)]
         else:
-            lines.append("(no warnings)")
+            lines.append(QCoreApplication.translate(
+                "WarningsDialog", "(no warnings)"))
         lines.append("")
     entries = log.entries()
-    lines.append(f"ALL RECENT WARNINGS ({len(entries)})")
+    lines.append(QCoreApplication.translate(
+        "WarningsDialog", "ALL RECENT WARNINGS ({0})").format(len(entries)))
     if entries:
         lines += [_format_entry(e) for e in reversed(entries)]
     else:
-        lines.append("(none this session)")
+        lines.append(QCoreApplication.translate(
+            "WarningsDialog", "(none this session)"))
     return "\n".join(lines)
 
 
@@ -49,7 +54,8 @@ class WarningsDialog(QtWidgets.QDialog):
 
     def __init__(self, parent=None, log=None):
         super().__init__(parent)
-        self.setWindowTitle("Warnings")
+        self.setWindowTitle(QCoreApplication.translate(
+            "WarningsDialog", "Warnings"))
         self.setModal(True)
         self.resize(720, 480)
         self._log = log or user_warnings.get_log()
@@ -58,10 +64,12 @@ class WarningsDialog(QtWidgets.QDialog):
         layout.setSpacing(10)
 
         intro = QtWidgets.QLabel(
-            "Problems the app worked around instead of stopping - "
-            "skipped lanes, unreadable fixture definitions, missing "
-            "audio. Everything here is also in the log file "
-            "(Help > Open Log Folder).")
+            QCoreApplication.translate(
+                "WarningsDialog",
+                "Problems the app worked around instead of stopping - "
+                "skipped lanes, unreadable fixture definitions, missing "
+                "audio. Everything here is also in the log file (Help > "
+                "Open Log Folder)."))
         intro.setWordWrap(True)
         layout.addWidget(intro)
 
@@ -72,15 +80,18 @@ class WarningsDialog(QtWidgets.QDialog):
         layout.addWidget(self.text_view, 1)
 
         bottom = QtWidgets.QHBoxLayout()
-        self.copy_btn = QtWidgets.QPushButton("COPY TO CLIPBOARD")
+        self.copy_btn = QtWidgets.QPushButton(QCoreApplication.translate(
+            "WarningsDialog", "COPY TO CLIPBOARD"))
         self.copy_btn.clicked.connect(self._copy)
         bottom.addWidget(self.copy_btn)
-        self.clear_btn = QtWidgets.QPushButton("CLEAR")
+        self.clear_btn = QtWidgets.QPushButton(QCoreApplication.translate(
+            "WarningsDialog", "CLEAR"))
         self.clear_btn.clicked.connect(self._clear)
         bottom.addWidget(self.clear_btn)
         self.copied_label = QtWidgets.QLabel("")
         bottom.addWidget(self.copied_label, 1)
-        close_btn = QtWidgets.QPushButton("Close")
+        close_btn = QtWidgets.QPushButton(QCoreApplication.translate(
+            "WarningsDialog", "Close"))
         close_btn.clicked.connect(self.accept)
         bottom.addWidget(close_btn)
         layout.addLayout(bottom)
@@ -93,9 +104,11 @@ class WarningsDialog(QtWidgets.QDialog):
     def _copy(self):
         QtWidgets.QApplication.clipboard().setText(
             self.text_view.toPlainText())
-        self.copied_label.setText("Copied.")
+        self.copied_label.setText(QCoreApplication.translate(
+            "WarningsDialog", "Copied."))
 
     def _clear(self):
         self._log.clear()
-        self.copied_label.setText("Cleared.")
+        self.copied_label.setText(QCoreApplication.translate(
+            "WarningsDialog", "Cleared."))
         self.refresh()

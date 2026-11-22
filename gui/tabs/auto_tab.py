@@ -56,7 +56,8 @@ from PyQt6.QtWidgets import (
     QHeaderView, QFrame, QScrollArea, QMenu, QInputDialog, QDialog,
     QApplication, QSizePolicy,
 )
-from PyQt6.QtCore import Qt, QTimer, QEvent, QPointF, pyqtSignal
+from PyQt6.QtCore import (QT_TRANSLATE_NOOP, QCoreApplication, Qt, QTimer,
+                          QEvent, QPointF, pyqtSignal)
 from PyQt6.QtGui import (
     QColor, QConicalGradient, QFont, QPainter,
 )
@@ -127,6 +128,9 @@ def _gain_db_label(gain: float) -> str:
 COLOR_PRESETS = ("#FF2850", "#C95FD0", "#4ECBD4")
 
 # Sentinel entry of the movement-plane combo.
+# Deliberately NOT translated: the plane combo's TEXT is the key (it is
+# persisted to the Auto settings and compared against this sentinel),
+# and the other entries are engine plane names.
 PLANE_NONE = "None (manual)"
 
 # PLANE BIAS chips -> movement-target plane. "MID" is the no-plane
@@ -134,7 +138,19 @@ PLANE_NONE = "None (manual)"
 # planes but no mid plane, so MID releases the plane target instead of
 # inventing an engine parameter. The full plane list stays reachable
 # through the SETUP disclosure's Movement Target combo.
-PLANE_BIAS_CHIPS = (("Front", "Front"), ("Mid", PLANE_NONE), ("Back", "Back"))
+# The first element is the chip LABEL (translated on the chip), the
+# second the plane-combo key.
+PLANE_BIAS_CHIPS = ((QT_TRANSLATE_NOOP("AutoTab", "Front"), "Front"),
+                    (QT_TRANSLATE_NOOP("AutoTab", "Mid"), PLANE_NONE),
+                    (QT_TRANSLATE_NOOP("AutoTab", "Back"), "Back"))
+
+# Display labels of the group-row mode chips; the dict key (AUTO /
+# CURATED / LOCKED) is the mode value the engine and constraint_mode use.
+MODE_CHIP_LABELS = {
+    "AUTO": QT_TRANSLATE_NOOP("AutoTab", "AUTO"),
+    "CURATED": QT_TRANSLATE_NOOP("AutoTab", "CURATED"),
+    "LOCKED": QT_TRANSLATE_NOOP("AutoTab", "LOCKED"),
+}
 
 # How many engine-log entries we keep / show.
 ENGINE_LOG_CAPACITY = 50
@@ -181,7 +197,7 @@ def riff_display_text(riff_name: Optional[str], locked: bool,
     """
     body = riff_name or "-"
     if locked and riff_name:
-        body = f"{body} (locked)"
+        body = QCoreApplication.translate("AutoTab", "{0} (locked)").format(body)
     return f"{prefix} {body}".strip() if prefix else body
 
 
@@ -196,11 +212,11 @@ def constraint_mode(allowed) -> str:
 
 def contrast_word(value: float) -> str:
     """The reference's qualitative contrast word."""
-    return "RICH" if value >= 0.5 else "FLAT"
+    return QCoreApplication.translate("AutoTab", "RICH") if value >= 0.5 else QCoreApplication.translate("AutoTab", "FLAT")
 
 
 def vocal_word(value: float) -> str:
-    return "PRESENT" if value >= 0.5 else "ABSENT"
+    return QCoreApplication.translate("AutoTab", "PRESENT") if value >= 0.5 else QCoreApplication.translate("AutoTab", "ABSENT")
 
 
 # ---------------------------------------------------------------------------
@@ -318,7 +334,7 @@ class _ColorWheelButton(QWidget):
         super().__init__(parent)
         self.setFixedSize(COLOR_WHEEL_BUTTON_SIZE, COLOR_WHEEL_BUTTON_SIZE)
         self.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.setToolTip("Colour override: pick a hue")
+        self.setToolTip(QCoreApplication.translate("AutoTab", "Colour override: pick a hue"))
 
     def mousePressEvent(self, event):
         if event.button() == Qt.MouseButton.LeftButton:
@@ -352,7 +368,7 @@ class _Swatch(QWidget):
         self.setCursor(Qt.CursorShape.PointingHandCursor)
         self._color = color
         self._selected = False
-        self.setToolTip(f"Colour override {color}")
+        self.setToolTip(QCoreApplication.translate("AutoTab", "Colour override {0}").format(color))
 
     def color(self) -> str:
         return self._color
@@ -453,7 +469,7 @@ class _GroupRow(QWidget):
         chip_row = QHBoxLayout()
         chip_row.setSpacing(0)
         for mode in ("AUTO", "CURATED", "LOCKED"):
-            button = QPushButton(mode, self)
+            button = QPushButton(QCoreApplication.translate("AutoTab", MODE_CHIP_LABELS[mode]), self)
             # Theme-owned chrome: QPushButton[role="mode-chip"], filled
             # with the accent when checked (warm text fill for LOCKED
             # via the [state="locked"] variant).
@@ -610,10 +626,10 @@ class AutoTab(BaseTab):
         header = QWidget()
         header_row = QHBoxLayout(header)
         header_row.setContentsMargins(16, 10, 16, 10)
-        header_row.addWidget(MicroLabel("Groups · Mode", point_size=8,
+        header_row.addWidget(MicroLabel(QCoreApplication.translate("AutoTab", "Groups · Mode"), point_size=8,
                                         tracking_em=0.12))
         header_row.addStretch()
-        header_row.addWidget(MicroLabel("Submaster", point_size=8,
+        header_row.addWidget(MicroLabel(QCoreApplication.translate("AutoTab", "Submaster"), point_size=8,
                                         tracking_em=0.12))
         layout.addWidget(header)
 
@@ -638,7 +654,7 @@ class AutoTab(BaseTab):
 
         energy_col = QVBoxLayout()
         energy_col.setSpacing(6)
-        energy_col.addWidget(MicroLabel("Energy sensitivity", point_size=7,
+        energy_col.addWidget(MicroLabel(QCoreApplication.translate("AutoTab", "Energy sensitivity"), point_size=7,
                                         tracking_em=0.1))
         # The fader widget stays as the backing store (value(), settings
         # round-trip); the visible control is the reference's bar slider.
@@ -655,13 +671,15 @@ class AutoTab(BaseTab):
 
         plane_col = QVBoxLayout()
         plane_col.setSpacing(6)
-        plane_col.addWidget(MicroLabel("Plane bias · front · mid · back",
+        plane_col.addWidget(MicroLabel(QCoreApplication.translate(
+            "AutoTab",
+            "Plane bias · front · mid · back"),
                                        point_size=7, tracking_em=0.06))
         chips = QHBoxLayout()
         chips.setSpacing(4)
         self._plane_chips: Dict[str, QPushButton] = {}
         for label, plane_name in PLANE_BIAS_CHIPS:
-            chip = QPushButton(label.upper())
+            chip = QPushButton(QCoreApplication.translate("AutoTab", label).upper())
             chip.setFont(mono_font(8, QFont.Weight.DemiBold))
             chip.setCursor(Qt.CursorShape.PointingHandCursor)
             chip.setFixedHeight(24)
@@ -692,7 +710,7 @@ class AutoTab(BaseTab):
         # -- state caption + BPM readout + BPM chips -----------------------
         head = QVBoxLayout()
         head.setSpacing(2)
-        self._status_phase = MicroLabel("Engine stopped", point_size=8,
+        self._status_phase = MicroLabel(QCoreApplication.translate("AutoTab", "Engine stopped"), point_size=8,
                                         tracking_em=0.16)
         self._status_phase.setObjectName("AutoStatusPhase")
         self._status_phase.setProperty("phase", "stopped")
@@ -713,24 +731,24 @@ class AutoTab(BaseTab):
         chips.setSpacing(8)
         chips.addStretch()
         # Kept as the checkable control the feature-frame handler reads.
-        self._auto_bpm_checkbox = QPushButton("BPM AUTO")
+        self._auto_bpm_checkbox = QPushButton(QCoreApplication.translate("AutoTab", "BPM AUTO"))
         self._auto_bpm_checkbox.setCheckable(True)
         self._auto_bpm_checkbox.setProperty("role", "output-select")
         self._auto_bpm_checkbox.setFont(mono_font(8, QFont.Weight.Medium))
         self._auto_bpm_checkbox.toggled.connect(self._on_auto_bpm_toggled)
         chips.addWidget(self._auto_bpm_checkbox)
 
-        self._tap_btn = QPushButton("TAP")
+        self._tap_btn = QPushButton(QCoreApplication.translate("AutoTab", "TAP"))
         self._tap_btn.setProperty("role", "primary")
         self._tap_btn.setFont(mono_font(8, QFont.Weight.DemiBold))
         self._tap_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self._tap_btn.clicked.connect(self._on_tap_bpm)
         chips.addWidget(self._tap_btn)
 
-        self._bpm_set_btn = QPushButton("SET...")
+        self._bpm_set_btn = QPushButton(QCoreApplication.translate("AutoTab", "SET..."))
         self._bpm_set_btn.setProperty("role", "output-select")
         self._bpm_set_btn.setFont(mono_font(8, QFont.Weight.Medium))
-        self._bpm_set_btn.setToolTip("Enter a BPM manually")
+        self._bpm_set_btn.setToolTip(QCoreApplication.translate("AutoTab", "Enter a BPM manually"))
         self._bpm_set_btn.clicked.connect(self._on_set_bpm)
         chips.addWidget(self._bpm_set_btn)
         chips.addStretch()
@@ -756,9 +774,9 @@ class AutoTab(BaseTab):
         # the centre panel past the 720p width budget.
         layout.addLayout(self._build_input_row())
         for key, caption, color in (
-            ("rms", "RMS energy", tokens["accent"]),
-            ("contrast", "Contrast", tokens["text_secondary"]),
-            ("vocal", "Vocals", VOCAL_COLOR),
+            ("rms", QCoreApplication.translate("AutoTab", "RMS energy"), tokens["accent"]),
+            ("contrast", QCoreApplication.translate("AutoTab", "Contrast"), tokens["text_secondary"]),
+            ("vocal", QCoreApplication.translate("AutoTab", "Vocals"), VOCAL_COLOR),
         ):
             column = QVBoxLayout()
             column.setSpacing(5)
@@ -785,7 +803,7 @@ class AutoTab(BaseTab):
         actions = QHBoxLayout()
         actions.setSpacing(14)
         actions.addStretch()
-        self._fill_btn = QPushButton("FILL NOW")
+        self._fill_btn = QPushButton(QCoreApplication.translate("AutoTab", "FILL NOW"))
         self._fill_btn.setProperty("role", "cta-accent")
         self._fill_btn.setFont(display_font(20, QFont.Weight.ExtraBold,
                                             tracking_em=0.1))
@@ -799,8 +817,8 @@ class AutoTab(BaseTab):
         # Both buttons exist (gui/tests drive them by name); only the one
         # matching the engine state is visible, per the reference's single
         # toggling button.
-        self._start_btn = QPushButton("START ENGINE")
-        self._stop_btn = QPushButton("STOP ENGINE")
+        self._start_btn = QPushButton(QCoreApplication.translate("AutoTab", "START ENGINE"))
+        self._stop_btn = QPushButton(QCoreApplication.translate("AutoTab", "STOP ENGINE"))
         for button in (self._start_btn, self._stop_btn):
             button.setFont(display_font(15, QFont.Weight.Bold,
                                         tracking_em=0.08))
@@ -819,7 +837,7 @@ class AutoTab(BaseTab):
         colors = QHBoxLayout()
         colors.setSpacing(12)
         colors.addStretch()
-        colors.addWidget(MicroLabel("Colour override", point_size=8,
+        colors.addWidget(MicroLabel(QCoreApplication.translate("AutoTab", "Colour override"), point_size=8,
                                     tracking_em=0.1))
 
         # The wheel widget itself lives in a popup dialog; the tab keeps
@@ -845,10 +863,12 @@ class AutoTab(BaseTab):
             colors.addWidget(swatch)
             self._swatches.append(swatch)
 
-        self._release_color_btn = QPushButton("RELEASE")
+        self._release_color_btn = QPushButton(QCoreApplication.translate("AutoTab", "RELEASE"))
         self._release_color_btn.setProperty("role", "output-select")
         self._release_color_btn.setFont(mono_font(8, QFont.Weight.Medium))
-        self._release_color_btn.setToolTip("Clear the colour override")
+        self._release_color_btn.setToolTip(QCoreApplication.translate(
+            "AutoTab",
+            "Clear the colour override"))
         self._release_color_btn.clicked.connect(self._on_release_color)
         colors.addWidget(self._release_color_btn)
         colors.addStretch()
@@ -869,7 +889,7 @@ class AutoTab(BaseTab):
 
         meter_column = QVBoxLayout()
         meter_column.setSpacing(5)
-        caption = MicroLabel("Input level", point_size=7, tracking_em=0.1)
+        caption = MicroLabel(QCoreApplication.translate("AutoTab", "Input level"), point_size=7, tracking_em=0.1)
         caption.setAlignment(Qt.AlignmentFlag.AlignCenter)
         meter_column.addWidget(caption)
         bar = _Bar(*METER_BAR_SIZE, INPUT_LEVEL_COLOR)
@@ -883,7 +903,7 @@ class AutoTab(BaseTab):
 
         gain_column = QVBoxLayout()
         gain_column.setSpacing(5)
-        gain_caption = MicroLabel("Gain", point_size=7, tracking_em=0.1)
+        gain_caption = MicroLabel(QCoreApplication.translate("AutoTab", "Gain"), point_size=7, tracking_em=0.1)
         gain_caption.setAlignment(Qt.AlignmentFlag.AlignCenter)
         gain_column.addWidget(gain_caption)
         self._gain_control = self._make_gain_control()
@@ -897,12 +917,14 @@ class AutoTab(BaseTab):
         gain_column.addWidget(self._gain_value)
         row.addLayout(gain_column)
 
-        self._gain_auto_btn = QPushButton("AUTO")
+        self._gain_auto_btn = QPushButton(QCoreApplication.translate("AutoTab", "AUTO"))
         self._gain_auto_btn.setProperty("role", "primary")
         self._gain_auto_btn.setFont(mono_font(8, QFont.Weight.DemiBold))
         self._gain_auto_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self._gain_auto_btn.setToolTip(
-            "Set the gain from the level of the last two seconds")
+            QCoreApplication.translate(
+                "AutoTab",
+                "Set the gain from the level of the last two seconds"))
         self._gain_auto_btn.clicked.connect(self._on_auto_gain)
         row.addWidget(self._gain_auto_btn,
                       alignment=Qt.AlignmentFlag.AlignVCenter)
@@ -916,8 +938,10 @@ class AutoTab(BaseTab):
         replace the bar slider by changing this one method."""
         control = _BarSlider()
         control.setFixedWidth(METER_BAR_SIZE[0])
-        control.setToolTip("Input gain · -20 dB to +20 dB · centre is "
-                           "0 dB · applied before analysis")
+        control.setToolTip(QCoreApplication.translate(
+            "AutoTab",
+            "Input gain · -20 dB to +20 dB · centre is "
+            "0 dB · applied before analysis"))
         return control
 
     # -- Right panel: preview, log, readouts, setup -------------------------
@@ -939,14 +963,18 @@ class AutoTab(BaseTab):
         header_row = QHBoxLayout(header)
         header_row.setContentsMargins(14, 0, 6, 0)
         header_row.setSpacing(12)
-        header_row.addWidget(MicroLabel("3D preview · live DMX", point_size=8,
+        header_row.addWidget(MicroLabel(QCoreApplication.translate(
+            "AutoTab",
+            "3D preview · live DMX"), point_size=8,
                                         tracking_em=0.12))
         header_row.addStretch()
-        self._pop_out_btn = QPushButton("POP-OUT")
+        self._pop_out_btn = QPushButton(QCoreApplication.translate("AutoTab", "POP-OUT"))
         self._pop_out_btn.setFlat(True)
         self._pop_out_btn.setFont(mono_font(8))
         self._pop_out_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        self._pop_out_btn.setToolTip("Open the standalone visualizer")
+        self._pop_out_btn.setToolTip(QCoreApplication.translate(
+            "AutoTab",
+            "Open the standalone visualizer"))
         self._pop_out_btn.setProperty("role", "pane-icon")
         self._pop_out_btn.clicked.connect(self._launch_visualizer)
         header_row.addWidget(self._pop_out_btn)
@@ -960,7 +988,9 @@ class AutoTab(BaseTab):
         # around a control that is "on" in its resting state.
         # Theme-owned: QPushButton[role="pane-icon"].
         self._pane_toggle_btn.setProperty("role", "pane-icon")
-        self._pane_toggle_btn.setToolTip("Collapse or restore the 3D preview")
+        self._pane_toggle_btn.setToolTip(QCoreApplication.translate(
+            "AutoTab",
+            "Collapse or restore the 3D preview"))
         self._pane_toggle_btn.toggled.connect(self._on_pane_toggle)
         header_row.addWidget(self._pane_toggle_btn)
         layout.addWidget(header)
@@ -981,7 +1011,7 @@ class AutoTab(BaseTab):
         lower_layout.setContentsMargins(16, 12, 16, 12)
         lower_layout.setSpacing(8)
 
-        lower_layout.addWidget(MicroLabel("Engine log", point_size=8,
+        lower_layout.addWidget(MicroLabel(QCoreApplication.translate("AutoTab", "Engine log"), point_size=8,
                                           tracking_em=0.12))
         self._engine_log_view = _EngineLogView()
         lower_layout.addWidget(self._engine_log_view)
@@ -989,11 +1019,15 @@ class AutoTab(BaseTab):
 
         # Key/value readouts. No Latency row: nothing in audio/ exposes an
         # input latency (see the report).
-        self._input_value = self._add_readout_row(lower_layout, "Input")
-        self._window_value = self._add_readout_row(lower_layout, "Window")
+        self._input_value = self._add_readout_row(lower_layout, QCoreApplication.translate(
+            "AutoTab",
+            "Input"))
+        self._window_value = self._add_readout_row(lower_layout, QCoreApplication.translate(
+            "AutoTab",
+            "Window"))
 
         # SETUP disclosure - the plumbing the reference screen omits.
-        self._setup_toggle_btn = QPushButton("SETUP")
+        self._setup_toggle_btn = QPushButton(QCoreApplication.translate("AutoTab", "SETUP"))
         self._setup_toggle_btn.setCheckable(True)
         self._setup_toggle_btn.setProperty("role", "output-select")
         self._setup_toggle_btn.setFont(mono_font(8, QFont.Weight.Medium))
@@ -1007,7 +1041,7 @@ class AutoTab(BaseTab):
         # the button's natural 25px resting height.
         self._setup_toggle_btn.setStyleSheet("min-height: 11px;")
         self._setup_toggle_btn.setToolTip(
-            "Show ArtNet, audio input and movement settings")
+            QCoreApplication.translate("AutoTab", "Show ArtNet, audio input and movement settings"))
         self._setup_toggle_btn.toggled.connect(self._on_setup_toggled)
         lower_layout.addWidget(self._setup_toggle_btn)
 
@@ -1055,22 +1089,24 @@ class AutoTab(BaseTab):
         right_layout.setContentsMargins(0, 8, 0, 0)
         right_layout.setSpacing(8)
 
-        artnet_group = QGroupBox("ArtNet Output")
+        artnet_group = QGroupBox(QCoreApplication.translate("AutoTab", "ArtNet Output"))
         artnet_layout = QVBoxLayout(artnet_group)
 
         ip_row = QHBoxLayout()
-        ip_row.addWidget(QLabel("Target IP:"))
+        ip_row.addWidget(QLabel(QCoreApplication.translate("AutoTab", "Target IP:")))
         self._ip_input = QLineEdit(self._settings.target_ip)
         self._ip_input.setPlaceholderText("192.168.1.151")
         self._ip_input.editingFinished.connect(self._on_ip_changed)
         ip_row.addWidget(self._ip_input)
         artnet_layout.addLayout(ip_row)
 
-        artnet_layout.addWidget(QLabel("Universe Mapping:"))
+        artnet_layout.addWidget(QLabel(QCoreApplication.translate("AutoTab", "Universe Mapping:")))
         self._universe_table = QTableWidget(0, 2)
         # Short labels - the column is narrow; two-letter labels and a
         # stretch resize mode let the columns split the available width.
-        self._universe_table.setHorizontalHeaderLabels(["Config", "ArtNet"])
+        self._universe_table.setHorizontalHeaderLabels([QCoreApplication.translate(
+            "AutoTab",
+            "Config"), "ArtNet"])
         h_header = self._universe_table.horizontalHeader()
         h_header.setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
         self._universe_table.verticalHeader().setVisible(False)
@@ -1082,18 +1118,20 @@ class AutoTab(BaseTab):
             self._on_universe_mapping_edited)
         artnet_layout.addWidget(self._universe_table)
 
-        self._mirror_checkbox = QCheckBox("Mirror to visualiser broadcast")
+        self._mirror_checkbox = QCheckBox(QCoreApplication.translate(
+            "AutoTab",
+            "Mirror to visualiser broadcast"))
         self._mirror_checkbox.setChecked(self._settings.mirror_to_visualizer)
         self._mirror_checkbox.toggled.connect(self._on_mirror_toggled)
         artnet_layout.addWidget(self._mirror_checkbox)
         right_layout.addWidget(artnet_group)
 
-        input_group = QGroupBox("Audio Input")
+        input_group = QGroupBox(QCoreApplication.translate("AutoTab", "Audio Input"))
         input_layout = QVBoxLayout(input_group)
 
         api_row = QHBoxLayout()
         api_row.setContentsMargins(0, 0, 0, 0)
-        api_label = QLabel("Host API:")
+        api_label = QLabel(QCoreApplication.translate("AutoTab", "Host API:"))
         api_label.setFixedWidth(60)
         self._input_api_combo = QComboBox()
         api_row.addWidget(api_label)
@@ -1102,7 +1140,7 @@ class AutoTab(BaseTab):
 
         dev_row = QHBoxLayout()
         dev_row.setContentsMargins(0, 0, 0, 0)
-        dev_label = QLabel("Device:")
+        dev_label = QLabel(QCoreApplication.translate("AutoTab", "Device:"))
         dev_label.setFixedWidth(60)
         self._input_device_combo = QComboBox()
         dev_row.addWidget(dev_label)
@@ -1111,7 +1149,9 @@ class AutoTab(BaseTab):
 
         refresh_row = QHBoxLayout()
         refresh_row.setContentsMargins(0, 0, 0, 0)
-        self._refresh_devices_btn = QPushButton("Refresh devices")
+        self._refresh_devices_btn = QPushButton(QCoreApplication.translate(
+            "AutoTab",
+            "Refresh devices"))
         self._refresh_devices_btn.setProperty("density", "compact")
         self._refresh_devices_btn.clicked.connect(self._on_refresh_devices)
         refresh_row.addWidget(self._refresh_devices_btn)
@@ -1131,7 +1171,7 @@ class AutoTab(BaseTab):
         self._input_device_combo.currentIndexChanged.connect(
             self._on_input_device_changed)
 
-        plane_group = QGroupBox("Movement Target")
+        plane_group = QGroupBox(QCoreApplication.translate("AutoTab", "Movement Target"))
         plane_layout = QVBoxLayout(plane_group)
         self._plane_combo = QComboBox()
         self._stage_planes: dict = {}
@@ -1141,14 +1181,14 @@ class AutoTab(BaseTab):
         plane_layout.addWidget(self._plane_combo)
 
         speed_row = QHBoxLayout()
-        speed_label = QLabel("Max Speed:")
+        speed_label = QLabel(QCoreApplication.translate("AutoTab", "Max Speed:"))
         speed_label.setFixedWidth(70)
         self._speed_slider = QSlider(Qt.Orientation.Horizontal)
         self._speed_slider.setRange(0, 360)
         self._speed_slider.setValue(self._settings.max_movement_speed)
         self._speed_value_label = QLabel(
-            "OFF" if self._settings.max_movement_speed == 0
-            else f"{self._settings.max_movement_speed}°/s"
+            QCoreApplication.translate("AutoTab", "OFF") if self._settings.max_movement_speed == 0
+            else QCoreApplication.translate("AutoTab", "{0}°/s").format(self._settings.max_movement_speed)
         )
         self._speed_value_label.setFixedWidth(46)
         self._speed_value_label.setAlignment(
@@ -1160,7 +1200,7 @@ class AutoTab(BaseTab):
         plane_layout.addLayout(speed_row)
         right_layout.addWidget(plane_group)
 
-        bpm_group = QGroupBox("BPM")
+        bpm_group = QGroupBox(QCoreApplication.translate("AutoTab", "BPM"))
         bpm_layout = QHBoxLayout(bpm_group)
         bpm_layout.addWidget(self._bpm_spinbox)
         bpm_layout.addStretch()
@@ -1305,7 +1345,7 @@ class AutoTab(BaseTab):
         if mode == "AUTO":
             panel.set_constraint(group_name, None)
             self._refresh_group_rows()
-            self._log_event(f"{group_name}: mode AUTO")
+            self._log_event(QCoreApplication.translate("AutoTab", "{0}: mode AUTO").format(group_name))
             return
         row = self._group_rows.get(group_name)
         anchor = row.mode_buttons[mode] if row else self
@@ -1314,7 +1354,7 @@ class AutoTab(BaseTab):
             if menu is not None:
                 menu.exec(anchor.mapToGlobal(anchor.rect().bottomLeft()))
                 self._refresh_group_rows()
-                self._log_event(f"{group_name}: mode CURATED")
+                self._log_event(QCoreApplication.translate("AutoTab", "{0}: mode CURATED").format(group_name))
             return
         # LOCKED: pick exactly one riff.
         menu = QMenu(self)
@@ -1328,7 +1368,7 @@ class AutoTab(BaseTab):
     def _lock_group_to(self, group_name: str, riff: str) -> None:
         self._riff_constraints.set_constraint(group_name, {riff})
         self._refresh_group_rows()
-        self._log_event(f"{group_name}: locked to {riff}")
+        self._log_event(QCoreApplication.translate("AutoTab", "{0}: locked to {1}").format(group_name, riff))
 
     def _on_intensity_bar(self, group_name: str, fraction: float) -> None:
         row = self._group_rows.get(group_name)
@@ -1376,7 +1416,7 @@ class AutoTab(BaseTab):
         long-lived control (settings + engine); the dialog just hosts it."""
         if self._color_wheel_dialog is None:
             dialog = QDialog(self)
-            dialog.setWindowTitle("Colour override")
+            dialog.setWindowTitle(QCoreApplication.translate("AutoTab", "Colour override"))
             layout = QVBoxLayout(dialog)
             layout.setContentsMargins(8, 8, 8, 8)
             layout.addWidget(self._color_wheel)
@@ -1637,6 +1677,8 @@ class AutoTab(BaseTab):
 
     # -- Population helpers -------------------------------------------------
 
+    # Deliberately NOT translated: the host-API combo's TEXT is the key
+    # (compared here and persisted as settings.input_host_api).
     _API_CURATED = "Curated (recommended)"
     _API_RAW = "All devices (raw)"
 
@@ -1747,7 +1789,7 @@ class AutoTab(BaseTab):
     def _device_label(self) -> str:
         idx = self._input_device_combo.currentIndex()
         if idx < 0:
-            return "No device"
+            return QCoreApplication.translate("AutoTab", "No device")
         label = self._input_device_combo.itemText(idx)
         parts = label.rsplit(" [", 1)
         return (parts[0].rstrip()
@@ -1851,9 +1893,11 @@ class AutoTab(BaseTab):
         mapping = self._get_universe_mapping()
         if mapping is None:
             self.show_error(
-                "Invalid universe mapping",
-                "ArtNet universe must be an integer. The previous mapping "
-                "has been kept until you fix the bad row.",
+                QCoreApplication.translate("AutoTab", "Invalid universe mapping"),
+                QCoreApplication.translate(
+                    "AutoTab",
+                    "ArtNet universe must be an integer. The previous mapping "
+                    "has been kept until you fix the bad row."),
             )
             return
         self._dmx_controller.set_universe_mapping(mapping)
@@ -1871,31 +1915,39 @@ class AutoTab(BaseTab):
         # Precondition gates - surfaced as errors rather than silent no-ops.
         if not self.config.groups:
             self.show_error(
-                "No fixture groups",
-                "Auto mode needs at least one fixture group. Add fixtures "
-                "in the Fixtures tab and assign them to groups before starting.",
+                QCoreApplication.translate("AutoTab", "No fixture groups"),
+                QCoreApplication.translate(
+                    "AutoTab",
+                    "Auto mode needs at least one fixture group. Add fixtures "
+                    "in the Fixtures tab and assign them to groups before starting."),
             )
             return
         if not self.config.universes:
             self.show_error(
-                "No universes configured",
-                "Auto mode has nothing to send DMX to. Configure at least "
-                "one universe in the Configuration tab before starting.",
+                QCoreApplication.translate("AutoTab", "No universes configured"),
+                QCoreApplication.translate(
+                    "AutoTab",
+                    "Auto mode has nothing to send DMX to. Configure at least "
+                    "one universe in the Configuration tab before starting."),
             )
             return
         if not self.fixture_definitions:
             self.show_error(
-                "No fixture definitions",
-                "QLC+ fixture definitions could not be loaded for the "
-                "configured fixtures. Check that the QXF files for each "
-                "fixture's manufacturer/model are reachable.",
+                QCoreApplication.translate("AutoTab", "No fixture definitions"),
+                QCoreApplication.translate(
+                    "AutoTab",
+                    "QLC+ fixture definitions could not be loaded for the "
+                    "configured fixtures. Check that the QXF files for each "
+                    "fixture's manufacturer/model are reachable."),
             )
             return
         if self._input_device_combo.currentIndex() < 0:
             self.show_error(
-                "No audio input device",
-                "Select an input device in the SETUP panel before starting "
-                "Auto mode.",
+                QCoreApplication.translate("AutoTab", "No audio input device"),
+                QCoreApplication.translate(
+                    "AutoTab",
+                    "Select an input device in the SETUP panel before starting "
+                    "Auto mode."),
             )
             return
 
@@ -1913,10 +1965,12 @@ class AutoTab(BaseTab):
             self._live_input.set_gain(self._input_gain)
             if not self._live_input.initialize(device_index=device_index):
                 self.show_error(
-                    "Audio input failed",
-                    "Could not initialise the selected audio input device. "
-                    "Try a different device or check that no other process "
-                    "is holding the input exclusively.",
+                    QCoreApplication.translate("AutoTab", "Audio input failed"),
+                    QCoreApplication.translate(
+                        "AutoTab",
+                        "Could not initialise the selected audio input device. "
+                        "Try a different device or check that no other process "
+                        "is holding the input exclusively."),
                 )
                 self._cleanup()
                 self._resume_idle_monitoring()
@@ -1993,10 +2047,12 @@ class AutoTab(BaseTab):
 
             if not self._live_input.start():
                 self.show_error(
-                    "Audio capture failed",
-                    "Initialised the audio input but the stream refused to "
-                    "start. Check that the device isn't in use by another "
-                    "application and try again.",
+                    QCoreApplication.translate("AutoTab", "Audio capture failed"),
+                    QCoreApplication.translate(
+                        "AutoTab",
+                        "Initialised the audio input but the stream refused to "
+                        "start. Check that the device isn't in use by another "
+                        "application and try again."),
                 )
                 self._cleanup()
                 self._resume_idle_monitoring()
@@ -2004,10 +2060,12 @@ class AutoTab(BaseTab):
             self._bridge.start(self._live_input.ring_buffer)
             if not self._dmx_controller.start():
                 self.show_error(
-                    "DMX output refused",
-                    "The Show tab's timeline is playing and holds the "
-                    "DMX output. Stop timeline playback before "
-                    "starting Auto mode.",
+                    QCoreApplication.translate("AutoTab", "DMX output refused"),
+                    QCoreApplication.translate(
+                        "AutoTab",
+                        "The Show tab's timeline is playing and holds the "
+                        "DMX output. Stop timeline playback before "
+                        "starting Auto mode."),
                 )
                 self._cleanup()
                 self._resume_idle_monitoring()
@@ -2021,9 +2079,9 @@ class AutoTab(BaseTab):
             self._stop_btn.setEnabled(True)
             self._stop_btn.show()
             self._set_phase("running")
-            self._status_phase.setText("Engine running")
+            self._status_phase.setText(QCoreApplication.translate("AutoTab", "Engine running"))
             self._refresh_input_readout()
-            self._log_event("Engine start", accent=True)
+            self._log_event(QCoreApplication.translate("AutoTab", "Engine start"), accent=True)
 
             # Flip the preview to "live" so feed_dmx frames drive it.
             if self.embedded_visualizer is not None:
@@ -2036,9 +2094,9 @@ class AutoTab(BaseTab):
             self._cleanup()
             self._resume_idle_monitoring()
             self.show_error(
-                "Auto mode failed to start",
-                f"An unexpected error occurred while starting:\n\n{e}\n\n"
-                "See the console for full traceback.",
+                QCoreApplication.translate("AutoTab", "Auto mode failed to start"),
+                QCoreApplication.translate("AutoTab", "An unexpected error occurred while starting:\n\n{0}\n\n"
+                  "See the console for full traceback.").format(e),
             )
 
     def _on_stop(self):
@@ -2053,11 +2111,11 @@ class AutoTab(BaseTab):
         self._stop_btn.setEnabled(False)
         self._stop_btn.hide()
         self._set_phase("stopped")
-        self._status_phase.setText("Engine stopped")
+        self._status_phase.setText(QCoreApplication.translate("AutoTab", "Engine stopped"))
         self._clear_meters()
         self._last_logged_riffs = {}
         self._last_logged_bpm = None
-        self._log_event("Engine stop", accent=True)
+        self._log_event(QCoreApplication.translate("AutoTab", "Engine stop"), accent=True)
         self._refresh_group_rows()
 
         # Drop the embedded preview back to build mode so every fixture is
@@ -2136,16 +2194,16 @@ class AutoTab(BaseTab):
             self._bpm_display.setText(f"{bpm:.1f}")
             if self._engine:
                 self._engine.set_bpm(bpm)
-            self._log_event(f"Tap tempo {bpm:.1f} BPM")
+            self._log_event(QCoreApplication.translate("AutoTab", "Tap tempo {0} BPM").format(f"{bpm:.1f}"))
 
     def _on_set_bpm(self):
         """The reference's SET... chip: manual BPM entry into the spinbox
         (which is the engine's write path)."""
         value, ok = QInputDialog.getInt(
-            self, "Set BPM", "BPM:", self._bpm_spinbox.value(), 30, 300)
+            self, QCoreApplication.translate("AutoTab", "Set BPM"), QCoreApplication.translate("AutoTab", "BPM:"), self._bpm_spinbox.value(), 30, 300)
         if ok:
             self._bpm_spinbox.setValue(value)
-            self._log_event(f"BPM set to {value}")
+            self._log_event(QCoreApplication.translate("AutoTab", "BPM set to {0}").format(value))
 
     def _on_auto_bpm_toggled(self, checked):
         if checked:
@@ -2158,7 +2216,8 @@ class AutoTab(BaseTab):
             self._tap_btn.setEnabled(not checked)
         if hasattr(self, "_bpm_set_btn"):
             self._bpm_set_btn.setEnabled(not checked)
-        self._log_event(f"BPM auto {'on' if checked else 'off'}")
+        self._log_event(QCoreApplication.translate("AutoTab", "BPM auto on") if checked
+                        else QCoreApplication.translate("AutoTab", "BPM auto off"))
 
     def _on_bpm_spinbox_changed(self, value):
         # Keep the readout in sync even when the engine isn't running.
@@ -2170,7 +2229,7 @@ class AutoTab(BaseTab):
     def _on_fill_now(self):
         if self._engine:
             self._engine.force_fill()
-        self._log_event("Fill bar", accent=True)
+        self._log_event(QCoreApplication.translate("AutoTab", "Fill bar"), accent=True)
 
     def _on_color_changed(self, r, g, b):
         if self._engine:
@@ -2181,9 +2240,9 @@ class AutoTab(BaseTab):
         if hasattr(self, "_swatches"):
             self._refresh_color_row()
             if r < 0:
-                self._log_event("Colour override released")
+                self._log_event(QCoreApplication.translate("AutoTab", "Colour override released"))
             else:
-                self._log_event(f"Colour override {QColor(r, g, b).name()}")
+                self._log_event(QCoreApplication.translate("AutoTab", "Colour override {0}").format(QColor(r, g, b).name()))
 
     def _on_energy_sensitivity_changed(self, value: float):
         if self._engine:
@@ -2201,9 +2260,9 @@ class AutoTab(BaseTab):
 
     def _on_speed_changed(self, value):
         if value == 0:
-            self._speed_value_label.setText("OFF")
+            self._speed_value_label.setText(QCoreApplication.translate("AutoTab", "OFF"))
         else:
-            self._speed_value_label.setText(f"{value}°/s")
+            self._speed_value_label.setText(QCoreApplication.translate("AutoTab", "{0}°/s").format(value))
         if self._engine:
             self._engine.set_max_movement_speed(float(value))
 
@@ -2252,8 +2311,11 @@ class AutoTab(BaseTab):
             total = self._engine.cycle_bars
             bar = self._engine.current_bar + 1
             is_fill = self._engine.is_fill
-            state = "Engine fill" if is_fill else "Engine running"
-            self._status_phase.setText(f"{state} · bar {bar}/{total}")
+            state = QCoreApplication.translate("AutoTab", "Engine fill") if is_fill else QCoreApplication.translate(
+                "AutoTab",
+                "Engine running")
+            self._status_phase.setText(
+                state + " · " + QCoreApplication.translate("AutoTab", "bar {0}/{1}").format(bar, total))
             self._set_phase("fill" if is_fill else "groove")
             self._bpm_display.setText(f"{self._engine.bpm:.1f}")
 
@@ -2278,7 +2340,7 @@ class AutoTab(BaseTab):
                 locked = int(round(auto_bpm))
                 if locked != self._last_logged_bpm:
                     self._last_logged_bpm = locked
-                    self._log_event(f"BPM lock {auto_bpm:.1f}")
+                    self._log_event(QCoreApplication.translate("AutoTab", "BPM lock {0}").format(f"{auto_bpm:.1f}"))
 
     def _update_input_meter(self) -> None:
         """Paint the INPUT LEVEL meter from whichever capture is live.
@@ -2327,7 +2389,7 @@ class AutoTab(BaseTab):
         peak = max(self._recent_raw_peaks, default=0.0)
         gain = compute_auto_gain(peak)
         if gain is None:
-            self._log_event("Auto gain skipped · no signal")
+            self._log_event(QCoreApplication.translate("AutoTab", "Auto gain skipped · no signal"))
             return
         self._input_gain = gain
         self._gain_control.set_value(gain_to_slider(gain))
@@ -2335,7 +2397,8 @@ class AutoTab(BaseTab):
             if source is not None:
                 source.set_gain(gain)
         self._gain_value.setText(_gain_db_label(gain))
-        self._log_event(f"Auto gain {_gain_db_label(gain)}", accent=True)
+        self._log_event(QCoreApplication.translate("AutoTab", "Auto gain {0}").format(_gain_db_label(gain)),
+                        accent=True)
 
     def _apply_active_riffs(self, active: Dict[str, str]) -> None:
         """Push engine-selected riffs into the rows and log the changes."""

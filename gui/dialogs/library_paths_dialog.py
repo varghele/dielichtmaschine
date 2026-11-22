@@ -15,6 +15,7 @@ future GDTF Share downloads land.
 import os
 
 from PyQt6 import QtWidgets
+from PyQt6.QtCore import QCoreApplication
 
 from utils.app_settings import (
     app_settings, default_user_gdtf_dir, default_user_qxf_dir,
@@ -27,7 +28,8 @@ class LibraryPathsDialog(QtWidgets.QDialog):
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.setWindowTitle("Fixture Libraries")
+        self.setWindowTitle(QCoreApplication.translate(
+            "LibraryPathsDialog", "Fixture Libraries"))
         self.setModal(True)
         self.setMinimumWidth(560)
 
@@ -35,20 +37,25 @@ class LibraryPathsDialog(QtWidgets.QDialog):
         layout.setSpacing(12)
 
         intro = QtWidgets.QLabel(
-            "Your own fixture definitions. Files in these directories are "
-            "found by the fixture browser and win over the shipped "
-            "definitions of the same fixture (GDTF wins over .qxf either "
-            "way). Leave a field empty to use the per-user default.")
+            QCoreApplication.translate(
+                "LibraryPathsDialog",
+                "Your own fixture definitions. Files in these directories "
+                "are found by the fixture browser and win over the shipped "
+                "definitions of the same fixture (GDTF wins over .qxf "
+                "either way). Leave a field empty to use the per-user "
+                "default."))
         intro.setWordWrap(True)
         layout.addWidget(intro)
 
         form = QtWidgets.QFormLayout()
         form.setSpacing(8)
         self.gdtf_edit = self._path_row(
-            form, "GDTF directory", user_gdtf_dir(),
+            form, QCoreApplication.translate(
+                "LibraryPathsDialog", "GDTF directory"), user_gdtf_dir(),
             default_user_gdtf_dir())
         self.qxf_edit = self._path_row(
-            form, "QXF directory", user_qxf_dir(),
+            form, QCoreApplication.translate(
+                "LibraryPathsDialog", "QXF directory"), user_qxf_dir(),
             default_user_qxf_dir())
         layout.addLayout(form)
 
@@ -70,7 +77,8 @@ class LibraryPathsDialog(QtWidgets.QDialog):
         edit.setPlaceholderText(default)
         if os.path.normpath(current) != os.path.normpath(default):
             edit.setText(current)
-        browse = QtWidgets.QPushButton("Browse...")
+        browse = QtWidgets.QPushButton(QCoreApplication.translate(
+            "LibraryPathsDialog", "Browse..."))
         browse.clicked.connect(lambda: self._browse_into(edit))
         row.addWidget(edit, 1)
         row.addWidget(browse)
@@ -80,7 +88,8 @@ class LibraryPathsDialog(QtWidgets.QDialog):
     def _browse_into(self, edit: QtWidgets.QLineEdit) -> None:
         start = edit.text() or edit.placeholderText()
         chosen = QtWidgets.QFileDialog.getExistingDirectory(
-            self, "Choose directory", start)
+            self, QCoreApplication.translate(
+                "LibraryPathsDialog", "Choose directory"), start)
         if chosen:
             edit.setText(chosen)
 
@@ -103,8 +112,11 @@ class LibraryPathsDialog(QtWidgets.QDialog):
                 os.makedirs(path, exist_ok=True)
             except OSError as exc:
                 QtWidgets.QMessageBox.warning(
-                    self, "Fixture Libraries",
-                    f"Cannot create {path}:\n{exc}")
+                    self, QCoreApplication.translate(
+                        "LibraryPathsDialog", "Fixture Libraries"),
+                    QCoreApplication.translate(
+                        "LibraryPathsDialog", "Cannot create {0}:\n{1}").format(
+                            path, exc))
                 return  # keep the dialog open for a correction
         set_user_gdtf_dir(gdtf)
         set_user_qxf_dir(qxf)

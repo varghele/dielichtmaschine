@@ -4,7 +4,7 @@
 
 import logging
 from PyQt6.QtWidgets import QWidget
-from PyQt6.QtCore import Qt, pyqtSignal, QPoint, QRect
+from PyQt6.QtCore import QCoreApplication, Qt, pyqtSignal, QPoint, QRect
 from PyQt6.QtGui import (
     QPainter, QColor, QPen, QBrush, QMouseEvent, QFont, QLinearGradient,
 )
@@ -2057,8 +2057,10 @@ class LightBlockWidget(QWidget):
             stack = self.lane_widget._get_undo_stack()
         if stack is not None:
             from .undo_commands import EnvelopeEditCommand
-            label = ("Stretch Block" if getattr(self, "_envelope_drag_stretch",
-                                                False) else "Trim Block")
+            if getattr(self, "_envelope_drag_stretch", False):
+                label = QCoreApplication.translate("LightBlockWidget", "Stretch Block")
+            else:
+                label = QCoreApplication.translate("LightBlockWidget", "Trim Block")
             stack.push(EnvelopeEditCommand(self.lane_widget, self.block,
                                            before, after, label))
         self._mark_hand_edit()
@@ -2101,20 +2103,22 @@ class LightBlockWidget(QWidget):
         if sublane_block is not None:
             # Sublane block context menu
             sublane_labels = {
-                "dimmer": "Dimmer",
-                "colour": "Colour",
-                "movement": "Movement",
-                "special": "Special"
+                "dimmer": QCoreApplication.translate("LightBlockWidget", "Dimmer"),
+                "colour": QCoreApplication.translate("LightBlockWidget", "Colour"),
+                "movement": QCoreApplication.translate("LightBlockWidget", "Movement"),
+                "special": QCoreApplication.translate("LightBlockWidget", "Special")
             }
             label = sublane_labels.get(sublane_type, sublane_type.capitalize())
 
-            edit_sublane_action = menu.addAction(f"Edit {label} Block...")
+            edit_sublane_action = menu.addAction(
+                QCoreApplication.translate("LightBlockWidget", "Edit {0} Block...").format(label))
             edit_sublane_action.triggered.connect(
                 lambda: self.open_sublane_dialog(sublane_type, sublane_block)
             )
             edit_sublane_action.setEnabled(not locked)
 
-            delete_sublane_action = menu.addAction(f"Delete {label} Block")
+            delete_sublane_action = menu.addAction(
+                QCoreApplication.translate("LightBlockWidget", "Delete {0} Block").format(label))
             delete_sublane_action.triggered.connect(
                 lambda: self._delete_sublane_block(sublane_type, sublane_block)
             )
@@ -2122,39 +2126,43 @@ class LightBlockWidget(QWidget):
 
             menu.addSeparator()
 
-        set_name_action = menu.addAction("Set Name...")
+        set_name_action = menu.addAction(QCoreApplication.translate(
+            "LightBlockWidget",
+            "Set Name..."))
         set_name_action.triggered.connect(self.set_block_name)
         set_name_action.setEnabled(not locked)
 
         menu.addSeparator()
 
         # Dynamic copy label based on selection count
-        copy_label = "Copy Effect"
+        copy_label = QCoreApplication.translate("LightBlockWidget", "Copy Effect")
         if self._is_multi_selected:
             shows_tab = self._get_shows_tab()
             if shows_tab and hasattr(shows_tab, 'selection_manager'):
                 count = shows_tab.selection_manager.get_selection_count()
                 if count > 1:
-                    copy_label = f"Copy {count} Effects"
+                    copy_label = QCoreApplication.translate("LightBlockWidget", "Copy {0} Effects").format(count)
 
         copy_action = menu.addAction(copy_label)
         copy_action.triggered.connect(self.copy_effect)
 
         menu.addSeparator()
 
-        save_riff_action = menu.addAction("Save as Riff...")
+        save_riff_action = menu.addAction(QCoreApplication.translate(
+            "LightBlockWidget",
+            "Save as Riff..."))
         save_riff_action.triggered.connect(self.save_as_riff)
 
         menu.addSeparator()
 
         # Dynamic delete label based on selection count
-        delete_label = "Delete Entire Effect"
+        delete_label = QCoreApplication.translate("LightBlockWidget", "Delete Entire Effect")
         if self._is_multi_selected:
             shows_tab = self._get_shows_tab()
             if shows_tab and hasattr(shows_tab, 'selection_manager'):
                 count = shows_tab.selection_manager.get_selection_count()
                 if count > 1:
-                    delete_label = f"Delete {count} Effects"
+                    delete_label = QCoreApplication.translate("LightBlockWidget", "Delete {0} Effects").format(count)
 
         delete_action = menu.addAction(delete_label)
         delete_action.triggered.connect(self._delete_effect_or_selection)
@@ -2173,8 +2181,10 @@ class LightBlockWidget(QWidget):
         if not riff_library:
             from PyQt6.QtWidgets import QMessageBox
             QMessageBox.warning(
-                self, "Error",
-                "Riff library not available. Cannot save riff."
+                self, QCoreApplication.translate("LightBlockWidget", "Error"),
+                QCoreApplication.translate(
+                    "LightBlockWidget",
+                    "Riff library not available. Cannot save riff.")
             )
             return
 
@@ -2203,8 +2213,8 @@ class LightBlockWidget(QWidget):
         # Show input dialog
         name, ok = QInputDialog.getText(
             self,
-            "Set Effect Name",
-            "Enter name for this effect block:",
+            QCoreApplication.translate("LightBlockWidget", "Set Effect Name"),
+            QCoreApplication.translate("LightBlockWidget", "Enter name for this effect block:"),
             text=current_name
         )
 
@@ -2421,15 +2431,20 @@ class LightBlockWidget(QWidget):
         menu = QMenu(self)
         count = len(hits)
         if count == 0:
-            empty = menu.addAction("No blocks in selection")
+            empty = menu.addAction(QCoreApplication.translate(
+                "LightBlockWidget",
+                "No blocks in selection"))
             empty.setEnabled(False)
         else:
-            label = "Delete Block" if count == 1 else f"Delete {count} Blocks"
+            if count == 1:
+                label = QCoreApplication.translate("LightBlockWidget", "Delete Block")
+            else:
+                label = QCoreApplication.translate("LightBlockWidget", "Delete {0} Blocks").format(count)
             delete = menu.addAction(label)
             delete.triggered.connect(lambda: self._bulk_delete_sublane_blocks(hits))
             delete.setEnabled(not self._locked())
             menu.addSeparator()
-            cancel = menu.addAction("Cancel")
+            cancel = menu.addAction(QCoreApplication.translate("LightBlockWidget", "Cancel"))
             cancel.triggered.connect(lambda: None)
         menu.exec(global_pos)
 

@@ -5,7 +5,7 @@ from PyQt6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QTreeWidget, QTreeWidgetItem,
     QPushButton, QDialogButtonBox, QLabel, QGroupBox
 )
-from PyQt6.QtCore import Qt
+from PyQt6.QtCore import QCoreApplication, Qt
 from typing import List
 from utils.target_resolver import parse_target
 
@@ -25,7 +25,7 @@ class TargetSelectionDialog(QDialog):
         self.config = config
         self.current_targets = set(current_targets)
 
-        self.setWindowTitle("Select Fixture Targets")
+        self.setWindowTitle(QCoreApplication.translate("TargetSelectionDialog", "Select Fixture Targets"))
         self.setMinimumSize(400, 500)
 
         self._setup_ui()
@@ -37,12 +37,12 @@ class TargetSelectionDialog(QDialog):
         layout = QVBoxLayout(self)
 
         # Instructions
-        instructions = QLabel("Select groups and/or individual fixtures to target.")
+        instructions = QLabel(QCoreApplication.translate("TargetSelectionDialog", "Select groups and/or individual fixtures to target."))
         instructions.setProperty("role", "stat-caption")
         layout.addWidget(instructions)
 
         # Tree group
-        tree_group = QGroupBox("Fixture Targets")
+        tree_group = QGroupBox(QCoreApplication.translate("TargetSelectionDialog", "Fixture Targets"))
         tree_layout = QVBoxLayout()
 
         # Tree widget
@@ -57,11 +57,11 @@ class TargetSelectionDialog(QDialog):
         # Quick action buttons
         btn_layout = QHBoxLayout()
 
-        select_all_btn = QPushButton("Select All")
+        select_all_btn = QPushButton(QCoreApplication.translate("TargetSelectionDialog", "Select All"))
         select_all_btn.clicked.connect(self._select_all)
         btn_layout.addWidget(select_all_btn)
 
-        clear_btn = QPushButton("Clear All")
+        clear_btn = QPushButton(QCoreApplication.translate("TargetSelectionDialog", "Clear All"))
         clear_btn.clicked.connect(self._clear_all)
         btn_layout.addWidget(clear_btn)
 
@@ -97,7 +97,7 @@ class TargetSelectionDialog(QDialog):
 
             # Add fixture children
             for idx, fixture in enumerate(group.fixtures):
-                fixture_name = fixture.name or f"Fixture {idx + 1}"
+                fixture_name = fixture.name or QCoreApplication.translate("TargetSelectionDialog", "Fixture {0}").format(idx + 1)
                 fixture_item = QTreeWidgetItem(group_item, [fixture_name])
                 fixture_item.setFlags(fixture_item.flags() | Qt.ItemFlag.ItemIsUserCheckable)
                 fixture_item.setCheckState(0, Qt.CheckState.Unchecked)

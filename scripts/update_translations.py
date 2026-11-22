@@ -17,17 +17,43 @@ import os
 import shutil
 import subprocess
 import sys
+import xml.etree.ElementTree as ET
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 TRANSLATIONS = os.path.join(ROOT, "translations")
 
-# Files that contain translate()/tr() calls today. Extend as more of
-# the UI gets wrapped.
+# Every UI package is scanned whole (pylupdate6 reads a directory
+# recursively), so a newly wrapped module never needs listing here.
+# tests/unit/test_translations_catalog.py fails when a translate() call
+# has no German entry in the .ts, which is the reminder to re-run this.
 SOURCES = [
-    os.path.join(ROOT, "gui", "widgets", "topbar.py"),
-    os.path.join(ROOT, "gui", "widgets", "home_screen.py"),
-    os.path.join(ROOT, "gui", "Ui_MainWindow.py"),
+    os.path.join(ROOT, "gui"),
+    os.path.join(ROOT, "timeline_ui"),
+    os.path.join(ROOT, "visualizer"),
 ]
+
+
+def normalise_catalog(ts_path: str) -> None:
+    """Rewrite a refreshed .ts in the committed layout.
+
+    pylupdate6 writes location paths relative to the .ts with the host's
+    separator and its own indentation; the catalog was first generated
+    on Windows (``..\\gui``, two-space XML indent). Normalising both
+    keeps a refresh diff down to the messages that really changed,
+    whichever OS ran it.
+    """
+    tree = ET.parse(ts_path)
+    root = tree.getroot()
+    for loc in root.iter("location"):
+        name = loc.get("filename")
+        if name:
+            loc.set("filename", name.replace("/", "\\"))
+    ET.indent(root, space="  ")
+    body = ET.tostring(root, encoding="unicode")
+    with open(ts_path, "w", encoding="utf-8", newline="\n") as fh:
+        fh.write('<?xml version="1.0" encoding="utf-8"?>\n<!DOCTYPE TS>\n')
+        fh.write(body)
+        fh.write("\n")
 
 
 def main() -> int:
@@ -45,6 +71,8 @@ def main() -> int:
         print("running:", " ".join(os.path.basename(c) for c in cmd[:1]),
               "...")
         subprocess.run(cmd, check=True)
+        for ts in ts_files:
+            normalise_catalog(ts)
     else:
         print("pylupdate6 not found (pip install PyQt6); skipping merge")
 

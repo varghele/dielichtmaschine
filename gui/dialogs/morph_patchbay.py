@@ -54,7 +54,7 @@ import contextlib
 from typing import Dict, List, Optional, Tuple
 
 from PyQt6 import QtCore, QtGui, QtWidgets
-from PyQt6.QtCore import Qt, pyqtSignal
+from PyQt6.QtCore import Qt, pyqtSignal, QCoreApplication, QT_TRANSLATE_NOOP
 
 from gui.theme_style import active_tokens, bind_style
 from gui.widgets.flow_layout import FlowLayout
@@ -64,11 +64,14 @@ from utils.morph.plan import (MorphEdge, MorphPlan, REGENERATE_STRATEGIES,
                               TRANSFORM_TYPES)
 
 #: data-model sublane -> UI capability label (decision 3, locked 1:1)
+#: The labels are marked for translation (QT_TRANSLATE_NOOP) and
+#: translated where shown; a module-level translate() would run before
+#: the translator is installed.
 SUBLANE_LABELS = {
-    "dimmer": "INTENSITY",
-    "colour": "COLOUR",
-    "movement": "POSITION",
-    "special": "BEAM",
+    "dimmer": QT_TRANSLATE_NOOP("MorphPatchbay", "INTENSITY"),
+    "colour": QT_TRANSLATE_NOOP("MorphPatchbay", "COLOUR"),
+    "movement": QT_TRANSLATE_NOOP("MorphPatchbay", "POSITION"),
+    "special": QT_TRANSLATE_NOOP("MorphPatchbay", "BEAM"),
 }
 SUBLANE_ORDER = ("dimmer", "colour", "movement", "special")
 
@@ -169,7 +172,13 @@ def _source_catalog(source_config) -> List[SourceInfo]:
         used = songs[selector]
         label = selector
         if len(source_config.songs) > 1:
-            label = f"{selector}  ({len(used)} song{'s' if len(used) != 1 else ''})"
+            if len(used) == 1:
+                label = QCoreApplication.translate(
+                    "MorphPatchbay", "{0}  (1 song)").format(selector)
+            else:
+                label = QCoreApplication.translate(
+                    "MorphPatchbay", "{0}  ({1} songs)").format(
+                        selector, len(used))
         infos.append(SourceInfo(
             selector, label, used,
             LANE_COLOURS[len(infos) % len(LANE_COLOURS)],
@@ -471,9 +480,13 @@ class MorphPatchbay(QtWidgets.QWidget):
 
     changed = pyqtSignal()
 
-    HINT_IDLE = ("Drag a source chip onto a matching target capability, "
-                 "or click source then target. "
-                 "Solid = 1:1 · dashed = lane patch.")
+    #: Marked for translation; translated where shown (tests compare
+    #: against the English source, which translate() returns untranslated).
+    HINT_IDLE = QT_TRANSLATE_NOOP(
+        "MorphPatchbay",
+        "Drag a source chip onto a matching target capability, "
+        "or click source then target. "
+        "Solid = 1:1 · dashed = lane patch.")
 
     def __init__(self, source_config, target_config,
                  plan: Optional[MorphPlan] = None, parent=None):
@@ -552,8 +565,12 @@ class MorphPatchbay(QtWidgets.QWidget):
         edge = MorphEdge(source_group=selector, sublane=sublane,
                          target_group=target_group, mode=mode)
         with self._undoable(
-                f"Patch {selector} · {SUBLANE_LABELS[sublane]} "
-                f"-> {target_group}"):
+                QCoreApplication.translate(
+                    "MorphPatchbay", "Patch {0} · {1} -> {2}").format(
+                    selector,
+                    QCoreApplication.translate(
+                        "MorphPatchbay", SUBLANE_LABELS[sublane]),
+                    target_group)):
             self.plan.edges.append(edge)
             self._notify()
         return edge
@@ -564,7 +581,9 @@ class MorphPatchbay(QtWidgets.QWidget):
         target renders, marked as one dashed fan-out."""
         added = []
         content = self.source_content(selector)
-        with self._undoable(f"Patch {selector} -> {target_group}"):
+        with self._undoable(QCoreApplication.translate(
+            "MorphPatchbay", "Patch {0} -> {1}").format(
+                selector, target_group)):
             for sublane in SUBLANE_ORDER:
                 if not content.get(sublane):
                     continue
@@ -580,8 +599,12 @@ class MorphPatchbay(QtWidgets.QWidget):
         edge = self.edge(edge_id)
         if edge is None:
             return False
-        label = f"{edge.source_group} · {SUBLANE_LABELS[edge.sublane]}"
-        with self._undoable(f"Unpatch {label}"):
+        label = "{0} · {1}".format(
+            edge.source_group,
+            QCoreApplication.translate(
+                "MorphPatchbay", SUBLANE_LABELS[edge.sublane]))
+        with self._undoable(QCoreApplication.translate(
+            "MorphPatchbay", "Unpatch {0}").format(label)):
             self.plan.edges.remove(edge)
             if self._selected_edge_id == edge_id:
                 # However it went (×, Delete, menu), a selection pointing
@@ -600,7 +623,8 @@ class MorphPatchbay(QtWidgets.QWidget):
         edge = self.edge(edge_id)
         if edge is None:
             return
-        with self._undoable(f"Set mode {mode}"):
+        with self._undoable(QCoreApplication.translate(
+            "MorphPatchbay", "Set mode {0}").format(mode)):
             edge.mode = mode
             if mode == "regenerate":
                 if strategy in REGENERATE_STRATEGIES:
@@ -621,7 +645,8 @@ class MorphPatchbay(QtWidgets.QWidget):
         edge = self.edge(edge_id)
         if edge is None:
             return
-        with self._undoable(f"Set {kind}"):
+        with self._undoable(QCoreApplication.translate(
+            "MorphPatchbay", "Set {0}").format(kind)):
             edge.transforms = [t for t in edge.transforms
                                if t.get("type") != kind]
             edge.transforms.append({"type": kind, **params})
@@ -633,7 +658,8 @@ class MorphPatchbay(QtWidgets.QWidget):
         edge = self.edge(edge_id)
         if edge is None:
             return
-        with self._undoable(f"Clear {kind}"):
+        with self._undoable(QCoreApplication.translate(
+            "MorphPatchbay", "Clear {0}").format(kind)):
             edge.transforms = [t for t in edge.transforms
                                if t.get("type") != kind]
             if not edge.transforms and edge.mode == "copy_transform":
@@ -644,7 +670,8 @@ class MorphPatchbay(QtWidgets.QWidget):
         edge = self.edge(edge_id)
         if edge is None:
             return
-        with self._undoable("Change priority"):
+        with self._undoable(QCoreApplication.translate(
+            "MorphPatchbay", "Change priority")):
             edge.priority = max(0, edge.priority + delta)
             self._notify()
 
@@ -656,7 +683,10 @@ class MorphPatchbay(QtWidgets.QWidget):
         else:
             protected.discard(target_group)
         with self._undoable(
-                f"{'Lock' if locked else 'Unlock'} {target_group}"):
+                QCoreApplication.translate("MorphPatchbay", "Lock {0}")
+                .format(target_group) if locked else
+                QCoreApplication.translate("MorphPatchbay", "Unlock {0}")
+                .format(target_group)):
             self.plan.protected_target_lanes = sorted(protected)
             self._notify()
 
@@ -680,7 +710,8 @@ class MorphPatchbay(QtWidgets.QWidget):
         added: List[MorphEdge] = []
         # One undo step for the whole prefill: suggesting 39 wires and
         # then pressing Ctrl+Z 39 times is not an undo.
-        with self._undoable("Auto-suggest"):
+        with self._undoable(QCoreApplication.translate(
+            "MorphPatchbay", "Auto-suggest")):
             for info in self._sources:
                 if not info.content:
                     continue
@@ -893,33 +924,44 @@ class MorphPatchbay(QtWidgets.QWidget):
         layout.setSpacing(8)
 
         header = QtWidgets.QHBoxLayout()
-        title = QtWidgets.QLabel("PATCH · CAPABILITY TO CAPABILITY")
+        title = QtWidgets.QLabel(QCoreApplication.translate(
+            "MorphPatchbay", "PATCH · CAPABILITY TO CAPABILITY"))
         font = title.font()
         font.setBold(True)
         title.setFont(font)
         header.addWidget(title)
-        self.hint_label = QtWidgets.QLabel(self.HINT_IDLE)
+        self.hint_label = QtWidgets.QLabel(
+            QCoreApplication.translate("MorphPatchbay", self.HINT_IDLE))
         header.addWidget(self.hint_label, 1)
-        self.suggest_btn = QtWidgets.QPushButton("Auto-suggest")
+        self.suggest_btn = QtWidgets.QPushButton(QCoreApplication.translate(
+            "MorphPatchbay", "Auto-suggest"))
         self.suggest_btn.setToolTip(
-            "Prefill edges by lighting role and capability overlap. "
-            "Only adds wires - delete any you do not want.")
+            QCoreApplication.translate(
+                "MorphPatchbay",
+                "Prefill edges by lighting role and capability overlap. "
+                "Only adds wires - delete any you do not want."))
         self.suggest_btn.clicked.connect(self.auto_suggest)
         header.addWidget(self.suggest_btn)
 
         # Sits next to Auto-suggest on purpose: prefilling 39 wires you
         # did not want is exactly when you need to start over.
-        self.unpatch_all_btn = QtWidgets.QPushButton("Unpatch all")
+        self.unpatch_all_btn = QtWidgets.QPushButton(QCoreApplication.translate(
+            "MorphPatchbay", "Unpatch all"))
         self.unpatch_all_btn.setToolTip(
-            "Remove every patch in this plan and start over")
+            QCoreApplication.translate(
+                "MorphPatchbay",
+                "Remove every patch in this plan and start over"))
         self.unpatch_all_btn.clicked.connect(
-            lambda _=False: self.confirm_and_clear(what="this plan"))
+            lambda _=False: self.confirm_and_clear(what=QCoreApplication.translate(
+                "MorphPatchbay", "this plan")))
         header.addWidget(self.unpatch_all_btn)
 
-        self.undo_btn = QtWidgets.QPushButton("Undo")
+        self.undo_btn = QtWidgets.QPushButton(QCoreApplication.translate(
+            "MorphPatchbay", "Undo"))
         self.undo_btn.clicked.connect(lambda _=False: self.undo())
         header.addWidget(self.undo_btn)
-        self.redo_btn = QtWidgets.QPushButton("Redo")
+        self.redo_btn = QtWidgets.QPushButton(QCoreApplication.translate(
+            "MorphPatchbay", "Redo"))
         self.redo_btn.clicked.connect(lambda _=False: self.redo())
         header.addWidget(self.redo_btn)
         # Buttons are the reliable path; the shortcut is scoped to this
@@ -1032,8 +1074,9 @@ class MorphPatchbay(QtWidgets.QWidget):
                      pos: QtCore.QPoint) -> None:
         menu = QtWidgets.QMenu(self)
         count = len(self.edges_matching(source_group=selector))
-        action = menu.addAction(f"Unpatch everything from {selector}"
-                                f" ({count})")
+        action = menu.addAction(QCoreApplication.translate(
+            "MorphPatchbay", "Unpatch everything from {0} ({1})").format(
+                selector, count))
         action.setEnabled(bool(count))
         action.triggered.connect(
             lambda _=False: self.confirm_and_clear(source_group=selector,
@@ -1107,7 +1150,8 @@ class MorphPatchbay(QtWidgets.QWidget):
         expand.setFixedSize(22, 22)
         expand.setStyleSheet("QToolButton { border: none;"
                              " background: transparent; padding: 0; }")
-        expand.setToolTip("Expand to the four sublane streams")
+        expand.setToolTip(QCoreApplication.translate(
+            "MorphPatchbay", "Expand to the four sublane streams"))
         expand.clicked.connect(
             lambda _=False, lid=info.selector:
             self.set_expanded(lid, lid not in self._expanded))
@@ -1126,15 +1170,19 @@ class MorphPatchbay(QtWidgets.QWidget):
                 sub_row.setContentsMargins(30, 4, 8, 4)
                 count = info.content.get(sublane, 0)
                 sub_row.addWidget(QtWidgets.QLabel(
-                    f"{count}x" if count else "empty"))
+                    f"{count}x" if count else QCoreApplication.translate(
+                        "MorphPatchbay", "empty")))
                 sub_row.addStretch(1)
                 chip = self._source_chip(
-                    (info.selector, sublane), SUBLANE_LABELS[sublane],
+                    (info.selector, sublane), QCoreApplication.translate(
+                        "MorphPatchbay", SUBLANE_LABELS[sublane]),
                     info.colour, ghost=not has_content)
                 if not has_content:
                     chip.setToolTip(
-                        "No movement authored - wiring this creates a "
-                        "REGENERATE edge")
+                        QCoreApplication.translate(
+                            "MorphPatchbay",
+                            "No movement authored - wiring this creates a "
+                            "REGENERATE edge"))
                 chip.clicked.connect(
                     lambda _=False, lid=info.selector, s=sublane:
                     self._chip_clicked(lid, s))
@@ -1143,11 +1191,14 @@ class MorphPatchbay(QtWidgets.QWidget):
                 self._source_anchors[(info.selector, sublane)] = sub
                 vbox.addWidget(sub)
         else:
-            chip = self._source_chip((info.selector, None), "GROUP",
+            chip = self._source_chip((info.selector, None), QCoreApplication.translate(
+                "MorphPatchbay", "GROUP"),
                                      info.colour)
             chip.setToolTip(
-                "Wire the whole lane: every stream it carries that the "
-                "target renders (dashed fan-out)")
+                QCoreApplication.translate(
+                    "MorphPatchbay",
+                    "Wire the whole lane: every stream it carries that the "
+                    "target renders (dashed fan-out)"))
             chip.clicked.connect(
                 lambda _=False, lid=info.selector:
                 self._chip_clicked(lid, None))
@@ -1181,17 +1232,23 @@ class MorphPatchbay(QtWidgets.QWidget):
         row.addWidget(self._name_label(group))
         row.addWidget(QtWidgets.QLabel(f"{len(fixtures)}x"))
         row.addStretch(1)
-        lock = self._chip("LOCK", NEUTRAL)
+        lock = self._chip(QCoreApplication.translate(
+            "MorphPatchbay", "LOCK"), NEUTRAL)
         lock.setChecked(self.is_locked(group))
         lock.setToolTip(
-            "Protect this target lane: re-morph leaves it untouched")
+            QCoreApplication.translate(
+                "MorphPatchbay",
+                "Protect this target lane: re-morph leaves it untouched"))
         lock.toggled.connect(
             lambda checked, g=group: self.set_lock(g, checked))
         row.addWidget(lock)
         if any(e.target_group == group for e in self.plan.edges):
-            clear = self._chip("UNPATCH", NEUTRAL)
+            clear = self._chip(QCoreApplication.translate(
+                "MorphPatchbay", "UNPATCH"), NEUTRAL)
             clear.setCheckable(False)
-            clear.setToolTip(f"Remove every patch feeding {group}")
+            clear.setToolTip(QCoreApplication.translate(
+                "MorphPatchbay", "Remove every patch feeding {0}").format(
+                    group))
             clear.setProperty("unpatch_target_group", group)
             clear.clicked.connect(
                 lambda _=False, g=group: self.confirm_and_clear(
@@ -1205,7 +1262,8 @@ class MorphPatchbay(QtWidgets.QWidget):
             if sublane not in self._caps.get(group, set()):
                 continue
             chip = _TargetChip(self, group, sublane)
-            self._style_chip(chip, SUBLANE_LABELS[sublane], colour)
+            self._style_chip(chip, QCoreApplication.translate(
+                "MorphPatchbay", SUBLANE_LABELS[sublane]), colour)
             chip.setCheckable(False)
             chip.clicked.connect(
                 lambda _=False, g=group, s=sublane:
@@ -1235,7 +1293,10 @@ class MorphPatchbay(QtWidgets.QWidget):
         """
         info = self._sources_by_selector.get(edge.source_group)
         colour = info.colour if info else NEUTRAL
-        text = f"{edge.source_group} · {SUBLANE_LABELS[edge.sublane]}"
+        text = "{0} · {1}".format(
+            edge.source_group,
+            QCoreApplication.translate(
+                "MorphPatchbay", SUBLANE_LABELS[edge.sublane]))
         if edge.mode == "regenerate":
             text += f" · REGEN({edge.regenerate_strategy})"
         if edge.transforms:
@@ -1247,11 +1308,13 @@ class MorphPatchbay(QtWidgets.QWidget):
         chip.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         chip.customContextMenuRequested.connect(
             lambda pos, e=edge, c=chip: self._edge_menu(e, c, pos))
-        chip.setToolTip("Right-click: mode, transforms, priority, delete")
+        chip.setToolTip(QCoreApplication.translate(
+            "MorphPatchbay", "Right-click: mode, transforms, priority, delete"))
         chip.setProperty("edge_id", edge.edge_id)
 
         unpatch = _EdgeChipHolder.make_unpatch_button(colour)
-        unpatch.setToolTip(f"Unpatch {text}")
+        unpatch.setToolTip(QCoreApplication.translate(
+            "MorphPatchbay", "Unpatch {0}").format(text))
         unpatch.setProperty("unpatch_edge_id", edge.edge_id)
         unpatch.clicked.connect(
             lambda _=False, eid=edge.edge_id: self.remove_edge(eid))
@@ -1286,7 +1349,8 @@ class MorphPatchbay(QtWidgets.QWidget):
     def _target_chip_clicked(self, group: str, sublane: str) -> None:
         if self._pending is None:
             self.hint_label.setText(
-                "Click (or drag) a source chip first.")
+                QCoreApplication.translate(
+                    "MorphPatchbay", "Click (or drag) a source chip first."))
             return
         selector, pending_sublane = self._pending
         if pending_sublane is None:
@@ -1327,25 +1391,37 @@ class MorphPatchbay(QtWidgets.QWidget):
                 chip.setEnabled(sublane == pending_sublane and
                                 self.can_dock(selector, sublane, group))
         if pending is None:
-            self.hint_label.setText(self.HINT_IDLE)
+            self.hint_label.setText(
+                QCoreApplication.translate("MorphPatchbay", self.HINT_IDLE))
         else:
             selector, sublane = pending
             info = self._sources_by_selector.get(selector)
-            what = SUBLANE_LABELS.get(sublane, "GROUP")
-            verb = "Drop on" if self._dragging else "Click"
-            self.hint_label.setText(
-                f"Wiring {info.name if info else '?'} · {what} - {verb} "
-                f"a matching target capability (incompatible chips are "
-                f"disabled).")
+            what = QCoreApplication.translate(
+                "MorphPatchbay", SUBLANE_LABELS.get(sublane, "GROUP"))
+            name = info.name if info else '?'
+            if self._dragging:
+                hint = QCoreApplication.translate(
+                    "MorphPatchbay",
+                    "Wiring {0} · {1} - Drop on a matching target "
+                    "capability (incompatible chips are disabled).")
+            else:
+                hint = QCoreApplication.translate(
+                    "MorphPatchbay",
+                    "Wiring {0} · {1} - Click a matching target "
+                    "capability (incompatible chips are disabled).")
+            self.hint_label.setText(hint.format(name, what))
         self._canvas.update()
 
     def _edge_menu(self, edge: MorphEdge, chip: QtWidgets.QWidget,
                    pos: QtCore.QPoint) -> None:
         menu = QtWidgets.QMenu(self)
 
-        mode_menu = menu.addMenu("Mode")
-        for mode, label in (("copy", "Copy"),
-                            ("copy_transform", "Copy + transform")):
+        mode_menu = menu.addMenu(QCoreApplication.translate(
+            "MorphPatchbay", "Mode"))
+        for mode, label in (("copy", QCoreApplication.translate(
+            "MorphPatchbay", "Copy")),
+                            ("copy_transform", QCoreApplication.translate(
+                                "MorphPatchbay", "Copy + transform"))):
             action = mode_menu.addAction(label)
             action.setCheckable(True)
             action.setChecked(edge.mode == mode)
@@ -1353,7 +1429,8 @@ class MorphPatchbay(QtWidgets.QWidget):
                 lambda _=False, m=mode:
                 self.set_edge_mode(edge.edge_id, m))
         if edge.sublane == "movement":
-            regen_menu = mode_menu.addMenu("Regenerate")
+            regen_menu = mode_menu.addMenu(QCoreApplication.translate(
+                "MorphPatchbay", "Regenerate"))
             for strategy in REGENERATE_STRATEGIES:
                 action = regen_menu.addAction(strategy)
                 action.setCheckable(True)
@@ -1363,27 +1440,33 @@ class MorphPatchbay(QtWidgets.QWidget):
                     lambda _=False, s=strategy:
                     self.set_edge_mode(edge.edge_id, "regenerate", s))
 
-        transform_menu = menu.addMenu("Transforms")
+        transform_menu = menu.addMenu(QCoreApplication.translate(
+            "MorphPatchbay", "Transforms"))
         current = {t.get("type") for t in edge.transforms}
-        action = transform_menu.addAction("Phase offset...")
+        action = transform_menu.addAction(QCoreApplication.translate(
+            "MorphPatchbay", "Phase offset..."))
         action.setCheckable(True)
         action.setChecked("phase_offset" in current)
         action.triggered.connect(
             lambda _=False: self._ask_phase_offset(edge))
-        action = transform_menu.addAction("Mirror")
+        action = transform_menu.addAction(QCoreApplication.translate(
+            "MorphPatchbay", "Mirror"))
         action.setCheckable(True)
         action.setChecked("mirror" in current)
         action.triggered.connect(
             lambda checked=False:
             self.set_transform(edge.edge_id, "mirror") if checked
             else self.clear_transform(edge.edge_id, "mirror"))
-        action = transform_menu.addAction("Intensity scale...")
+        action = transform_menu.addAction(QCoreApplication.translate(
+            "MorphPatchbay", "Intensity scale..."))
         action.setCheckable(True)
         action.setChecked("intensity_scale" in current)
         action.triggered.connect(
             lambda _=False: self._ask_intensity_scale(edge))
-        subset_menu = transform_menu.addMenu("Spatial subset")
-        none_action = subset_menu.addAction("(none)")
+        subset_menu = transform_menu.addMenu(QCoreApplication.translate(
+            "MorphPatchbay", "Spatial subset"))
+        none_action = subset_menu.addAction(QCoreApplication.translate(
+            "MorphPatchbay", "(none)"))
         none_action.triggered.connect(
             lambda _=False:
             self.clear_transform(edge.edge_id, "spatial_subset"))
@@ -1400,28 +1483,35 @@ class MorphPatchbay(QtWidgets.QWidget):
                                    selector=s))
 
         menu.addSeparator()
-        up = menu.addAction("Priority +")
+        up = menu.addAction(QCoreApplication.translate(
+            "MorphPatchbay", "Priority +"))
         up.triggered.connect(
             lambda _=False: self.bump_priority(edge.edge_id, +1))
-        down = menu.addAction("Priority -")
+        down = menu.addAction(QCoreApplication.translate(
+            "MorphPatchbay", "Priority -"))
         down.triggered.connect(
             lambda _=False: self.bump_priority(edge.edge_id, -1))
         menu.addSeparator()
-        delete = menu.addAction("Delete edge")
+        delete = menu.addAction(QCoreApplication.translate(
+            "MorphPatchbay", "Delete edge"))
         delete.triggered.connect(
             lambda _=False: self.remove_edge(edge.edge_id))
         menu.exec(chip.mapToGlobal(pos))
 
     def _ask_phase_offset(self, edge: MorphEdge) -> None:
         amount, ok = QtWidgets.QInputDialog.getDouble(
-            self, "Phase offset", "Fraction of a cycle (0..1):",
+            self, QCoreApplication.translate(
+                "MorphPatchbay", "Phase offset"), QCoreApplication.translate(
+                "MorphPatchbay", "Fraction of a cycle (0..1):"),
             0.5, 0.0, 1.0, 3)
         if ok:
             self.set_transform(edge.edge_id, "phase_offset", amount=amount)
 
     def _ask_intensity_scale(self, edge: MorphEdge) -> None:
         factor, ok = QtWidgets.QInputDialog.getDouble(
-            self, "Intensity scale", "Factor:", 0.8, 0.0, 4.0, 2)
+            self, QCoreApplication.translate(
+                "MorphPatchbay", "Intensity scale"), QCoreApplication.translate(
+                    "MorphPatchbay", "Factor:"), 0.8, 0.0, 4.0, 2)
         if ok:
             self.set_transform(edge.edge_id, "intensity_scale",
                                factor=factor)
@@ -1484,8 +1574,10 @@ class MorphPatchbay(QtWidgets.QWidget):
         self._selected_edge_id = edge_id
         self._canvas.update()
         self.hint_label.setText(
-            "Wire selected - press Delete to unpatch it."
-            if edge_id else self.HINT_IDLE)
+            QCoreApplication.translate(
+                "MorphPatchbay", "Wire selected - press Delete to unpatch it.")
+            if edge_id else
+            QCoreApplication.translate("MorphPatchbay", self.HINT_IDLE))
 
     @property
     def selected_edge_id(self) -> Optional[str]:
@@ -1554,11 +1646,15 @@ class MorphPatchbay(QtWidgets.QWidget):
         self.undo_btn.setEnabled(self.undo_stack.canUndo())
         self.redo_btn.setEnabled(self.undo_stack.canRedo())
         self.undo_btn.setToolTip(
-            f"Undo {self.undo_stack.undoText()}"
-            if self.undo_stack.canUndo() else "Nothing to undo")
+            QCoreApplication.translate(
+                "MorphPatchbay", "Undo {0}").format(self.undo_stack.undoText())
+            if self.undo_stack.canUndo() else QCoreApplication.translate(
+                "MorphPatchbay", "Nothing to undo"))
         self.redo_btn.setToolTip(
-            f"Redo {self.undo_stack.redoText()}"
-            if self.undo_stack.canRedo() else "Nothing to redo")
+            QCoreApplication.translate(
+                "MorphPatchbay", "Redo {0}").format(self.undo_stack.redoText())
+            if self.undo_stack.canRedo() else QCoreApplication.translate(
+                "MorphPatchbay", "Nothing to redo"))
 
     def can_undo(self) -> bool:
         return self.undo_stack.canUndo()
@@ -1590,8 +1686,11 @@ class MorphPatchbay(QtWidgets.QWidget):
         if not doomed:
             return 0
         doomed_ids = {e.edge_id for e in doomed}
-        scope = target_group or source_group or "this plan"
-        with self._undoable(f"Unpatch {len(doomed)} from {scope}"):
+        scope = target_group or source_group or QCoreApplication.translate(
+            "MorphPatchbay", "this plan")
+        with self._undoable(QCoreApplication.translate(
+            "MorphPatchbay", "Unpatch {0} from {1}").format(
+                len(doomed), scope)):
             self.plan.edges = [e for e in self.plan.edges
                                if e.edge_id not in doomed_ids]
             if self._selected_edge_id in doomed_ids:
@@ -1607,20 +1706,24 @@ class MorphPatchbay(QtWidgets.QWidget):
 
     def confirm_and_clear(self, source_group: Optional[str] = None,
                           target_group: Optional[str] = None,
-                          what: str = "every patch") -> int:
+                          what: str = QCoreApplication.translate(
+                              "MorphPatchbay", "every patch")) -> int:
         """UI entry point: ask first when more than one wire would go.
 
         There is no undo in the patchbay, so a bulk removal that took one
         click to trigger should take one more to mean it."""
         doomed = self.edges_matching(source_group, target_group)
         if not doomed:
-            self.hint_label.setText("Nothing patched there yet.")
+            self.hint_label.setText(QCoreApplication.translate(
+                "MorphPatchbay", "Nothing patched there yet."))
             return 0
         if len(doomed) > 1:
             answer = QtWidgets.QMessageBox.question(
-                self, "Unpatch",
-                f"Remove {len(doomed)} patches from {what}?\n"
-                f"This cannot be undone.",
+                self, QCoreApplication.translate("MorphPatchbay", "Unpatch"),
+                QCoreApplication.translate(
+                    "MorphPatchbay",
+                    "Remove {0} patches from {1}?\n"
+                    "This cannot be undone.").format(len(doomed), what),
                 QtWidgets.QMessageBox.StandardButton.Yes
                 | QtWidgets.QMessageBox.StandardButton.No,
                 QtWidgets.QMessageBox.StandardButton.No)
@@ -1664,15 +1767,21 @@ class MorphPatchbay(QtWidgets.QWidget):
         parts = []
         error = active_tokens()["error_text"]
         for group, sublane, percent, is_gap in self.coverage_summary():
-            label = f"{group} {SUBLANE_LABELS[sublane]} {percent}%"
+            label = "{0} {1} {2}%".format(
+                group,
+                QCoreApplication.translate(
+                    "MorphPatchbay", SUBLANE_LABELS[sublane]),
+                percent)
             if is_gap:
-                parts.append(f"<span style='color:{error}'>"
-                             f"{label} GAP</span>")
+                parts.append(QCoreApplication.translate(
+                    "MorphPatchbay", "<span style='color:{0}'>{1} GAP</span>").format(
+                        error, label))
             else:
                 parts.append(label)
         self.checker_label.setText(
             " · ".join(parts) if parts
-            else "No edges yet - nothing routed.")
+            else QCoreApplication.translate(
+                "MorphPatchbay", "No edges yet - nothing routed."))
 
     def _notify(self) -> None:
         self._rebuild_rows()

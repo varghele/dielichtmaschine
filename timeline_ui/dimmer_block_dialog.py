@@ -5,7 +5,7 @@ from PyQt6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QFormLayout,
                              QGroupBox, QSlider, QDoubleSpinBox, QSpinBox,
                              QLabel, QDialogButtonBox, QCheckBox, QComboBox,
                              QScrollArea, QWidget, QFrame)
-from PyQt6.QtCore import Qt
+from PyQt6.QtCore import QCoreApplication, Qt
 from config.models import DimmerBlock
 
 
@@ -22,7 +22,7 @@ class DimmerBlockDialog(QDialog):
         super().__init__(parent)
         self.block = block
 
-        self.setWindowTitle("Edit Dimmer Block")
+        self.setWindowTitle(QCoreApplication.translate("DimmerBlockDialog", "Edit Dimmer Block"))
         self.setMinimumWidth(450)
         self.setMinimumHeight(550)
 
@@ -40,57 +40,65 @@ class DimmerBlockDialog(QDialog):
         layout = QVBoxLayout(scroll_widget)
 
         # Timing info (read-only display)
-        timing_group = QGroupBox("Timing")
+        timing_group = QGroupBox(QCoreApplication.translate("DimmerBlockDialog", "Timing"))
         timing_layout = QFormLayout()
 
         self.start_label = QLabel()
         self.end_label = QLabel()
         self.duration_label = QLabel()
-        timing_layout.addRow("Start:", self.start_label)
-        timing_layout.addRow("End:", self.end_label)
-        timing_layout.addRow("Duration:", self.duration_label)
+        timing_layout.addRow(QCoreApplication.translate("DimmerBlockDialog", "Start:"), self.start_label)
+        timing_layout.addRow(QCoreApplication.translate("DimmerBlockDialog", "End:"), self.end_label)
+        timing_layout.addRow(QCoreApplication.translate("DimmerBlockDialog", "Duration:"), self.duration_label)
 
         timing_group.setLayout(timing_layout)
         layout.addWidget(timing_group)
 
         # Effect group
-        effect_group = QGroupBox("Effect")
+        effect_group = QGroupBox(QCoreApplication.translate("DimmerBlockDialog", "Effect"))
         effect_layout = QFormLayout()
 
         # Effect type selector
         self.effect_type_combo = QComboBox()
         self.effect_type_combo.addItems(["static", "stroke", "throb", "ping_pong", "chase", "wave", "waterfall", "fill", "random_stroke", "sparkle", "pulse", "strobe", "fade", "cascade", "heartbeat"])
-        effect_layout.addRow("Effect Type:", self.effect_type_combo)
+        effect_layout.addRow(QCoreApplication.translate("DimmerBlockDialog", "Effect Type:"), self.effect_type_combo)
 
         # Effect speed selector
         self.effect_speed_combo = QComboBox()
         self.effect_speed_combo.addItems(["1/16", "1/8", "1/4", "1/2", "1", "2", "4", "8", "16"])
         self.effect_speed_combo.setCurrentText("1")
-        effect_layout.addRow("Speed:", self.effect_speed_combo)
+        effect_layout.addRow(QCoreApplication.translate("DimmerBlockDialog", "Speed:"), self.effect_speed_combo)
 
         # Direction selector (waterfall, fade)
         self.direction_combo = QComboBox()
         self.direction_combo.addItems(["down", "up", "in", "out"])
-        self.direction_label = QLabel("Direction:")
+        self.direction_label = QLabel(QCoreApplication.translate("DimmerBlockDialog", "Direction:"))
         effect_layout.addRow(self.direction_label, self.direction_combo)
 
         # Chase scope selector (chase)
         self.chase_scope_combo = QComboBox()
         self.chase_scope_combo.addItems(["fixture", "global"])
-        self.chase_scope_label = QLabel("Scope:")
+        self.chase_scope_label = QLabel(QCoreApplication.translate("DimmerBlockDialog", "Scope:"))
         self.chase_scope_combo.setToolTip(
-            "fixture: each fixture animates independently\n"
-            "global: all fixtures treated as one continuous chain"
+            QCoreApplication.translate(
+                "DimmerBlockDialog",
+                "fixture: each fixture animates independently\n"
+                "global: all fixtures treated as one continuous chain")
         )
         effect_layout.addRow(self.chase_scope_label, self.chase_scope_combo)
 
         # Phase offset per fixture (pulse)
-        self.phase_offset_check = QCheckBox("Spread phase across fixtures")
+        self.phase_offset_check = QCheckBox(QCoreApplication.translate(
+            "DimmerBlockDialog",
+            "Spread phase across fixtures"))
         self.phase_offset_check.setToolTip(
-            "When enabled, each fixture gets a phase offset\n"
-            "creating a wave-like breathing effect across the group"
+            QCoreApplication.translate(
+                "DimmerBlockDialog",
+                "When enabled, each fixture gets a phase offset\n"
+                "creating a wave-like breathing effect across the group")
         )
-        self.phase_offset_label = QLabel("Phase Offset:")
+        self.phase_offset_label = QLabel(QCoreApplication.translate(
+            "DimmerBlockDialog",
+            "Phase Offset:"))
         effect_layout.addRow(self.phase_offset_label, self.phase_offset_check)
 
         # Build fraction (cascade)
@@ -98,8 +106,12 @@ class DimmerBlockDialog(QDialog):
         self.build_fraction_spin.setRange(0.1, 0.95)
         self.build_fraction_spin.setSingleStep(0.05)
         self.build_fraction_spin.setValue(0.7)
-        self.build_fraction_spin.setToolTip("Portion of block spent building (rest is release)")
-        self.build_fraction_label = QLabel("Build Fraction:")
+        self.build_fraction_spin.setToolTip(QCoreApplication.translate(
+            "DimmerBlockDialog",
+            "Portion of block spent building (rest is release)"))
+        self.build_fraction_label = QLabel(QCoreApplication.translate(
+            "DimmerBlockDialog",
+            "Build Fraction:"))
         effect_layout.addRow(self.build_fraction_label, self.build_fraction_spin)
 
         # Connect effect type change to show/hide rudiment-specific controls
@@ -109,7 +121,7 @@ class DimmerBlockDialog(QDialog):
         layout.addWidget(effect_group)
 
         # Intensity group
-        intensity_group = QGroupBox("Intensity")
+        intensity_group = QGroupBox(QCoreApplication.translate("DimmerBlockDialog", "Intensity"))
         intensity_layout = QFormLayout()
 
         # Intensity slider
@@ -122,7 +134,7 @@ class DimmerBlockDialog(QDialog):
         self.intensity_spinbox.valueChanged.connect(self.intensity_slider.setValue)
         intensity_widget.addWidget(self.intensity_slider, 1)
         intensity_widget.addWidget(self.intensity_spinbox)
-        intensity_layout.addRow("Intensity:", intensity_widget)
+        intensity_layout.addRow(QCoreApplication.translate("DimmerBlockDialog", "Intensity:"), intensity_widget)
 
         # Percentage label
         self.intensity_percent_label = QLabel("100%")
@@ -135,11 +147,13 @@ class DimmerBlockDialog(QDialog):
         layout.addWidget(intensity_group)
 
         # Strobe group
-        strobe_group = QGroupBox("Strobe")
+        strobe_group = QGroupBox(QCoreApplication.translate("DimmerBlockDialog", "Strobe"))
         strobe_layout = QFormLayout()
 
         # Strobe enable checkbox
-        self.strobe_enabled = QCheckBox("Enable Strobe")
+        self.strobe_enabled = QCheckBox(QCoreApplication.translate(
+            "DimmerBlockDialog",
+            "Enable Strobe"))
         self.strobe_enabled.toggled.connect(self._on_strobe_toggled)
         strobe_layout.addRow(self.strobe_enabled)
 
@@ -159,13 +173,13 @@ class DimmerBlockDialog(QDialog):
         )
         strobe_widget.addWidget(self.strobe_slider, 1)
         strobe_widget.addWidget(self.strobe_spinbox)
-        strobe_layout.addRow("Speed:", strobe_widget)
+        strobe_layout.addRow(QCoreApplication.translate("DimmerBlockDialog", "Speed:"), strobe_widget)
 
         strobe_group.setLayout(strobe_layout)
         layout.addWidget(strobe_group)
 
         # Iris group (for fixtures with iris)
-        iris_group = QGroupBox("Iris")
+        iris_group = QGroupBox(QCoreApplication.translate("DimmerBlockDialog", "Iris"))
         iris_layout = QFormLayout()
 
         iris_widget = QHBoxLayout()
@@ -177,7 +191,7 @@ class DimmerBlockDialog(QDialog):
         self.iris_spinbox.valueChanged.connect(self.iris_slider.setValue)
         iris_widget.addWidget(self.iris_slider, 1)
         iris_widget.addWidget(self.iris_spinbox)
-        iris_layout.addRow("Opening:", iris_widget)
+        iris_layout.addRow(QCoreApplication.translate("DimmerBlockDialog", "Opening:"), iris_widget)
 
         # Percentage label
         self.iris_percent_label = QLabel("100%")

@@ -25,6 +25,31 @@ verbatim as the GitHub Release notes (see [docs/releasing.md](docs/releasing.md)
   this build understands it and adds a Help > Warnings entry; an unreadable
   version value is treated as 0 and warned about. Export output is unchanged.
 
+- **German covers the whole interface, not just the shell.** Every screen,
+  dialog, menu, tooltip and message of the main app now goes through the
+  translation catalog: `translations/lichtmaschine_de.ts` grew from 40 to
+  1743 strings in 53 contexts (one per module), all translated, with one
+  glossary across the app (lighting terms such as Fixture, Show, Timeline,
+  Riff, Dimmer stay English, Stage is Bühne, Universe is Universum, neutral
+  imperative style). English stays the default and reads exactly as before,
+  apart from two messages in the import-shows dialog that lose an em-dash
+  ("That is the currently open config: nothing to import." and the
+  "name · N part(s)" list entry). Three screens that read their own label
+  text back as a value now use stored data instead (the auto-generate key
+  picker, the Structure tab's audio readout, the Shows tab's generate
+  button), and the Structure tab's Play and Stop buttons widen for a longer
+  translation instead of clipping it. Names that are data stay as written:
+  effect, movement and dimmer types, musical keys, presets, roles, groups,
+  songs, riff categories, protocol names, the default names written into
+  projects, the timeline block-face codes, the stage plot PDF (a rider for
+  venue crews), log messages and Help > Warnings entries.
+  `scripts/update_translations.py` now scans the `gui`, `timeline_ui` and
+  `visualizer` packages whole and keeps the catalog's layout stable on any
+  OS, and `tests/unit/test_i18n_coverage.py` fails on any UI string without
+  a German entry. To use it, set `ui/language` to `de` and compile the
+  catalog with `lrelease` (there is no language picker yet). Export output
+  is unchanged.
+
 ### Changed
 
 - **UI colours come from the theme tokens.** The hard-coded chrome colours

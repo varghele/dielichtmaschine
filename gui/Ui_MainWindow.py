@@ -20,38 +20,41 @@ class Ui_MainWindow(object):
         # Icons are brand line-SVGs applied theme-aware in
         # apply_shell_icons (re-run on theme switch); the QAction objects
         # keep their names so gui.py's existing connections keep working.
-        self.saveAction = QAction("Save Configuration", MainWindow)
-        self.loadAction = QAction("Load Configuration", MainWindow)
-        self.importWorkspaceAction = QAction("Import Workspace", MainWindow)
-        self.createWorkspaceAction = QAction("Create Workspace", MainWindow)
+        self.saveAction = QAction(QtCore.QCoreApplication.translate("Shell", "Save Configuration"), MainWindow)
+        self.loadAction = QAction(QtCore.QCoreApplication.translate("Shell", "Load Configuration"), MainWindow)
+        self.importWorkspaceAction = QAction(QtCore.QCoreApplication.translate("Shell", "Import Workspace"), MainWindow)
+        self.createWorkspaceAction = QAction(QtCore.QCoreApplication.translate("Shell", "Create Workspace"), MainWindow)
 
         # ArtNet / TCP-Visualizer status widgets. Per-theme styling lives
         # in the QSS template; here we only set role/status dynamic
         # properties that the stylesheet targets. gui.py's
         # _update_toolbar_status drives text + status props; the widgets
         # are packed into topbar StatusChips in setupStatusAndMenu.
-        self.artnet_status_indicator = QtWidgets.QLabel("OFF")
+        self.artnet_status_indicator = QtWidgets.QLabel(QtCore.QCoreApplication.translate("Shell", "OFF"))
         self.artnet_status_indicator.setProperty("status", "off")
         self.artnet_status_indicator.setToolTip(
-            "DMX output status (native ArtNet)")
+            QtCore.QCoreApplication.translate("Shell",
+                "DMX output status (native ArtNet)"))
         # The toggle is a small square that fills with the status color
         # (QSS [status=...] rules); no glyph, so no font dependency.
         self.artnet_toggle_btn = QtWidgets.QPushButton("")
         self.artnet_toggle_btn.setFixedSize(14, 14)
         self.artnet_toggle_btn.setProperty("role", "status-pill")
         self.artnet_toggle_btn.setProperty("status", "off")
-        self.artnet_toggle_btn.setToolTip("Click to toggle DMX output")
+        self.artnet_toggle_btn.setToolTip(QtCore.QCoreApplication.translate("Shell",
+                "Click to toggle DMX output"))
         self.artnet_toggle_btn.setCursor(QtCore.Qt.CursorShape.PointingHandCursor)
 
-        self.tcp_status_indicator = QtWidgets.QLabel("OFF")
+        self.tcp_status_indicator = QtWidgets.QLabel(QtCore.QCoreApplication.translate("Shell", "OFF"))
         self.tcp_status_indicator.setProperty("status", "off")
-        self.tcp_status_indicator.setToolTip("Visualizer feed status")
+        self.tcp_status_indicator.setToolTip(QtCore.QCoreApplication.translate("Shell",
+                "Visualizer feed status"))
         # A labelled ACTION button, not an anonymous status square:
         # OPEN launches the standalone visualizer and starts its TCP
         # feed in one click, STOP ends the feed. Text is driven by
         # gui.py's _update_toolbar_status; width from the text (a
         # fixed narrow width would clip the glyphs, CLAUDE.md).
-        self.tcp_toggle_btn = QtWidgets.QPushButton("OPEN")
+        self.tcp_toggle_btn = QtWidgets.QPushButton(QtCore.QCoreApplication.translate("Shell", "OPEN"))
         self.tcp_toggle_btn.setProperty("role", "output-select")
         # compact density: the default 6px vertical padding clips the
         # label inside the 26px chip row (CLAUDE.md glyph-clip rule).
@@ -61,7 +64,8 @@ class Ui_MainWindow(object):
         self.tcp_toggle_btn.setFont(mono_font(8, QFont.Weight.DemiBold))
         self.tcp_toggle_btn.setFixedHeight(20)
         self.tcp_toggle_btn.setToolTip(
-            "Launch the standalone visualizer and start its feed")
+            QtCore.QCoreApplication.translate("Shell",
+                "Launch the standalone visualizer and start its feed"))
         self.tcp_toggle_btn.setCursor(QtCore.Qt.CursorShape.PointingHandCursor)
 
         # Main layout: [topbar][subnav][tab pages]; the topbar + subnav
@@ -129,19 +133,20 @@ class Ui_MainWindow(object):
         QtCore.QMetaObject.connectSlotsByName(MainWindow)
 
     def retranslateUi(self, MainWindow):
-        _translate = QtCore.QCoreApplication.translate
-        MainWindow.setWindowTitle(_translate("MainWindow", APP_NAME))
+        # Literal calls (pylupdate6 cannot see an alias); the window
+        # title is the brand name and stays untranslated.
+        MainWindow.setWindowTitle(APP_NAME)
         # Tab titles
-        self.tabWidget.setTabText(self.tabWidget.indexOf(self.tab_config), _translate("MainWindow", "Configuration"))
-        self.tabWidget.setTabText(self.tabWidget.indexOf(self.tab), _translate("MainWindow", "Fixtures"))
-        self.tabWidget.setTabText(self.tabWidget.indexOf(self.tab_stage), _translate("MainWindow", "Stage"))
-        self.tabWidget.setTabText(self.tabWidget.indexOf(self.tab_structure), _translate("MainWindow", "Structure"))
-        self.tabWidget.setTabText(self.tabWidget.indexOf(self.tab_2), _translate("MainWindow", "Shows"))
-        self.tabWidget.setTabText(self.tabWidget.indexOf(self.tab_auto), _translate("MainWindow", "Auto(Experimental)"))
-        self.tabWidget.setTabText(self.tabWidget.indexOf(self.tab_live), _translate("MainWindow", "Live"))
+        self.tabWidget.setTabText(self.tabWidget.indexOf(self.tab_config), QtCore.QCoreApplication.translate("Shell", "Configuration"))
+        self.tabWidget.setTabText(self.tabWidget.indexOf(self.tab), QtCore.QCoreApplication.translate("Shell", "Fixtures"))
+        self.tabWidget.setTabText(self.tabWidget.indexOf(self.tab_stage), QtCore.QCoreApplication.translate("Shell", "Stage"))
+        self.tabWidget.setTabText(self.tabWidget.indexOf(self.tab_structure), QtCore.QCoreApplication.translate("Shell", "Structure"))
+        self.tabWidget.setTabText(self.tabWidget.indexOf(self.tab_2), QtCore.QCoreApplication.translate("Shell", "Shows"))
+        self.tabWidget.setTabText(self.tabWidget.indexOf(self.tab_auto), QtCore.QCoreApplication.translate("Shell", "Auto(Experimental)"))
+        self.tabWidget.setTabText(self.tabWidget.indexOf(self.tab_live), QtCore.QCoreApplication.translate("Shell", "Live"))
         # Toolbar actions
-        self.saveAction.setText(_translate("MainWindow", "Save Configuration"))
-        self.loadAction.setText(_translate("MainWindow", "Load Configuration"))
+        self.saveAction.setText(QtCore.QCoreApplication.translate("Shell", "Save Configuration"))
+        self.loadAction.setText(QtCore.QCoreApplication.translate("Shell", "Load Configuration"))
 
     def setupStatusAndMenu(self, MainWindow):
         # 26px mono status strip: contextual hint left, version right.
@@ -165,29 +170,29 @@ class Ui_MainWindow(object):
         MainWindow.setStatusBar(self.statusbar)
 
         # File menu
-        self.menuFile = QtWidgets.QMenu("File", parent=MainWindow)
-        self.actionNewFromTemplate = QAction("New from Template...", MainWindow)
+        self.menuFile = QtWidgets.QMenu(QtCore.QCoreApplication.translate("Shell", "File"), parent=MainWindow)
+        self.actionNewFromTemplate = QAction(QtCore.QCoreApplication.translate("Shell", "New from Template..."), MainWindow)
         self.actionNewFromTemplate.setShortcut("Ctrl+N")
-        self.actionSaveConfig = QAction("Save Configuration", MainWindow)
+        self.actionSaveConfig = QAction(QtCore.QCoreApplication.translate("Shell", "Save Configuration"), MainWindow)
         self.actionSaveConfig.setShortcut("Ctrl+S")
-        self.actionSaveConfigAs = QAction("Save Configuration As...", MainWindow)
+        self.actionSaveConfigAs = QAction(QtCore.QCoreApplication.translate("Shell", "Save Configuration As..."), MainWindow)
         self.actionSaveConfigAs.setShortcut("Ctrl+Shift+S")
-        self.actionLoadConfig = QAction("Load Configuration", MainWindow)
+        self.actionLoadConfig = QAction(QtCore.QCoreApplication.translate("Shell", "Load Configuration"), MainWindow)
         self.actionLoadConfig.setShortcut("Ctrl+O")
-        self.actionImportShowStructure = QAction("Import Show Structure...", MainWindow)
-        self.actionExportShowStructure = QAction("Export Show Structure...", MainWindow)
-        self.actionImportFixtureList = QAction("Import Fixture List...", MainWindow)
+        self.actionImportShowStructure = QAction(QtCore.QCoreApplication.translate("Shell", "Import Show Structure..."), MainWindow)
+        self.actionExportShowStructure = QAction(QtCore.QCoreApplication.translate("Shell", "Export Show Structure..."), MainWindow)
+        self.actionImportFixtureList = QAction(QtCore.QCoreApplication.translate("Shell", "Import Fixture List..."), MainWindow)
         # Foreign venue spreadsheets (column-mapping wizard,
         # gui/dialogs/csv_import_wizard.py) vs. the app's own fixture
         # list layout above.
         self.actionImportCsvTable = QAction(
-            "Import Lighting Table (CSV)...", MainWindow)
-        self.actionExportFixtureList = QAction("Export Fixture List...", MainWindow)
-        self.actionImportShowsFromConfig = QAction("Import Shows from Config...", MainWindow)
-        self.actionImportLegacyCsv = QAction("Import Legacy CSV Songs...", MainWindow)
-        self.actionImportWorkspace = QAction("Import QLC+ Workspace...", MainWindow)
-        self.actionCreateWorkspace = QAction("Create QLC+ Workspace", MainWindow)
-        self.actionExit = QAction("Exit", MainWindow)
+            QtCore.QCoreApplication.translate("Shell", "Import Lighting Table (CSV)..."), MainWindow)
+        self.actionExportFixtureList = QAction(QtCore.QCoreApplication.translate("Shell", "Export Fixture List..."), MainWindow)
+        self.actionImportShowsFromConfig = QAction(QtCore.QCoreApplication.translate("Shell", "Import Shows from Config..."), MainWindow)
+        self.actionImportLegacyCsv = QAction(QtCore.QCoreApplication.translate("Shell", "Import Legacy CSV Songs..."), MainWindow)
+        self.actionImportWorkspace = QAction(QtCore.QCoreApplication.translate("Shell", "Import QLC+ Workspace..."), MainWindow)
+        self.actionCreateWorkspace = QAction(QtCore.QCoreApplication.translate("Shell", "Create QLC+ Workspace"), MainWindow)
+        self.actionExit = QAction(QtCore.QCoreApplication.translate("Shell", "Exit"), MainWindow)
         self.actionExit.setShortcut("Ctrl+Q")
 
         self.menuFile.addAction(self.actionNewFromTemplate)
@@ -211,12 +216,12 @@ class Ui_MainWindow(object):
         self.menuFile.addAction(self.actionExit)
 
         # View menu — fullscreen toggle + theme picker.
-        self.menuView = QtWidgets.QMenu("View", parent=MainWindow)
-        self.actionToggleFullscreen = QAction("Toggle Fullscreen", MainWindow)
+        self.menuView = QtWidgets.QMenu(QtCore.QCoreApplication.translate("Shell", "View"), parent=MainWindow)
+        self.actionToggleFullscreen = QAction(QtCore.QCoreApplication.translate("Shell", "Toggle Fullscreen"), MainWindow)
         self.actionToggleFullscreen.setShortcut("F11")
         self.actionToggleFullscreen.setCheckable(True)
         self.menuView.addAction(self.actionToggleFullscreen)
-        self.actionScreensaver = QAction("Screensaver", MainWindow)
+        self.actionScreensaver = QAction(QtCore.QCoreApplication.translate("Shell", "Screensaver"), MainWindow)
         # F7 opens the pause screen. Free key (F11 is fullscreen; F and L
         # are widget-scoped in the Stage tab). register_menu_shortcuts
         # re-adds it to the window so it fires without a menubar.
@@ -224,12 +229,12 @@ class Ui_MainWindow(object):
         self.menuView.addAction(self.actionScreensaver)
         self.menuView.addSeparator()
 
-        self.menuTheme = QtWidgets.QMenu("Theme", parent=self.menuView)
+        self.menuTheme = QtWidgets.QMenu(QtCore.QCoreApplication.translate("Shell", "Theme"), parent=self.menuView)
         self.themeActionGroup = QtGui.QActionGroup(MainWindow)
         self.themeActionGroup.setExclusive(True)
-        self.actionThemeDark = QAction("Dark", MainWindow)
+        self.actionThemeDark = QAction(QtCore.QCoreApplication.translate("Shell", "Dark"), MainWindow)
         self.actionThemeDark.setCheckable(True)
-        self.actionThemeLight = QAction("Light", MainWindow)
+        self.actionThemeLight = QAction(QtCore.QCoreApplication.translate("Shell", "Light"), MainWindow)
         self.actionThemeLight.setCheckable(True)
         self.themeActionGroup.addAction(self.actionThemeDark)
         self.themeActionGroup.addAction(self.actionThemeLight)
@@ -242,19 +247,19 @@ class Ui_MainWindow(object):
         # pan/tilt movement block's centre beam onto the stage and write
         # the landing point as its world target; gui.py wires the
         # handler, utils/movement_migration.py does the tracing).
-        self.menuTools = QtWidgets.QMenu("Tools", parent=MainWindow)
+        self.menuTools = QtWidgets.QMenu(QtCore.QCoreApplication.translate("Shell", "Tools"), parent=MainWindow)
         # Venue adaptation first (the task the user reaches for here):
         # the morph screen + patchbay (gui/screens/morph_screen.py,
         # design doc docs/design-show-morphing.md; lived in the File
         # menu as a dialog until 2026-07-16 - it is a venue WORKFLOW
         # like the two below, not a file operation).
-        self.actionMorphToVenue = QAction("Morph to Venue...", MainWindow)
+        self.actionMorphToVenue = QAction(QtCore.QCoreApplication.translate("Shell", "Morph to Venue..."), MainWindow)
         self.menuTools.addAction(self.actionMorphToVenue)
         # Venue pre-flight: the generated on-site checklist that drives
         # the rig into testable states (design doc 7, v1.5b phase 5).
         # gui.py wires the handler; the same dialog also opens from the
         # morph screen's commit page.
-        self.actionVenuePreflight = QAction("Venue Pre-Flight...",
+        self.actionVenuePreflight = QAction(QtCore.QCoreApplication.translate("Shell", "Venue Pre-Flight..."),
                                             MainWindow)
         self.menuTools.addAction(self.actionVenuePreflight)
         # Batch migration on the loaded config: the v1.5a movement
@@ -262,50 +267,50 @@ class Ui_MainWindow(object):
         # beam onto the stage and write the landing point as its world
         # target; utils/movement_migration.py does the tracing).
         self.actionConvertMovementTargets = QAction(
-            "Convert Movement to World Targets...", MainWindow)
+            QtCore.QCoreApplication.translate("Shell", "Convert Movement to World Targets..."), MainWindow)
         self.menuTools.addAction(self.actionConvertMovementTargets)
         # Render-to-video: lived in its own one-action Render menu
         # until 2026-07-22 - it is a tool over the loaded show, not a
         # menu category. gui.py wires the handler.
         self.menuTools.addSeparator()
-        self.actionRenderToVideo = QAction("Render Show to Video...",
+        self.actionRenderToVideo = QAction(QtCore.QCoreApplication.translate("Shell", "Render Show to Video..."),
                                            MainWindow)
         self.menuTools.addAction(self.actionRenderToVideo)
 
         # Settings menu
-        self.menuSettings = QtWidgets.QMenu("Settings", parent=MainWindow)
-        self.actionAudioSettings = QAction("Audio Settings...", MainWindow)
+        self.menuSettings = QtWidgets.QMenu(QtCore.QCoreApplication.translate("Shell", "Settings"), parent=MainWindow)
+        self.actionAudioSettings = QAction(QtCore.QCoreApplication.translate("Shell", "Audio Settings..."), MainWindow)
         self.actionAudioSettings.setShortcut("Ctrl+,")
         self.menuSettings.addAction(self.actionAudioSettings)
         # User fixture-library directories (GDTF + .qxf), folded into
         # the definition search path (gui/dialogs/library_paths_dialog.py).
-        self.actionLibraryPaths = QAction("Fixture Libraries...", MainWindow)
+        self.actionLibraryPaths = QAction(QtCore.QCoreApplication.translate("Shell", "Fixture Libraries..."), MainWindow)
         self.menuSettings.addAction(self.actionLibraryPaths)
         # GDTF Share account (username in QSettings, password in the OS
         # credential store; gui/dialogs/gdtf_share_account_dialog.py).
         self.actionGDTFShareAccount = QAction(
-            "GDTF Share Account...", MainWindow)
+            QtCore.QCoreApplication.translate("Shell", "GDTF Share Account..."), MainWindow)
         self.menuSettings.addAction(self.actionGDTFShareAccount)
         # Hidden deep setting: toggle the canvas sub-lane purpose labels in
         # the Show Timeline. Checkable, persisted to the
         # "timeline/show_sublane_labels" QSettings key (default on).
         self.actionShowSublaneLabels = QAction(
-            "Show timeline sub-lane labels", MainWindow)
+            QtCore.QCoreApplication.translate("Shell", "Show timeline sub-lane labels"), MainWindow)
         self.actionShowSublaneLabels.setCheckable(True)
         self.menuSettings.addAction(self.actionShowSublaneLabels)
 
         # Help menu
-        self.menuHelp = QtWidgets.QMenu("Help", parent=MainWindow)
-        self.actionOpenLogFolder = QAction("Open Log Folder", MainWindow)
+        self.menuHelp = QtWidgets.QMenu(QtCore.QCoreApplication.translate("Shell", "Help"), parent=MainWindow)
+        self.actionOpenLogFolder = QAction(QtCore.QCoreApplication.translate("Shell", "Open Log Folder"), MainWindow)
         self.menuHelp.addAction(self.actionOpenLogFolder)
         # Copyable bug-report block (gui/dialogs/diagnostics_dialog.py).
-        self.actionDiagnostics = QAction("Diagnostics...", MainWindow)
+        self.actionDiagnostics = QAction(QtCore.QCoreApplication.translate("Shell", "Diagnostics..."), MainWindow)
         self.menuHelp.addAction(self.actionDiagnostics)
         # Structured user warnings from the last export/load
         # (gui/dialogs/warnings_dialog.py, utils/user_warnings.py).
-        self.actionWarnings = QAction("Warnings...", MainWindow)
+        self.actionWarnings = QAction(QtCore.QCoreApplication.translate("Shell", "Warnings..."), MainWindow)
         self.menuHelp.addAction(self.actionWarnings)
-        self.actionAbout = QAction("About", MainWindow)
+        self.actionAbout = QAction(QtCore.QCoreApplication.translate("Shell", "About"), MainWindow)
         self.menuHelp.addAction(self.actionAbout)
 
         # No QMenuBar (North Star shell): the menus live in one overflow
@@ -375,9 +380,9 @@ class Ui_MainWindow(object):
         # OUTPUT = the master DMX switch (native ArtNet); VISUALIZER
         # pairs the feed status with an explicit OPEN/STOP action.
         self.artnet_chip = StatusChip(
-            "Output", self.artnet_status_indicator, self.artnet_toggle_btn)
+            QtCore.QCoreApplication.translate("Shell", "Output"), self.artnet_status_indicator, self.artnet_toggle_btn)
         self.tcp_chip = StatusChip(
-            "Visualizer", self.tcp_status_indicator, self.tcp_toggle_btn)
+            QtCore.QCoreApplication.translate("Shell", "Visualizer"), self.tcp_status_indicator, self.tcp_toggle_btn)
         self.topbar.right_layout.addWidget(self.artnet_chip)
         self.topbar.right_layout.addWidget(self.tcp_chip)
 

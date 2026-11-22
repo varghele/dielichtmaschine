@@ -15,7 +15,7 @@ regenerate the golden (test_about_dialog_golden.py). House rules
 apply: no em-dashes, separator is " · ".
 """
 
-from PyQt6.QtCore import Qt
+from PyQt6.QtCore import QT_TRANSLATE_NOOP, QCoreApplication, Qt
 from PyQt6.QtGui import QFont, QPixmap
 from PyQt6.QtWidgets import (QDialog, QFrame, QHBoxLayout, QLabel,
                              QPushButton, QVBoxLayout)
@@ -27,7 +27,9 @@ from utils import app_identity
 #: The human paragraph - the author's own words (2026-07-23). Each
 #: line is a separate string literal, so keep a trailing space on
 #: every line but the last, or sentences run together at the joins.
-ABOUT_BODY = (
+#: QT_TRANSLATE_NOOP marks it for pylupdate6 and returns it unchanged;
+#: the dialog translates it when it builds the label.
+ABOUT_BODY = QT_TRANSLATE_NOOP("AboutDialog", (
     "Hello and welcome, you have found the Lichtmaschine! Step right up! "
     "If you read this: first of all, thank you very much for checking out "
     "the code, it means a lot to me. "
@@ -53,7 +55,7 @@ ABOUT_BODY = (
     "Otherwise, have fun, good luck with your project, and if you wish for a "
     "feature or encounter a bug, let me know on the repo! "
     "Cheers! -V"
-)
+))
 
 
 def _active_tokens() -> dict:
@@ -75,7 +77,7 @@ class AboutDialog(QDialog):
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.setWindowTitle(f"About {app_identity.APP_NAME}")
+        self.setWindowTitle(QCoreApplication.translate("AboutDialog", "About {0}").format(app_identity.APP_NAME))
         self.setObjectName("AboutDialog")
         self.setFixedWidth(520)
 
@@ -113,7 +115,7 @@ class AboutDialog(QDialog):
         layout.addLayout(brand_row)
 
         # Body copy (ABOUT_BODY - the user-editable part).
-        self.body_label = QLabel(ABOUT_BODY)
+        self.body_label = QLabel(QCoreApplication.translate("AboutDialog", ABOUT_BODY))
         self.body_label.setWordWrap(True)
         self.body_label.setMinimumWidth(1)
         layout.addWidget(self.body_label)
@@ -161,7 +163,7 @@ class AboutDialog(QDialog):
             f"font-family: '{FONT_MONO}'; background: transparent;")
         footer.addWidget(self.link_label)
         footer.addStretch(1)
-        self.close_button = QPushButton("CLOSE")
+        self.close_button = QPushButton(QCoreApplication.translate("AboutDialog", "CLOSE"))
         self.close_button.setProperty("role", "output-select")
         self.close_button.setFont(mono_font(8, QFont.Weight.Medium))
         self.close_button.setDefault(True)

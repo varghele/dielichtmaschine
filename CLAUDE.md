@@ -185,10 +185,17 @@ misreporting state, so a green suite does not mean a working surface.
   or a template rule keyed by objectName/property.
 - ALL QSettings access goes through `utils/app_settings.app_settings()`;
   identity lives in `utils/app_identity.py`.
-- i18n: shell strings are literal
-  `QCoreApplication.translate("Shell", "...")` calls (pylupdate6 cannot
-  see wrappers or aliases); `translations/lichtmaschine_de.ts` is the
-  source of truth, `scripts/update_translations.py` refreshes it.
+- i18n: every UI string is a literal
+  `QCoreApplication.translate("<Context>", "...")` call, one context per
+  module (pylupdate6 cannot see wrappers, aliases or f-strings: format
+  AFTER translate). Module constants cannot translate at import time
+  (the translator is installed later): mark them with
+  `QT_TRANSLATE_NOOP` (imported by bare name) and translate where shown.
+  Never read a displayed text back as a key (itemData or a flag).
+  `translations/lichtmaschine_de.ts` is the source of truth;
+  `scripts/update_translations.py` scans gui/, timeline_ui/ and
+  visualizer/ and normalises the .ts layout, and
+  `tests/unit/test_i18n_coverage.py` fails on any string without German.
 - UI separator is " · ". Song combo itemData carries the raw name:
   never read `currentText` for the key.
 - `main.py` dispatches CLI subcommands (`export`, `morph`) BEFORE any
