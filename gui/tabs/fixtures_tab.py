@@ -49,6 +49,7 @@ from config.models import (
     Configuration, Fixture, FixtureMode, FixtureGroup, primary_group,
     primary_group_name,
 )
+from gui.theme_tokens import THEMES
 from utils.fixture_utils import get_cached_fixture_definitions
 from utils.dmx_conflicts import (
     AddressConflict,
@@ -85,10 +86,10 @@ STRIPE_ANGLE_DEG = 18.0
 _STRIPE_TILE_CACHE = {}
 
 # Warning treatment for Universe / Address cells of conflicting fixtures.
-# A fixed red (not theme-derived) so it reads as "error" on both themes
-# and can't collide with the group tints.
-CONFLICT_BG = "#d9534f"
-CONFLICT_FG = "#ffffff"
+# A fixed red (a shared token, the same in every theme) so it reads as
+# "error" on both themes and can't collide with the group tints.
+CONFLICT_BG = THEMES["dark"]["conflict"]
+CONFLICT_FG = THEMES["dark"]["on_function"]
 
 # Readable words for the legacy fixture-type strings.
 TYPE_LABELS = {

@@ -7,6 +7,61 @@ from PyQt6.QtWidgets import (QProgressDialog, QApplication, QProgressBar,
 from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QFont
 
+from gui.theme_style import active_tokens, bind_style
+
+
+def _status_bar_meter_style(t: dict) -> str:
+    return f"""
+            QProgressBar {{
+                border: 1px solid {t['legacy_dialog_border']};
+                border-radius: 3px;
+                background-color: {t['legacy_dialog_field']};
+            }}
+            QProgressBar::chunk {{
+                background-color: {t['success']};
+                border-radius: 2px;
+            }}
+        """
+
+
+def _modal_progress_style(t: dict) -> str:
+    return f"""
+            QProgressDialog {{
+                background-color: {t['legacy_dialog_bg']};
+            }}
+            QLabel {{
+                color: {t['legacy_dialog_text']};
+                font-size: 12px;
+            }}
+            QProgressBar {{
+                border: 1px solid {t['legacy_dialog_border']};
+                border-radius: 3px;
+                background-color: {t['legacy_dialog_field']};
+                text-align: center;
+                color: {t['legacy_dialog_text']};
+            }}
+            QProgressBar::chunk {{
+                background-color: {t['success']};
+                border-radius: 2px;
+            }}
+        """
+
+
+def _log_dialog_style(t: dict) -> str:
+    return f"""
+            QDialog {{ background-color: {t['legacy_dialog_bg']}; }}
+            QLabel {{ color: {t['legacy_dialog_text']}; font-size: 12px; }}
+            QProgressBar {{
+                border: 1px solid {t['legacy_dialog_border']}; border-radius: 3px;
+                background-color: {t['legacy_dialog_field']}; text-align: center; color: {t['legacy_dialog_text']};
+            }}
+            QProgressBar::chunk {{ background-color: {t['success']}; border-radius: 2px; }}
+            QTextEdit {{
+                background-color: {t['legacy_dialog_log_bg']}; color: {t['legacy_dialog_log_text']};
+                border: 1px solid {t['legacy_dialog_border']}; border-radius: 3px;
+            }}
+        """
+
 
 class StatusBarProgress(QWidget):
     """Progress indicator widget for status bar."""
@@ -18,24 +73,15 @@ class StatusBarProgress(QWidget):
         layout.setSpacing(5)
 
         self.label = QLabel()
-        self.label.setStyleSheet("color: #888;")
+        bind_style(self.label, lambda t: f"color: {t['hint_text']};")
         layout.addWidget(self.label)
 
         self.progress_bar = QProgressBar()
         self.progress_bar.setFixedWidth(150)
         self.progress_bar.setFixedHeight(16)
         self.progress_bar.setTextVisible(False)
-        self.progress_bar.setStyleSheet("""
-            QProgressBar {
-                border: 1px solid #555;
-                border-radius: 3px;
-                background-color: #2d2d2d;
-            }
-            QProgressBar::chunk {
-                background-color: #4CAF50;
-                border-radius: 2px;
-            }
-        """)
+        # The status-bar meter outlives theme switches: bound, not baked.
+        bind_style(self.progress_bar, _status_bar_meter_style)
         layout.addWidget(self.progress_bar)
 
         self.hide()
@@ -137,26 +183,7 @@ class ProgressManager:
         self.modal_dialog.setMinimumHeight(100)
 
         # Style the dialog
-        self.modal_dialog.setStyleSheet("""
-            QProgressDialog {
-                background-color: #3d3d3d;
-            }
-            QLabel {
-                color: white;
-                font-size: 12px;
-            }
-            QProgressBar {
-                border: 1px solid #555;
-                border-radius: 3px;
-                background-color: #2d2d2d;
-                text-align: center;
-                color: white;
-            }
-            QProgressBar::chunk {
-                background-color: #4CAF50;
-                border-radius: 2px;
-            }
-        """)
+        self.modal_dialog.setStyleSheet(_modal_progress_style(active_tokens()))
 
         # Force the dialog to show immediately (bypass minimumDuration timer)
         self.modal_dialog.setMinimumDuration(0)
@@ -275,19 +302,7 @@ class ProgressDialogWithLog(QDialog):
         layout.addWidget(self._log, stretch=1)
 
         # Styling
-        self.setStyleSheet("""
-            QDialog { background-color: #3d3d3d; }
-            QLabel { color: white; font-size: 12px; }
-            QProgressBar {
-                border: 1px solid #555; border-radius: 3px;
-                background-color: #2d2d2d; text-align: center; color: white;
-            }
-            QProgressBar::chunk { background-color: #4CAF50; border-radius: 2px; }
-            QTextEdit {
-                background-color: #1e1e1e; color: #cccccc;
-                border: 1px solid #555; border-radius: 3px;
-            }
-        """)
+        self.setStyleSheet(_log_dialog_style(active_tokens()))
 
         self._line_count = 0
 

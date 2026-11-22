@@ -582,10 +582,10 @@ class TimelineWidget(QWidget):
         (deferred import: light_block_widget imports config models only,
         no cycle back into this module's importers).
         """
+        from .light_block_widget import token_qcolor
         if getattr(self, "playhead_accent", False):
-            from .light_block_widget import token_qcolor
             return token_qcolor("accent")
-        return QColor("#FF4444")
+        return token_qcolor("playhead")
 
     def draw_playhead(self, painter, width, height):
         """Draw playhead at time position (a 2px vertical line)."""

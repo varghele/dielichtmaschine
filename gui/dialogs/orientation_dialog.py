@@ -20,6 +20,7 @@ from PyQt6.QtCore import Qt, QTimer, pyqtSignal
 
 from utils.fixture_capabilities import Chassis, chassis_from_legacy_type
 from utils.geometry import GeometryBuilder
+from gui.theme_style import active_tokens
 from utils.orientation import MOUNTING_PRESET_ANGLES
 
 logger = logging.getLogger(__name__)
@@ -2130,6 +2131,9 @@ class OrientationPanel(QWidget):
                 rotate_btn.setStyleSheet(rotate_btn.styleSheet() + " padding: 4px 2px;")
                 adjust_layout.addWidget(rotate_btn, row_index, 2)
 
+        # Axis colours match the 3D gizmo rings (shared tokens).
+        tokens = active_tokens()
+
         # Yaw
         self.yaw_spin = QDoubleSpinBox()
         self.yaw_spin.setRange(-180, 180)
@@ -2139,7 +2143,8 @@ class OrientationPanel(QWidget):
         self.yaw_90_btn = QPushButton("+90°")
         self.yaw_90_btn.setToolTip("Rotate yaw by +90°")
         self.yaw_90_btn.setStyleSheet(
-            "background-color: #4466CC; color: white; font-weight: bold; "
+            f"background-color: {tokens['axis_yaw']};"
+            f" color: {tokens['on_function']}; font-weight: bold; "
             "padding: 4px 6px;"
         )
         self.yaw_90_btn.clicked.connect(lambda: self._rotate_by_90('yaw'))
@@ -2154,7 +2159,8 @@ class OrientationPanel(QWidget):
         self.pitch_90_btn = QPushButton("+90°")
         self.pitch_90_btn.setToolTip("Rotate pitch by +90°")
         self.pitch_90_btn.setStyleSheet(
-            "background-color: #44AA44; color: white; font-weight: bold; "
+            f"background-color: {tokens['axis_pitch']};"
+            f" color: {tokens['on_function']}; font-weight: bold; "
             "padding: 4px 6px;"
         )
         self.pitch_90_btn.clicked.connect(lambda: self._rotate_by_90('pitch'))
@@ -2169,7 +2175,8 @@ class OrientationPanel(QWidget):
         self.roll_90_btn = QPushButton("+90°")
         self.roll_90_btn.setToolTip("Rotate roll by +90°")
         self.roll_90_btn.setStyleSheet(
-            "background-color: #CC4444; color: white; font-weight: bold; "
+            f"background-color: {tokens['axis_roll']};"
+            f" color: {tokens['on_function']}; font-weight: bold; "
             "padding: 4px 6px;"
         )
         self.roll_90_btn.clicked.connect(lambda: self._rotate_by_90('roll'))

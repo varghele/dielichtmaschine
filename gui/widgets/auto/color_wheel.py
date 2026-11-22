@@ -7,6 +7,8 @@ from PyQt6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QLab
 from PyQt6.QtCore import Qt, pyqtSignal, QPointF
 from PyQt6.QtGui import QPainter, QColor, QImage, QPen
 
+from gui.theme_style import bind_style
+
 
 class HSVColorWheel(QWidget):
     """Interactive HSV color wheel with override/auto toggle.
@@ -42,7 +44,9 @@ class HSVColorWheel(QWidget):
         # Color swatch
         self._swatch = QLabel()
         self._swatch.setFixedHeight(24)
-        self._swatch.setStyleSheet("background-color: white; border: 1px solid #555;")
+        # Starts on white LIGHT (data); only the border is chrome.
+        self._swatch_fill = "white"
+        bind_style(self._swatch, self._swatch_style)
         layout.addWidget(self._swatch)
 
         # Override / Auto buttons
@@ -131,9 +135,12 @@ class HSVColorWheel(QWidget):
 
     def _update_swatch(self):
         c = QColor.fromHsvF(self._hue / 360.0, self._saturation, 1.0)
-        self._swatch.setStyleSheet(
-            f"background-color: {c.name()}; border: 1px solid #555;"
-        )
+        self._swatch_fill = c.name()
+        bind_style(self._swatch, self._swatch_style)
+
+    def _swatch_style(self, t: dict) -> str:
+        return (f"background-color: {self._swatch_fill};"
+                f" border: 1px solid {t['swatch_border']};")
 
 
 class _WheelCanvas(QWidget):

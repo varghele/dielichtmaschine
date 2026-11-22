@@ -979,7 +979,8 @@ class ShowsTab(BaseTab):
         """
         if not hasattr(self, "play_btn") or not hasattr(self, "pane_toggle_btn"):
             return
-        on_function = "#ffffff"
+        from gui.theme_tokens import THEMES
+        on_function = THEMES["dark"]["on_function"]  # shared by all themes
         self.play_btn.setIcon(
             line_icon("pause" if self.is_playing else "play", on_function))
         self.stop_btn.setIcon(line_icon("stop", on_function))

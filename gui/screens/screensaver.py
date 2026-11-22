@@ -43,22 +43,24 @@ from PyQt6.QtWidgets import (
 )
 
 from gui.fonts import FONT_DISPLAY, FONT_MONO
+from gui.theme_tokens import SCREENSAVER
 from gui.typography import DisplayLabel, MicroLabel
 from utils.app_identity import APP_WORDMARK, SLOGAN_EN
 
 # The screensaver black: deliberately darker than the dark theme's
-# window token (#141416) - this is the "screen off" surface from the
-# design reference, hardcoded on purpose.
-SCREENSAVER_BG = "#0E0E10"
+# window token - this is the "screen off" surface from the design
+# reference, one fixed palette whatever theme is applied
+# (gui/theme_tokens.py SCREENSAVER).
+SCREENSAVER_BG = SCREENSAVER["background"]
 
 # Reference palette for the on-black elements.
-INK = "#F4F1EA"            # wordmark + clock
-MUTED_INK = "#8D9299"      # the state kicker above the clock
-DIM_INK = "#5C6068"        # slogan + status bar
-ROTOR_SEGMENT = "#C9CDD2"  # the 8 inner arc segments
-OUTER_RING = "#3F4348"     # the thin outer registration ring
-ACCENT = "#F0562E"         # Glutorange center dot
-MARK_INK = "#3A3A3A"       # the four corner registration crosses
+INK = SCREENSAVER["ink"]                      # wordmark + clock
+MUTED_INK = SCREENSAVER["muted_ink"]          # state kicker above the clock
+DIM_INK = SCREENSAVER["dim_ink"]              # slogan + status bar
+ROTOR_SEGMENT = SCREENSAVER["rotor_segment"]  # the 8 inner arc segments
+OUTER_RING = SCREENSAVER["outer_ring"]        # thin outer registration ring
+ACCENT = SCREENSAVER["accent"]                # Glutorange center dot
+MARK_INK = SCREENSAVER["mark_ink"]            # corner registration crosses
 
 # Backdrop: 1px lines every 48px in rgba(141,146,153,0.04).
 GRID_PITCH_PX = 48

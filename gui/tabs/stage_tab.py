@@ -857,7 +857,8 @@ class StageTab(BaseTab):
         tcp_status_layout.addWidget(
             MicroLabel("TCP server", point_size=8, tracking_em=0.1))
         self.tcp_status_label = QtWidgets.QLabel()
-        self.tcp_status_label.setStyleSheet("font-weight: bold;")
+        # Weight + per-status colour: QLabel#StageTcpStatus in the theme.
+        self.tcp_status_label.setObjectName("StageTcpStatus")
         self.tcp_status_label.setFont(mono_font(8))
         tcp_status_layout.addWidget(self.tcp_status_label)
         tcp_status_layout.addStretch()
@@ -1708,18 +1709,24 @@ class StageTab(BaseTab):
 
         if tcp_server is None:
             self.tcp_status_label.setText("Not initialized")
-            self.tcp_status_label.setStyleSheet("color: #666; font-weight: bold;")
+            status = "idle"
         elif not tcp_server.is_running():
             self.tcp_status_label.setText("Stopped")
-            self.tcp_status_label.setStyleSheet("color: #f44336; font-weight: bold;")
+            status = "stopped"
         else:
             client_count = tcp_server.get_client_count()
             if client_count == 0:
                 self.tcp_status_label.setText("Running (no clients)")
-                self.tcp_status_label.setStyleSheet("color: #2196F3; font-weight: bold;")
+                status = "running"
             else:
                 self.tcp_status_label.setText(f"Connected ({client_count})")
-                self.tcp_status_label.setStyleSheet("color: #4CAF50; font-weight: bold;")
+                status = "connected"
+        if self.tcp_status_label.property("status") != status:
+            self.tcp_status_label.setProperty("status", status)
+            style = self.tcp_status_label.style()
+            if style:
+                style.unpolish(self.tcp_status_label)
+                style.polish(self.tcp_status_label)
 
     def on_tab_activated(self):
         """Called when stage tab becomes visible."""

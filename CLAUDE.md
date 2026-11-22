@@ -178,6 +178,11 @@ misreporting state, so a green suite does not mean a working surface.
   `QWidget { font-family }` rule overrides `setFont`: a widget that
   needs another family pins it in its own stylesheet. Letter-spacing
   and caps go through `gui/typography.py` (QSS cannot).
+- Chrome colours live ONLY in `gui/theme_tokens.py` (lint:
+  `tests/unit/test_theme_lint.py`; data palettes are its allowlist).
+  Inline `setStyleSheet` strings are baked and never see a theme
+  switch: use `gui/theme_style.bind_style` (re-applies on StyleChange)
+  or a template rule keyed by objectName/property.
 - ALL QSettings access goes through `utils/app_settings.app_settings()`;
   identity lives in `utils/app_identity.py`.
 - i18n: shell strings are literal

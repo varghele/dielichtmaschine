@@ -301,6 +301,16 @@ def _theme_text_color(self):
   Python painter doesn't read QSS at all), and re-introduces the
   mess the modernization rework was supposed to eliminate.
 
+An inline sheet is also BAKED: `ThemeManager.apply` replaces the app
+stylesheet and re-polishes, but every widget-local sheet keeps the
+colours it was written with. Where a local sheet is unavoidable (it
+mixes a data colour with chrome), build it from tokens with
+`gui/theme_style.bind_style(widget, build)`, which re-runs the builder
+on every `StyleChange`; pure chrome goes into the template, keyed by
+objectName or a dynamic property. `tests/unit/test_theme_lint.py`
+rejects colour literals outside `gui/theme_tokens.py` (2026-11-22
+theme sweep).
+
 ---
 
 ## 6. Tab caches derived from `self.config` need invalidation on the same triggers as the config rebind ladder

@@ -50,7 +50,7 @@ def token_qcolor(key: str, alpha: int = 255) -> QColor:
     pass the base accent through with an explicit alpha instead.
     """
     tok = active_tokens()
-    color = QColor(tok.get(key, "#000000"))
+    color = QColor(tok[key])
     if alpha != 255:
         color.setAlpha(alpha)
     return color

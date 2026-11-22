@@ -10,6 +10,7 @@ from PyQt6.QtCore import QThread, pyqtSignal
 from PyQt6.QtGui import QFont
 
 from config.models import Configuration
+from gui.theme_style import active_tokens
 from utils.render.camera_presets import CAMERA_PRESETS
 
 
@@ -147,23 +148,24 @@ class RenderDialog(QDialog):
 
         # Render / Cancel buttons
         self._render_btn = QPushButton("Render")
-        self._render_btn.setStyleSheet("""
-            QPushButton {
-                background-color: #4CAF50; color: white; font-weight: bold;
+        tokens = active_tokens()
+        self._render_btn.setStyleSheet(f"""
+            QPushButton {{
+                background-color: {tokens['success']}; color: {tokens['on_function']}; font-weight: bold;
                 border: none; border-radius: 4px; padding: 8px 20px; font-size: 14px;
-            }
-            QPushButton:hover { background-color: #66BB6A; }
-            QPushButton:disabled { background-color: #555; }
+            }}
+            QPushButton:hover {{ background-color: {tokens['success_light']}; }}
+            QPushButton:disabled {{ background-color: {tokens['legacy_dialog_disabled']}; }}
         """)
         self._render_btn.clicked.connect(self._start_render)
 
         self._cancel_btn = QPushButton("Cancel")
-        self._cancel_btn.setStyleSheet("""
-            QPushButton {
-                background-color: #f44336; color: white; font-weight: bold;
+        self._cancel_btn.setStyleSheet(f"""
+            QPushButton {{
+                background-color: {tokens['destructive']}; color: {tokens['on_function']}; font-weight: bold;
                 border: none; border-radius: 4px; padding: 8px 20px; font-size: 14px;
-            }
-            QPushButton:hover { background-color: #EF5350; }
+            }}
+            QPushButton:hover {{ background-color: {tokens['destructive_light']}; }}
         """)
         self._cancel_btn.clicked.connect(self._cancel_render)
         self._cancel_btn.setVisible(False)
@@ -191,18 +193,22 @@ class RenderDialog(QDialog):
         layout.addWidget(self._log)
 
         # Styling
-        self.setStyleSheet("""
-            QDialog { background-color: #3d3d3d; }
-            QLabel { color: white; }
-            QGroupBox { color: white; font-weight: bold; border: 1px solid #555; border-radius: 4px; margin-top: 10px; padding-top: 15px; }
-            QGroupBox::title { subcontrol-origin: margin; left: 10px; padding: 0 3px; }
-            QCheckBox { color: white; }
-            QComboBox, QLineEdit { background-color: #2d2d2d; color: white; border: 1px solid #555; border-radius: 3px; padding: 4px; }
-            QScrollArea { border: none; background-color: #2d2d2d; }
-            QScrollArea > QWidget > QWidget { background-color: #2d2d2d; }
-            QProgressBar { border: 1px solid #555; border-radius: 3px; background-color: #2d2d2d; text-align: center; color: white; }
-            QProgressBar::chunk { background-color: #4CAF50; border-radius: 2px; }
-            QTextEdit { background-color: #1e1e1e; color: #cccccc; border: 1px solid #555; border-radius: 3px; }
+        # Pre-rebrand dialog look, token-sourced (a modal: no theme
+        # switch can happen while it is open, so read once).
+        bg, field = tokens['legacy_dialog_bg'], tokens['legacy_dialog_field']
+        border, text = tokens['legacy_dialog_border'], tokens['legacy_dialog_text']
+        self.setStyleSheet(f"""
+            QDialog {{ background-color: {bg}; }}
+            QLabel {{ color: {text}; }}
+            QGroupBox {{ color: {text}; font-weight: bold; border: 1px solid {border}; border-radius: 4px; margin-top: 10px; padding-top: 15px; }}
+            QGroupBox::title {{ subcontrol-origin: margin; left: 10px; padding: 0 3px; }}
+            QCheckBox {{ color: {text}; }}
+            QComboBox, QLineEdit {{ background-color: {field}; color: {text}; border: 1px solid {border}; border-radius: 3px; padding: 4px; }}
+            QScrollArea {{ border: none; background-color: {field}; }}
+            QScrollArea > QWidget > QWidget {{ background-color: {field}; }}
+            QProgressBar {{ border: 1px solid {border}; border-radius: 3px; background-color: {field}; text-align: center; color: {text}; }}
+            QProgressBar::chunk {{ background-color: {tokens['success']}; border-radius: 2px; }}
+            QTextEdit {{ background-color: {tokens['legacy_dialog_log_bg']}; color: {tokens['legacy_dialog_log_text']}; border: 1px solid {border}; border-radius: 3px; }}
         """)
 
     def _set_all_checked(self, checked: bool):

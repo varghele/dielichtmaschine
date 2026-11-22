@@ -358,8 +358,10 @@ class MasterTimelineWidget(TimelineWidget):
             playhead_x_rounded = round(playhead_x)
 
             if 0 <= playhead_x_rounded <= width:
-                # Playhead line
-                playhead_pen = QPen(QColor("#FF4444"), 2)
+                # Playhead line (deferred import, as in TimelineWidget)
+                from .light_block_widget import token_qcolor
+                playhead_color = token_qcolor("playhead")
+                playhead_pen = QPen(playhead_color, 2)
                 painter.setPen(playhead_pen)
                 painter.drawLine(playhead_x_rounded, 0, playhead_x_rounded, height)
 
@@ -371,7 +373,7 @@ class MasterTimelineWidget(TimelineWidget):
                     QPoint(playhead_x_rounded + triangle_size, triangle_size)
                 ])
 
-                painter.setBrush(QBrush(QColor("#FF4444")))
+                painter.setBrush(QBrush(playhead_color))
                 painter.drawPolygon(triangle)
         except (AttributeError, TypeError):
             super().draw_playhead(painter, width, height)

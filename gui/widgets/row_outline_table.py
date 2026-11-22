@@ -14,10 +14,12 @@ from PyQt6.QtCore import QRect, Qt
 from PyQt6.QtGui import QColor, QPainter, QPen
 from PyQt6.QtWidgets import QTableWidget, QWidget
 
+from gui.theme_style import active_tokens
+
 
 # Glutorange selection outline per the design reference (screen 02
 # outlines the selected patch row in the accent, 1px, not info-blue).
-_OUTLINE_COLOR = QColor("#F0562E")
+# The accent token is read at paint time.
 _OUTLINE_WIDTH = 1
 
 
@@ -54,7 +56,7 @@ class _RowOutlineOverlay(QWidget):
 
         painter = QPainter(self)
         try:
-            pen = QPen(_OUTLINE_COLOR, _OUTLINE_WIDTH)
+            pen = QPen(QColor(active_tokens()["accent"]), _OUTLINE_WIDTH)
             painter.setPen(pen)
             painter.setBrush(Qt.BrushStyle.NoBrush)
             for row in rows:

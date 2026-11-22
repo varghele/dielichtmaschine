@@ -700,6 +700,12 @@ class StageElementItem(QGraphicsItem):
             self.setSelected(False)
         self.update()
 
+    @staticmethod
+    def _placeholder_color() -> str:
+        """Dashed outline of an element whose SVG failed to load: the
+        active theme's token (same tab sniff as SpotItem._tokens)."""
+        return SpotItem._tokens()["stage_placeholder"]
+
     def paint(self, painter, option, widget):
         painter.save()
         painter.rotate(self.element.rotation)
@@ -707,7 +713,8 @@ class StageElementItem(QGraphicsItem):
         if renderer.isValid():
             renderer.render(painter, self._body_rect())
         else:
-            painter.setPen(QPen(QColor("#8D9299"), 1, Qt.PenStyle.DashLine))
+            painter.setPen(QPen(QColor(self._placeholder_color()), 1,
+                                Qt.PenStyle.DashLine))
             painter.setBrush(Qt.BrushStyle.NoBrush)
             painter.drawRect(self._body_rect())
         painter.restore()

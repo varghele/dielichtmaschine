@@ -27,6 +27,20 @@ verbatim as the GitHub Release notes (see [docs/releasing.md](docs/releasing.md)
 
 ### Changed
 
+- **UI colours come from the theme tokens.** The hard-coded chrome colours
+  left in the UI code (about 90 hex values and 16 colour names in widget
+  stylesheets and custom painters: the render and progress dialogs, the
+  workspace export options, the morph screen and patchbay, the Auto riff
+  badges and colour wheel, the Structure inspector's colour button and
+  time-signature separator, the Stage tab's TCP status, the universe
+  meters, the orientation dialog's +90 buttons, the playhead, the
+  screensaver palette) are now named tokens in `gui/theme_tokens.py`.
+  Widget stylesheets that mix a data colour with chrome are rebuilt from
+  the tokens on every theme switch (`gui/theme_style.py`), and the TCP
+  status and the separator are styled by the theme template. A new lint
+  test rejects colour literals outside the token file; data colours (group
+  and song palettes, light colours) are its documented allowlist. Nothing
+  looks different: every screen renders pixel-identical in both themes.
 - **The core packages import without Qt.** The Auto Mode widgets moved from
   `auto/widgets/` to `gui/widgets/auto/`, the waveform widget from `audio/` to
   `timeline_ui/audio_waveform_widget.py` (next to the audio lane that uses

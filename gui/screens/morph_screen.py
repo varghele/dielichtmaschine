@@ -60,6 +60,7 @@ from utils.morph.compile import (_song_duration, apply_morph,
 from utils.morph.plan import MorphPlan, PlanError, config_hash
 
 from gui.dialogs.morph_patchbay import SUBLANE_LABELS, MorphPatchbay
+from gui.theme_style import bind_style
 from gui.typography import DisplayLabel
 from gui.widgets.modern_table import apply_modern_table_style
 
@@ -170,9 +171,10 @@ class MorphScreen(QtWidgets.QWidget):
         # Non-blocking plan-vs-config warning (design: warn, never block).
         self.banner = QtWidgets.QLabel("")
         self.banner.setWordWrap(True)
-        self.banner.setStyleSheet(
-            "QLabel { color: #ff9800; border: 1px solid #ff9800;"
-            " padding: 6px 10px; }")
+        bind_style(self.banner, lambda t: (
+            f"QLabel {{ color: {t['warning']};"
+            f" border: 1px solid {t['warning']};"
+            " padding: 6px 10px; }"))
         self.banner.setVisible(False)
         layout.addWidget(self.banner)
 
@@ -387,7 +389,8 @@ class MorphScreen(QtWidgets.QWidget):
 
         self.destroyed_label = QtWidgets.QLabel("")
         self.destroyed_label.setWordWrap(True)
-        self.destroyed_label.setStyleSheet("QLabel { color: #e5484d; }")
+        bind_style(self.destroyed_label,
+                   lambda t: f"QLabel {{ color: {t['error_text']}; }}")
         self.destroyed_label.setVisible(False)
         layout.addWidget(self.destroyed_label)
 
@@ -933,9 +936,10 @@ class MorphScreen(QtWidgets.QWidget):
             self.next_btn.setEnabled(self.target_config is not None)
         for i, label in enumerate(self._step_labels):
             if i == index:
-                label.setStyleSheet(
-                    "QLabel { padding: 2px 8px; color: #f0562e;"
-                    " border: 1px solid #f0562e; }")
+                bind_style(label, lambda t: (
+                    f"QLabel {{ padding: 2px 8px; color: {t['accent']};"
+                    f" border: 1px solid {t['accent']}; }}"))
             else:
-                label.setStyleSheet(
-                    "QLabel { padding: 2px 8px; color: #8d9299; }")
+                bind_style(label, lambda t: (
+                    "QLabel { padding: 2px 8px;"
+                    f" color: {t['morph_step_idle']}; }}"))

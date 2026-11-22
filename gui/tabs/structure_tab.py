@@ -82,6 +82,7 @@ PART_MIME_TYPE = "application/x-lichtmaschine-part"
 SETLIST_MIME_TYPE = "application/x-lichtmaschine-setlist-entry"
 from config.models import (Configuration, Song, ShowPart, TimelineData,
                            SetlistEntry)
+from gui.theme_style import bind_style, unbind_style
 from gui.typography import DisplayLabel, MicroLabel, display_font, mono_font
 from gui.widgets.chip import Chip
 from timeline.song_structure import SongStructure
@@ -275,8 +276,9 @@ class MeterBar(QWidget):
         self.setSizePolicy(QSizePolicy.Policy.Expanding,
                            QSizePolicy.Policy.Fixed)
         self._fraction = 0.0
-        self._track = QColor("#2d2d2d")
-        self._fill = QColor("#8d9299")
+        tokens = _active_tokens()
+        self._track = QColor(tokens["meter_track"])
+        self._fill = QColor(tokens["meter_fill"])
 
     def set_state(self, fraction: float, track: str, fill: str) -> None:
         self._fraction = max(0.0, min(1.0, float(fraction)))
@@ -399,7 +401,8 @@ class TimeSignatureWidget(QWidget):
 
         # Separator
         separator = QLabel("/")
-        separator.setStyleSheet("color: white;")
+        # Colour from the theme template (QLabel#TimeSignatureSeparator).
+        separator.setObjectName("TimeSignatureSeparator")
         layout.addWidget(separator)
 
         # Denominator spinbox
@@ -448,14 +451,14 @@ class ColorButton(QPushButton):
 
     def _pick_color(self):
         """Open color picker dialog."""
-        # Temporarily clear stylesheet to avoid affecting dialog
-        original_stylesheet = self.styleSheet()
-        self.setStyleSheet("")
+        # Temporarily clear the stylesheet so it cannot cascade into the
+        # dialog (a child of this button), then re-bind it.
+        build = unbind_style(self)
 
         color = QColorDialog.getColor(self.current_color, self, "Select Color")
 
-        # Restore stylesheet
-        self.setStyleSheet(original_stylesheet)
+        if build is not None:
+            bind_style(self, build)
 
         if color.isValid():
             self.current_color = color
@@ -473,16 +476,19 @@ class ColorButton(QPushButton):
         text_color = "#000000" if luminance > 0.5 else "#FFFFFF"
 
         self.setText(self.current_color.name().upper())
-        self.setStyleSheet(f"""
+        fill = self.current_color.name()
+        # The fill and its contrast ink are DATA (the part colour); the
+        # borders are chrome and follow theme switches.
+        bind_style(self, lambda t: f"""
             QPushButton {{
-                background-color: {self.current_color.name()};
+                background-color: {fill};
                 color: {text_color};
-                border: 1px solid #666;
+                border: 1px solid {t['color_button_border']};
                 border-radius: 3px;
                 font-weight: bold;
             }}
             QPushButton:hover {{
-                border: 2px solid #999;
+                border: 2px solid {t['color_button_border_hover']};
             }}
         """)
 

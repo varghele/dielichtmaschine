@@ -22,6 +22,11 @@ Notes:
   in tests/visual/test_master_timeline_render.py; change them there and
   here together.
 - Border radius is 0 everywhere (no radius tokens exist by design).
+- This module is the only place UI chrome colours are spelled out
+  (tests/unit/test_theme_lint.py). Widget-local sheets read these dicts
+  through gui/theme_style.py (active_tokens / bind_style, which
+  re-applies on a theme switch); DATA colours (group palettes, light
+  colours) stay with their code and are allowlisted in the lint.
 """
 
 import os
@@ -50,6 +55,39 @@ _FUNCTION = {
     "destructive_hover": "#E53935",
     "destructive_border": "#C62828",
     "on_function": "#ffffff",
+    # Brighter hover shades of success/destructive (the render dialog's
+    # filled Render/Cancel buttons).
+    "success_light": "#66BB6A",
+    "destructive_light": "#EF5350",
+    # Inline error text (morph screen, patchbay gap marks, unpatch x).
+    "error_text": "#e5484d",
+    # Fixtures-table conflict cells: a fixed red so it reads as an
+    # error on both themes and never collides with a group tint.
+    "conflict": "#d9534f",
+    # Timeline playhead outside the accent-playhead Shows tab.
+    "playhead": "#FF4444",
+    # Orientation dialog +90 buttons, matching the 3D gizmo rings.
+    "axis_yaw": "#4466CC",
+    "axis_pitch": "#44AA44",
+    "axis_roll": "#CC4444",
+    # Contrast ink over a DATA fill (group/colour swatches), picked by
+    # the fill's luminance; ink_on_fill is the patchbay's checked chip.
+    "ink_on_light": "#141416",
+    "ink_on_dark": "#F4F1EA",
+    "ink_on_fill": "#0e0e10",
+}
+
+# The screensaver is the "screen off" surface: one fixed palette, the
+# same whatever theme is applied (pinned by the screensaver golden).
+SCREENSAVER = {
+    "background": "#0E0E10",  # a shade under the dark window token
+    "ink": "#F4F1EA",         # wordmark + clock
+    "muted_ink": "#8D9299",   # the state kicker above the clock
+    "dim_ink": "#5C6068",     # slogan + status bar
+    "rotor_segment": "#C9CDD2",  # the 8 inner arc segments
+    "outer_ring": "#3F4348",  # the thin outer registration ring
+    "accent": "#F0562E",      # Glutorange center dot
+    "mark_ink": "#3A3A3A",    # the four corner registration crosses
 }
 
 # Shared typography. Sizes are deliberately NOT tokens: existing layouts
@@ -102,6 +140,43 @@ DARK = {
     "phase_stopped": "#ff6b6b",
     "phase_running": "#4CAF50",
     "phase_fill": "#FF9800",
+    # --- Chrome roles from the v1.5.6 theme sweep (formerly inline hex
+    # literals; tests/unit/test_theme_lint.py keeps them here) ---
+    # Pre-rebrand dialog look: render dialog + progress dialogs + the
+    # status-bar progress meter.
+    "legacy_dialog_bg": "#3d3d3d",
+    "legacy_dialog_field": "#2d2d2d",
+    "legacy_dialog_border": "#555555",
+    "legacy_dialog_text": "#ffffff",
+    "legacy_dialog_log_bg": "#1e1e1e",
+    "legacy_dialog_log_text": "#cccccc",
+    "legacy_dialog_disabled": "#555555",
+    # Muted explanatory text in dialogs, and its dimmer variant
+    # (empty-state notes, the Stage tab's idle TCP status).
+    "hint_text": "#888888",
+    "hint_text_dim": "#666666",
+    # Borders around DATA swatches (structure part-colour button, auto
+    # colour wheel).
+    "color_button_border": "#666666",
+    "color_button_border_hover": "#999999",
+    "swatch_border": "#555555",
+    # The "/" between the time-signature spin boxes.
+    "separator_glyph": "#ffffff",
+    # Morph screen step rail (inactive steps).
+    "morph_step_idle": "#8D9299",
+    # Morph patchbay chrome.
+    "patchbay_halo": "#F4F1EA",
+    "patchbay_chip_border": "#3A3A3A",
+    "patchbay_neutral": "#8D9299",
+    "patchbay_disabled_text": "#5C6068",
+    "patchbay_rule": "#2D2D2D",
+    # Painted meters (universe channel bar, analysis bars) and the
+    # universe status dot.
+    "meter_track": "#2D2D2D",
+    "meter_fill": "#8D9299",
+    "status_dot_idle": "#5C6068",
+    # Dashed outline of a stage element whose SVG failed to load.
+    "stage_placeholder": "#8D9299",
 }
 
 LIGHT = {
@@ -146,6 +221,31 @@ LIGHT = {
     "phase_stopped": "#c62828",
     "phase_running": "#2E7D32",
     "phase_fill": "#ef6c00",
+    # --- Chrome roles from the v1.5.6 theme sweep: same roles as DARK.
+    # Values are what the light theme showed when they were literals ---
+    "legacy_dialog_bg": "#3d3d3d",
+    "legacy_dialog_field": "#2d2d2d",
+    "legacy_dialog_border": "#555555",
+    "legacy_dialog_text": "#ffffff",
+    "legacy_dialog_log_bg": "#1e1e1e",
+    "legacy_dialog_log_text": "#cccccc",
+    "legacy_dialog_disabled": "#555555",
+    "hint_text": "#888888",
+    "hint_text_dim": "#666666",
+    "color_button_border": "#666666",
+    "color_button_border_hover": "#999999",
+    "swatch_border": "#555555",
+    "separator_glyph": "#ffffff",
+    "morph_step_idle": "#8D9299",
+    "patchbay_halo": "#F4F1EA",
+    "patchbay_chip_border": "#3A3A3A",
+    "patchbay_neutral": "#8D9299",
+    "patchbay_disabled_text": "#5C6068",
+    "patchbay_rule": "#2D2D2D",
+    "meter_track": "#2D2D2D",
+    "meter_fill": "#8D9299",
+    "status_dot_idle": "#5C6068",
+    "stage_placeholder": "#8D9299",
 }
 
 THEMES = {

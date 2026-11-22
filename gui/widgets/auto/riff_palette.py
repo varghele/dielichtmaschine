@@ -13,7 +13,16 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtCore import Qt, pyqtSignal
 from typing import Dict, List, Optional, Set
 
+from gui.theme_style import bind_style
 from rudiments.registry import get_intensity_rudiments
+
+
+def _set_mode_badge(label: QLabel, function_token: str) -> None:
+    """AUTO / LOCKED / CURATED badge in a shared function colour."""
+    bind_style(label, lambda t: (
+        f"font-size: 9px; font-weight: bold; color: {t[function_token]}; "
+        f"border: 1px solid {t[function_token]}; border-radius: 3px;"
+        " padding: 1px;"))
 
 
 class _RiffChecklistMenu(QMenu):
@@ -137,10 +146,7 @@ class GroupRiffConstraintPanel(QWidget):
         mode_label = QLabel("AUTO")
         mode_label.setFixedWidth(70)
         mode_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        mode_label.setStyleSheet(
-            "font-size: 9px; font-weight: bold; color: #4CAF50; "
-            "border: 1px solid #4CAF50; border-radius: 3px; padding: 1px;"
-        )
+        _set_mode_badge(mode_label, "success")
         self._mode_labels[group_name] = mode_label
         row.addWidget(mode_label)
 
@@ -169,29 +175,20 @@ class GroupRiffConstraintPanel(QWidget):
             # All or none selected = fully automatic
             btn.setText("All")
             mode_label.setText("AUTO")
-            mode_label.setStyleSheet(
-                "font-size: 9px; font-weight: bold; color: #4CAF50; "
-                "border: 1px solid #4CAF50; border-radius: 3px; padding: 1px;"
-            )
+            _set_mode_badge(mode_label, "success")
             self.constraints_changed.emit(group_name, None)
         elif count == 1:
             # Locked to one riff
             name = next(iter(selected))
             btn.setText(name)
             mode_label.setText("LOCKED")
-            mode_label.setStyleSheet(
-                "font-size: 9px; font-weight: bold; color: #ff9800; "
-                "border: 1px solid #ff9800; border-radius: 3px; padding: 1px;"
-            )
+            _set_mode_badge(mode_label, "warning")
             self.constraints_changed.emit(group_name, selected)
         else:
             # Curated subset
             btn.setText(f"{count} sel.")
             mode_label.setText(f"CURATED")
-            mode_label.setStyleSheet(
-                "font-size: 9px; font-weight: bold; color: #2196F3; "
-                "border: 1px solid #2196F3; border-radius: 3px; padding: 1px;"
-            )
+            _set_mode_badge(mode_label, "info")
             self.constraints_changed.emit(group_name, selected)
 
     def update_active_riffs(self, per_group: Dict[str, str]):

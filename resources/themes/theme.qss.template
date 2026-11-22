@@ -967,6 +967,17 @@ QLabel#LightLaneTargets {
     padding: 2px 6px;
 }
 
+/* Structure inspector: the "/" between the time-signature spin boxes. */
+QLabel#TimeSignatureSeparator { color: $separator_glyph$; }
+
+/* Stage tab footer: TCP server status, keyed by the `status` property
+   the tab sets (idle / stopped / running / connected). */
+QLabel#StageTcpStatus { font-weight: bold; }
+QLabel#StageTcpStatus[status="idle"] { color: $hint_text_dim$; }
+QLabel#StageTcpStatus[status="stopped"] { color: $destructive$; }
+QLabel#StageTcpStatus[status="running"] { color: $info$; }
+QLabel#StageTcpStatus[status="connected"] { color: $success$; }
+
 /* -- Auto tab (real-time audio-reactive auto-generation) ----------------- */
 /* Engine-state caption on the centre stage. The colour is driven by a
    `phase` dynamic property the tab re-polishes on transition. (The old

@@ -56,6 +56,7 @@ from typing import Dict, List, Optional, Tuple
 from PyQt6 import QtCore, QtGui, QtWidgets
 from PyQt6.QtCore import Qt, pyqtSignal
 
+from gui.theme_style import active_tokens, bind_style
 from gui.widgets.flow_layout import FlowLayout
 from utils.morph.checker import check, group_capabilities
 from utils.morph.compile import SUBLANE_ATTRS
@@ -74,6 +75,19 @@ SUBLANE_ORDER = ("dimmer", "colour", "movement", "special")
 #: wire colours per source lane, cycled (mockup 6d palette)
 LANE_COLOURS = ("#d9a441", "#4ecbd4", "#c95fd0", "#6f9e4c",
                 "#f0562e", "#8d9299")
+
+#: Chip/row colour meaning "the theme's neutral lane tone" (resolved per
+#: theme, so it follows a theme switch); any other value is a lane DATA
+#: colour from LANE_COLOURS.
+NEUTRAL = "@patchbay_neutral"
+
+
+def _lane_colour(colour: str, tokens: dict) -> str:
+    """A lane colour, with NEUTRAL resolved against the token dict."""
+    if colour == NEUTRAL:
+        return tokens["patchbay_neutral"]
+    return colour
+
 
 SUBSET_SELECTORS = ("left-half", "right-half", "front-half", "back-half")
 
@@ -192,7 +206,8 @@ class EdgeCanvas(QtWidgets.QWidget):
             if is_selected:
                 # A halo, so the selected wire reads even where it
                 # overlaps its neighbours.
-                halo = QtGui.QPen(QtGui.QColor("#f4f1ea"), 1.0)
+                halo = QtGui.QPen(
+                    QtGui.QColor(active_tokens()["patchbay_halo"]), 1.0)
                 halo.setStyle(Qt.PenStyle.DotLine)
                 painter.setPen(halo)
                 painter.drawPath(path)
@@ -442,10 +457,11 @@ class _EdgeChipHolder(QtWidgets.QWidget):
         button.setFixedSize(_EdgeChipHolder.UNPATCH_SIZE,
                             _EdgeChipHolder.UNPATCH_SIZE)
         button.setCursor(Qt.CursorShape.PointingHandCursor)
-        button.setStyleSheet(
+        bind_style(button, lambda t: (
             "QToolButton { border: none; background: transparent;"
-            f" color: {colour}; font-size: 14px; padding: 0; }}"
-            "QToolButton:hover { color: #e5484d; }")
+            f" color: {_lane_colour(colour, t)}; font-size: 14px;"
+            " padding: 0; }"
+            f"QToolButton:hover {{ color: {t['error_text']}; }}"))
         return button
 
 
@@ -980,16 +996,20 @@ class MorphPatchbay(QtWidgets.QWidget):
         chip.setCursor(Qt.CursorShape.PointingHandCursor)
         metrics = QtGui.QFontMetrics(chip.font())
         chip.setMinimumWidth(metrics.horizontalAdvance(text) + 20)
-        border = colour or "#3a3a3a"
-        style = (f"QToolButton {{ border: 1px solid {border};"
-                 f" background: transparent; padding: 2px 8px; }}"
-                 f" QToolButton:checked {{ background: {border};"
-                 f" color: #0e0e10; }}"
-                 f" QToolButton:disabled {{ color: #5c6068;"
-                 f" border-color: #2d2d2d; }}")
-        if ghost:
-            style = style.replace("1px solid", "1px dashed")
-        chip.setStyleSheet(style)
+
+        def build(t: dict) -> str:
+            border = _lane_colour(colour, t) or t["patchbay_chip_border"]
+            style = (f"QToolButton {{ border: 1px solid {border};"
+                     f" background: transparent; padding: 2px 8px; }}"
+                     f" QToolButton:checked {{ background: {border};"
+                     f" color: {t['ink_on_fill']}; }}"
+                     f" QToolButton:disabled {{"
+                     f" color: {t['patchbay_disabled_text']};"
+                     f" border-color: {t['patchbay_rule']}; }}")
+            if ghost:
+                style = style.replace("1px solid", "1px dashed")
+            return style
+        bind_style(chip, build)
 
     def _chip(self, text: str, colour: str = "",
               ghost: bool = False) -> QtWidgets.QToolButton:
@@ -1025,10 +1045,10 @@ class MorphPatchbay(QtWidgets.QWidget):
                    ) -> QtWidgets.QFrame:
         if frame is None:
             frame = QtWidgets.QFrame()
-        frame.setStyleSheet(
-            f"QFrame {{ border: 1px solid #2d2d2d;"
-            f" border-left: 3px solid {colour}; }}"
-            f" QLabel {{ border: none; }}")
+        bind_style(frame, lambda t: (
+            f"QFrame {{ border: 1px solid {t['patchbay_rule']};"
+            f" border-left: 3px solid {_lane_colour(colour, t)}; }}"
+            f" QLabel {{ border: none; }}"))
         frame.setMinimumHeight(ROW_HEIGHT)
         return frame
 
@@ -1139,7 +1159,7 @@ class MorphPatchbay(QtWidgets.QWidget):
         return holder
 
     def _build_target_row(self, group: str) -> QtWidgets.QWidget:
-        colour = "#8d9299"
+        colour = NEUTRAL
         for edge in self.plan.edges:
             if edge.target_group == group:
                 info = self._sources_by_selector.get(edge.source_group)
@@ -1161,7 +1181,7 @@ class MorphPatchbay(QtWidgets.QWidget):
         row.addWidget(self._name_label(group))
         row.addWidget(QtWidgets.QLabel(f"{len(fixtures)}x"))
         row.addStretch(1)
-        lock = self._chip("LOCK", "#8d9299")
+        lock = self._chip("LOCK", NEUTRAL)
         lock.setChecked(self.is_locked(group))
         lock.setToolTip(
             "Protect this target lane: re-morph leaves it untouched")
@@ -1169,7 +1189,7 @@ class MorphPatchbay(QtWidgets.QWidget):
             lambda checked, g=group: self.set_lock(g, checked))
         row.addWidget(lock)
         if any(e.target_group == group for e in self.plan.edges):
-            clear = self._chip("UNPATCH", "#8d9299")
+            clear = self._chip("UNPATCH", NEUTRAL)
             clear.setCheckable(False)
             clear.setToolTip(f"Remove every patch feeding {group}")
             clear.setProperty("unpatch_target_group", group)
@@ -1214,7 +1234,7 @@ class MorphPatchbay(QtWidgets.QWidget):
         appears on hover would not have fixed that.
         """
         info = self._sources_by_selector.get(edge.source_group)
-        colour = info.colour if info else "#8d9299"
+        colour = info.colour if info else NEUTRAL
         text = f"{edge.source_group} · {SUBLANE_LABELS[edge.sublane]}"
         if edge.mode == "regenerate":
             text += f" · REGEN({edge.regenerate_strategy})"
@@ -1642,10 +1662,11 @@ class MorphPatchbay(QtWidgets.QWidget):
 
     def _refresh_checker(self) -> None:
         parts = []
+        error = active_tokens()["error_text"]
         for group, sublane, percent, is_gap in self.coverage_summary():
             label = f"{group} {SUBLANE_LABELS[sublane]} {percent}%"
             if is_gap:
-                parts.append(f"<span style='color:#e5484d'>"
+                parts.append(f"<span style='color:{error}'>"
                              f"{label} GAP</span>")
             else:
                 parts.append(label)

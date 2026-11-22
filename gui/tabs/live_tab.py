@@ -233,7 +233,9 @@ def _contrast_text(hex_color: str) -> str:
     """Dark on light swatches, light on dark ones, by relative luminance."""
     c = QColor(hex_color)
     lum = 0.299 * c.red() + 0.587 * c.green() + 0.114 * c.blue()
-    return "#141416" if lum > 128 else "#F4F1EA"
+    from gui.theme_tokens import THEMES
+    ink = THEMES["dark"]  # the ink pair is shared by every theme
+    return ink["ink_on_light"] if lum > 128 else ink["ink_on_dark"]
 
 
 # _group_has_movers moved to utils/position_presets.py (group_has_movers)

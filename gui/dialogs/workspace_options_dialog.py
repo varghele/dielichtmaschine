@@ -6,6 +6,8 @@ from PyQt6.QtWidgets import (
     QDialogButtonBox, QLabel, QSpinBox, QGridLayout, QComboBox
 )
 
+from gui.theme_style import active_tokens
+
 # QLC+ target versions for the cosmetic <Creator><Version> stamp.
 # The workspace XML schema is identical across these (verified: stock
 # Sample.qxw and engine/src/doc.cpp are byte-identical between QLC+_4.14.4
@@ -27,6 +29,8 @@ class WorkspaceOptionsDialog(QDialog):
         self.setMinimumWidth(400)
         self._config = config
         self._group_spinboxes = {}  # group_name -> QSpinBox
+        # A modal export dialog: read the theme once.
+        self._tokens = active_tokens()
         self._setup_ui()
 
     def _setup_ui(self):
@@ -40,7 +44,8 @@ class WorkspaceOptionsDialog(QDialog):
             "The Virtual Console provides live control of your fixtures."
         )
         desc_label.setWordWrap(True)
-        desc_label.setStyleSheet("color: #888; margin-bottom: 10px;")
+        desc_label.setStyleSheet(
+            f"color: {self._tokens['hint_text']}; margin-bottom: 10px;")
         layout.addWidget(desc_label)
 
         # Virtual Console group
@@ -138,7 +143,8 @@ class WorkspaceOptionsDialog(QDialog):
             "All dimmer values are scaled proportionally to balance brightness."
         )
         overrides_desc.setWordWrap(True)
-        overrides_desc.setStyleSheet("color: #888; margin-bottom: 5px;")
+        overrides_desc.setStyleSheet(
+            f"color: {self._tokens['hint_text']}; margin-bottom: 5px;")
         overrides_layout.addWidget(overrides_desc)
 
         if self._config and self._config.groups:
@@ -159,7 +165,8 @@ class WorkspaceOptionsDialog(QDialog):
             overrides_layout.addLayout(grid)
         else:
             no_groups_label = QLabel("No fixture groups configured.")
-            no_groups_label.setStyleSheet("color: #666; font-style: italic;")
+            no_groups_label.setStyleSheet(
+                f"color: {self._tokens['hint_text_dim']}; font-style: italic;")
             overrides_layout.addWidget(no_groups_label)
 
         layout.addWidget(overrides_group)
@@ -173,7 +180,8 @@ class WorkspaceOptionsDialog(QDialog):
             "version banner QLC+ shows on import."
         )
         version_desc.setWordWrap(True)
-        version_desc.setStyleSheet("color: #888; margin-bottom: 5px;")
+        version_desc.setStyleSheet(
+            f"color: {self._tokens['hint_text']}; margin-bottom: 5px;")
         version_layout.addWidget(version_desc)
 
         self.qlc_version_combo = QComboBox()

@@ -19,6 +19,7 @@ from PyQt6.QtGui import QBrush, QColor, QFont, QPainter
 from PyQt6.QtCore import Qt, pyqtSignal
 
 from config.models import Configuration, Universe
+from gui.theme_style import active_tokens
 from utils.dmx_device_detection import (
     get_device_display_names, get_device_port_by_display_name,
 )
@@ -101,16 +102,20 @@ class StatusDot(QtWidgets.QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setFixedSize(9, 9)
-        self._color = QColor("#5C6068")
+        self._ok = False
 
     def set_ok(self, ok: bool) -> None:
-        self._color = QColor("#4CAF50" if ok else "#5C6068")
+        self._ok = bool(ok)
         self.update()
 
     def paintEvent(self, event):
+        # Read at paint time, so the dot follows theme switches.
+        tokens = active_tokens()
+        color = QColor(tokens["success"] if self._ok
+                       else tokens["status_dot_idle"])
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-        painter.setBrush(QBrush(self._color))
+        painter.setBrush(QBrush(color))
         painter.setPen(Qt.PenStyle.NoPen)
         painter.drawEllipse(self.rect().adjusted(1, 1, -1, -1))
 
@@ -131,13 +136,14 @@ class ChannelBar(QtWidgets.QWidget):
         self.update()
 
     def paintEvent(self, event):
+        tokens = active_tokens()
         painter = QPainter(self)
         painter.setPen(Qt.PenStyle.NoPen)
-        painter.setBrush(QColor("#2d2d2d"))
+        painter.setBrush(QColor(tokens["meter_track"]))
         painter.drawRect(self.rect())
         if self._fraction > 0:
-            painter.setBrush(
-                QColor("#F0562E" if self._selected else "#8D9299"))
+            painter.setBrush(QColor(
+                tokens["accent"] if self._selected else tokens["meter_fill"]))
             painter.drawRect(0, 0, int(self.width() * self._fraction),
                              self.height())
 
