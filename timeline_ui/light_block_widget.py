@@ -17,11 +17,6 @@ from .timeline_widget import STRIP_ZONE_HEIGHT, sublane_band_geometry
 
 logger = logging.getLogger(__name__)
 
-# Glutorange, the brand accent (gui/theme_tokens.py); selection marks in
-# this custom-painted widget follow the theme's selection color. Same
-# value in both themes, so a constant is fine here.
-ACCENT = QColor(240, 86, 46)
-
 
 def token_qcolor(key: str, alpha: int = 255) -> QColor:
     """Brand token as a QColor, optionally with an alpha override.
@@ -558,10 +553,9 @@ class LightBlockWidget(QWidget):
         # Draw the sublane marquee rectangle on top of everything else.
         if self._sublane_marquee_active:
             rect = self._compute_sublane_marquee_rect()
-            marquee_fill = QColor(ACCENT)
-            marquee_fill.setAlpha(40)
-            marquee_pen = QColor(ACCENT)
-            marquee_pen.setAlpha(200)
+            # Selection marks follow the theme's accent token.
+            marquee_fill = token_qcolor("accent", 40)
+            marquee_pen = token_qcolor("accent", 200)
             painter.setBrush(QBrush(marquee_fill))
             painter.setPen(QPen(marquee_pen, 2))
             painter.drawRect(rect)
@@ -730,7 +724,7 @@ class LightBlockWidget(QWidget):
         painter.setPen(glow)
         painter.drawRect(2, 2, w - 5, h - 5)
 
-        border = QPen(ACCENT, 1)
+        border = QPen(token_qcolor("accent"), 1)
         border.setWidthF(1.5)
         painter.setPen(border)
         painter.drawRect(2, 2, w - 5, h - 5)
@@ -889,7 +883,7 @@ class LightBlockWidget(QWidget):
         # otherwise a solid 1px line in the segment's own colour.
         is_selected = (sublane_block is self.selected_sublane_block)
         if is_selected:
-            painter.setPen(QPen(ACCENT, 3))  # Accent border when selected
+            painter.setPen(QPen(token_qcolor("accent"), 3))  # selected
         else:
             hairline = segment_border if segment_border is not None \
                 else color.darker(130)

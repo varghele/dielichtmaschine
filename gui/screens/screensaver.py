@@ -67,7 +67,8 @@ MARK_INK = SCREENSAVER["mark_ink"]            # corner registration crosses
 
 # Backdrop: 1px lines every 48px in rgba(141,146,153,0.04).
 GRID_PITCH_PX = 48
-GRID_INK = QColor(141, 146, 153, 10)
+GRID_INK = QColor(SCREENSAVER["muted_ink"])
+GRID_INK.setAlpha(10)
 
 # Corner registration crosses: 15x15 px, 24px in from each corner.
 MARK_SIZE_PX = 15

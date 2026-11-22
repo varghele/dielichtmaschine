@@ -22,6 +22,7 @@ literals out of every ``setStyleSheet`` call.
 from typing import Callable
 
 from PyQt6.QtCore import QEvent, QObject
+from PyQt6.QtGui import QColor
 from PyQt6.QtWidgets import QApplication, QWidget
 
 from gui.theme_tokens import THEMES
@@ -52,6 +53,16 @@ def active_tokens() -> dict:
     """Token dict of the theme currently applied to the app (see
     active_theme_name)."""
     return THEMES[active_theme_name()]
+
+
+def token_color(key: str, alpha: int = 255) -> QColor:
+    """An active-theme token as a QColor, optionally with an alpha
+    (painters: the numeric QColor literals became tokens, the alpha of
+    each use stays with the code)."""
+    color = QColor(active_tokens()[key])
+    if alpha != 255:
+        color.setAlpha(alpha)
+    return color
 
 
 class _ThemeRestyler(QObject):

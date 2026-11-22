@@ -11,6 +11,7 @@ from PyQt6.QtCore import QPointF
 from PyQt6.QtGui import QPainter, QPen, QColor, QFont
 
 from audio.realtime_spectral import LiveFeatureFrame
+from gui.theme_tokens import ANALYSIS_PLOT
 
 
 # 30 seconds at 20Hz UI updates
@@ -58,7 +59,7 @@ class AutoMetricsTracker(QWidget):
         h = self.height()
 
         # Background
-        painter.fillRect(0, 0, w, h, QColor(20, 20, 30))
+        painter.fillRect(0, 0, w, h, QColor(ANALYSIS_PLOT["tracker_bg"]))
 
         # Chart area (leave room for legend at top)
         legend_h = 16
@@ -66,7 +67,7 @@ class AutoMetricsTracker(QWidget):
         chart_h = h - chart_top - 2
 
         # Grid lines
-        pen = QPen(QColor(50, 50, 60))
+        pen = QPen(QColor(ANALYSIS_PLOT["tracker_grid"]))
         pen.setWidth(1)
         painter.setPen(pen)
         for frac in [0.25, 0.5, 0.75]:

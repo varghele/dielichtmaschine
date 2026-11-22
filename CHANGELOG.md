@@ -71,7 +71,14 @@ verbatim as the GitHub Release notes (see [docs/releasing.md](docs/releasing.md)
   and song palettes, light colours) are its documented allowlist, keyed by
   where each one sits (file, enclosing function or constant, count) rather
   than by value, so a chrome colour that happens to equal a data colour
-  (the old white separator, the accent) is still caught. The active theme
+  (the old white separator, the accent) is still caught. The lint also
+  covers colours written as numbers (`QColor(r, g, b)` and Qt's named
+  colours) in the custom painters: 93 of them (stage plan marks, mounting
+  and axis colours, timeline grid and selection, waveform, the movement
+  editor's pan/tilt canvas, the colour wheel marker, the stage plot page,
+  the generation inspector and Auto metrics chrome) are now tokens, and
+  the 46 left are data colours on the same allowlist (analysis plot
+  series, the pixel-bar icon's RGB cue, group defaults). The active theme
   is read in one place, `gui/theme_style.active_tokens`: the eleven
   per-module copies of that stylesheet check (Structure, Stage, Live, Auto
   and Fixtures tabs, the About, Autogen, colour and movement dialogs, the

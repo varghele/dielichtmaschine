@@ -105,8 +105,10 @@ class AudioWaveformWidget(QWidget):
         self.scroll_offset = 0  # Horizontal scroll offset in pixels
 
         # Visual styling
-        self.waveform_color = QColor(100, 150, 255, 120)  # Semi-transparent blue
-        self.background_color = QColor(30, 30, 30, 50)  # Very subtle background
+        # (deferred import: the gui package imports timeline_ui)
+        from gui.theme_style import token_color
+        self.waveform_color = token_color("waveform", 120)  # semi-transparent
+        self.background_color = token_color("waveform_bg", 50)  # very subtle
 
         # Loading state
         self.is_loading = False
@@ -303,20 +305,23 @@ class AudioWaveformWidget(QWidget):
 
     def draw_loading_state(self, painter: QPainter, width: int, height: int):
         """Draw loading indicator"""
-        painter.setPen(QColor(200, 200, 200))
+        from gui.theme_style import token_color  # deferred (cycle)
+        painter.setPen(token_color("waveform_text"))
         painter.drawText(0, 0, width, height, Qt.AlignmentFlag.AlignCenter,
                          QCoreApplication.translate("AudioWaveformWidget", "Generating waveform..."))
 
     def draw_error_state(self, painter: QPainter, width: int, height: int):
         """Draw error message"""
-        painter.setPen(QColor(255, 100, 100))
+        from gui.theme_style import token_color  # deferred (cycle)
+        painter.setPen(token_color("waveform_error"))
         painter.drawText(0, 0, width, height, Qt.AlignmentFlag.AlignCenter,
                          QCoreApplication.translate("AudioWaveformWidget", "Error: {0}").format(
                              self.load_error))
 
     def draw_no_audio_state(self, painter: QPainter, width: int, height: int):
         """Draw placeholder when no audio loaded"""
-        painter.setPen(QColor(150, 150, 150))
+        from gui.theme_style import token_color  # deferred (cycle)
+        painter.setPen(token_color("waveform_hint"))
         painter.drawText(0, 0, width, height, Qt.AlignmentFlag.AlignCenter,
                          QCoreApplication.translate("AudioWaveformWidget", "No audio loaded"))
 

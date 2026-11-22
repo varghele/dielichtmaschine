@@ -27,6 +27,9 @@ Notes:
   through gui/theme_style.py (active_tokens / bind_style, which
   re-applies on a theme switch); DATA colours (group palettes, light
   colours) stay with their code and are allowlisted in the lint.
+- Painters: numeric QColor literals are tokens too (PAINTED, shared by
+  both themes, and the fixed ANALYSIS_PLOT / STAGE_PLOT palettes); the
+  alpha of each use stays in the code (theme_style.token_color).
 """
 
 import os
@@ -90,6 +93,102 @@ SCREENSAVER = {
     "mark_ink": "#3A3A3A",    # the four corner registration crosses
 }
 
+# Painted chrome shared by both themes: the numeric QColor literals of
+# the custom painters (v1.5.6 follow-up; tests/unit/test_theme_lint.py
+# covers numeric QColor and Qt.GlobalColor too). Merged into DARK and
+# LIGHT with the values the painters always used, so either theme can
+# tune a role later; painters read them through active_tokens(), module
+# constants (fallbacks drawn before any theme applies) read PAINTED.
+PAINTED = {
+    # Stage plan items (gui/stage_items.py, gui/StageView.py). Fixture
+    # outline pens; the mounting indicator per mounting type; the
+    # orientation axes (red X, green Y, blue Z; the plan's centre axes
+    # use the same red and blue); label inks before a view supplies its
+    # qproperty colours.
+    "plan_select_pen": "#0000FF",
+    "plan_item_pen": "#000000",
+    "mount_hanging": "#3C78FF",
+    "mount_standing": "#FF8C00",
+    "mount_wall": "#64B464",
+    "mount_unknown": "#808080",
+    "plan_axis_red": "#FF5050",
+    "plan_axis_green": "#50C850",
+    "plan_axis_blue": "#5050FF",
+    "plan_text_fallback": "#000000",
+    "plan_label_fallback": "#787878",
+    # StageView's qproperty fallbacks, drawn only before the theme's
+    # qproperty-stage*Color rules arrive.
+    "stage_fallback_outline": "#000000",
+    "stage_fallback_fill": "#F0F0F0",
+    "stage_fallback_grid": "#C8C8C8",
+    "stage_fallback_label": "#3C3C3C",
+    "stage_fallback_fixture_text": "#000000",
+    # The "?" glyph of the unknown-fixture icon.
+    "icon_glyph": "#DCDCDC",
+    # Timeline: the neutral grid gray (alpha set per line weight), the
+    # parts band BPM ink, the rubber-band / drop-preview blue.
+    "timeline_grid_line": "#7F7F7F",
+    "timeline_ruler_ink": "#8D9299",
+    "selection_blue": "#0078D7",
+    # Audio lane waveform and its state texts.
+    "waveform": "#6496FF",
+    "waveform_bg": "#1E1E1E",
+    "waveform_text": "#C8C8C8",
+    "waveform_error": "#FF6464",
+    "waveform_hint": "#969696",
+    # Movement dialog pan/tilt canvas: grid, crosshair, the boundary
+    # and amplitude boxes, the shape path, the position marker, labels.
+    "pantilt_grid": "#323246",
+    "pantilt_center": "#646478",
+    "pantilt_boundary": "#FF6464",
+    "pantilt_amplitude": "#64C864",
+    "pantilt_shape": "#00C8FF",
+    "pantilt_position": "#FFA500",
+    "pantilt_position_dot": "#FFC832",
+    "pantilt_label": "#969696",
+    # Auto colour wheel: the selector ring and its outline.
+    "wheel_marker": "#FFFFFF",
+    "wheel_marker_outline": "#000000",
+    # Invalid cells in the CSV import and morph review tables.
+    "invalid_text": "#FF0000",
+    # Greyed (disabled) cells in the universes table.
+    "disabled_cell_text": "#7F7F7F",
+}
+
+# The generation inspector and the Auto metrics chart: developer
+# analysis plots on a fixed dark ground in every theme (their series
+# colours are a data-viz palette and stay with the code, allowlisted).
+ANALYSIS_PLOT = {
+    "panel": "#282830",
+    "text": "#C8C8D2",
+    "grid": "#3C3C46",
+    "cursor": "#FF2828",
+    "line_light": "#FFFFFF",   # white rules / outlines, alpha per use
+    "band_even": "#32323A",
+    "band_odd": "#2A2A32",
+    "axis_text": "#8C8C96",
+    "dim_text": "#787882",
+    "inactive_cell": "#323237",
+    "mark": "#FFFF64",
+    "selected_text": "#FFFFC8",
+    "dot_outline": "#B4B4B4",
+    "tracker_bg": "#14141E",
+    "tracker_grid": "#32323C",
+}
+
+# The stage plot export (gui/stage_plot.py) is a printed page: white
+# paper and dark ink whatever theme the app shows.
+STAGE_PLOT = {
+    "paper": "#FFFFFF",
+    "ink": "#141414",
+    "gray": "#969696",
+    "subtitle": "#505050",
+    "grid": "#E1E1E1",
+    "meter_labels": "#646464",
+    "audience": "#787878",
+    "legend_text": "#3C3C3C",
+}
+
 # Shared typography. Sizes are deliberately NOT tokens: existing layouts
 # depend on the current sizes, and display typography (Barlow Condensed)
 # lands with the screen redesigns, not the retokenization.
@@ -102,6 +201,7 @@ _FONTS = {
 DARK = {
     **_FONTS,
     **_FUNCTION,
+    **PAINTED,
     # Engineering-grid background tile (scripts/generate_grid_tiles.py)
     "grid_tile": _grid_tile("grid-dark.png"),
     # Surfaces
@@ -182,6 +282,7 @@ DARK = {
 LIGHT = {
     **_FONTS,
     **_FUNCTION,
+    **PAINTED,
     # Engineering-grid background tile (scripts/generate_grid_tiles.py)
     "grid_tile": _grid_tile("grid-light.png"),
     # Surfaces

@@ -7,9 +7,9 @@ from PyQt6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QFormLayout,
                              QLabel, QDialogButtonBox, QCheckBox, QFrame,
                              QPushButton, QComboBox, QWidget, QScrollArea)
 from PyQt6.QtCore import QCoreApplication, Qt, pyqtSignal
-from PyQt6.QtGui import QPainter, QColor, QPen, QBrush, QPainterPath
+from PyQt6.QtGui import QPainter, QPen, QBrush, QPainterPath
 from config.models import MovementBlock
-from gui.theme_style import active_tokens
+from gui.theme_style import active_tokens, token_color
 
 
 def generate_shape_points(effect_type: str, center_pan: float, center_tilt: float,
@@ -252,7 +252,7 @@ class PanTiltWidget(QFrame):
             return margin + (tilt / 255) * (h - 2 * margin)
 
         # Draw grid
-        painter.setPen(QPen(QColor(50, 50, 70), 1))
+        painter.setPen(QPen(token_color("pantilt_grid"), 1))
         for i in range(5):
             x = margin + (w - 2 * margin) * i / 4
             painter.drawLine(int(x), margin, int(x), h - margin)
@@ -261,7 +261,8 @@ class PanTiltWidget(QFrame):
             painter.drawLine(margin, int(y), w - margin, int(y))
 
         # Draw center crosshair
-        painter.setPen(QPen(QColor(100, 100, 120), 1, Qt.PenStyle.DashLine))
+        painter.setPen(QPen(token_color("pantilt_center"), 1,
+                            Qt.PenStyle.DashLine))
         center_x = w / 2
         center_y = h / 2
         painter.drawLine(int(center_x), margin, int(center_x), h - margin)
@@ -273,8 +274,9 @@ class PanTiltWidget(QFrame):
         bound_top = tilt_to_y(self._tilt_min)
         bound_bottom = tilt_to_y(self._tilt_max)
 
-        painter.setPen(QPen(QColor(255, 100, 100, 150), 2, Qt.PenStyle.DashLine))
-        painter.setBrush(QBrush(QColor(255, 100, 100, 30)))
+        painter.setPen(QPen(token_color("pantilt_boundary", 150), 2,
+                            Qt.PenStyle.DashLine))
+        painter.setBrush(QBrush(token_color("pantilt_boundary", 30)))
         painter.drawRect(int(bound_left), int(bound_top),
                          int(bound_right - bound_left), int(bound_bottom - bound_top))
 
@@ -285,7 +287,8 @@ class PanTiltWidget(QFrame):
             amp_top = tilt_to_y(self._tilt - self._tilt_amplitude)
             amp_bottom = tilt_to_y(self._tilt + self._tilt_amplitude)
 
-            painter.setPen(QPen(QColor(100, 200, 100, 100), 1, Qt.PenStyle.DotLine))
+            painter.setPen(QPen(token_color("pantilt_amplitude", 100), 1,
+                                Qt.PenStyle.DotLine))
             painter.setBrush(Qt.BrushStyle.NoBrush)
             painter.drawRect(int(amp_left), int(amp_top),
                              int(amp_right - amp_left), int(amp_bottom - amp_top))
@@ -304,8 +307,8 @@ class PanTiltWidget(QFrame):
                 path.lineTo(pan_to_x(first_point[0]), tilt_to_y(first_point[1]))
 
             # Draw the path with gradient effect
-            painter.setPen(QPen(QColor(0, 200, 255), 2))
-            painter.setBrush(QBrush(QColor(0, 200, 255, 40)))
+            painter.setPen(QPen(token_color("pantilt_shape"), 2))
+            painter.setBrush(QBrush(token_color("pantilt_shape", 40)))
             painter.drawPath(path)
 
         # Draw center position indicator
@@ -313,16 +316,16 @@ class PanTiltWidget(QFrame):
         pos_y = tilt_to_y(self._tilt)
 
         # Outer circle
-        painter.setPen(QPen(QColor(255, 165, 0), 2))
-        painter.setBrush(QBrush(QColor(255, 165, 0, 100)))
+        painter.setPen(QPen(token_color("pantilt_position"), 2))
+        painter.setBrush(QBrush(token_color("pantilt_position", 100)))
         painter.drawEllipse(int(pos_x - 8), int(pos_y - 8), 16, 16)
 
         # Center dot
-        painter.setBrush(QBrush(QColor(255, 200, 50)))
+        painter.setBrush(QBrush(token_color("pantilt_position_dot")))
         painter.drawEllipse(int(pos_x - 3), int(pos_y - 3), 6, 6)
 
         # Labels
-        painter.setPen(QColor(150, 150, 150))
+        painter.setPen(token_color("pantilt_label"))
         painter.drawText(margin, h - 2, "0")
         painter.drawText(w - margin - 20, h - 2, "255")
         painter.drawText(2, margin + 10, "0")
@@ -331,7 +334,7 @@ class PanTiltWidget(QFrame):
         painter.drawText(2, int(center_y), "Tilt")
 
         # Draw effect type label
-        painter.setPen(QColor(0, 200, 255))
+        painter.setPen(token_color("pantilt_shape"))
         effect_label = self._effect_type.replace("_", " ").title()
         if self._effect_type == "lissajous":
             effect_label += f" ({self._lissajous_ratio})"

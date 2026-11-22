@@ -17,6 +17,7 @@ from PyQt6.QtGui import (
 )
 
 from autogen.report import GenerationReport, SectionReport
+from gui.theme_tokens import ANALYSIS_PLOT
 
 
 # ── Color constants ──────────────────────────────────────
@@ -43,12 +44,19 @@ SCORE_COLORS = {
     "coherence": QColor(160, 80, 200),  # purple
 }
 
-BG_DARK = QColor(30, 30, 35)
-BG_PANEL = QColor(40, 40, 48)
-TEXT_COLOR = QColor(200, 200, 210)
-GRID_COLOR = QColor(60, 60, 70)
-CURSOR_COLOR = QColor(255, 40, 40)
-HIGHLIGHT_COLOR = QColor(255, 255, 255, 50)
+def _plot(key: str, alpha: int = 255) -> QColor:
+    """An ANALYSIS_PLOT chrome colour (fixed dark plot ground in every
+    theme; gui/theme_tokens.py), optionally with an alpha."""
+    color = QColor(ANALYSIS_PLOT[key])
+    if alpha != 255:
+        color.setAlpha(alpha)
+    return color
+
+
+BG_PANEL = _plot("panel")
+TEXT_COLOR = _plot("text")
+GRID_COLOR = _plot("grid")
+CURSOR_COLOR = _plot("cursor")
 
 
 # ── Audio Features Timeline ─────────────────────────────
@@ -165,11 +173,11 @@ class AudioFeaturesWidget(QWidget):
         for i, sec in enumerate(self.report.sections):
             x1 = margin_left + (sec.start_time / total_time) * plot_w
             x2 = margin_left + (sec.end_time / total_time) * plot_w
-            shade = QColor(50, 50, 58) if i % 2 == 0 else QColor(42, 42, 50)
+            shade = _plot("band_even") if i % 2 == 0 else _plot("band_odd")
             p.fillRect(QRectF(x1, margin_top, x2 - x1, plot_h), shade)
 
             # Section name label
-            p.setPen(QPen(QColor(140, 140, 150), 1))
+            p.setPen(QPen(_plot("axis_text"), 1))
             p.setFont(QFont("Arial", 7))
             label_w = x2 - x1
             if label_w > 20:
@@ -245,7 +253,7 @@ class AudioFeaturesWidget(QWidget):
                 dimmed = QColor(color.red(), color.green(), color.blue(), 60)
                 p.setPen(QPen(dimmed, 1))
                 p.drawLine(QPointF(legend_x, legend_y + 4), QPointF(legend_x + 12, legend_y + 4))
-                p.setPen(QPen(QColor(120, 120, 130), 1))
+                p.setPen(QPen(_plot("dim_text"), 1))
             p.drawText(QPointF(legend_x + 15, legend_y + 8), key)
             legend_x += item_w
 
@@ -678,7 +686,7 @@ class MelSpectrogramWidget(QWidget):
                 p.drawText(QRectF(0, y - 8, ml - 4, 16),
                            Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter,
                            label)
-                p.setPen(QPen(QColor(255, 255, 255, 30), 0.5))
+                p.setPen(QPen(_plot("line_light", 30), 0.5))
                 p.drawLine(QPointF(ml, y), QPointF(w - mr, y))
                 p.setPen(QPen(TEXT_COLOR, 1))
 
@@ -778,13 +786,13 @@ class GroupActivationWidget(QWidget):
                     color = QColor(base_color.red(), base_color.green(),
                                    base_color.blue(), alpha)
                 else:
-                    color = QColor(50, 50, 55, 120)
+                    color = _plot("inactive_cell", 120)
 
                 p.fillRect(QRectF(x + 1, y + 1, cell_w - 2, cell_h - 2), color)
 
                 # Role letter
                 if gr and gr.weight > 0:
-                    p.setPen(QPen(QColor(255, 255, 255, 180), 1))
+                    p.setPen(QPen(_plot("line_light", 180), 1))
                     p.setFont(QFont("Arial", 7, QFont.Weight.Bold))
                     label = gr.role[0].upper()  # F, G, or f
                     p.drawText(QRectF(x, y, cell_w, cell_h),
@@ -793,7 +801,7 @@ class GroupActivationWidget(QWidget):
         # Highlight current section column
         if 0 <= self.current_section_idx < n_sections:
             x = margin_left + self.current_section_idx * cell_w
-            p.setPen(QPen(QColor(255, 255, 255), 2))
+            p.setPen(QPen(_plot("line_light"), 2))
             p.setBrush(Qt.BrushStyle.NoBrush)
             p.drawRect(QRectF(x, margin_top, cell_w, n_groups * cell_h))
 
@@ -801,7 +809,7 @@ class GroupActivationWidget(QWidget):
         if self.selected_group and self.selected_group in self.report.group_names:
             row = self.report.group_names.index(self.selected_group)
             y = margin_top + row * cell_h
-            p.setPen(QPen(QColor(255, 255, 100), 1.5))
+            p.setPen(QPen(_plot("mark"), 1.5))
             p.setBrush(Qt.BrushStyle.NoBrush)
             p.drawRect(QRectF(margin_left, y, n_sections * cell_w, cell_h))
 
@@ -861,7 +869,8 @@ class RudimentScoresWidget(QWidget):
             is_selected = (entry.rudiment_name == self._selected_rudiment)
 
             # Rudiment name label
-            p.setPen(QPen(QColor(255, 255, 200) if is_selected else TEXT_COLOR, 1))
+            p.setPen(QPen(_plot("selected_text") if is_selected else TEXT_COLOR,
+                          1))
             p.setFont(QFont("Arial", 7, QFont.Weight.Bold if is_selected else QFont.Weight.Normal))
             p.drawText(QRectF(2, y, margin_left - 4, bar_h),
                        Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter,
@@ -888,7 +897,7 @@ class RudimentScoresWidget(QWidget):
 
             # Selection highlight border
             if is_selected:
-                p.setPen(QPen(QColor(255, 255, 100), 1.5))
+                p.setPen(QPen(_plot("mark"), 1.5))
                 p.setBrush(Qt.BrushStyle.NoBrush)
                 p.drawRect(QRectF(margin_left, y + 1, x - margin_left, bar_h - 2))
 
@@ -958,11 +967,13 @@ class ColorPaletteWidget(QWidget):
 
         # Song palette dots
         for color_tuple in self.report.song_palette_rgb:
-            self._draw_color_dot(p, cx, cy, radius, color_tuple, size=8, outline=QColor(180, 180, 180))
+            self._draw_color_dot(p, cx, cy, radius, color_tuple, size=8,
+                                 outline=_plot("dot_outline"))
 
         # Current section colors (larger, highlighted)
         for color_tuple in self._current_colors:
-            self._draw_color_dot(p, cx, cy, radius, color_tuple, size=12, outline=QColor(255, 255, 255))
+            self._draw_color_dot(p, cx, cy, radius, color_tuple, size=12,
+                                 outline=_plot("line_light"))
 
         p.end()
 

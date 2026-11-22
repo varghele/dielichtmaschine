@@ -27,7 +27,9 @@ import csv
 import os
 
 from PyQt6 import QtWidgets
-from PyQt6.QtCore import Qt, QCoreApplication, QT_TRANSLATE_NOOP
+from PyQt6.QtCore import QCoreApplication, QT_TRANSLATE_NOOP
+
+from gui.theme_style import token_color
 
 from utils.csv_table_import import (
     FIELDS, REQUIRED_FIELDS, apply_mapping, build_fixtures, guess_mapping,
@@ -414,7 +416,7 @@ class CsvImportWizard(QtWidgets.QDialog):
             for c, value in enumerate(values):
                 item = QtWidgets.QTableWidgetItem(value)
                 if not resolved:
-                    item.setForeground(Qt.GlobalColor.red)
+                    item.setForeground(token_color("invalid_text"))
                 self.resolved_table.setItem(r, c, item)
 
         # Nothing to replace on an empty rig: Add covers it.

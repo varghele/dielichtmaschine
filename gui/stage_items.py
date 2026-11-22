@@ -186,12 +186,12 @@ class FixtureItem(QGraphicsItem):
 
         # Set up pens and brushes based on selection state
         if self.isSelected():
-            painter.setPen(QPen(Qt.GlobalColor.blue, 3))
+            painter.setPen(QPen(QColor(active_tokens()["plan_select_pen"]), 3))
             selected_color = QColor(self.channel_color)
             selected_color.setAlpha(160)
             painter.setBrush(QBrush(selected_color))
         else:
-            painter.setPen(QPen(Qt.GlobalColor.black, 2))
+            painter.setPen(QPen(QColor(active_tokens()["plan_item_pen"]), 2))
             painter.setBrush(QBrush(QColor(self.channel_color)))
 
         # Draw the fixture icon. Mapped types render their North Star
@@ -331,14 +331,15 @@ class FixtureItem(QGraphicsItem):
         indicator_size = 8
 
         # Determine color based on mounting
+        tokens = active_tokens()
         if self.mounting == "hanging":
-            color = QColor(60, 120, 255)  # Blue for hanging (beam down)
+            color = QColor(tokens["mount_hanging"])  # beam down
         elif self.mounting == "standing":
-            color = QColor(255, 140, 0)  # Orange for standing (beam up)
+            color = QColor(tokens["mount_standing"])  # beam up
         elif self.mounting in ("wall_left", "wall_right", "wall_back", "wall_front"):
-            color = QColor(100, 180, 100)  # Green for wall mounts
+            color = QColor(tokens["mount_wall"])
         else:
-            color = QColor(128, 128, 128)  # Gray for unknown
+            color = QColor(tokens["mount_unknown"])
 
         # Check if this is a custom orientation (non-preset values)
         is_custom = self._is_custom_orientation()
@@ -429,7 +430,7 @@ class FixtureItem(QGraphicsItem):
                 color = getattr(view, "fixtureTextColor", None)
                 if color is not None and color.isValid():
                     return color
-        return QColor(0, 0, 0)
+        return QColor(active_tokens()["plan_text_fallback"])
 
     def _theme_label_color(self):
         """The quieter secondary label colour (StageView's
@@ -442,7 +443,7 @@ class FixtureItem(QGraphicsItem):
                 color = getattr(view, "stageLabelColor", None)
                 if color is not None and color.isValid():
                     return color
-        return QColor(120, 120, 120)
+        return QColor(active_tokens()["plan_label_fallback"])
 
     def _draw_orientation_axes(self, painter):
         """Draw orientation coordinate axes for the fixture.
@@ -460,15 +461,16 @@ class FixtureItem(QGraphicsItem):
         # - Y axis points up in the view (green)
         # - Z axis points out of/into the page (blue)
 
+        tokens = active_tokens()
         # Draw X axis (red) - pointing right
-        painter.setPen(QPen(QColor(255, 80, 80), 2))
+        painter.setPen(QPen(QColor(tokens["plan_axis_red"]), 2))
         painter.drawLine(QPointF(0, 0), QPointF(axis_length, 0))
         # Arrow head
         painter.drawLine(QPointF(axis_length, 0), QPointF(axis_length - arrow_size, -arrow_size/2))
         painter.drawLine(QPointF(axis_length, 0), QPointF(axis_length - arrow_size, arrow_size/2))
 
         # Draw Y axis (green) - pointing up (which is negative Y in Qt coordinates)
-        painter.setPen(QPen(QColor(80, 200, 80), 2))
+        painter.setPen(QPen(QColor(tokens["plan_axis_green"]), 2))
         painter.drawLine(QPointF(0, 0), QPointF(0, -axis_length))
         # Arrow head
         painter.drawLine(QPointF(0, -axis_length), QPointF(-arrow_size/2, -axis_length + arrow_size))
@@ -478,7 +480,7 @@ class FixtureItem(QGraphicsItem):
         z_indicator_size = 8
         z_offset = axis_length * 0.4  # Position slightly offset from center
 
-        painter.setPen(QPen(QColor(80, 80, 255), 2))
+        painter.setPen(QPen(QColor(tokens["plan_axis_blue"]), 2))
 
         # Determine Z direction based on mounting
         if self.mounting == "hanging":
@@ -496,7 +498,7 @@ class FixtureItem(QGraphicsItem):
             painter.drawEllipse(QRectF(z_offset - z_indicator_size/2, z_offset - z_indicator_size/2,
                                        z_indicator_size, z_indicator_size))
             # Draw dot inside
-            painter.setBrush(QBrush(QColor(80, 80, 255)))
+            painter.setBrush(QBrush(QColor(tokens["plan_axis_blue"])))
             painter.drawEllipse(QRectF(z_offset - 2, z_offset - 2, 4, 4))
 
 
@@ -711,7 +713,7 @@ class StageElementItem(QGraphicsItem):
         painter.restore()
 
         if self.isSelected():
-            painter.setPen(QPen(Qt.GlobalColor.blue, 2))
+            painter.setPen(QPen(QColor(active_tokens()["plan_select_pen"]), 2))
             painter.setBrush(Qt.BrushStyle.NoBrush)
             body = self.boundingRect()
             painter.drawRect(body.adjusted(2, 2, -2,
@@ -735,7 +737,7 @@ class StageElementItem(QGraphicsItem):
                 color = getattr(views[0], "stageLabelColor", None)
                 if color is not None and color.isValid():
                     return color
-        return QColor(120, 120, 120)
+        return QColor(active_tokens()["plan_label_fallback"])
 
     def mouseMoveEvent(self, event):
         if self.ghosted:

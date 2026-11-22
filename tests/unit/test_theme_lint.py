@@ -2,7 +2,7 @@
 
 The v1.5.6 theme sweep moved every hard-coded chrome colour in the UI
 packages onto theme tokens (the light theme had inherited dark-only
-literals such as the Structure tab's ``color: white`` separator). Two
+literals such as the Structure tab's ``color: white`` separator). Four
 static checks keep it that way:
 
 1. No QSS declaration in the UI packages may spell a colour by CSS
@@ -18,6 +18,14 @@ static checks keep it that way:
    palettes, light colours the user picks or busks, contrast ink chosen
    from a data fill, and self-contained palettes that are deliberately
    theme-independent. A new chrome colour belongs in theme_tokens.py.
+
+3. Numeric colour literals (``QColor(r, g, b[, a])`` with integer
+   constants, ``Qt.GlobalColor.<name>`` except ``transparent``) follow
+   the same rule through ``NUMERIC_ALLOWLIST``: painter chrome lives in
+   ``theme_tokens.PAINTED`` (both themes) or a fixed palette
+   (``ANALYSIS_PLOT``, ``STAGE_PLOT``, ``SCREENSAVER``).
+4. The active theme is read only through ``gui/theme_style.py``: no
+   module keeps a private copy of the stylesheet sniff.
 
 ``visualizer/renderer/`` is out of scope: its colours are GL scene
 colours, not Qt chrome. ``utils/`` is out of scope: its colours are
@@ -497,3 +505,200 @@ def test_sniff_scanner_finds_a_copy():
     home = _parse(os.path.join(ROOT, SNIFF_HOME))
     assert sorted(n for _l, n in sniff_copies_in(home)) == [
         "active_theme_name", "active_tokens"]
+
+
+# --- Numeric QColor and Qt.GlobalColor literals ----------------------
+
+#: Qt global colours that are not a colour role.
+GLOBAL_COLOUR_EXEMPT = {"transparent", "color0", "color1"}
+#: PyQt5-style ``Qt.white`` spellings (PyQt6 needs Qt.GlobalColor.white).
+QT_GLOBAL_NAMES = {
+    "white", "black", "red", "darkRed", "green", "darkGreen", "blue",
+    "darkBlue", "cyan", "darkCyan", "magenta", "darkMagenta", "yellow",
+    "darkYellow", "gray", "darkGray", "lightGray"}
+
+
+def _numeric_literal(node):
+    """'rgb(r, g, b)' / 'rgba(r, g, b, a)' for a QColor call with only
+    integer constant arguments, 'Qt.GlobalColor.<name>' for a global
+    colour; None otherwise."""
+    if isinstance(node, ast.Call):
+        func = node.func
+        name = (func.id if isinstance(func, ast.Name)
+                else func.attr if isinstance(func, ast.Attribute) else None)
+        if (name == "QColor" and node.args and not node.keywords
+                and all(isinstance(a, ast.Constant)
+                        and isinstance(a.value, int)
+                        and not isinstance(a.value, bool)
+                        for a in node.args)):
+            values = ", ".join(str(a.value) for a in node.args)
+            if len(node.args) == 4:
+                return f"rgba({values})"
+            if len(node.args) == 3:
+                return f"rgb({values})"
+            return f"QColor({values})"
+    if isinstance(node, ast.Attribute):
+        value = node.value
+        if (isinstance(value, ast.Attribute) and value.attr == "GlobalColor"
+                and node.attr not in GLOBAL_COLOUR_EXEMPT):
+            return f"Qt.GlobalColor.{node.attr}"
+        if (isinstance(value, ast.Name) and value.id == "Qt"
+                and node.attr in QT_GLOBAL_NAMES):
+            return f"Qt.GlobalColor.{node.attr}"
+    return None
+
+
+def numeric_sites_in(tree: ast.AST) -> dict:
+    """{(LITERAL, scope): [lineno, ...]} of numeric colour literals."""
+    scopes = _scopes(tree)
+    found = {}
+    for node in ast.walk(tree):
+        literal = _numeric_literal(node)
+        if literal is not None:
+            found.setdefault((literal, scopes[id(node)]), []).append(
+                node.lineno)
+    return found
+
+
+def numeric_sites():
+    found = {}
+    for path in _ui_sources():
+        sites = numeric_sites_in(_parse(path))
+        if sites:
+            found[_rel(path)] = sites
+    return found
+
+
+#: Numeric literals allowed in the UI packages, DATA ONLY, keyed like
+#: HEX_ALLOWLIST ({relpath: {(LITERAL, scope): count}}).
+#: Chrome colours are tokens (gui/theme_tokens.py: PAINTED, the fixed
+#: ANALYSIS_PLOT and STAGE_PLOT palettes); what stays here: data-viz
+#: series palettes of the analysis plots (one colour per metric, role,
+#: score, cluster or axis variable), a fixture group's default colour,
+#: the RGB pixel cue drawn in the pixel-bar fixture icon (light
+#: colours), and the colour dialog's initial black.
+NUMERIC_ALLOWLIST = {
+    "gui/dialogs/generation_inspector.py": {
+        # Metric, role and score series, and their fallbacks.
+        **_in("COLORS", "rgb(220, 60, 60)", "rgb(230, 140, 30)",
+              "rgb(50, 180, 50)", "rgb(160, 80, 200)", "rgb(60, 180, 220)",
+              "rgba(255, 200, 60, 60)"),
+        **_in("ROLE_COLORS", "rgb(60, 180, 80)", "rgb(60, 120, 220)",
+              "rgb(230, 140, 40)"),
+        **_in("SCORE_COLORS", "rgb(70, 130, 220)", "rgb(60, 180, 80)",
+              "rgb(230, 140, 40)", "rgb(160, 80, 200)"),
+        **_in("AudioFeaturesWidget.paintEvent", "rgb(200, 200, 200)"),
+        **_in("GroupActivationWidget.paintEvent", "rgb(100, 100, 100)"),
+        **_in("RudimentScoresWidget.paintEvent", "rgb(150, 150, 150)"),
+        # One colour per section cluster in the 3D flux plot.
+        **_in("FluxPlot3DWidget._SECTION_PALETTE",
+              "rgb(220, 80, 80)", "rgb(80, 180, 220)", "rgb(100, 200, 100)",
+              "rgb(220, 180, 60)", "rgb(180, 100, 220)", "rgb(220, 130, 70)",
+              "rgb(100, 220, 200)", "rgb(200, 100, 150)",
+              "rgb(150, 180, 80)"),
+        # The X / Y / Z variable colours (time, flux, transient), on the
+        # axes and in their legend.
+        **_in("FluxPlot3DWidget._draw_axes", "rgb(200, 80, 80)",
+              "rgb(80, 200, 80)", "rgb(80, 80, 200)"),
+        **_in("FluxPlot3DWidget._draw_legend", "rgb(200, 80, 80)",
+              "rgb(80, 200, 80)", "rgb(80, 80, 200)"),
+    },
+    # Auto metrics chart: one colour per audio feature.
+    "gui/widgets/auto/metrics_tracker.py": _in(
+        "_METRIC_COLORS", "rgb(255, 100, 100)", "rgb(100, 255, 100)",
+        "rgb(100, 100, 255)", "rgb(255, 200, 50)", "rgb(200, 100, 255)",
+        "rgb(50, 220, 220)", "rgb(255, 150, 50)"),
+    # Group data-colour default when a fixture's group is missing.
+    "gui/stage_plot.py": _in("StagePlotRenderer._draw_fixtures",
+                             "rgb(160, 160, 160)"),
+    # The pixel-bar icon's RGB pixel cue: light colours.
+    "gui/widgets/fixture_icons.py": _in(
+        "_draw_pixel_accents", "rgb(255, 100, 100)", "rgb(100, 255, 100)",
+        "rgb(100, 100, 255)", "rgb(255, 255, 100)", "rgb(255, 100, 255)",
+        "rgb(100, 255, 255)"),
+    # The colour dialog's initial colour (black, like its #000000
+    # preview fill in HEX_ALLOWLIST).
+    "timeline_ui/colour_block_dialog.py": _in(
+        "ColorPreviewWidget.__init__", "rgb(0, 0, 0)"),
+}
+
+
+def numeric_offenders(rel: str, sites: dict) -> list:
+    allowed = NUMERIC_ALLOWLIST.get(rel, {})
+    out = []
+    for (literal, scope), lines in sorted(sites.items()):
+        extra = len(lines) - allowed.get((literal, scope), 0)
+        if extra > 0:
+            where = ",".join(str(n) for n in sorted(lines))
+            out.append(f"{rel}:{where}: {literal} in {scope} "
+                       f"({len(lines)} found, {len(lines) - extra} allowed)")
+    return out
+
+
+def test_numeric_colour_literals_only_for_allowlisted_data_colours():
+    offenders = [o for rel, sites in sorted(numeric_sites().items())
+                 for o in numeric_offenders(rel, sites)]
+    assert not offenders, (
+        "numeric QColor / Qt.GlobalColor literal in the UI packages: "
+        "chrome colours are theme tokens (gui/theme_tokens.py PAINTED, "
+        "or a fixed palette such as ANALYSIS_PLOT); only DATA colours may "
+        "be allowlisted (per file, scope and count) in "
+        "tests/unit/test_theme_lint.py NUMERIC_ALLOWLIST. Offenders:\n  "
+        + "\n  ".join(offenders))
+
+
+def test_numeric_allowlist_has_no_stale_entries():
+    present = numeric_sites()
+    stale = []
+    for rel, allowed in sorted(NUMERIC_ALLOWLIST.items()):
+        sites = present.get(rel, {})
+        for (lit, scope), count in sorted(allowed.items()):
+            found = len(sites.get((lit, scope), []))
+            if found < count:
+                stale.append(f"{rel}: {lit} in {scope} "
+                             f"({count} allowed, {found} found)")
+    assert not stale, ("allowlisted numeric colour no longer in the code; "
+                       "lower or drop it in NUMERIC_ALLOWLIST:\n  "
+                       + "\n  ".join(stale))
+    scanned = {_rel(p) for p in _ui_sources()}
+    assert not sorted(set(NUMERIC_ALLOWLIST) - scanned)
+
+
+def test_numeric_scanner_shapes():
+    """Self-test: integer QColor calls in every spelling and global
+    colours are literals; a token read, a hex string, a variable, a
+    float or transparent are not."""
+    tree = ast.parse(
+        "a = QColor(1, 2, 3)\n"
+        "b = QtGui.QColor(1, 2, 3, 4)\n"
+        "c = Qt.GlobalColor.red\n"
+        "d = QtCore.Qt.GlobalColor.blue\n"
+        "e = Qt.white\n"
+        "f = Qt.GlobalColor.transparent\n"
+        "g = QColor(tokens['x'])\n"
+        "h = QColor('#ffffff')\n"
+        "i = QColor(r, g, b)\n"
+        "j = QColor(0.5, 0, 0)\n")
+    assert sorted(numeric_sites_in(tree)) == [
+        ("Qt.GlobalColor.blue", "d"), ("Qt.GlobalColor.red", "c"),
+        ("Qt.GlobalColor.white", "e"), ("rgb(1, 2, 3)", "a"),
+        ("rgba(1, 2, 3, 4)", "b")]
+
+
+@pytest.mark.parametrize("rel,old,new", [
+    # A painter chrome literal equal to an allowlisted series colour.
+    ("gui/dialogs/generation_inspector.py",
+     'p.setPen(QPen(_plot("axis_text"), 1))',
+     "p.setPen(QPen(QColor(220, 60, 60), 1))"),
+    # The old Qt.blue selection pen of the stage plan.
+    ("gui/stage_items.py",
+     'painter.setPen(QPen(QColor(active_tokens()["plan_select_pen"]), 3))',
+     "painter.setPen(QPen(Qt.GlobalColor.blue, 3))"),
+])
+def test_numeric_literal_in_a_new_place_is_rejected(rel, old, new):
+    with open(os.path.join(ROOT, rel), "r", encoding="utf-8") as f:
+        source = f.read()
+    assert source.count(old) == 1, f"{rel}: anchor {old!r} not unique"
+    assert not numeric_offenders(rel, numeric_sites_in(ast.parse(source)))
+    assert numeric_offenders(
+        rel, numeric_sites_in(ast.parse(source.replace(old, new))))

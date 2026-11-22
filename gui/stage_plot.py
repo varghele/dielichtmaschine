@@ -33,6 +33,7 @@ from PyQt6.QtGui import (
 from config.models import primary_group
 from utils.fixture_capabilities import chassis_from_legacy_type
 from gui.stage_items import projected_bar_angle_2d
+from gui.theme_tokens import STAGE_PLOT
 from gui.widgets.fixture_icons import (
     ACCENT_LAMPS,
     ACCENT_PIXELS,
@@ -151,7 +152,7 @@ class StagePlotRenderer:
         px_per_mm = dpi / 25.4
         image = QImage(int(w_mm * px_per_mm), int(h_mm * px_per_mm),
                        QImage.Format.Format_ARGB32)
-        image.fill(QColor(255, 255, 255))
+        image.fill(QColor(STAGE_PLOT["paper"]))
 
         painter = QPainter(image)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
@@ -179,9 +180,10 @@ class StagePlotRenderer:
         title_h = 13 * mm
         legend_w = 54 * mm
 
-        black = QColor(20, 20, 20)
-        gray = QColor(150, 150, 150)
-        painter.fillRect(QRectF(0, 0, page_w, page_h), QColor(255, 255, 255))
+        black = QColor(STAGE_PLOT["ink"])
+        gray = QColor(STAGE_PLOT["gray"])
+        painter.fillRect(QRectF(0, 0, page_w, page_h),
+                         QColor(STAGE_PLOT["paper"]))
 
         plot_rect = QRectF(
             margin, margin + title_h,
@@ -267,7 +269,7 @@ class StagePlotRenderer:
             f"{self.title} · Stage Plot",
         )
         painter.setFont(self._font(2.6, mm))
-        painter.setPen(QPen(QColor(80, 80, 80), 0.2 * mm))
+        painter.setPen(QPen(QColor(STAGE_PLOT["subtitle"]), 0.2 * mm))
         subtitle = (
             f"Stage {stage_w:g} m × {stage_d:g} m    "
             f"Scale ≈ 1:{scale_den}    "
@@ -292,7 +294,7 @@ class StagePlotRenderer:
 
         # Grid first (light), then the outline on top.
         grid_m = float(getattr(self.config, 'grid_size', 0.5) or 0.5)
-        painter.setPen(QPen(QColor(225, 225, 225), 0.15 * mm))
+        painter.setPen(QPen(QColor(STAGE_PLOT["grid"]), 0.15 * mm))
         step = grid_m * ppm
         x = ox
         while x <= stage_rect.right() + 0.5:
@@ -316,7 +318,7 @@ class StagePlotRenderer:
         # at the bottom, so the X numbers live along the TOP edge and the
         # AUDIENCE marker owns the bottom band.
         painter.setFont(self._font(2.2, mm))
-        painter.setPen(QPen(QColor(100, 100, 100), 0.2 * mm))
+        painter.setPen(QPen(QColor(STAGE_PLOT["meter_labels"]), 0.2 * mm))
         label_step = nice_label_step(ppm, 8 * mm)
 
         m = 0.0
@@ -345,7 +347,7 @@ class StagePlotRenderer:
         # meter labels now sit along the TOP edge, so this marker owns the
         # bottom band on its own.
         painter.setFont(self._font(2.8, mm, bold=True))
-        painter.setPen(QPen(QColor(120, 120, 120), 0.2 * mm))
+        painter.setPen(QPen(QColor(STAGE_PLOT["audience"]), 0.2 * mm))
         painter.drawText(
             self._audience_marker_rect(stage_rect, mm),
             int(Qt.AlignmentFlag.AlignCenter),
@@ -499,7 +501,7 @@ class StagePlotRenderer:
                 painter.drawRect(QRectF(x, y + (row_h - swatch) / 2, swatch, swatch))
                 text_x = x + swatch + 1.5 * mm
             painter.setFont(self._font(2.3, mm))
-            painter.setPen(QPen(QColor(60, 60, 60), 0.15 * mm))
+            painter.setPen(QPen(QColor(STAGE_PLOT["legend_text"]), 0.15 * mm))
             painter.drawText(QRectF(text_x, y, rect.right() - text_x, row_h),
                              int(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter),
                              text)

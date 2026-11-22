@@ -156,3 +156,71 @@ def test_template_is_the_single_source():
         f"verbatim .qss files reappeared in resources/themes: {leftovers} - "
         "the token template is the single source of truth"
     )
+
+
+# The numeric QColor literals the v1.5.6 follow-up moved onto tokens,
+# as the painters spelled them: the move is pixel-identical only while
+# these hold (test_theme_lint keeps new literals out).
+_HISTORIC_PAINTED = {
+    "plan_select_pen": (0, 0, 255), "plan_item_pen": (0, 0, 0),
+    "mount_hanging": (60, 120, 255), "mount_standing": (255, 140, 0),
+    "mount_wall": (100, 180, 100), "mount_unknown": (128, 128, 128),
+    "plan_axis_red": (255, 80, 80), "plan_axis_green": (80, 200, 80),
+    "plan_axis_blue": (80, 80, 255), "plan_text_fallback": (0, 0, 0),
+    "plan_label_fallback": (120, 120, 120),
+    "stage_fallback_outline": (0, 0, 0),
+    "stage_fallback_fill": (240, 240, 240),
+    "stage_fallback_grid": (200, 200, 200),
+    "stage_fallback_label": (60, 60, 60),
+    "stage_fallback_fixture_text": (0, 0, 0),
+    "icon_glyph": (220, 220, 220), "timeline_grid_line": (127, 127, 127),
+    "timeline_ruler_ink": (141, 146, 153), "selection_blue": (0, 120, 215),
+    "waveform": (100, 150, 255), "waveform_bg": (30, 30, 30),
+    "waveform_text": (200, 200, 200), "waveform_error": (255, 100, 100),
+    "waveform_hint": (150, 150, 150), "pantilt_grid": (50, 50, 70),
+    "pantilt_center": (100, 100, 120), "pantilt_boundary": (255, 100, 100),
+    "pantilt_amplitude": (100, 200, 100), "pantilt_shape": (0, 200, 255),
+    "pantilt_position": (255, 165, 0), "pantilt_position_dot": (255, 200, 50),
+    "pantilt_label": (150, 150, 150), "wheel_marker": (255, 255, 255),
+    "wheel_marker_outline": (0, 0, 0), "invalid_text": (255, 0, 0),
+    "disabled_cell_text": (127, 127, 127),
+}
+_HISTORIC_ANALYSIS_PLOT = {
+    "panel": (40, 40, 48), "text": (200, 200, 210), "grid": (60, 60, 70),
+    "cursor": (255, 40, 40), "line_light": (255, 255, 255),
+    "band_even": (50, 50, 58), "band_odd": (42, 42, 50),
+    "axis_text": (140, 140, 150), "dim_text": (120, 120, 130),
+    "inactive_cell": (50, 50, 55), "mark": (255, 255, 100),
+    "selected_text": (255, 255, 200), "dot_outline": (180, 180, 180),
+    "tracker_bg": (20, 20, 30), "tracker_grid": (50, 50, 60),
+}
+_HISTORIC_STAGE_PLOT = {
+    "paper": (255, 255, 255), "ink": (20, 20, 20), "gray": (150, 150, 150),
+    "subtitle": (80, 80, 80), "grid": (225, 225, 225),
+    "meter_labels": (100, 100, 100), "audience": (120, 120, 120),
+    "legend_text": (60, 60, 60),
+}
+
+
+def _rgb(hex_value):
+    h = hex_value.lstrip("#")
+    return tuple(int(h[i:i + 2], 16) for i in (0, 2, 4))
+
+
+@pytest.mark.parametrize("table,historic", [
+    ("PAINTED", _HISTORIC_PAINTED),
+    ("ANALYSIS_PLOT", _HISTORIC_ANALYSIS_PLOT),
+    ("STAGE_PLOT", _HISTORIC_STAGE_PLOT),
+])
+def test_painter_tokens_keep_the_literals_they_replaced(table, historic):
+    import gui.theme_tokens as tt
+    values = getattr(tt, table)
+    assert set(values) == set(historic)
+    for key, rgb in historic.items():
+        assert _rgb(values[key]) == rgb, key
+
+
+def test_painted_chrome_is_in_both_themes_unchanged():
+    from gui.theme_tokens import DARK, LIGHT, PAINTED
+    for key, value in PAINTED.items():
+        assert DARK[key] == LIGHT[key] == value, key

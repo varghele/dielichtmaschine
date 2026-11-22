@@ -3,7 +3,7 @@
 
 from PyQt6.QtWidgets import QWidget
 from PyQt6.QtCore import Qt, QPoint, QRect, pyqtSignal
-from PyQt6.QtGui import QPainter, QColor, QPen, QBrush
+from PyQt6.QtGui import QPainter, QPen, QBrush
 
 
 class SelectionOverlay(QWidget):
@@ -17,8 +17,9 @@ class SelectionOverlay(QWidget):
     selection_finished = pyqtSignal(QPoint, QPoint)
 
     # Selection rectangle style
-    FILL_COLOR = QColor(0, 120, 215, 30)  # Semi-transparent blue
-    BORDER_COLOR = QColor(0, 120, 215, 200)  # Solid blue
+    # Rubber band: the selection_blue token at these alphas.
+    FILL_ALPHA = 30
+    BORDER_ALPHA = 200
     BORDER_WIDTH = 2
 
     def __init__(self, parent=None):
@@ -107,11 +108,14 @@ class SelectionOverlay(QWidget):
         rect = self._get_selection_rect()
 
         # Draw fill
-        painter.setBrush(QBrush(self.FILL_COLOR))
+        from gui.theme_style import token_color  # deferred (cycle)
+        painter.setBrush(QBrush(token_color("selection_blue",
+                                            self.FILL_ALPHA)))
         painter.setPen(Qt.PenStyle.NoPen)
         painter.drawRect(rect)
 
         # Draw border
         painter.setBrush(Qt.BrushStyle.NoBrush)
-        painter.setPen(QPen(self.BORDER_COLOR, self.BORDER_WIDTH))
+        painter.setPen(QPen(token_color("selection_blue", self.BORDER_ALPHA),
+                            self.BORDER_WIDTH))
         painter.drawRect(rect)

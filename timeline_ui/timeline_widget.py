@@ -493,10 +493,12 @@ class TimelineWidget(QWidget):
         """Draw grid based on song structure, with optional sub-beat lines."""
         # Semi-transparent neutral gray reads on both dark and light themes
         # without needing explicit theme detection.
-        sub_pen = QPen(QColor(127, 127, 127, 40), 1, Qt.PenStyle.DotLine)
-        beat_pen = QPen(QColor(127, 127, 127, 80), 1)
-        bar_pen = QPen(QColor(127, 127, 127, 160), 2)
-        part_pen = QPen(QColor(127, 127, 127, 220), 3)
+        from gui.theme_style import token_color  # deferred (cycle)
+        sub_pen = QPen(token_color("timeline_grid_line", 40), 1,
+                       Qt.PenStyle.DotLine)
+        beat_pen = QPen(token_color("timeline_grid_line", 80), 1)
+        bar_pen = QPen(token_color("timeline_grid_line", 160), 2)
+        part_pen = QPen(token_color("timeline_grid_line", 220), 3)
 
         subdivision = getattr(self, "grid_subdivision", 1.0)
         swing = getattr(self, "swing_amount", 0.0)
@@ -546,9 +548,11 @@ class TimelineWidget(QWidget):
 
     def draw_basic_grid(self, painter, width, height, clip=None):
         """Draw basic grid without song structure (time-based)."""
-        sub_pen = QPen(QColor(127, 127, 127, 40), 1, Qt.PenStyle.DotLine)
-        beat_pen = QPen(QColor(127, 127, 127, 80), 1)
-        bar_pen = QPen(QColor(127, 127, 127, 160), 2)
+        from gui.theme_style import token_color  # deferred (cycle)
+        sub_pen = QPen(token_color("timeline_grid_line", 40), 1,
+                       Qt.PenStyle.DotLine)
+        beat_pen = QPen(token_color("timeline_grid_line", 80), 1)
+        bar_pen = QPen(token_color("timeline_grid_line", 160), 2)
 
         subdivision = getattr(self, "grid_subdivision", 1.0)
         swing = getattr(self, "swing_amount", 0.0)
@@ -639,7 +643,9 @@ class TimelineWidget(QWidget):
         if self.num_sublanes <= 1:
             return
 
-        separator_pen = QPen(QColor(127, 127, 127, 200), 1, Qt.PenStyle.DashLine)
+        from gui.theme_style import token_color  # deferred (cycle)
+        separator_pen = QPen(token_color("timeline_grid_line", 200), 1,
+                             Qt.PenStyle.DashLine)
         painter.setPen(separator_pen)
 
         _strip, bands = self.band_geometry()
@@ -793,8 +799,9 @@ class TimelineWidget(QWidget):
         end_x = self.time_to_pixel(self._drag_preview_time + duration_secs)
 
         # Draw semi-transparent blue rectangle
-        preview_color = QColor(0, 120, 215, 80)
-        border_color = QColor(0, 120, 215, 200)
+        from gui.theme_style import token_color  # deferred (cycle)
+        preview_color = token_color("selection_blue", 80)
+        border_color = token_color("selection_blue", 200)
 
         painter.setBrush(QBrush(preview_color))
         painter.setPen(QPen(border_color, 2, Qt.PenStyle.DashLine))

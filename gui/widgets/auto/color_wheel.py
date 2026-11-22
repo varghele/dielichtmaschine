@@ -7,7 +7,7 @@ from PyQt6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QLab
 from PyQt6.QtCore import QCoreApplication, Qt, pyqtSignal, QPointF
 from PyQt6.QtGui import QPainter, QColor, QImage, QPen
 
-from gui.theme_style import bind_style
+from gui.theme_style import bind_style, token_color
 
 
 class HSVColorWheel(QWidget):
@@ -182,9 +182,9 @@ class _WheelCanvas(QWidget):
         sx = cx + dist * math.cos(angle_rad)
         sy = cy - dist * math.sin(angle_rad)
 
-        painter.setPen(QPen(Qt.GlobalColor.white, 2))
+        painter.setPen(QPen(token_color("wheel_marker"), 2))
         painter.drawEllipse(QPointF(sx, sy), 6, 6)
-        painter.setPen(QPen(Qt.GlobalColor.black, 1))
+        painter.setPen(QPen(token_color("wheel_marker_outline"), 1))
         painter.drawEllipse(QPointF(sx, sy), 7, 7)
 
     def _build_wheel_image(self, size: int) -> QImage:

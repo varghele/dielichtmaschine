@@ -156,6 +156,7 @@ class MasterTimelineWidget(TimelineWidget):
         (BPM readout in steel-gray tracked mono)."""
         # Deferred import: the gui package imports timeline_ui at module
         # load, so a top-level import here would be circular.
+        from gui.theme_style import token_color
         from gui.typography import display_font, mono_font
         if self.parts_band:
             self._draw_parts_band(painter, width, height)
@@ -190,7 +191,7 @@ class MasterTimelineWidget(TimelineWidget):
 
                     # BPM readout: mono, steel gray (#8D9299 reads on
                     # the near-background tint in both themes).
-                    painter.setPen(QPen(QColor(141, 146, 153), 1))
+                    painter.setPen(QPen(token_color("timeline_ruler_ink"), 1))
                     painter.setFont(mono_font(7))
                     bpm_text = f"{part.bpm} BPM"
                     if part.transition == "gradual":
@@ -228,7 +229,7 @@ class MasterTimelineWidget(TimelineWidget):
         separator_color = QColor(tokens["window"])
         # Steel gray reads on the near-background tint in both themes
         # (same value the block sub-row labels use).
-        bpm_color = QColor(141, 146, 153)
+        bpm_color = QColor(tokens["timeline_ruler_ink"])
 
         try:
             parts = self.song_structure.parts
@@ -296,9 +297,11 @@ class MasterTimelineWidget(TimelineWidget):
         if has_structure:
             try:
                 # Semi-transparent gray reads on both dark and light themes.
-                sub_pen = QPen(QColor(127, 127, 127, 60), 1, Qt.PenStyle.DotLine)
-                bar_pen = QPen(QColor(127, 127, 127, 200), 1)
-                beat_pen = QPen(QColor(127, 127, 127, 100), 1)
+                from gui.theme_style import token_color  # deferred (cycle)
+                sub_pen = QPen(token_color("timeline_grid_line", 60), 1,
+                               Qt.PenStyle.DotLine)
+                bar_pen = QPen(token_color("timeline_grid_line", 200), 1)
+                beat_pen = QPen(token_color("timeline_grid_line", 100), 1)
 
                 subdivision = getattr(self, "grid_subdivision", 1.0)
                 swing = getattr(self, "swing_amount", 0.0)

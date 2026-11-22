@@ -4,6 +4,7 @@ from PyQt6 import QtWidgets, QtGui, QtCore
 from PyQt6.QtCore import pyqtProperty, QCoreApplication
 from PyQt6.QtGui import QColor
 from gui.stage_items import FixtureItem, SpotItem
+from gui.theme_tokens import PAINTED
 from config.models import Spot, primary_group, primary_group_name
 
 
@@ -11,11 +12,11 @@ from config.models import Spot, primary_group, primary_group_name
 # the very first paint before the theme is applied). The active theme
 # overrides these via `qproperty-stageOutlineColor` and friends in the
 # theme stylesheets — see ``resources/themes/{dark,light}.qss``.
-_FALLBACK_OUTLINE = QColor(0, 0, 0)
-_FALLBACK_FILL = QColor(240, 240, 240)
-_FALLBACK_GRID = QColor(200, 200, 200)
-_FALLBACK_LABEL = QColor(60, 60, 60)
-_FALLBACK_FIXTURE_TEXT = QColor(0, 0, 0)
+_FALLBACK_OUTLINE = QColor(PAINTED["stage_fallback_outline"])
+_FALLBACK_FILL = QColor(PAINTED["stage_fallback_fill"])
+_FALLBACK_GRID = QColor(PAINTED["stage_fallback_grid"])
+_FALLBACK_LABEL = QColor(PAINTED["stage_fallback_label"])
+_FALLBACK_FIXTURE_TEXT = QColor(PAINTED["stage_fallback_fixture_text"])
 
 
 # Drag-and-drop contract between the Stage tab's element palette and the
@@ -882,13 +883,13 @@ class StageView(QtWidgets.QGraphicsView):
             # Y=blue so the two views stay cross-readable, but per the
             # North Star stage plan (card 5a) they are quiet 1px dashed
             # marks instead of the old loud 2px lines.
-            x_axis = QtGui.QColor(255, 80, 80)
+            x_axis = QtGui.QColor(PAINTED["plan_axis_red"])
             x_axis.setAlpha(90)
             pen = QtGui.QPen(x_axis, 1, QtCore.Qt.PenStyle.DashLine)
             painter.setPen(pen)
             painter.drawLine(self.padding, int(center_y_px), width_px + self.padding, int(center_y_px))
 
-            y_axis = QtGui.QColor(80, 80, 255)
+            y_axis = QtGui.QColor(PAINTED["plan_axis_blue"])
             y_axis.setAlpha(90)
             pen = QtGui.QPen(y_axis, 1, QtCore.Qt.PenStyle.DashLine)
             painter.setPen(pen)

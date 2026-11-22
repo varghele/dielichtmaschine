@@ -60,7 +60,7 @@ from utils.morph.compile import (_song_duration, apply_morph,
 from utils.morph.plan import MorphPlan, PlanError, config_hash
 
 from gui.dialogs.morph_patchbay import SUBLANE_LABELS, MorphPatchbay
-from gui.theme_style import bind_style
+from gui.theme_style import bind_style, token_color
 from gui.typography import DisplayLabel
 from gui.widgets.modern_table import apply_modern_table_style
 
@@ -561,7 +561,7 @@ class MorphScreen(QtWidgets.QWidget):
             for c, value in enumerate(values):
                 item = QtWidgets.QTableWidgetItem(value)
                 if is_gap:
-                    item.setForeground(Qt.GlobalColor.red)
+                    item.setForeground(token_color("invalid_text"))
                 self.coverage_table.setItem(r, c, item)
         self.coverage_table.resizeColumnsToContents()
         # Fill the width instead of leaving dead space to the right of

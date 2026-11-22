@@ -40,6 +40,7 @@ from typing import Dict, Optional, Tuple
 from PyQt6.QtCore import QByteArray, QPointF, QRectF, Qt
 from PyQt6.QtGui import QBrush, QColor, QImage, QPainter, QPen, QPixmap
 
+from gui.theme_style import active_tokens
 from utils.fixture_capabilities import Chassis
 from utils.paths import get_project_root
 
@@ -382,7 +383,7 @@ def _paint_other_icon(painter: QPainter, size: float) -> None:
     painter.drawRect(QRectF(-half, -half, size, size))
     painter.save()
     pen = painter.pen()
-    text_pen = QPen(QColor(220, 220, 220))
+    text_pen = QPen(QColor(active_tokens()["icon_glyph"]))
     text_pen.setWidthF(max(1.0, pen.widthF()))
     painter.setPen(text_pen)
     font = painter.font()
